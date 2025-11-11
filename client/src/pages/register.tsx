@@ -5,21 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiRequest } from '@/lib/queryClient';
-import { useAuth } from '@/lib/authContext';
-import { getRoleHomePath } from '@/lib/roleRedirect';
-import type { AuthResponse } from '@shared/schema';
 
 export default function Register() {
   const [, setLocation] = useLocation();
-  const { login } = useAuth();
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
     password: '',
     rol: '' as 'estudiante' | 'profesor' | 'directivo' | 'padre' | '',
     curso: '',
-    colegioId: 'default_colegio', // Por ahora un ID por defecto
-    hijoId: '', // Para padres
+    codigoAcceso: '', // Código del colegio para profesor/directivo
+    colegioId: 'default_colegio',
+    hijoId: '',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,24 +39,18 @@ export default function Register() {
       return;
     }
 
+    if ((formData.rol === 'profesor' || formData.rol === 'directivo') && !formData.codigoAcceso) {
+      setError('Debes ingresar el código del colegio');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await apiRequest<AuthResponse>('POST', '/api/auth/register', formData);
-      
-      // Auto-login con los datos del usuario registrado
-      login({
-        id: response.id,
-        nombre: response.nombre,
-        email: response.email,
-        rol: response.rol,
-        curso: response.curso,
-        colegioId: response.colegioId,
-        token: response.token,
-      });
+      await apiRequest('POST', '/api/auth/register', formData);
       
       setSuccess(true);
-      // Redirigir según el rol del usuario
-      const homePath = getRoleHomePath(response.rol);
-      setTimeout(() => setLocation(homePath), 1000);
+      // Redirigir a login después de 2 segundos
+      setTimeout(() => setLocation('/login'), 2000);
     } catch (err: any) {
       setError(err.message || 'Error al registrar usuario');
     } finally {
@@ -84,7 +75,7 @@ export default function Register() {
           {success ? (
             <div className="text-center py-8">
               <p className="text-green-400 font-semibold mb-2">¡Registro exitoso!</p>
-              <p className="text-white/70 text-sm">Redirigiendo al dashboard...</p>
+              <p className="text-white/70 text-sm">Ahora puedes iniciar sesión con tu cuenta</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -158,6 +149,21 @@ export default function Register() {
                     className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
                     placeholder="ej: 10A, 11B"
                     data-testid="input-curso"
+                  />
+                </div>
+              )}
+
+              {(formData.rol === 'profesor' || formData.rol === 'directivo') && (
+                <div>
+                  <Label htmlFor="codigoAcceso" className="text-white/90 mb-2 block">Código del Colegio</Label>
+                  <Input
+                    id="codigoAcceso"
+                    value={formData.codigoAcceso}
+                    onChange={(e) => setFormData({ ...formData, codigoAcceso: e.target.value })}
+                    required
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                    placeholder="Código proporcionado por tu institución"
+                    data-testid="input-codigo-acceso"
                   />
                 </div>
               )}

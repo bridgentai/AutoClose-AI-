@@ -12,10 +12,17 @@ if (!JWT_SECRET) {
 
 const generateToken = (id: string) => jwt.sign({ id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRES });
 
+// Códigos de acceso por colegio (en producción esto estaría en una base de datos)
+const CODIGOS_COLEGIO: Record<string, string> = {
+  'COLEGIO_DEMO_2025': 'default_colegio',
+  'SAN_JOSE_2025': 'colegio_san_jose',
+  'SANTA_MARIA_2025': 'colegio_santa_maria',
+};
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { nombre, email, password, rol, curso, colegioId, hijoId } = req.body;
+    const { nombre, email, password, rol, curso, codigoAcceso, hijoId } = req.body;
 
     if (!nombre || !email || !password || !rol) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
@@ -23,6 +30,21 @@ router.post('/register', async (req, res) => {
 
     if (!['estudiante', 'profesor', 'directivo', 'padre'].includes(rol)) {
       return res.status(400).json({ message: 'Rol inválido.' });
+    }
+
+    // Validar código de acceso para profesor y directivo
+    let colegioId = 'default_colegio';
+    if (rol === 'profesor' || rol === 'directivo') {
+      if (!codigoAcceso) {
+        return res.status(400).json({ message: 'El código del colegio es obligatorio para profesores y directivos.' });
+      }
+      
+      const colegioIdFromCodigo = CODIGOS_COLEGIO[codigoAcceso];
+      if (!colegioIdFromCodigo) {
+        return res.status(400).json({ message: 'Código del colegio inválido.' });
+      }
+      
+      colegioId = colegioIdFromCodigo;
     }
 
     const existing = await User.findOne({ email: email.toLowerCase() });
@@ -36,7 +58,7 @@ router.post('/register', async (req, res) => {
       password,
       rol,
       curso: rol === 'estudiante' ? curso : undefined,
-      colegioId: colegioId || 'default_colegio',
+      colegioId,
       hijoId: rol === 'padre' ? hijoId : undefined,
     });
 
