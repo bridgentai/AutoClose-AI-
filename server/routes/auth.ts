@@ -42,7 +42,17 @@ router.post('/register', async (req, res) => {
 
     await newUser.save();
 
-    return res.status(201).json({ message: 'Usuario registrado exitosamente.' });
+    const token = generateToken(newUser._id.toString());
+
+    return res.status(201).json({
+      id: newUser._id,
+      nombre: newUser.nombre,
+      email: newUser.email,
+      rol: newUser.rol,
+      curso: newUser.curso,
+      colegioId: newUser.colegioId,
+      token,
+    });
   } catch (err: any) {
     console.error('Error en register:', err.message);
     return res.status(500).json({ message: 'Error interno del servidor.' });

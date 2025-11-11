@@ -5,9 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiRequest } from '@/lib/queryClient';
+import { useAuth } from '@/lib/authContext';
 
 export default function Register() {
   const [, setLocation] = useLocation();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
@@ -39,9 +41,21 @@ export default function Register() {
     }
 
     try {
-      await apiRequest('POST', '/api/auth/register', formData);
+      const response = await apiRequest('POST', '/api/auth/register', formData);
+      
+      // Auto-login con los datos del usuario registrado
+      login({
+        id: response.id,
+        nombre: response.nombre,
+        email: response.email,
+        rol: response.rol,
+        curso: response.curso,
+        colegioId: response.colegioId,
+        token: response.token,
+      });
+      
       setSuccess(true);
-      setTimeout(() => setLocation('/login'), 2000);
+      setTimeout(() => setLocation('/dashboard'), 1000);
     } catch (err: any) {
       setError(err.message || 'Error al registrar usuario');
     } finally {
@@ -66,7 +80,7 @@ export default function Register() {
           {success ? (
             <div className="text-center py-8">
               <p className="text-green-400 font-semibold mb-2">¡Registro exitoso!</p>
-              <p className="text-white/70 text-sm">Redirigiendo al inicio de sesión...</p>
+              <p className="text-white/70 text-sm">Redirigiendo al dashboard...</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
