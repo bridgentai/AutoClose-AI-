@@ -14,6 +14,7 @@ import Chat from "@/pages/chat";
 import Courses from "@/pages/courses";
 import Materials from "@/pages/materials";
 import Account from "@/pages/account";
+import Setup from "@/pages/setup";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -68,6 +69,8 @@ function Router() {
           <Account />
         </AuthGuard>
       </Route>
+
+      <Route path="/setup" component={Setup} />
 
       {/* Fallback to 404 */}
       <Route component={NotFound} />

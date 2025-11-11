@@ -3,8 +3,12 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'AUTOCLOSE_SECRET_KEY_SUPER_SEGURO_123';
+const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_EXPIRES = '30d';
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET no está configurado');
+}
 
 const generateToken = (id: string) => jwt.sign({ id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRES });
 

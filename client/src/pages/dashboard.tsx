@@ -29,7 +29,7 @@ export default function Dashboard() {
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
-              Bienvenido, {user?.nombre.split(' ')[0]} 👋
+              Bienvenido, {user?.nombre?.split(' ')[0] || 'Usuario'} 👋
             </h1>
             <p className="text-white/60">
               {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}

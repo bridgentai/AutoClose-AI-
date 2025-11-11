@@ -22,11 +22,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/courses', coursesRoutes);
   app.use('/api/materials', materialsRoutes);
 
-  // Ruta de prueba
-  app.get('/api/health', (req, res) => {
+  // Ruta de health check
+  app.get('/api/health', async (req, res) => {
+    const { mongoConnected, mongoError } = await import('./config/db');
     res.json({ 
-      status: 'ok', 
-      message: 'AutoClose AI Backend funcionando correctamente',
+      status: mongoConnected ? 'ok' : 'degraded',
+      message: mongoConnected 
+        ? 'AutoClose AI Backend funcionando correctamente'
+        : 'Backend iniciado pero MongoDB no conectado',
+      mongodb: {
+        connected: mongoConnected,
+        error: mongoError
+      },
       timestamp: new Date().toISOString()
     });
   });

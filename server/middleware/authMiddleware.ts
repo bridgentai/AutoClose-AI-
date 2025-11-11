@@ -2,7 +2,12 @@ import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { User } from '../models';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'AUTOCLOSE_SECRET_KEY_SUPER_SEGURO_123';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('❌ Error: JWT_SECRET no está configurado');
+  process.exit(1);
+}
 
 interface JwtPayload {
   id: string;
