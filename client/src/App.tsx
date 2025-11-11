@@ -7,6 +7,7 @@ import { AuthProvider } from "@/lib/authContext";
 import { AuthGuard, GuestGuard } from "@/components/auth-guard";
 
 // Pages
+import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
@@ -33,12 +34,10 @@ function Router() {
         </GuestGuard>
       </Route>
 
+      {/* Home/Landing Page - accessible to everyone */}
+      <Route path="/" component={Home} />
+
       {/* Protected routes */}
-      <Route path="/">
-        <AuthGuard>
-          <Dashboard />
-        </AuthGuard>
-      </Route>
       
       <Route path="/dashboard">
         <AuthGuard>
