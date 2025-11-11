@@ -1,13 +1,35 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import cors from "cors";
+import { connectDB } from "./config/db";
+
+// Importar rutas
+import authRoutes from "./routes/auth";
+import chatRoutes from "./routes/chat";
+import coursesRoutes from "./routes/courses";
+import materialsRoutes from "./routes/materials";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  // Conectar a MongoDB
+  await connectDB();
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+  // CORS
+  app.use(cors());
+
+  // Rutas de API
+  app.use('/api/auth', authRoutes);
+  app.use('/api/chat', chatRoutes);
+  app.use('/api/courses', coursesRoutes);
+  app.use('/api/materials', materialsRoutes);
+
+  // Ruta de prueba
+  app.get('/api/health', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      message: 'AutoClose AI Backend funcionando correctamente',
+      timestamp: new Date().toISOString()
+    });
+  });
 
   const httpServer = createServer(app);
 

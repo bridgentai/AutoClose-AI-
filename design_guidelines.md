@@ -2,23 +2,43 @@
 
 ## Design Approach
 
-**Selected Approach:** Design System (Material Design 3) with Educational Focus
+**Selected Approach:** Modern Glassmorphism with Academic Purple Theme
 
-**Justification:** AutoClose serves institutional clients requiring trust, professionalism, and multi-role interfaces. Material Design provides the structured component library needed for complex dashboards while maintaining accessibility and clarity across student, teacher, and administrative views.
+**Justification:** AutoClose AI es una plataforma educativa institucional que requiere un diseño moderno, confiable y profesional. El estilo glassmorphism con tonos morados (#9f25b8) crea una identidad visual distintiva que inspira innovación tecnológica mientras mantiene la seriedad académica.
 
 **Key Principles:**
-1. Institutional Trust - Professional, clean layouts that inspire confidence
-2. Role-Based Clarity - Distinct visual hierarchies for different user types
-3. AI-First Interface - Chat/conversational UI as the primary interaction model
-4. Customizable Identity - Flexible branding system for each institution
+1. Identidad Visual Distintiva - Color morado característico (#9f25b8) de Bridgent AI
+2. Glassmorphism - Efectos de transparencia y blur para modernidad
+3. Interfaz AI-First - El chat inteligente como centro de la experiencia
+4. Multi-Rol - Dashboards diferenciados para estudiante/profesor/directivo/padre
+5. Responsive & Professional - Diseño adaptable y de nivel empresarial
+
+---
+
+## Color Palette
+
+**Primary Colors:**
+- **Accent Purple:** `#9f25b8` - Color principal de AutoClose AI
+- **Accent Dark:** `#6a0dad` - Morado oscuro para hover states
+- **Accent Light:** `#c66bff` - Morado claro para gradientes
+
+**Backgrounds:**
+- **Dark Base:** Gradiente `linear-gradient(135deg, #0a0a0c, #1a001c, #3d0045)`
+- **Card/Glass:** `rgba(255, 255, 255, 0.05)` con `backdrop-filter: blur(14px)`
+- **Sidebar:** `rgba(0, 0, 0, 0.64)` con hover transparencia
+
+**Text Colors:**
+- **Primary Text:** `#ffffff` (blanco)
+- **Secondary Text:** `rgba(255, 255, 255, 0.7)`
+- **Muted Text:** `#aaa`, `#bbb`, `#ccc`
 
 ---
 
 ## Typography
 
 **Font System (Google Fonts):**
-- **Primary:** Inter (UI elements, navigation, labels)
-- **Display:** Poppins (headings, section titles, institutional branding)
+- **Primary:** Inter (cuerpo, UI elements, texto general)
+- **Display:** Poppins (títulos, headings, branding - peso 600-800)
 
 **Hierarchy:**
 - **Hero/Display:** text-5xl to text-6xl (Poppins SemiBold)
