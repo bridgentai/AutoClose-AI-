@@ -17,6 +17,11 @@ import Materials from "@/pages/materials";
 import Account from "@/pages/account";
 import Setup from "@/pages/setup";
 import NotFound from "@/pages/not-found";
+// Role-specific pages
+import StudentPage from "@/pages/student";
+import TeacherPage from "@/pages/teacher";
+import DirectorPage from "@/pages/director";
+import ParentPage from "@/pages/parent";
 
 function Router() {
   return (
@@ -39,6 +44,31 @@ function Router() {
 
       {/* Protected routes */}
       
+      {/* Role-specific interfaces */}
+      <Route path="/student">
+        <AuthGuard>
+          <StudentPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/teacher">
+        <AuthGuard>
+          <TeacherPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/director">
+        <AuthGuard>
+          <DirectorPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/parent">
+        <AuthGuard>
+          <ParentPage />
+        </AuthGuard>
+      </Route>
+
       <Route path="/dashboard">
         <AuthGuard>
           <Dashboard />

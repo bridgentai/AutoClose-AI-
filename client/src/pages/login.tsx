@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiRequest } from '@/lib/queryClient';
+import { getRoleHomePath } from '@/lib/roleRedirect';
 import type { AuthResponse } from '@shared/schema';
 
 export default function Login() {
@@ -27,7 +28,9 @@ export default function Login() {
       });
 
       login(data);
-      setLocation('/dashboard');
+      // Redirigir según el rol del usuario
+      const homePath = getRoleHomePath(data.rol);
+      setLocation(homePath);
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión');
     } finally {

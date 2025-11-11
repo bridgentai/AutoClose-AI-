@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/authContext';
+import { getRoleHomePath } from '@/lib/roleRedirect';
+import type { AuthResponse } from '@shared/schema';
 
 export default function Register() {
   const [, setLocation] = useLocation();
@@ -41,7 +43,7 @@ export default function Register() {
     }
 
     try {
-      const response = await apiRequest('POST', '/api/auth/register', formData) as any;
+      const response = await apiRequest<AuthResponse>('POST', '/api/auth/register', formData);
       
       // Auto-login con los datos del usuario registrado
       login({
@@ -55,7 +57,9 @@ export default function Register() {
       });
       
       setSuccess(true);
-      setTimeout(() => setLocation('/dashboard'), 1000);
+      // Redirigir según el rol del usuario
+      const homePath = getRoleHomePath(response.rol);
+      setTimeout(() => setLocation(homePath), 1000);
     } catch (err: any) {
       setError(err.message || 'Error al registrar usuario');
     } finally {
