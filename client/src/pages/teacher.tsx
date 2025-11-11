@@ -5,10 +5,36 @@ import { BookOpen, GraduationCap, MessageSquare, User, TrendingUp, Plus } from '
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { Calendar } from '@/components/Calendar';
+import { useQuery } from '@tanstack/react-query';
+
+interface Assignment {
+  _id: string;
+  titulo: string;
+  descripcion: string;
+  curso: string;
+  fechaEntrega: string;
+  profesorNombre: string;
+}
 
 export default function TeacherPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Obtener mes y año actuales
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  // Query para obtener todas las tareas asignadas por el profesor
+  const { data: assignments = [] } = useQuery<Assignment[]>({
+    queryKey: ['/api/assignments/profesor', user?.id, currentMonth, currentYear],
+    enabled: !!user?.id,
+  });
+
+  const handleDayClick = (assignment: Assignment) => {
+    setLocation(`/assignment/${assignment._id}`);
+  };
 
   return (
     <SidebarProvider>
@@ -138,17 +164,13 @@ export default function TeacherPage() {
 
                 <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                   <CardHeader>
-                    <CardTitle className="text-white">Gestión de Cursos</CardTitle>
-                    <CardDescription className="text-white/60">Administra tus materias</CardDescription>
+                    <CardTitle className="text-white">Calendario de Tareas</CardTitle>
+                    <CardDescription className="text-white/60">
+                      Tus tareas asignadas este mes
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Button
-                      className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
-                      data-testid="button-create-course"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Crear Nuevo Curso
-                    </Button>
+                    <Calendar assignments={assignments} onDayClick={handleDayClick} />
                   </CardContent>
                 </Card>
               </div>

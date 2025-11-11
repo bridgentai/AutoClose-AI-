@@ -8,6 +8,7 @@ import authRoutes from "./routes/auth";
 import chatRoutes from "./routes/chat";
 import coursesRoutes from "./routes/courses";
 import materialsRoutes from "./routes/materials";
+import assignmentsRoutes from "./routes/assignments";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Conectar a MongoDB
@@ -21,6 +22,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/chat', chatRoutes);
   app.use('/api/courses', coursesRoutes);
   app.use('/api/materials', materialsRoutes);
+  app.use('/api/assignments', assignmentsRoutes);
 
   // Ruta de health check
   app.get('/api/health', async (req, res) => {

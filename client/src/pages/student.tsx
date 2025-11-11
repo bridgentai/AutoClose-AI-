@@ -5,10 +5,37 @@ import { BookOpen, GraduationCap, MessageSquare, User } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { Calendar } from '@/components/Calendar';
+import { useQuery } from '@tanstack/react-query';
+
+interface Assignment {
+  _id: string;
+  titulo: string;
+  descripcion: string;
+  curso: string;
+  fechaEntrega: string;
+  profesorNombre: string;
+}
 
 export default function StudentPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Obtener mes y año actuales
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  // Query para obtener tareas del curso del estudiante
+  const { data: assignments = [] } = useQuery<Assignment[]>({
+    queryKey: ['/api/assignments/curso', user?.curso, currentMonth, currentYear],
+    enabled: !!user?.curso,
+  });
+
+  const handleDayClick = (assignment: any) => {
+    // Navegar a la página de detalle de la tarea
+    setLocation(`/assignment/${assignment._id}`);
+  };
 
   return (
     <SidebarProvider>
@@ -128,18 +155,13 @@ export default function StudentPage() {
 
                 <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                   <CardHeader>
-                    <CardTitle className="text-white">Cursos Recientes</CardTitle>
-                    <CardDescription className="text-white/60">Tus materias</CardDescription>
+                    <CardTitle className="text-white">Calendario de Tareas</CardTitle>
+                    <CardDescription className="text-white/60">
+                      Curso: {user?.curso || 'No asignado'}
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    {['Matemáticas', 'Física', 'Química', 'Historia'].map((curso) => (
-                      <div key={curso} className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-lg" />
-                          <span className="text-white text-sm">{curso}</span>
-                        </div>
-                      </div>
-                    ))}
+                  <CardContent>
+                    <Calendar assignments={assignments} onDayClick={handleDayClick} />
                   </CardContent>
                 </Card>
               </div>
