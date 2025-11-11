@@ -107,7 +107,7 @@ export default function Home() {
             {isAuthenticated ? (
               <>
                 <span className="text-white/70 text-sm hidden md:block">
-                  Hola, <span className="text-white font-medium">{user?.nombre.split(' ')[0]}</span>
+                  Hola, <span className="text-white font-medium">{user?.nombre?.split(' ')[0] || 'Usuario'}</span>
                 </span>
                 <Button 
                   onClick={() => setLocation('/dashboard')}

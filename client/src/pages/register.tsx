@@ -41,7 +41,7 @@ export default function Register() {
     }
 
     try {
-      const response = await apiRequest('POST', '/api/auth/register', formData);
+      const response = await apiRequest('POST', '/api/auth/register', formData) as any;
       
       // Auto-login con los datos del usuario registrado
       login({
