@@ -52,6 +52,11 @@ Preferred communication style: Simple, everyday language.
   - Groups courses by grupo (class group) to avoid duplicates
   - Shows empty state if director hasn't assigned courses yet
 - `/course/:cursoId` - Teacher assignment creation and calendar for a specific group
+- `/directivo` - Director panel for managing teacher-group assignments (only accessible to directors)
+  - Lists all teachers from the institution
+  - Allows directors to assign grupos to each teacher's subjects
+  - Multi-select interface for group assignment
+  - Updates Course records with assigned grupos
 
 ### Backend Architecture
 
@@ -64,9 +69,12 @@ Preferred communication style: Simple, everyday language.
 **API Route Organization**:
 - `/api/auth` - User registration and login
 - `/api/chat` - AI chat sessions and messaging
+- `/api/users` - User management
+  - `GET /api/users/profesores` - Get all teachers from institution (directors only)
 - `/api/courses` - Course CRUD operations
   - `GET /api/courses` - Get courses (filtered by profesorId for teachers, all courses for others)
   - `GET /api/courses/for-group/:grupo` - Get teacher's subjects for a specific class group
+  - `POST /api/courses/assign` - Assign grupos to teacher-subject combination (directors only)
 - `/api/subjects` - Student subject overview (added November 2025)
   - `GET /api/subjects/mine` - Get all subjects taught to student's class group
   - `GET /api/subjects/:id/overview` - Get subject details with pending/past assignments
@@ -115,6 +123,13 @@ Preferred communication style: Simple, everyday language.
   - Prevents spoofed assignments where teacher uses valid courseId but arbitrary grupo
   - **Auto-selection UX**: If teacher teaches only ONE subject to a group, courseId auto-selected; if MULTIPLE, dropdown selector shown
   - Frontend disables submit when teacher has no subjects for target group
+- **Director Course Assignment System** (added November 2025):
+  - Directors assign class groups (grupos) to teachers via `/directivo` panel
+  - Backend endpoint POST /api/courses/assign creates/updates Course records
+  - Upsert logic: finds existing Course by colegioId+profesorId+materia, updates grupos OR creates new
+  - Security: validates subject is in teacher.materias, enforces colegioId isolation
+  - Teachers see only grupos assigned by director in their "Cursos" view
+  - Multi-select UI for grupo assignment with current assignment preview
 
 **Database Configuration** (Drizzle setup present but MongoDB is primary):
 - Drizzle Kit configured for PostgreSQL migrations (fallback option)

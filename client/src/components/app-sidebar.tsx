@@ -1,4 +1,4 @@
-import { Home, MessageSquare, BookOpen, GraduationCap, Settings, LogOut, User, Calendar } from 'lucide-react';
+import { Home, MessageSquare, BookOpen, GraduationCap, Settings, LogOut, User, Calendar, Users } from 'lucide-react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import {
@@ -28,6 +28,7 @@ export function AppSidebar() {
     { icon: BookOpen, label: 'Mis Materias', path: '/subjects', roles: ['estudiante'] },
     { icon: Calendar, label: 'Calendario', path: '/calendar', roles: ['estudiante'] },
     { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
+    { icon: Users, label: 'Profesores', path: '/directivo', roles: ['directivo'] },
     { icon: GraduationCap, label: 'Materiales', path: '/materials', roles: ['estudiante', 'profesor'] },
     { icon: Settings, label: 'Configuración', path: '/settings', roles: ['directivo'] },
     { icon: User, label: 'Mi Cuenta', path: '/account', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },

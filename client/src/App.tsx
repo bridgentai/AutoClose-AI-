@@ -27,6 +27,8 @@ import ParentPage from "@/pages/parent";
 // Subject pages
 import SubjectsPage from "@/pages/subjects";
 import SubjectDetailPage from "@/pages/subject-detail";
+// Director panel
+import DirectivoPage from "@/pages/directivo";
 
 function Router() {
   return (
@@ -113,6 +115,12 @@ function Router() {
       <Route path="/subject/:id">
         <AuthGuard>
           <SubjectDetailPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/directivo">
+        <AuthGuard>
+          <DirectivoPage />
         </AuthGuard>
       </Route>
 
