@@ -86,8 +86,9 @@ Preferred communication style: Simple, everyday language.
 
 **Data Models**:
 1. **User**: Authentication, roles, course assignments, institution linkage
+   - **Teacher-specific field**: `materias` (array of strings) - subjects the teacher teaches
 2. **Course**: Subject information (e.g., "Matemáticas"), teacher assignment, multiple student groups
-3. **Assignment**: Tasks with optional courseId reference to link to specific subjects
+3. **Assignment**: Tasks with **required** courseId reference to link to specific subjects
 4. **Material**: Educational resources (PDFs, videos, links, documents)
 5. **ChatSession**: Conversation history with context tracking
 6. **InstitutionConfig**: School-specific branding and curriculum settings
@@ -98,11 +99,18 @@ Preferred communication style: Simple, everyday language.
 - Embedded chat message arrays for performance
 - Reference-based relationships between users and courses
 - Pre-save hooks for password hashing and timestamp updates
-- **Assignment-Course Linking** (added November 2025):
-  - Assignments now include optional `courseId` field referencing Course
-  - Backward compatible: legacy assignments without courseId use curso + profesorId inference
-  - Dual filtering strategy in subject queries handles both new and legacy data
-  - Teachers must select subject when creating assignments to ensure proper categorization
+- **Teacher Subject Management** (added November 2025):
+  - Teachers specify one or more subjects during registration via `materias` array
+  - Backend validates, normalizes (capitalize), and deduplicates subjects (max 10, min 1)
+  - Registration UI uses chip-based input for subject entry/removal
+  - Account page displays teacher's subjects as badges
+- **Assignment-Course Linking & Security** (added November 2025):
+  - Assignments **require** courseId field referencing Course (no longer optional)
+  - Backend validates both courseId ownership AND curso membership before creating assignment
+  - Server checks: (1) Course exists, (2) course.profesorId === requesting user, (3) curso ∈ course.cursos
+  - Prevents spoofed assignments where teacher uses valid courseId but arbitrary grupo
+  - **Auto-selection UX**: If teacher teaches only ONE subject to a group, courseId auto-selected; if MULTIPLE, dropdown selector shown
+  - Frontend disables submit when teacher has no subjects for target group
 
 **Database Configuration** (Drizzle setup present but MongoDB is primary):
 - Drizzle Kit configured for PostgreSQL migrations (fallback option)
