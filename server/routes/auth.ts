@@ -22,7 +22,7 @@ const CODIGOS_COLEGIO: Record<string, string> = {
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { nombre, email, password, rol, curso, codigoAcceso, hijoId } = req.body;
+    const { nombre, email, password, rol, curso, codigoAcceso, hijoId, materias } = req.body;
 
     if (!nombre || !email || !password || !rol) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
@@ -47,6 +47,30 @@ router.post('/register', async (req, res) => {
       colegioId = colegioIdFromCodigo;
     }
 
+    // Validar y normalizar materias para profesores
+    let materiasArray: string[] = [];
+    if (rol === 'profesor') {
+      if (!materias || !Array.isArray(materias) || materias.length === 0) {
+        return res.status(400).json({ message: 'Los profesores deben especificar al menos una materia.' });
+      }
+      
+      // Normalizar: eliminar vacíos, deduplicar y capitalizar
+      materiasArray = Array.from(new Set(
+        materias
+          .map((m: string) => m.trim())
+          .filter((m: string) => m.length > 0)
+          .map((m: string) => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase())
+      ));
+      
+      if (materiasArray.length === 0) {
+        return res.status(400).json({ message: 'Debes ingresar al menos una materia válida.' });
+      }
+      
+      if (materiasArray.length > 10) {
+        return res.status(400).json({ message: 'No puedes especificar más de 10 materias.' });
+      }
+    }
+
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
       return res.status(400).json({ message: 'El correo ya está registrado.' });
@@ -58,6 +82,7 @@ router.post('/register', async (req, res) => {
       password,
       rol,
       curso: rol === 'estudiante' ? curso : undefined,
+      materias: rol === 'profesor' ? materiasArray : undefined,
       colegioId,
       hijoId: rol === 'padre' ? hijoId : undefined,
     });
@@ -72,6 +97,7 @@ router.post('/register', async (req, res) => {
       email: newUser.email,
       rol: newUser.rol,
       curso: newUser.curso,
+      materias: newUser.materias,
       colegioId: newUser.colegioId,
       token,
     });
@@ -108,6 +134,7 @@ router.post('/login', async (req, res) => {
       email: user.email,
       rol: user.rol,
       curso: user.curso,
+      materias: user.materias,
       colegioId: user.colegioId,
       token,
     });

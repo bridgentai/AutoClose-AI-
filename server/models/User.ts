@@ -7,6 +7,7 @@ interface IUser {
   password: string;
   rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';
   curso?: string;
+  materias?: string[];
   colegioId: string;
   hijoId?: string;
   createdAt: Date;
@@ -23,6 +24,7 @@ const userSchema = new Schema<IUser>({
     enum: ['estudiante', 'profesor', 'directivo', 'padre'] 
   },
   curso: { type: String },
+  materias: { type: [String], default: [] },
   colegioId: { type: String, required: true, default: 'default_colegio' },
   hijoId: { type: String }, // Para padres
   createdAt: { type: Date, default: Date.now },

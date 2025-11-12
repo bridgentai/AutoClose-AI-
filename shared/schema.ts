@@ -129,6 +129,7 @@ export interface AuthResponse {
   email: string;
   rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';
   curso?: string;
+  materias?: string[];
   colegioId: string;
   token: string;
 }
