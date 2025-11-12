@@ -2,6 +2,7 @@ import { useAuth } from '@/lib/authContext';
 import { AppSidebar } from '@/components/app-sidebar';
 import { BookOpen, GraduationCap, MessageSquare, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -22,24 +23,27 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-      <AppSidebar />
-      
-      <div className="ml-20 p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
-              Bienvenido, {user?.nombre?.split(' ')[0] || 'Usuario'} 👋
-            </h1>
-            <p className="text-white/60">
-              {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
-          </div>
+    <SidebarProvider>
+      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+        <AppSidebar />
+        <SidebarInset className="flex flex-col flex-1">
+          <div className="flex-1 overflow-auto p-8">
+            <div className="max-w-7xl mx-auto">
+              <div className="mb-8">
+                <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+                  Bienvenido, {user?.nombre?.split(' ')[0] || 'Usuario'}
+                </h1>
+                <p className="text-white/60">
+                  {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
 
-          {getDashboardContent()}
-        </div>
+              {getDashboardContent()}
+            </div>
+          </div>
+        </SidebarInset>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }
 

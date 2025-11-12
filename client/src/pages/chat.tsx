@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Loader2 } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
 interface Message {
   emisor: 'user' | 'ai';
@@ -80,10 +81,10 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-screen bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045] flex">
-      <AppSidebar />
-
-      <div className="flex-1 ml-20 flex flex-col">
+    <SidebarProvider>
+      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+        <AppSidebar />
+        <SidebarInset className="flex flex-col flex-1">
         {/* Header */}
         <div className="sticky top-0 z-10 backdrop-blur-md bg-black/40 border-b border-white/5 px-8 py-4">
           <h1 className="text-2xl font-bold text-white font-['Poppins']">
@@ -170,7 +171,8 @@ export default function Chat() {
             </Button>
           </div>
         </div>
+      </SidebarInset>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }
