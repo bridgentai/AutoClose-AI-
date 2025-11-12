@@ -14,6 +14,7 @@ import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
 import Courses from "@/pages/courses";
 import CourseDetail from "@/pages/course-detail";
+import CalendarPage from "@/pages/calendar";
 import Materials from "@/pages/materials";
 import Account from "@/pages/account";
 import Setup from "@/pages/setup";
@@ -91,6 +92,12 @@ function Router() {
       <Route path="/course/:cursoId">
         <AuthGuard>
           <CourseDetail />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/calendar">
+        <AuthGuard>
+          <CalendarPage />
         </AuthGuard>
       </Route>
 

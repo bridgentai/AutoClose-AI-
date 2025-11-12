@@ -1,4 +1,4 @@
-import { Home, MessageSquare, BookOpen, GraduationCap, Settings, LogOut, Plus, History, User } from 'lucide-react';
+import { Home, MessageSquare, BookOpen, GraduationCap, Settings, LogOut, Plus, History, User, Calendar } from 'lucide-react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 
@@ -14,6 +14,7 @@ export function AppSidebar() {
   const menuItems = [
     { icon: Home, label: 'Dashboard', path: '/dashboard', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
     { icon: MessageSquare, label: 'Chat AI', path: '/chat', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
+    { icon: Calendar, label: 'Calendario', path: '/calendar', roles: ['estudiante'] },
     { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['estudiante', 'profesor'] },
     { icon: GraduationCap, label: 'Materiales', path: '/materials', roles: ['estudiante', 'profesor'] },
     { icon: Settings, label: 'Configuración', path: '/settings', roles: ['directivo'] },
