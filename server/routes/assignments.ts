@@ -1,5 +1,5 @@
 import express from 'express';
-import { Assignment, User } from '../models';
+import { Assignment, User, Course } from '../models';
 import { protect, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
@@ -21,6 +21,31 @@ router.post('/', protect, async (req: AuthRequest, res) => {
 
     if (user.rol !== 'profesor') {
       return res.status(403).json({ message: 'Solo los profesores pueden crear tareas.' });
+    }
+
+    // Validación de seguridad crítica
+    if (!courseId) {
+      return res.status(400).json({ message: 'El courseId es obligatorio.' });
+    }
+
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: 'Materia no encontrada.' });
+    }
+
+    // Verificar que el profesor es el dueño de la materia
+    if (course.profesorId.toString() !== user._id.toString()) {
+      return res.status(403).json({ 
+        message: 'No puedes asignar tareas para una materia que no dictas.' 
+      });
+    }
+
+    // CRÍTICO: Verificar que el grupo (curso) solicitado pertenece a esta materia
+    // Esto previene que un cliente malicioso use un courseId válido pero envíe un curso arbitrario
+    if (!course.cursos.includes(curso)) {
+      return res.status(403).json({ 
+        message: `La materia ${course.nombre} no incluye el grupo ${curso}. Grupos válidos: ${course.cursos.join(', ')}.` 
+      });
     }
 
     const newAssignment = new Assignment({

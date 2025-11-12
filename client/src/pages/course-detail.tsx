@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { Calendar as CalendarIcon, ClipboardList, User, ArrowLeft } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, User, ArrowLeft, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { useLocation, useRoute } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -61,6 +63,20 @@ export default function CourseDetailPage() {
     queryKey: ['/api/courses/for-group', cursoId],
     enabled: user?.rol === 'profesor',
   });
+
+  // Auto-seleccionar materia si el profesor solo dicta una
+  useEffect(() => {
+    if (subjectsForGroup.length === 1 && showAssignmentForm) {
+      setFormData(prev => ({ ...prev, courseId: subjectsForGroup[0]._id }));
+    }
+  }, [subjectsForGroup, showAssignmentForm]);
+
+  // Resetear formData cuando se cierra el formulario
+  useEffect(() => {
+    if (!showAssignmentForm) {
+      setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
+    }
+  }, [showAssignmentForm]);
 
   // Mutation para crear tarea
   const createAssignmentMutation = useMutation({
@@ -172,35 +188,57 @@ export default function CourseDetailPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
+                    {subjectsForGroup.length === 0 && (
+                      <Alert className="mb-4 bg-red-500/10 border-red-500/50">
+                        <AlertCircle className="h-4 w-4 text-red-400" />
+                        <AlertDescription className="text-red-200">
+                          No tienes materias asignadas a este curso. Por favor contacta al administrador para que te asignen materias.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    
                     <form onSubmit={handleSubmit} className="space-y-4">
-                      <div>
-                        <Label htmlFor="materia" className="text-white">Materia *</Label>
-                        <Select
-                          value={formData.courseId}
-                          onValueChange={(value) => setFormData({ ...formData, courseId: value })}
-                          required
-                        >
-                          <SelectTrigger 
-                            className="bg-white/5 border-white/10 text-white"
-                            data-testid="select-materia"
+                      {/* Mostrar selector solo si el profesor dicta MÁS DE UNA materia */}
+                      {subjectsForGroup.length > 1 && (
+                        <div>
+                          <Label htmlFor="materia" className="text-white">Materia *</Label>
+                          <Select
+                            value={formData.courseId}
+                            onValueChange={(value) => setFormData({ ...formData, courseId: value })}
+                            required
                           >
-                            <SelectValue placeholder="Selecciona la materia" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {subjectsForGroup.length === 0 ? (
-                              <div className="p-2 text-sm text-muted-foreground">
-                                No tienes materias asignadas a este curso
-                              </div>
-                            ) : (
-                              subjectsForGroup.map((subject) => (
+                            <SelectTrigger 
+                              className="bg-white/5 border-white/10 text-white"
+                              data-testid="select-materia"
+                            >
+                              <SelectValue placeholder="Selecciona la materia" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {subjectsForGroup.map((subject) => (
                                 <SelectItem key={subject._id} value={subject._id}>
                                   {subject.nombre}
                                 </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      
+                      {/* Mostrar badge si el profesor dicta UNA SOLA materia (auto-seleccionada) */}
+                      {subjectsForGroup.length === 1 && (
+                        <div>
+                          <Label className="text-white mb-2 block">Materia</Label>
+                          <div className="flex items-center gap-2">
+                            <Badge 
+                              className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40 text-base px-4 py-2"
+                              data-testid="badge-materia-auto-selected"
+                            >
+                              {subjectsForGroup[0].nombre}
+                            </Badge>
+                            <span className="text-white/50 text-sm">(auto-seleccionada)</span>
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <Label htmlFor="titulo" className="text-white">Título</Label>
                         <Input
@@ -240,7 +278,7 @@ export default function CourseDetailPage() {
                       </div>
                       <Button
                         type="submit"
-                        disabled={createAssignmentMutation.isPending}
+                        disabled={createAssignmentMutation.isPending || subjectsForGroup.length === 0}
                         className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
                         data-testid="button-submit-task"
                       >

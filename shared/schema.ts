@@ -8,6 +8,7 @@ export interface User {
   password: string;
   rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';
   curso?: string;
+  materias?: string[];
   colegioId: string;
   hijoId?: string; // Para padres - ID del estudiante hijo
   createdAt: Date;
@@ -19,6 +20,7 @@ export interface InsertUser {
   password: string;
   rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';
   curso?: string;
+  materias?: string[];
   colegioId: string;
   hijoId?: string;
 }
