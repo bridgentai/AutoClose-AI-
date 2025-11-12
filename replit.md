@@ -37,8 +37,18 @@ Preferred communication style: Simple, everyday language.
 **Component Structure**:
 - Route guards (AuthGuard/GuestGuard) for protected routes
 - Collapsible sidebar navigation with role-based menu items
+  - Students: "Mis Materias" (subject-first view) + "Calendario"
+  - Teachers: "Cursos" (class-group management)
+  - Subject selector in assignment creation form for multi-subject teachers
 - Reusable UI components from shadcn/ui
 - Context-based authentication management
+
+**Key Pages**:
+- `/subjects` - Student view of all subjects in their class group
+- `/subject/:id` - Subject detail with teacher info and categorized assignments (pending/past)
+- `/calendar` - Student calendar filtered by enrolled course
+- `/courses` - Teacher management of class groups
+- `/course/:cursoId` - Teacher assignment creation and calendar for a specific group
 
 ### Backend Architecture
 
@@ -52,6 +62,11 @@ Preferred communication style: Simple, everyday language.
 - `/api/auth` - User registration and login
 - `/api/chat` - AI chat sessions and messaging
 - `/api/courses` - Course CRUD operations
+  - `GET /api/courses/for-group/:grupo` - Get teacher's subjects for a specific class group
+- `/api/subjects` - Student subject overview (added November 2025)
+  - `GET /api/subjects/mine` - Get all subjects taught to student's class group
+  - `GET /api/subjects/:id/overview` - Get subject details with pending/past assignments
+- `/api/assignments` - Assignment management
 - `/api/materials` - Educational material management
 - `/api/health` - Service health checks
 
@@ -71,10 +86,11 @@ Preferred communication style: Simple, everyday language.
 
 **Data Models**:
 1. **User**: Authentication, roles, course assignments, institution linkage
-2. **Course**: Subject information, teacher assignment, student groups
-3. **Material**: Educational resources (PDFs, videos, links, documents)
-4. **ChatSession**: Conversation history with context tracking
-5. **InstitutionConfig**: School-specific branding and curriculum settings
+2. **Course**: Subject information (e.g., "Matemáticas"), teacher assignment, multiple student groups
+3. **Assignment**: Tasks with optional courseId reference to link to specific subjects
+4. **Material**: Educational resources (PDFs, videos, links, documents)
+5. **ChatSession**: Conversation history with context tracking
+6. **InstitutionConfig**: School-specific branding and curriculum settings
 
 **Schema Design Decisions**:
 - Multi-tenancy via `colegioId` field on all documents
@@ -82,6 +98,11 @@ Preferred communication style: Simple, everyday language.
 - Embedded chat message arrays for performance
 - Reference-based relationships between users and courses
 - Pre-save hooks for password hashing and timestamp updates
+- **Assignment-Course Linking** (added November 2025):
+  - Assignments now include optional `courseId` field referencing Course
+  - Backward compatible: legacy assignments without courseId use curso + profesorId inference
+  - Dual filtering strategy in subject queries handles both new and legacy data
+  - Teachers must select subject when creating assignments to ensure proper categorization
 
 **Database Configuration** (Drizzle setup present but MongoDB is primary):
 - Drizzle Kit configured for PostgreSQL migrations (fallback option)
