@@ -12,7 +12,16 @@ router.get('/', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    const courses = await Course.find({ colegioId: user.colegioId })
+    // Filtrar cursos según el rol del usuario
+    let query: any = { colegioId: user.colegioId };
+    
+    // Si es profesor, solo mostrar cursos donde él es el profesor asignado
+    if (user.rol === 'profesor') {
+      query.profesorId = user._id;
+    }
+    // Si es directivo, padre o estudiante, mostrar todos los cursos del colegio
+
+    const courses = await Course.find(query)
       .populate('profesorId', 'nombre email')
       .sort({ nombre: 1 });
 
