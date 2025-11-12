@@ -26,7 +26,7 @@ export function AppSidebar() {
     { icon: Home, label: 'Dashboard', path: '/dashboard', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
     { icon: MessageSquare, label: 'Chat AI', path: '/chat', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
     { icon: Calendar, label: 'Calendario', path: '/calendar', roles: ['estudiante'] },
-    { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['estudiante', 'profesor'] },
+    { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
     { icon: GraduationCap, label: 'Materiales', path: '/materials', roles: ['estudiante', 'profesor'] },
     { icon: Settings, label: 'Configuración', path: '/settings', roles: ['directivo'] },
     { icon: User, label: 'Mi Cuenta', path: '/account', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
