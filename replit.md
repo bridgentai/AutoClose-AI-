@@ -47,7 +47,10 @@ Preferred communication style: Simple, everyday language.
 - `/subjects` - Student view of all subjects in their class group
 - `/subject/:id` - Subject detail with teacher info and categorized assignments (pending/past)
 - `/calendar` - Student calendar filtered by enrolled course
-- `/courses` - Teacher management of class groups
+- `/courses` - Teacher management of class groups (only accessible to teachers)
+  - Dynamically fetches courses from backend (filtered by profesorId)
+  - Groups courses by grupo (class group) to avoid duplicates
+  - Shows empty state if director hasn't assigned courses yet
 - `/course/:cursoId` - Teacher assignment creation and calendar for a specific group
 
 ### Backend Architecture
@@ -62,6 +65,7 @@ Preferred communication style: Simple, everyday language.
 - `/api/auth` - User registration and login
 - `/api/chat` - AI chat sessions and messaging
 - `/api/courses` - Course CRUD operations
+  - `GET /api/courses` - Get courses (filtered by profesorId for teachers, all courses for others)
   - `GET /api/courses/for-group/:grupo` - Get teacher's subjects for a specific class group
 - `/api/subjects` - Student subject overview (added November 2025)
   - `GET /api/subjects/mine` - Get all subjects taught to student's class group
