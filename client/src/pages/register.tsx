@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { X, Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 export default function Register() {
@@ -18,6 +20,8 @@ export default function Register() {
     colegioId: 'default_colegio',
     hijoId: '',
   });
+  const [materias, setMaterias] = useState<string[]>([]);
+  const [currentMateria, setCurrentMateria] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -45,8 +49,18 @@ export default function Register() {
       return;
     }
 
+    // Validar materias para profesores
+    if (formData.rol === 'profesor' && materias.length === 0) {
+      setError('Los profesores deben especificar al menos una materia');
+      setLoading(false);
+      return;
+    }
+
     try {
-      await apiRequest('POST', '/api/auth/register', formData);
+      await apiRequest('POST', '/api/auth/register', {
+        ...formData,
+        materias: formData.rol === 'profesor' ? materias : undefined
+      });
       
       setSuccess(true);
       // Redirigir a login después de 2 segundos
@@ -56,6 +70,17 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const addMateria = () => {
+    if (currentMateria.trim() && !materias.includes(currentMateria.trim()) && materias.length < 10) {
+      setMaterias([...materias, currentMateria.trim()]);
+      setCurrentMateria('');
+    }
+  };
+
+  const removeMateria = (materia: string) => {
+    setMaterias(materias.filter(m => m !== materia));
   };
 
   return (
@@ -150,6 +175,63 @@ export default function Register() {
                     placeholder="ej: 10A, 11B"
                     data-testid="input-curso"
                   />
+                </div>
+              )}
+
+              {formData.rol === 'profesor' && (
+                <div>
+                  <Label className="text-white/90 mb-2 block">Materias que dictas *</Label>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        value={currentMateria}
+                        onChange={(e) => setCurrentMateria(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addMateria();
+                          }
+                        }}
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/40 flex-1"
+                        placeholder="ej: Filosofía, Matemáticas"
+                        data-testid="input-materia"
+                      />
+                      <Button
+                        type="button"
+                        onClick={addMateria}
+                        disabled={!currentMateria.trim() || materias.length >= 10}
+                        className="bg-white/10 hover:bg-white/20 text-white border border-white/20"
+                        size="icon"
+                        data-testid="button-add-materia"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {materias.length > 0 && (
+                      <div className="flex flex-wrap gap-2" data-testid="container-materias">
+                        {materias.map((materia) => (
+                          <Badge
+                            key={materia}
+                            className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40 hover:bg-[#9f25b8]/30"
+                            data-testid={`badge-materia-${materia.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            {materia}
+                            <button
+                              type="button"
+                              onClick={() => removeMateria(materia)}
+                              className="ml-2 hover:text-red-400"
+                              data-testid={`button-remove-${materia.toLowerCase().replace(/\s+/g, '-')}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-white/50 text-xs">
+                      Agrega todas las materias que dictas (máximo 10). Presiona Enter o el botón + para agregar.
+                    </p>
+                  </div>
                 </div>
               )}
 

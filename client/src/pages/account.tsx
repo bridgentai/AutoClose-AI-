@@ -1,7 +1,8 @@
 import { useAuth } from '@/lib/authContext';
 import { AppSidebar } from '@/components/app-sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { User, Mail, GraduationCap, Shield } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { User, Mail, GraduationCap, Shield, BookOpen } from 'lucide-react';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
 export default function Account() {
@@ -66,6 +67,28 @@ export default function Account() {
                     <div className="flex-1">
                       <p className="text-white/60 text-sm">Curso</p>
                       <p className="text-white font-medium">{user.curso}</p>
+                    </div>
+                  </div>
+                )}
+
+                {user?.materias && user.materias.length > 0 && (
+                  <div className="flex items-start gap-4 p-4 bg-white/5 rounded-xl">
+                    <div className="w-12 h-12 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-xl flex items-center justify-center">
+                      <BookOpen className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-white/60 text-sm mb-2">Materias que dictas</p>
+                      <div className="flex flex-wrap gap-2" data-testid="container-materias-display">
+                        {user.materias.map((materia) => (
+                          <Badge
+                            key={materia}
+                            className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40"
+                            data-testid={`badge-materia-${materia.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            {materia}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
