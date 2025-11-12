@@ -4,6 +4,7 @@ export interface IAssignment {
   titulo: string;
   descripcion: string;
   curso: string; // ej: "11H", "10A"
+  courseId?: Types.ObjectId; // Referencia al Course (materia como Matemáticas, Física)
   fechaEntrega: Date;
   profesorId: Types.ObjectId;
   profesorNombre: string;
@@ -15,6 +16,7 @@ const assignmentSchema = new Schema<IAssignment>({
   titulo: { type: String, required: true },
   descripcion: { type: String, required: true },
   curso: { type: String, required: true },
+  courseId: { type: Schema.Types.ObjectId, ref: 'Course' }, // Opcional para compatibilidad con datos existentes
   fechaEntrega: { type: Date, required: true },
   profesorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   profesorNombre: { type: String, required: true },

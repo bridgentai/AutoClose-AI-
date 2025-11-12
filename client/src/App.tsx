@@ -24,6 +24,9 @@ import StudentPage from "@/pages/student";
 import TeacherPage from "@/pages/teacher";
 import DirectorPage from "@/pages/director";
 import ParentPage from "@/pages/parent";
+// Subject pages
+import SubjectsPage from "@/pages/subjects";
+import SubjectDetailPage from "@/pages/subject-detail";
 
 function Router() {
   return (
@@ -98,6 +101,18 @@ function Router() {
       <Route path="/calendar">
         <AuthGuard>
           <CalendarPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/subjects">
+        <AuthGuard>
+          <SubjectsPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/subject/:id">
+        <AuthGuard>
+          <SubjectDetailPage />
         </AuthGuard>
       </Route>
 

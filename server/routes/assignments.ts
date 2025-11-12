@@ -7,7 +7,7 @@ const router = express.Router();
 // POST /api/assignments - Crear nueva tarea (solo profesores)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, curso, fechaEntrega } = req.body;
+    const { titulo, descripcion, curso, courseId, fechaEntrega } = req.body;
 
     if (!titulo || !descripcion || !curso || !fechaEntrega) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
@@ -27,6 +27,7 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       titulo,
       descripcion,
       curso,
+      courseId: courseId || undefined, // Agregar courseId si está disponible
       fechaEntrega: new Date(fechaEntrega),
       profesorId: user._id,
       profesorNombre: user.nombre,

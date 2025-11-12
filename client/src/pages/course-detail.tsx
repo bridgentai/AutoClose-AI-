@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLocation, useRoute } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -23,6 +24,13 @@ interface Assignment {
   profesorNombre: string;
 }
 
+interface CourseSubject {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+  colorAcento?: string;
+}
+
 export default function CourseDetailPage() {
   const [, params] = useRoute('/course/:cursoId');
   const cursoId = params?.cursoId || '';
@@ -35,6 +43,7 @@ export default function CourseDetailPage() {
     titulo: '',
     descripcion: '',
     fechaEntrega: '',
+    courseId: '',
   });
 
   // Obtener mes y año actuales
@@ -47,13 +56,24 @@ export default function CourseDetailPage() {
     queryKey: ['/api/assignments/curso', cursoId, currentMonth, currentYear],
   });
 
+  // Query para obtener las materias del profesor para este grupo
+  const { data: subjectsForGroup = [] } = useQuery<CourseSubject[]>({
+    queryKey: ['/api/courses/for-group', cursoId],
+    enabled: user?.rol === 'profesor',
+  });
+
   // Mutation para crear tarea
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      if (!data.courseId) {
+        throw new Error('Debes seleccionar una materia para esta tarea');
+      }
+      
       return await apiRequest('POST', '/api/assignments', {
         titulo: data.titulo,
         descripcion: data.descripcion,
         curso: cursoId,
+        courseId: data.courseId,
         fechaEntrega: data.fechaEntrega,
         profesorId: user?.id,
         profesorNombre: user?.nombre,
@@ -66,7 +86,7 @@ export default function CourseDetailPage() {
         description: 'La tarea ha sido asignada al curso exitosamente.',
       });
       queryClient.invalidateQueries({ queryKey: ['/api/assignments/curso', cursoId] });
-      setFormData({ titulo: '', descripcion: '', fechaEntrega: '' });
+      setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
       setShowAssignmentForm(false);
     },
     onError: (error: any) => {
@@ -153,6 +173,34 @@ export default function CourseDetailPage() {
                   </CardHeader>
                   <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
+                      <div>
+                        <Label htmlFor="materia" className="text-white">Materia *</Label>
+                        <Select
+                          value={formData.courseId}
+                          onValueChange={(value) => setFormData({ ...formData, courseId: value })}
+                          required
+                        >
+                          <SelectTrigger 
+                            className="bg-white/5 border-white/10 text-white"
+                            data-testid="select-materia"
+                          >
+                            <SelectValue placeholder="Selecciona la materia" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {subjectsForGroup.length === 0 ? (
+                              <div className="p-2 text-sm text-muted-foreground">
+                                No tienes materias asignadas a este curso
+                              </div>
+                            ) : (
+                              subjectsForGroup.map((subject) => (
+                                <SelectItem key={subject._id} value={subject._id}>
+                                  {subject.nombre}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div>
                         <Label htmlFor="titulo" className="text-white">Título</Label>
                         <Input

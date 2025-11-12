@@ -1,15 +1,18 @@
 import express from 'express';
-import { Course } from '../models';
-import { protect, restrictTo, AuthRequest } from '../middleware/authMiddleware';
+import { Course, User } from '../models';
+import { protect, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
 // GET /api/courses - Obtener cursos
 router.get('/', protect, async (req: AuthRequest, res) => {
-  const { colegioId } = req.user!;
-
   try {
-    const courses = await Course.find({ colegioId })
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const courses = await Course.find({ colegioId: user.colegioId })
       .populate('profesorId', 'nombre email')
       .sort({ nombre: 1 });
 
@@ -20,17 +23,53 @@ router.get('/', protect, async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/courses/for-group/:grupo - Obtener materias del profesor para un grupo específico
+router.get('/for-group/:grupo', protect, async (req: AuthRequest, res) => {
+  try {
+    const { grupo } = req.params;
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    if (user.rol !== 'profesor') {
+      return res.status(403).json({ message: 'Solo los profesores pueden acceder a esta ruta' });
+    }
+
+    // Buscar todas las materias del profesor que incluyan este grupo
+    const courses = await Course.find({
+      profesorId: user._id,
+      cursos: grupo,
+      colegioId: user.colegioId
+    }).sort({ nombre: 1 });
+
+    res.json(courses);
+  } catch (error: any) {
+    console.error('Error al obtener materias para grupo:', error.message);
+    res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
 // POST /api/courses - Crear curso (profesor/directivo)
-router.post('/', protect, restrictTo('profesor', 'directivo'), async (req: AuthRequest, res) => {
+router.post('/', protect, async (req: AuthRequest, res) => {
   const { nombre, descripcion, cursos, colorAcento, icono } = req.body;
-  const { colegioId, id: profesorId } = req.user!;
+  
+  const user = await User.findById(req.userId);
+  if (!user) {
+    return res.status(404).json({ message: 'Usuario no encontrado' });
+  }
+
+  if (user.rol !== 'profesor' && user.rol !== 'directivo') {
+    return res.status(403).json({ message: 'Solo profesores y directivos pueden crear cursos' });
+  }
 
   try {
     const nuevoCurso = await Course.create({
-      colegioId,
+      colegioId: user.colegioId,
       nombre,
       descripcion,
-      profesorId,
+      profesorId: user._id,
       cursos: Array.isArray(cursos) ? cursos : [],
       colorAcento: colorAcento || '#9f25b8',
       icono,
@@ -44,7 +83,15 @@ router.post('/', protect, restrictTo('profesor', 'directivo'), async (req: AuthR
 });
 
 // PUT /api/courses/:id - Actualizar curso
-router.put('/:id', protect, restrictTo('profesor', 'directivo'), async (req: AuthRequest, res) => {
+router.put('/:id', protect, async (req: AuthRequest, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) {
+    return res.status(404).json({ message: 'Usuario no encontrado' });
+  }
+
+  if (user.rol !== 'profesor' && user.rol !== 'directivo') {
+    return res.status(403).json({ message: 'Solo profesores y directivos pueden actualizar cursos' });
+  }
   const { id } = req.params;
   const { nombre, descripcion, cursos, colorAcento, icono } = req.body;
 
@@ -67,7 +114,15 @@ router.put('/:id', protect, restrictTo('profesor', 'directivo'), async (req: Aut
 });
 
 // DELETE /api/courses/:id - Eliminar curso
-router.delete('/:id', protect, restrictTo('directivo'), async (req: AuthRequest, res) => {
+router.delete('/:id', protect, async (req: AuthRequest, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) {
+    return res.status(404).json({ message: 'Usuario no encontrado' });
+  }
+
+  if (user.rol !== 'directivo') {
+    return res.status(403).json({ message: 'Solo directivos pueden eliminar cursos' });
+  }
   const { id } = req.params;
 
   try {
