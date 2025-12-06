@@ -1,6 +1,6 @@
 import { useAuth } from '@/lib/authContext';
 import { AppSidebar } from '@/components/app-sidebar';
-import { BookOpen, GraduationCap, MessageSquare, TrendingUp } from 'lucide-react';
+import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
@@ -50,7 +50,7 @@ export default function Dashboard() {
 function EstudianteDashboard() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
@@ -69,13 +69,13 @@ function EstudianteDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
               <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
-              Materiales
+              Tareas Pendientes
             </CardTitle>
-            <CardDescription className="text-white/60">Recursos disponibles</CardDescription>
+            <CardDescription className="text-white/60">Por entregar:</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">24</div>
-            <p className="text-sm text-white/50 mt-1">Documentos y guías</p>
+            <div className="text-3xl font-bold text-white">7</div>
+            <p className="text-sm text-white/50 mt-1">esta semana</p>
           </CardContent>
         </Card>
 
@@ -92,8 +92,36 @@ function EstudianteDashboard() {
             <p className="text-sm text-white/50 mt-1">Esta semana</p>
           </CardContent>
         </Card>
-      </div>
 
+        <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-white">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              Materias Perdidas
+            </CardTitle>
+            <CardDescription className="text-white/60">Requieren atención</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-red-400">2</div>
+            <p className="text-sm text-white/50 mt-1">Este período</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-white">
+              <Trophy className="w-5 h-5 text-yellow-500" />
+              Puesto en el Salón
+            </CardTitle>
+            <CardDescription className="text-white/60">Ranking académico</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">#5</div>
+            <p className="text-sm text-white/50 mt-1">De 32 estudiantes</p>
+          </CardContent>
+        </Card>
+      </div>
+      
       <Card className="bg-white/5 border-white/10 backdrop-blur-md">
         <CardHeader>
           <CardTitle className="text-white">Cursos Recientes</CardTitle>
