@@ -109,13 +109,17 @@ export default function PlataformasPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
+  const isEstudiante = user?.rol === 'estudiante';
+  const bgGradient = isEstudiante 
+    ? 'bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]'
+    : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
   
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+      <div className={`flex h-screen w-full ${bgGradient}`}>
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
+          <header className={`flex items-center justify-between p-4 border-b backdrop-blur-xl ${isEstudiante ? 'border-[#3b82f6]/20 bg-[#0a1628]/80' : 'border-white/10 bg-black/20'}`}>
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
               <h1 className="text-xl font-bold text-white font-['Poppins']">
@@ -150,7 +154,7 @@ export default function PlataformasPage() {
                   return (
                     <Card 
                       key={plataforma.id} 
-                      className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate group"
+                      className={`backdrop-blur-md hover-elevate group ${isEstudiante ? 'bg-[#1e3a8a]/20 border-[#3b82f6]/30' : 'bg-white/5 border-white/10'}`}
                       data-testid={`card-plataforma-${plataforma.id}`}
                     >
                       <CardHeader className="pb-3">
@@ -167,7 +171,7 @@ export default function PlataformasPage() {
                       <CardContent className="pt-0">
                         <Button
                           onClick={() => window.open(plataforma.url, '_blank')}
-                          className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                          className={`w-full hover:opacity-90 ${isEstudiante ? 'bg-[#facc15] text-[#1e3a8a] hover:bg-[#eab308]' : 'bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]'}`}
                           data-testid={`button-open-${plataforma.id}`}
                         >
                           <ExternalLink className="w-4 h-4 mr-2" />

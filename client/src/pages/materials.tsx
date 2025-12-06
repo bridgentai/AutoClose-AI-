@@ -30,9 +30,14 @@ export default function Materials() {
     }
   };
 
+  const isEstudiante = user?.rol === 'estudiante';
+  const bgGradient = isEstudiante 
+    ? 'bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]'
+    : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
+
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+      <div className={`flex h-screen w-full ${bgGradient}`}>
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           <div className="flex-1 overflow-auto p-8">
@@ -58,17 +63,17 @@ export default function Materials() {
 
           <div className="grid grid-cols-1 gap-4">
             {materials.map((material) => (
-              <Card key={material.id} className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate transition-all cursor-pointer">
+              <Card key={material.id} className={`backdrop-blur-md hover-elevate transition-all cursor-pointer ${isEstudiante ? 'bg-[#1e3a8a]/20 border-[#3b82f6]/30' : 'bg-white/5 border-white/10'}`}>
                 <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="w-12 h-12 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-xl flex items-center justify-center text-white">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${isEstudiante ? 'bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a]' : 'bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]'}`}>
                         {getIcon(material.tipo)}
                       </div>
                       
                       <div className="flex-1">
                         <h3 className="text-white font-medium mb-1">{material.titulo}</h3>
-                        <div className="flex items-center gap-4 text-sm text-white/60">
+                        <div className="flex items-center gap-4 text-sm text-white/60 flex-wrap">
                           <span>{material.curso}</span>
                           <span>•</span>
                           <span>{new Date(material.fecha).toLocaleDateString('es-CO')}</span>
@@ -78,7 +83,7 @@ export default function Materials() {
                       </div>
                     </div>
 
-                    <button className="p-2 hover:bg-white/5 rounded-lg transition-colors text-white/70 hover:text-white">
+                    <button className={`p-2 rounded-lg transition-colors ${isEstudiante ? 'hover:bg-[#3b82f6]/20 text-[#facc15]' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
                       <Download className="w-5 h-5" />
                     </button>
                   </div>

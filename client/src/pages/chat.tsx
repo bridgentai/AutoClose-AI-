@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/authContext';
 import { AppSidebar } from '@/components/app-sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Loader2 } from 'lucide-react';
+import { Send, Loader2, MessageSquare } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
@@ -80,13 +80,20 @@ export default function Chat() {
     }
   };
 
+  const isEstudiante = user?.rol === 'estudiante';
+  const bgGradient = isEstudiante 
+    ? 'bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]'
+    : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
+  const accentColor = isEstudiante ? '#3b82f6' : '#9f25b8';
+  const accentColorDark = isEstudiante ? '#1e3a8a' : '#6a0dad';
+
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+      <div className={`flex h-screen w-full ${bgGradient}`}>
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
         {/* Header */}
-        <div className="sticky top-0 z-10 backdrop-blur-md bg-black/40 border-b border-white/5 px-8 py-4">
+        <div className={`sticky top-0 z-10 backdrop-blur-md border-b px-8 py-4 ${isEstudiante ? 'bg-[#0a1628]/80 border-[#3b82f6]/20' : 'bg-black/40 border-white/5'}`}>
           <h1 className="text-2xl font-bold text-white font-['Poppins']">
             AutoClose AI
           </h1>
@@ -100,8 +107,8 @@ export default function Chat() {
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className="w-20 h-20 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-2xl mx-auto mb-6 flex items-center justify-center">
-                  <span className="text-4xl">🤖</span>
+                <div className={`w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center ${isEstudiante ? 'bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a]' : 'bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]'}`}>
+                  <MessageSquare className={`w-10 h-10 ${isEstudiante ? 'text-[#facc15]' : 'text-white'}`} />
                 </div>
                 <h2 className="text-3xl font-bold text-white mb-3 font-['Poppins']">
                   ¿Por dónde empezamos?
@@ -121,9 +128,15 @@ export default function Chat() {
                   <div
                     className={`max-w-[80%] px-5 py-3 rounded-2xl ${
                       msg.emisor === 'user'
-                        ? 'bg-gradient-to-r from-[#6a0dad] to-[#9f25b8] text-white rounded-br-sm'
-                        : 'bg-white/95 text-gray-900 border-2 border-[#9f25b8] rounded-bl-sm'
+                        ? `bg-gradient-to-r from-[${accentColorDark}] to-[${accentColor}] text-white rounded-br-sm`
+                        : `bg-white/95 text-gray-900 border-2 border-[${accentColor}] rounded-bl-sm`
                     }`}
+                    style={{
+                      background: msg.emisor === 'user' 
+                        ? `linear-gradient(to right, ${accentColorDark}, ${accentColor})` 
+                        : undefined,
+                      borderColor: msg.emisor !== 'user' ? accentColor : undefined
+                    }}
                   >
                     <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
                       {msg.contenido}
@@ -133,7 +146,10 @@ export default function Chat() {
               ))}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="bg-white/90 text-[#9f25b8] px-5 py-3 rounded-2xl rounded-bl-sm border border-[#9f25b8]/30 flex items-center gap-2">
+                  <div 
+                    className="bg-white/90 px-5 py-3 rounded-2xl rounded-bl-sm border flex items-center gap-2"
+                    style={{ color: accentColor, borderColor: `${accentColor}30` }}
+                  >
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span className="italic">Escribiendo...</span>
                   </div>
@@ -145,7 +161,7 @@ export default function Chat() {
         </div>
 
         {/* Input */}
-        <div className="sticky bottom-0 backdrop-blur-md bg-black/30 border-t border-white/5 p-6">
+        <div className={`sticky bottom-0 backdrop-blur-md border-t p-6 ${isEstudiante ? 'bg-[#0a1628]/60 border-[#3b82f6]/20' : 'bg-black/30 border-white/5'}`}>
           <div className="max-w-4xl mx-auto flex gap-3 items-center">
             <Input
               value={input}
@@ -157,14 +173,15 @@ export default function Chat() {
                 }
               }}
               placeholder="Escribe tu pregunta..."
-              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 rounded-2xl px-5"
+              className={`h-12 rounded-2xl px-5 text-white placeholder:text-white/40 ${isEstudiante ? 'bg-[#1e3a8a]/30 border-[#3b82f6]/30' : 'bg-white/5 border-white/10'}`}
               disabled={loading}
               data-testid="input-chat"
             />
             <Button
               onClick={handleSend}
               disabled={loading || !input.trim()}
-              className="w-12 h-12 rounded-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 flex-shrink-0"
+              className="w-12 h-12 rounded-full hover:opacity-90 flex-shrink-0"
+              style={{ background: `linear-gradient(to right, ${accentColor}, ${accentColorDark})` }}
               data-testid="button-send"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}

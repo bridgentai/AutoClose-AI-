@@ -6,6 +6,7 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const isEstudiante = user?.rol === 'estudiante';
 
   const getDashboardContent = () => {
     switch (user?.rol) {
@@ -22,9 +23,13 @@ export default function Dashboard() {
     }
   };
 
+  const bgGradient = isEstudiante 
+    ? 'bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]'
+    : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
+
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+      <div className={`flex h-screen w-full ${bgGradient}`}>
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
           <div className="flex-1 overflow-auto p-8">

@@ -39,10 +39,10 @@ export default function CalendarPage() {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
+          <header className="flex items-center justify-between p-4 border-b border-[#3b82f6]/20 backdrop-blur-xl bg-[#0a1628]/80">
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
               <h1 className="text-xl font-bold text-white font-['Poppins']">
@@ -72,10 +72,10 @@ export default function CalendarPage() {
               </div>
 
               {/* Calendario */}
-              <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+              <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-white">
-                    <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                    <CalendarIcon className="w-5 h-5 text-[#facc15]" />
                     Calendario del Mes
                   </CardTitle>
                   <CardDescription className="text-white/60">
@@ -89,7 +89,7 @@ export default function CalendarPage() {
 
               {/* Lista de tareas del mes */}
               {assignments.length > 0 && (
-                <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
+                <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md mt-8">
                   <CardHeader>
                     <CardTitle className="text-white">Tareas Próximas</CardTitle>
                     <CardDescription className="text-white/60">
@@ -103,7 +103,7 @@ export default function CalendarPage() {
                         .map((assignment) => (
                           <div
                             key={assignment._id}
-                            className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                            className="p-4 bg-[#1e3a8a]/30 border border-[#3b82f6]/20 rounded-lg hover:bg-[#1e3a8a]/50 transition-colors cursor-pointer"
                             onClick={() => setLocation(`/assignment/${assignment._id}`)}
                             data-testid={`assignment-item-${assignment._id}`}
                           >
@@ -116,7 +116,7 @@ export default function CalendarPage() {
                                 </p>
                               </div>
                               <div className="text-right ml-4">
-                                <p className="text-sm font-semibold text-[#9f25b8]">
+                                <p className="text-sm font-semibold text-[#facc15]">
                                   {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO', { 
                                     day: 'numeric',
                                     month: 'short'
@@ -138,9 +138,9 @@ export default function CalendarPage() {
               )}
 
               {assignments.length === 0 && (
-                <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
+                <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md mt-8">
                   <CardContent className="py-12 text-center">
-                    <CalendarIcon className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                    <CalendarIcon className="w-16 h-16 text-[#3b82f6]/40 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-white mb-2">
                       No hay tareas este mes
                     </h3>
