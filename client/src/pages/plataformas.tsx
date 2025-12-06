@@ -40,10 +40,10 @@ const plataformas = [
     color: 'from-green-500 to-green-600'
   },
   {
-    id: 'slides',
-    nombre: 'Google Slides',
-    descripcion: 'Presentaciones',
-    url: 'https://slides.google.com',
+    id: 'Cengage',
+    nombre: 'Webassign ',
+    descripcion: 'Trabajos Matemáticas',
+    url: 'https://www.cengage.com/',
     icono: MonitorPlay,
     color: 'from-orange-500 to-orange-600'
   },
