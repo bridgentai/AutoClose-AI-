@@ -12,7 +12,7 @@ export async function apiRequest<T = any>(
   url: string,
   data?: unknown | undefined,
 ): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('autoclose_token');
   const headers: HeadersInit = data ? { "Content-Type": "application/json" } : {};
   
   if (token) {
@@ -36,7 +36,7 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('autoclose_token');
     const headers: HeadersInit = {};
     
     if (token) {

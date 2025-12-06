@@ -24,137 +24,132 @@ import StudentPage from "@/pages/student";
 import TeacherPage from "@/pages/teacher";
 import DirectorPage from "@/pages/director";
 import ParentPage from "@/pages/parent";
-// Subject pages
-import SubjectsPage from "@/pages/subjects";
-import SubjectDetailPage from "@/pages/subject-detail";
 // Director panel
 import DirectivoPage from "@/pages/directivo";
 
+
 function Router() {
-  return (
-    <Switch>
-      {/* Public routes */}
-      <Route path="/login">
-        <GuestGuard>
-          <Login />
-        </GuestGuard>
-      </Route>
-      
-      <Route path="/register">
-        <GuestGuard>
-          <Register />
-        </GuestGuard>
-      </Route>
+return (
+<Switch>
+{/* Public routes */}
+<Route path="/login">
+<GuestGuard>
+<Login />
+</GuestGuard>
+</Route>
 
-      {/* Home/Landing Page - accessible to everyone */}
-      <Route path="/" component={Home} />
+<Route path="/register">
+<GuestGuard>
+<Register />
+</GuestGuard>
+</Route>
 
-      {/* Protected routes */}
-      
-      {/* Role-specific interfaces */}
-      <Route path="/student">
-        <AuthGuard>
-          <StudentPage />
-        </AuthGuard>
-      </Route>
+{/* Home/Landing Page - accessible to everyone */}
+<Route path="/" component={Home} />
 
-      <Route path="/teacher">
-        <AuthGuard>
-          <TeacherPage />
-        </AuthGuard>
-      </Route>
+{/* Protected routes */}
 
-      <Route path="/director">
-        <AuthGuard>
-          <DirectorPage />
-        </AuthGuard>
-      </Route>
+{/* Role-specific interfaces */}
+<Route path="/student">
+<AuthGuard>
+<StudentPage />
+</AuthGuard>
+</Route>
 
-      <Route path="/parent">
-        <AuthGuard>
-          <ParentPage />
-        </AuthGuard>
-      </Route>
+<Route path="/teacher">
+<AuthGuard>
+<TeacherPage />
+</AuthGuard>
+</Route>
 
-      <Route path="/dashboard">
-        <AuthGuard>
-          <Dashboard />
-        </AuthGuard>
-      </Route>
+<Route path="/director">
+<AuthGuard>
+<DirectorPage />
+</AuthGuard>
+</Route>
 
-      <Route path="/chat">
-        <AuthGuard>
-          <Chat />
-        </AuthGuard>
-      </Route>
+<Route path="/parent">
+<AuthGuard>
+<ParentPage />
+</AuthGuard>
+</Route>
 
-      <Route path="/courses">
-        <AuthGuard>
-          <Courses />
-        </AuthGuard>
-      </Route>
+<Route path="/dashboard">
+<AuthGuard>
+<Dashboard />
+</AuthGuard>
+</Route>
 
-      <Route path="/course/:cursoId">
-        <AuthGuard>
-          <CourseDetail />
-        </AuthGuard>
-      </Route>
+<Route path="/chat">
+<AuthGuard>
+<Chat />
+</AuthGuard>
+</Route>
 
-      <Route path="/calendar">
-        <AuthGuard>
-          <CalendarPage />
-        </AuthGuard>
-      </Route>
+{/* RUTA PRINCIPAL DE CURSOS/MATERIAS */}
+<Route path="/courses">
+<AuthGuard>
+<Courses />
+</AuthGuard>
+</Route>
 
-      <Route path="/subjects">
-        <AuthGuard>
-          <SubjectsPage />
-        </AuthGuard>
-      </Route>
+      {/* RUTA CORREGIDA: Si el menú o la app usa /subjects, cargamos CoursesPage */}
+<Route path="/subjects">
+<AuthGuard>
+<Courses />
+</AuthGuard>
+</Route>
 
-      <Route path="/subject/:id">
-        <AuthGuard>
-          <SubjectDetailPage />
-        </AuthGuard>
-      </Route>
+<Route path="/course/:cursoId">
+<AuthGuard>
+<CourseDetail />
+</AuthGuard>
+</Route>
 
-      <Route path="/directivo">
-        <AuthGuard>
-          <DirectivoPage />
-        </AuthGuard>
-      </Route>
 
-      <Route path="/materials">
-        <AuthGuard>
-          <Materials />
-        </AuthGuard>
-      </Route>
+<Route path="/calendar">
+<AuthGuard>
+<CalendarPage />
+</AuthGuard>
+</Route>
 
-      <Route path="/account">
-        <AuthGuard>
-          <Account />
-        </AuthGuard>
-      </Route>
+<Route path="/directivo">
+<AuthGuard>
+<DirectivoPage />
+</AuthGuard>
+</Route>
 
-      <Route path="/setup" component={Setup} />
+<Route path="/materials">
+<AuthGuard>
+<Materials />
+</AuthGuard>
+</Route>
 
-      {/* Fallback to 404 */}
-      <Route component={NotFound} />
-    </Switch>
-  );
+<Route path="/account">
+<AuthGuard>
+<Account />
+</AuthGuard>
+</Route>
+
+<Route path="/setup" component={Setup} />
+
+{/* Fallback to 404 */}
+<Route component={NotFound} />
+</Switch>
+);
 }
 
 function App() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
-  );
+return (
+<QueryClientProvider client={queryClient}>
+<AuthProvider>
+<TooltipProvider>
+<Toaster />
+<Router />
+</TooltipProvider>
+</AuthProvider>
+</QueryClientProvider>
+);
 }
 
 export default App;
