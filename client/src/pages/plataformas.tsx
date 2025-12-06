@@ -109,25 +109,7 @@ export default function PlataformasPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  if (user?.rol !== 'profesor') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-          <CardContent className="p-8 text-center">
-            <p className="text-white/70">No tienes acceso a esta página</p>
-            <Button 
-              onClick={() => setLocation('/dashboard')} 
-              className="mt-4"
-              data-testid="button-go-dashboard"
-            >
-              Ir al Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
+  
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">

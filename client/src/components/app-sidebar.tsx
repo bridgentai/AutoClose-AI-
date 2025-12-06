@@ -28,7 +28,7 @@ export function AppSidebar() {
     { icon: BookOpen, label: 'Mis Materias', path: '/subjects', roles: ['estudiante'] },
     { icon: Calendar, label: 'Calendario', path: '/calendar', roles: ['estudiante'] },
     { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
-    { icon: Globe, label: 'Plataformas', path: '/plataformas', roles: ['profesor'] },
+    { icon: Globe, label: 'Plataformas', path: '/plataformas', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
     { icon: Users, label: 'Profesores', path: '/directivo', roles: ['directivo'] },
     { icon: GraduationCap, label: 'Materiales', path: '/materials', roles: ['estudiante', 'profesor'] },
     { icon: Settings, label: 'Configuración', path: '/settings', roles: ['directivo'] },
