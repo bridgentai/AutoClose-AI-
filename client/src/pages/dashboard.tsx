@@ -50,94 +50,68 @@ export default function Dashboard() {
 function EstudianteDashboard() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <BookOpen className="w-5 h-5 text-[#9f25b8]" />
-              Mis Cursos
-            </CardTitle>
-            <CardDescription className="text-white/60">4 cursos activos</CardDescription>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">Mis Materias</CardTitle>
+            <BookOpen className="w-5 h-5 text-[#facc15]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">4</div>
-            <p className="text-sm text-white/50 mt-1">Cursos este semestre</p>
+            <p className="text-xs text-white/60 mt-1">Materias este año</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
-              Tareas Pendientes
-            </CardTitle>
-            <CardDescription className="text-white/60">Por entregar:</CardDescription>
+        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">Tareas Pendientes</CardTitle>
+            <GraduationCap className="w-5 h-5 text-[#facc15]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">7</div>
-            <p className="text-sm text-white/50 mt-1">esta semana</p>
+            <p className="text-xs text-white/60 mt-1">Por entregar esta semana</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <MessageSquare className="w-5 h-5 text-[#9f25b8]" />
-              Chat AI
-            </CardTitle>
-            <CardDescription className="text-white/60">Consultas realizadas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">12</div>
-            <p className="text-sm text-white/50 mt-1">Esta semana</p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-              Materias Perdidas
-            </CardTitle>
-            <CardDescription className="text-white/60">Requieren atención</CardDescription>
+        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">Materias Perdidas</CardTitle>
+            <AlertTriangle className="w-5 h-5 text-red-400" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-red-400">2</div>
-            <p className="text-sm text-white/50 mt-1">Este período</p>
+            <p className="text-xs text-white/60 mt-1">Requieren atención</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Trophy className="w-5 h-5 text-yellow-500" />
-              Puesto en el Salón
-            </CardTitle>
-            <CardDescription className="text-white/60">Ranking académico</CardDescription>
+        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">Puesto en el Salón</CardTitle>
+            <Trophy className="w-5 h-5 text-[#facc15]" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">#5</div>
-            <p className="text-sm text-white/50 mt-1">De 32 estudiantes</p>
+            <div className="text-3xl font-bold text-[#facc15]">#5</div>
+            <p className="text-xs text-white/60 mt-1">De 32 estudiantes</p>
           </CardContent>
         </Card>
       </div>
       
-      <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+      <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md">
         <CardHeader>
-          <CardTitle className="text-white">Cursos Recientes</CardTitle>
+          <CardTitle className="text-white">Materias Recientes</CardTitle>
           <CardDescription className="text-white/60">Tus materias de este período</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {['Matemáticas', 'Física', 'Química', 'Historia'].map((curso) => (
-            <div key={curso} className="flex items-center justify-between p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer">
+            <div key={curso} className="flex items-center justify-between gap-2 p-4 bg-[#1e3a8a]/30 rounded-xl hover:bg-[#1e3a8a]/50 transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-lg" />
+                <div className="w-10 h-10 bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a] rounded-lg" />
                 <div>
                   <p className="font-medium text-white">{curso}</p>
                   <p className="text-sm text-white/50">Curso activo</p>
                 </div>
               </div>
-              <button className="px-4 py-2 bg-[#9f25b8] hover:bg-[#6a0dad] text-white rounded-lg text-sm font-medium transition-colors">
+              <button className="px-4 py-2 bg-[#facc15] hover:bg-[#eab308] text-[#1e3a8a] rounded-lg text-sm font-medium transition-colors">
                 Ver curso
               </button>
             </div>
