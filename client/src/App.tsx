@@ -26,6 +26,8 @@ import DirectorPage from "@/pages/director";
 import ParentPage from "@/pages/parent";
 // Director panel
 import DirectivoPage from "@/pages/directivo";
+// Teacher pages
+import PlataformasPage from "@/pages/plataformas";
 
 
 function Router() {
@@ -59,6 +61,12 @@ return (
 <Route path="/teacher">
 <AuthGuard>
 <TeacherPage />
+</AuthGuard>
+</Route>
+
+<Route path="/plataformas">
+<AuthGuard>
+<PlataformasPage />
 </AuthGuard>
 </Route>
 
