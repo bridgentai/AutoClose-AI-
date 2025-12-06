@@ -1,59 +1,107 @@
 import { useAuth } from '@/lib/authContext';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { User, ExternalLink, Globe, BookOpen, Video, FileText, Presentation } from 'lucide-react';
+import { User, ExternalLink, Mail, Calendar, FileText, FolderOpen, Video, MessageCircle, Users, PenTool, BarChart3, Globe, MonitorPlay } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
 
 const plataformas = [
   {
-    id: 1,
-    nombre: 'Google Classroom',
-    descripcion: 'Gestión de clases y tareas',
-    url: 'https://classroom.google.com',
-    icono: BookOpen,
-    color: 'from-green-500 to-green-600'
+    id: 'gmail',
+    nombre: 'Gmail',
+    descripcion: 'Correo electrónico institucional',
+    url: 'https://mail.google.com',
+    icono: Mail,
+    color: 'from-red-500 to-red-600'
   },
   {
-    id: 2,
-    nombre: 'Microsoft Teams',
-    descripcion: 'Videollamadas y colaboración',
-    url: 'https://teams.microsoft.com',
-    icono: Video,
+    id: 'drive',
+    nombre: 'Google Drive',
+    descripcion: 'Almacenamiento en la nube',
+    url: 'https://drive.google.com',
+    icono: FolderOpen,
+    color: 'from-yellow-500 to-yellow-600'
+  },
+  {
+    id: 'docs',
+    nombre: 'Google Docs',
+    descripcion: 'Documentos de texto',
+    url: 'https://docs.google.com',
+    icono: FileText,
     color: 'from-blue-500 to-blue-600'
   },
   {
-    id: 3,
-    nombre: 'Moodle',
-    descripcion: 'Plataforma de aprendizaje',
-    url: 'https://moodle.org',
-    icono: Globe,
+    id: 'sheets',
+    nombre: 'Google Sheets',
+    descripcion: 'Hojas de cálculo',
+    url: 'https://sheets.google.com',
+    icono: BarChart3,
+    color: 'from-green-500 to-green-600'
+  },
+  {
+    id: 'slides',
+    nombre: 'Google Slides',
+    descripcion: 'Presentaciones',
+    url: 'https://slides.google.com',
+    icono: MonitorPlay,
     color: 'from-orange-500 to-orange-600'
   },
   {
-    id: 4,
-    nombre: 'Canva Educación',
-    descripcion: 'Diseño de presentaciones',
-    url: 'https://www.canva.com/education',
-    icono: Presentation,
+    id: 'calendar',
+    nombre: 'Google Calendar',
+    descripcion: 'Calendario y eventos',
+    url: 'https://calendar.google.com',
+    icono: Calendar,
+    color: 'from-blue-400 to-blue-500'
+  },
+  {
+    id: 'meet',
+    nombre: 'Google Meet',
+    descripcion: 'Videollamadas',
+    url: 'https://meet.google.com',
+    icono: Video,
+    color: 'from-green-600 to-teal-500'
+  },
+  {
+    id: 'chat',
+    nombre: 'Google Chat',
+    descripcion: 'Mensajería instantánea',
+    url: 'https://chat.google.com',
+    icono: MessageCircle,
+    color: 'from-green-500 to-green-600'
+  },
+  {
+    id: 'classroom',
+    nombre: 'Google Classroom',
+    descripcion: 'Gestión de clases',
+    url: 'https://classroom.google.com',
+    icono: Users,
+    color: 'from-yellow-600 to-orange-500'
+  },
+  {
+    id: 'forms',
+    nombre: 'Google Forms',
+    descripcion: 'Formularios y encuestas',
+    url: 'https://forms.google.com',
+    icono: PenTool,
     color: 'from-purple-500 to-purple-600'
   },
   {
-    id: 5,
-    nombre: 'Genially',
-    descripcion: 'Contenido interactivo',
-    url: 'https://genial.ly',
-    icono: FileText,
-    color: 'from-cyan-500 to-cyan-600'
+    id: 'sites',
+    nombre: 'Google Sites',
+    descripcion: 'Creación de sitios web',
+    url: 'https://sites.google.com',
+    icono: Globe,
+    color: 'from-indigo-500 to-indigo-600'
   },
   {
-    id: 6,
-    nombre: 'Kahoot!',
-    descripcion: 'Cuestionarios interactivos',
-    url: 'https://kahoot.com',
-    icono: Globe,
-    color: 'from-pink-500 to-pink-600'
+    id: 'keep',
+    nombre: 'Google Keep',
+    descripcion: 'Notas y recordatorios',
+    url: 'https://keep.google.com',
+    icono: FileText,
+    color: 'from-amber-400 to-amber-500'
   }
 ];
 
@@ -89,7 +137,7 @@ export default function PlataformasPage() {
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
               <h1 className="text-xl font-bold text-white font-['Poppins']">
-                Plataformas Educativas
+                Google Workspace
               </h1>
             </div>
             <Button
@@ -107,14 +155,14 @@ export default function PlataformasPage() {
             <div className="max-w-7xl mx-auto">
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-                  Herramientas Externas
+                  Herramientas Google Workspace
                 </h2>
                 <p className="text-white/60">
-                  Accede a las plataformas educativas que utilizas en tus clases
+                  Accede a todas las aplicaciones de Google Workspace para tu trabajo educativo
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {plataformas.map((plataforma) => {
                   const IconComponent = plataforma.icono;
                   return (
@@ -123,25 +171,25 @@ export default function PlataformasPage() {
                       className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate group"
                       data-testid={`card-plataforma-${plataforma.id}`}
                     >
-                      <CardHeader>
+                      <CardHeader className="pb-3">
                         <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${plataforma.color} flex items-center justify-center mb-3`}>
                           <IconComponent className="w-6 h-6 text-white" />
                         </div>
-                        <CardTitle className="text-white flex items-center gap-2">
+                        <CardTitle className="text-white text-lg">
                           {plataforma.nombre}
                         </CardTitle>
-                        <CardDescription className="text-white/60">
+                        <CardDescription className="text-white/60 text-sm">
                           {plataforma.descripcion}
                         </CardDescription>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="pt-0">
                         <Button
                           onClick={() => window.open(plataforma.url, '_blank')}
                           className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
                           data-testid={`button-open-${plataforma.id}`}
                         >
                           <ExternalLink className="w-4 h-4 mr-2" />
-                          Abrir Plataforma
+                          Abrir
                         </Button>
                       </CardContent>
                     </Card>
