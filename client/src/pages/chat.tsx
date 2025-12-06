@@ -82,7 +82,7 @@ export default function Chat() {
 
   const isEstudiante = user?.rol === 'estudiante';
   const bgGradient = isEstudiante 
-    ? 'bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]'
+    ? 'bg-[#001855]'
     : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
   const accentColor = isEstudiante ? '#3b82f6' : '#9f25b8';
   const accentColorDark = isEstudiante ? '#1e3a8a' : '#6a0dad';
@@ -93,7 +93,7 @@ export default function Chat() {
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
         {/* Header */}
-        <div className={`sticky top-0 z-10 backdrop-blur-md border-b px-8 py-4 ${isEstudiante ? 'bg-[#0a1628]/80 border-[#3b82f6]/20' : 'bg-black/40 border-white/5'}`}>
+        <div className={`sticky top-0 z-10 backdrop-blur-md border-b px-8 py-4 ${isEstudiante ? 'bg-[#001855]/80 border-[#3b82f6]/20' : 'bg-black/40 border-white/5'}`}>
           <h1 className="text-2xl font-bold text-white font-['Poppins']">
             AutoClose AI
           </h1>
@@ -161,7 +161,7 @@ export default function Chat() {
         </div>
 
         {/* Input */}
-        <div className={`sticky bottom-0 backdrop-blur-md border-t p-6 ${isEstudiante ? 'bg-[#0a1628]/60 border-[#3b82f6]/20' : 'bg-black/30 border-white/5'}`}>
+        <div className={`sticky bottom-0 backdrop-blur-md border-t p-6 ${isEstudiante ? 'bg-[#001855]/60 border-[#3b82f6]/20' : 'bg-black/30 border-white/5'}`}>
           <div className="max-w-4xl mx-auto flex gap-3 items-center">
             <Input
               value={input}

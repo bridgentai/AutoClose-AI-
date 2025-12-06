@@ -39,10 +39,10 @@ export default function CalendarPage() {
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]">
+      <div className="flex h-screen w-full bg-[#001855]">
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className="flex items-center justify-between p-4 border-b border-[#3b82f6]/20 backdrop-blur-xl bg-[#0a1628]/80">
+          <header className="flex items-center justify-between p-4 border-b border-[#3b82f6]/20 backdrop-blur-xl bg-[#001855]/80">
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
               <h1 className="text-xl font-bold text-white font-['Poppins']">

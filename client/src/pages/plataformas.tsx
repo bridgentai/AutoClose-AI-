@@ -111,7 +111,7 @@ export default function PlataformasPage() {
 
   const isEstudiante = user?.rol === 'estudiante';
   const bgGradient = isEstudiante 
-    ? 'bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]'
+    ? 'bg-[#001855]'
     : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
   
   return (
@@ -119,7 +119,7 @@ export default function PlataformasPage() {
       <div className={`flex h-screen w-full ${bgGradient}`}>
         <AppSidebar />
         <SidebarInset className="flex flex-col flex-1">
-          <header className={`flex items-center justify-between p-4 border-b backdrop-blur-xl ${isEstudiante ? 'border-[#3b82f6]/20 bg-[#0a1628]/80' : 'border-white/10 bg-black/20'}`}>
+          <header className={`flex items-center justify-between p-4 border-b backdrop-blur-xl ${isEstudiante ? 'border-[#3b82f6]/20 bg-[#001855]/80' : 'border-white/10 bg-black/20'}`}>
             <div className="flex items-center gap-3">
               <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
               <h1 className="text-xl font-bold text-white font-['Poppins']">

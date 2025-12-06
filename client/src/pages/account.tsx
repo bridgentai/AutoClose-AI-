@@ -10,7 +10,7 @@ export default function Account() {
 
   const isEstudiante = user?.rol === 'estudiante';
   const bgGradient = isEstudiante 
-    ? 'bg-gradient-to-br from-[#0a1628] via-[#0f172a] to-[#1e3a8a]'
+    ? 'bg-[#001855]'
     : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
   const iconGradient = isEstudiante 
     ? 'bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a]'

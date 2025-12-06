@@ -40,7 +40,7 @@ export function AppSidebar() {
   const filteredItems = menuItems.filter(item => item.roles.includes(user?.rol || ''));
 
   return (
-    <Sidebar className={`border-r backdrop-blur-xl ${isEstudiante ? 'border-[#3b82f6]/20 bg-[#0a1628]/90' : 'border-white/10 bg-black/40'}`}>
+    <Sidebar className={`border-r backdrop-blur-xl ${isEstudiante ? 'border-[#3b82f6]/20 bg-[#001855]/90' : 'border-white/10 bg-black/40'}`}>
       <SidebarHeader className={`border-b p-4 ${isEstudiante ? 'border-[#3b82f6]/20' : 'border-white/10'}`}>
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isEstudiante ? 'bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a]' : 'bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]'}`}>
