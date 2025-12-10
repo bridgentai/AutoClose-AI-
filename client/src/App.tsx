@@ -28,6 +28,8 @@ import ParentPage from "@/pages/parent";
 import DirectivoPage from "@/pages/directivo";
 // Teacher pages
 import PlataformasPage from "@/pages/plataformas";
+// Mi Aprendizaje module
+import MiAprendizajeLayout from "@/pages/mi-aprendizaje";
 
 
 function Router() {
@@ -67,6 +69,31 @@ return (
 <Route path="/plataformas">
 <AuthGuard>
 <PlataformasPage />
+</AuthGuard>
+</Route>
+
+<Route path="/mi-aprendizaje">
+<AuthGuard>
+<MiAprendizajeLayout />
+</AuthGuard>
+</Route>
+
+{/* Spanish routes for Mi Aprendizaje module */}
+<Route path="/cursos">
+<AuthGuard>
+<Courses />
+</AuthGuard>
+</Route>
+
+<Route path="/materiales">
+<AuthGuard>
+<Materials />
+</AuthGuard>
+</Route>
+
+<Route path="/calendario">
+<AuthGuard>
+<CalendarPage />
 </AuthGuard>
 </Route>
 
