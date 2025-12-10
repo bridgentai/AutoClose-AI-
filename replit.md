@@ -47,6 +47,16 @@ Preferred communication style: Simple, everyday language.
 - `/subjects` - Student view of all subjects in their class group
 - `/subject/:id` - Subject detail with teacher info and categorized assignments (pending/past)
 - `/calendar` - Student calendar filtered by enrolled course
+- `/teacher-calendar` - Teacher calendar with task creation (December 2025)
+  - Identical to student calendar with purple circular "+" button for creating tasks
+  - Shows all tasks created by the teacher across all their courses
+  - Click task to view/edit details via /assignment/:id
+  - Tasks automatically appear in student calendars for assigned course group
+- `/assignment/:id` - Assignment detail page with role-based views (December 2025)
+  - Teachers: Can edit title, description, due date, and attachments
+  - Students: Can view assignment details and submit their work
+  - Supports attachments: PDF, links, images, documents
+  - Student submissions include files, comments, and grading
 - `/courses` - Teacher management of class groups (only accessible to teachers)
   - Dynamically fetches courses from backend (filtered by profesorId)
   - Groups courses by grupo (class group) to avoid duplicates
@@ -78,7 +88,14 @@ Preferred communication style: Simple, everyday language.
 - `/api/subjects` - Student subject overview (added November 2025)
   - `GET /api/subjects/mine` - Get all subjects taught to student's class group
   - `GET /api/subjects/:id/overview` - Get subject details with pending/past assignments
-- `/api/assignments` - Assignment management
+- `/api/assignments` - Assignment management (December 2025)
+  - `POST /api/assignments` - Create new assignment (profesor only, validates courseId ownership)
+  - `PUT /api/assignments/:id` - Edit assignment (owning profesor only)
+  - `POST /api/assignments/:id/submit` - Submit student work (validates curso + colegioId)
+  - `GET /api/assignments/curso/:curso/:mes/:año` - Get assignments for a course/month (filtered by colegioId)
+  - `GET /api/assignments/profesor/:profesorId/:mes/:año` - Get teacher's assignments for month
+  - `GET /api/assignments/:id` - Get single assignment details
+  - `DELETE /api/assignments/:id` - Delete assignment (owning profesor only)
 - `/api/materials` - Educational material management
 - `/api/health` - Service health checks
 
