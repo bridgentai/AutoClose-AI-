@@ -72,26 +72,32 @@ return (
 </AuthGuard>
 </Route>
 
+{/* Mi Aprendizaje - Student module */}
 <Route path="/mi-aprendizaje">
 <AuthGuard>
 <MiAprendizajeLayout />
 </AuthGuard>
 </Route>
 
-{/* Spanish routes for Mi Aprendizaje module */}
-<Route path="/cursos">
+<Route path="/mi-aprendizaje/cursos">
 <AuthGuard>
 <Courses />
 </AuthGuard>
 </Route>
 
-<Route path="/materiales">
+<Route path="/mi-aprendizaje/materiales">
 <AuthGuard>
 <Materials />
 </AuthGuard>
 </Route>
 
-<Route path="/calendario">
+<Route path="/mi-aprendizaje/plataformas">
+<AuthGuard>
+<PlataformasPage />
+</AuthGuard>
+</Route>
+
+<Route path="/mi-aprendizaje/calendario">
 <AuthGuard>
 <CalendarPage />
 </AuthGuard>
