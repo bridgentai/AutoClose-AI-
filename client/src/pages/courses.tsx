@@ -107,52 +107,45 @@ export default function CoursesPage() {
   // ------------------------------
 
   const renderProfessorView = () => {
-    const grupoMap = new Map<string, string[]>();
+    const groupedCourses: Record<string, { courses: Course[]; color: string }> = {};
 
-    courses.forEach(course => {
-      const uniqueGrupos = Array.from(new Set(course.cursos));
-      uniqueGrupos.forEach(grupo => {
-        if (!grupoMap.has(grupo)) grupoMap.set(grupo, []);
-        grupoMap.get(grupo)!.push(course.nombre);
+    courses.forEach((course, index) => {
+      course.cursos.forEach(grupo => {
+        if (!groupedCourses[grupo]) {
+          groupedCourses[grupo] = {
+            courses: [],
+            color: GRADIENT_COLORS[Object.keys(groupedCourses).length % GRADIENT_COLORS.length],
+          };
+        }
+        groupedCourses[grupo].courses.push(course);
       });
     });
 
-    const groupCards: GroupCard[] = Array.from(grupoMap.entries()).map(([grupo, materias], index) => ({
-      id: grupo,
-      nombre: grupo,
-      materias,
-      color: GRADIENT_COLORS[index % GRADIENT_COLORS.length],
-    }));
-
     return (
       <>
-        <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Gestión de Grupos</h2>
+        <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Mis Grupos Asignados</h2>
         <p className="text-white/60 mb-8">
-          Selecciona un grupo que impartes para gestionar tareas y recursos.
+          Gestiona tus materias por grupo de estudiantes.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {groupCards.map(group => (
+          {Object.entries(groupedCourses).map(([grupo, { courses: groupCourses, color }], index) => (
             <Card
-              key={group.id}
+              key={grupo}
               className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
-              onClick={() => handleCourseClick(group.id, true)}
+              onClick={() => handleCourseClick(grupo, true)}
             >
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div
-                    className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${group.color} flex items-center justify-center`}
-                  >
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-br ${color}`}>
                     <Users className="w-8 h-8 text-white" />
                   </div>
                   <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
                 </div>
 
-                <CardTitle className="text-white text-2xl font-bold mt-4">
-                  Grupo {group.nombre}
-                </CardTitle>
-                <CardDescription className="text-white/60">
-                  {group.materias.length} Materia(s) asignada(s)
+                <CardTitle className="text-white text-2xl font-bold">Grupo {grupo}</CardTitle>
+                <CardDescription className="text-white/60 line-clamp-2">
+                  {groupCourses.length} {groupCourses.length === 1 ? 'materia' : 'materias'}
                 </CardDescription>
               </CardHeader>
 
@@ -162,10 +155,10 @@ export default function CoursesPage() {
                   className="w-full border-white/10 text-white hover:bg-white/10"
                   onClick={e => {
                     e.stopPropagation();
-                    handleCourseClick(group.id, true);
+                    handleCourseClick(grupo, true);
                   }}
                 >
-                  Gestionar Grupo
+                  Ver Grupo
                 </Button>
               </CardContent>
             </Card>

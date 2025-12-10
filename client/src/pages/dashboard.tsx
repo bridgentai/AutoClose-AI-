@@ -53,13 +53,21 @@ export default function Dashboard() {
 }
 
 function EstudianteDashboard() {
+  const PURPLE_ACCENT = '#9f25b8'; 
+  const RED_ALERT = 'text-red-400'; 
+  const YELLOW_TROPHY = '#facc15'; 
+
+  const CARD_STYLE = `bg-white/5 border-white/10 backdrop-blur-md hover-elevate`;
+  const GRADIENT_STYLE = `from-[#9f25b8] to-[#6a0dad]`; 
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+
+        <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Mis Materias</CardTitle>
-            <BookOpen className="w-5 h-5 text-[#facc15]" />
+            <BookOpen className={`w-5 h-5 text-[${PURPLE_ACCENT}]`} /> 
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">4</div>
@@ -67,10 +75,10 @@ function EstudianteDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+        <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Tareas Pendientes</CardTitle>
-            <GraduationCap className="w-5 h-5 text-[#facc15]" />
+            <GraduationCap className={`w-5 h-5 text-[${PURPLE_ACCENT}]`} /> 
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">7</div>
@@ -78,45 +86,47 @@ function EstudianteDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+        <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Materias Perdidas</CardTitle>
-            <AlertTriangle className="w-5 h-5 text-red-400" />
+            <AlertTriangle className={`w-5 h-5 ${RED_ALERT}`} /> 
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-400">2</div>
+            <div className={`text-3xl font-bold ${RED_ALERT}`}>2</div>
             <p className="text-xs text-white/60 mt-1">Requieren atención</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md hover-elevate">
+        <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Puesto en el Salón</CardTitle>
-            <Trophy className="w-5 h-5 text-[#facc15]" />
+            <Trophy className={`w-5 h-5 text-[${YELLOW_TROPHY}]`} /> 
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-[#facc15]">#5</div>
+            <div className={`text-3xl font-bold text-[${YELLOW_TROPHY}]`}>#5</div>
             <p className="text-xs text-white/60 mt-1">De 32 estudiantes</p>
           </CardContent>
         </Card>
       </div>
-      
-      <Card className="bg-[#1e3a8a]/20 border-[#3b82f6]/30 backdrop-blur-md">
+
+      <Card className={CARD_STYLE}>
         <CardHeader>
           <CardTitle className="text-white">Materias Recientes</CardTitle>
           <CardDescription className="text-white/60">Tus materias de este período</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {['Matemáticas', 'Física', 'Química', 'Historia'].map((curso) => (
-            <div key={curso} className="flex items-center justify-between gap-2 p-4 bg-[#1e3a8a]/30 rounded-xl hover:bg-[#1e3a8a]/50 transition-colors cursor-pointer">
+            <div key={curso} className="flex items-center justify-between gap-2 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a] rounded-lg" />
+                <div className={`w-10 h-10 bg-gradient-to-br ${GRADIENT_STYLE} rounded-lg`} />
                 <div>
                   <p className="font-medium text-white">{curso}</p>
                   <p className="text-sm text-white/50">Curso activo</p>
                 </div>
               </div>
-              <button className="px-4 py-2 bg-[#facc15] hover:bg-[#eab308] text-[#1e3a8a] rounded-lg text-sm font-medium transition-colors">
+              <button 
+                className={`px-4 py-2 bg-[${PURPLE_ACCENT}] hover:bg-[#6a0dad] text-white rounded-lg text-sm font-medium transition-colors`}
+              >
                 Ver curso
               </button>
             </div>
