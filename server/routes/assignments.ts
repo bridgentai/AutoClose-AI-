@@ -121,6 +121,11 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Solo los estudiantes pueden enviar entregas.' });
     }
 
+    // Verificar que el estudiante pertenece al mismo colegio
+    if (user.colegioId !== assignment.colegioId) {
+      return res.status(403).json({ message: 'No tienes acceso a esta tarea.' });
+    }
+
     // Verificar que el estudiante pertenece al curso de la tarea
     if (user.curso !== assignment.curso) {
       return res.status(403).json({ message: 'No perteneces al curso de esta tarea.' });
@@ -164,6 +169,12 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
   try {
     const { curso, mes, año } = req.params;
     
+    // Obtener el usuario para filtrar por colegio
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    
     const mesNum = parseInt(mes);
     const añoNum = parseInt(año);
     
@@ -171,8 +182,10 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
     const primerDia = new Date(añoNum, mesNum - 1, 1);
     const ultimoDia = new Date(añoNum, mesNum, 0, 23, 59, 59);
 
+    // Filtrar por curso Y colegio para evitar conflictos entre colegios
     const assignments = await Assignment.find({
       curso,
+      colegioId: user.colegioId,
       fechaEntrega: {
         $gte: primerDia,
         $lte: ultimoDia,
