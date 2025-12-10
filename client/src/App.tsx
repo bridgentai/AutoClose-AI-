@@ -32,6 +32,8 @@ import PlataformasPage from "@/pages/plataformas";
 import MiAprendizajeLayout from "@/pages/mi-aprendizaje";
 
 
+
+
 function Router() {
 return (
 <Switch>

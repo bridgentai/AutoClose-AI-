@@ -25,19 +25,51 @@ export function AppSidebar() {
   const isEstudiante = user?.rol === 'estudiante';
 
   const menuItems = [
-    { icon: Home, label: 'Dashboard', path: '/dashboard', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
-    { icon: MessageSquare, label: 'Chat AI', path: '/chat', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
-    { icon: GraduationCap, label: 'Mi Aprendizaje', path: '/mi-aprendizaje', roles: ['estudiante'] },
-    { icon: BookOpen, label: 'Mis Materias', path: '/subjects', roles: ['estudiante'] },
-    { icon: Calendar, label: 'Calendario', path: '/calendar', roles: ['estudiante'] },
-    { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
-    { icon: Globe, label: 'Plataformas', path: '/plataformas', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
-    { icon: Users, label: 'Profesores', path: '/directivo', roles: ['directivo'] },
-    { icon: GraduationCap, label: 'Materiales', path: '/materials', roles: ['estudiante', 'profesor'] },
-    { icon: Settings, label: 'Configuración', path: '/settings', roles: ['directivo'] },
-    { icon: User, label: 'Mi Cuenta', path: '/account', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
-  ];
+      // Se mantiene: Dashboard
+      { icon: Home, label: 'Dashboard', path: '/dashboard', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
 
+      // Se mantiene: Chat AI
+      { icon: MessageSquare, label: 'Chat AI', path: '/chat', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
+
+      // NUEVO MÓDULO 1: Mi Aprendizaje (Entrada principal del estudiante)
+      { icon: GraduationCap, label: 'Mi Aprendizaje', path: '/mi-aprendizaje', roles: ['estudiante'] },
+
+    // ... (después de Mi Aprendizaje)
+        { icon: MessageSquare, label: 'Comunicación', path: '/comunicacion', roles: ['estudiante'] },
+    // ... (antes de Mi Cuenta)
+
+      // -------------------------------------------------------------
+      // ELIMINADAS PARA EL ESTUDIANTE: Absorbidas por 'Mi Aprendizaje'
+      // -------------------------------------------------------------
+
+      // Mis Materias: Ahora solo para 'profesor' (Se quita 'estudiante')
+      { icon: BookOpen, label: 'Mis Materias', path: '/subjects', roles: ['profesor'] }, 
+
+      // Calendario: Se quita 'estudiante' (Se accede por Mi Aprendizaje o Módulo 2)
+      { icon: Calendar, label: 'Calendario', path: '/calendar', roles: ['profesor', 'directivo', 'padre'] }, 
+
+      // Cursos: Se mantiene solo para 'profesor' (Como estaba)
+      { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
+
+      // Plataformas: Se quita 'estudiante' (Se mueve al Módulo 1 o Módulo 5)
+      { icon: Globe, label: 'Plataformas', path: '/plataformas', roles: ['profesor', 'directivo', 'padre'] },
+
+      // Materiales: Se quita 'estudiante' (Se mueve al Módulo 1)
+      { icon: GraduationCap, label: 'Materiales', path: '/materials', roles: ['profesor'] }, 
+
+      // -------------------------------------------------------------
+      // OTROS MÓDULOS Y ENLACES (Mantenidos)
+      // -------------------------------------------------------------
+
+      // Se mantiene: Profesores (Solo Directivo)
+      { icon: Users, label: 'Profesores', path: '/directivo', roles: ['directivo'] }, 
+
+      // Se mantiene: Configuración (Solo Directivo)
+      { icon: Settings, label: 'Configuración', path: '/settings', roles: ['directivo'] }, 
+
+      // Módulo 4: Mi Cuenta / Perfil (Se mantiene por ahora para todos)
+      { icon: User, label: 'Mi Cuenta', path: '/account', roles: ['estudiante', 'profesor', 'directivo', 'padre'] }, 
+  ];
   const filteredItems = menuItems.filter(item => item.roles.includes(user?.rol || ''));
 
   return (

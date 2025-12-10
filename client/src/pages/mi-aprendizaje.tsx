@@ -7,7 +7,7 @@ import { useEffect } from "react";
 
 const navigationItems = [
   {
-    title: "Cursos",
+    title: "Materias",
     path: "/mi-aprendizaje/cursos",
     icon: BookOpen,
   },
