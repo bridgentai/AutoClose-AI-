@@ -7,7 +7,7 @@ const router = express.Router();
 // POST /api/assignments - Crear nueva tarea (solo profesores)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, curso, courseId, fechaEntrega } = req.body;
+    const { titulo, descripcion, curso, courseId, fechaEntrega, adjuntos } = req.body;
 
     if (!titulo || !descripcion || !curso || !fechaEntrega) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
@@ -41,7 +41,6 @@ router.post('/', protect, async (req: AuthRequest, res) => {
     }
 
     // CRÍTICO: Verificar que el grupo (curso) solicitado pertenece a esta materia
-    // Esto previene que un cliente malicioso use un courseId válido pero envíe un curso arbitrario
     if (!course.cursos.includes(curso)) {
       return res.status(403).json({ 
         message: `La materia ${course.nombre} no incluye el grupo ${curso}. Grupos válidos: ${course.cursos.join(', ')}.` 
@@ -52,11 +51,12 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       titulo,
       descripcion,
       curso,
-      courseId: courseId || undefined, // Agregar courseId si está disponible
+      courseId: courseId || undefined,
       fechaEntrega: new Date(fechaEntrega),
       profesorId: user._id,
       profesorNombre: user.nombre,
       colegioId: user.colegioId,
+      adjuntos: adjuntos || [],
     });
 
     await newAssignment.save();
@@ -64,6 +64,94 @@ router.post('/', protect, async (req: AuthRequest, res) => {
     return res.status(201).json(newAssignment);
   } catch (err: any) {
     console.error('Error al crear tarea:', err.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// PUT /api/assignments/:id - Editar tarea (solo el profesor que la creó)
+router.put('/:id', protect, async (req: AuthRequest, res) => {
+  try {
+    const { titulo, descripcion, fechaEntrega, adjuntos } = req.body;
+    
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) {
+      return res.status(404).json({ message: 'Tarea no encontrada.' });
+    }
+
+    // Verificar que el usuario es el profesor que creó la tarea
+    if (assignment.profesorId.toString() !== req.userId) {
+      return res.status(403).json({ message: 'No tienes permiso para editar esta tarea.' });
+    }
+
+    // Actualizar campos
+    if (titulo) assignment.titulo = titulo;
+    if (descripcion) assignment.descripcion = descripcion;
+    if (fechaEntrega) assignment.fechaEntrega = new Date(fechaEntrega);
+    if (adjuntos !== undefined) assignment.adjuntos = adjuntos;
+
+    await assignment.save();
+
+    return res.json(assignment);
+  } catch (err: any) {
+    console.error('Error al editar tarea:', err.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// POST /api/assignments/:id/submit - Enviar entrega de estudiante
+router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
+  try {
+    const { archivos, comentario } = req.body;
+    
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) {
+      return res.status(404).json({ message: 'Tarea no encontrada.' });
+    }
+
+    // Verificar que el usuario es estudiante
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    if (user.rol !== 'estudiante') {
+      return res.status(403).json({ message: 'Solo los estudiantes pueden enviar entregas.' });
+    }
+
+    // Verificar que el estudiante pertenece al curso de la tarea
+    if (user.curso !== assignment.curso) {
+      return res.status(403).json({ message: 'No perteneces al curso de esta tarea.' });
+    }
+
+    // Verificar si ya existe una entrega del estudiante
+    const existingSubmissionIndex = assignment.entregas.findIndex(
+      (e: any) => e.estudianteId.toString() === req.userId
+    );
+
+    const submission = {
+      estudianteId: user._id,
+      estudianteNombre: user.nombre,
+      archivos: archivos || [],
+      comentario,
+      fechaEntrega: new Date(),
+    };
+
+    if (existingSubmissionIndex >= 0) {
+      // Actualizar entrega existente
+      assignment.entregas[existingSubmissionIndex] = {
+        ...assignment.entregas[existingSubmissionIndex],
+        ...submission,
+      } as any;
+    } else {
+      // Nueva entrega
+      assignment.entregas.push(submission as any);
+    }
+
+    await assignment.save();
+
+    return res.json({ message: 'Entrega enviada exitosamente.', assignment });
+  } catch (err: any) {
+    console.error('Error al enviar entrega:', err.message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
