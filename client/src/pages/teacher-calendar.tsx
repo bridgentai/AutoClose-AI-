@@ -32,8 +32,10 @@ interface Course {
   cursos: string[];
 }
 
+type AttachmentType = 'pdf' | 'link' | 'imagen' | 'documento' | 'otro';
+
 interface Attachment {
-  tipo: 'pdf' | 'link' | 'imagen' | 'documento' | 'otro';
+  tipo: AttachmentType;
   nombre: string;
   url: string;
 }
@@ -52,7 +54,7 @@ export default function TeacherCalendarPage() {
     horaEntrega: '23:59',
   });
   const [adjuntos, setAdjuntos] = useState<Attachment[]>([]);
-  const [newAttachment, setNewAttachment] = useState({ tipo: 'link' as const, nombre: '', url: '' });
+  const [newAttachment, setNewAttachment] = useState<Attachment>({ tipo: 'link', nombre: '', url: '' });
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -372,7 +374,7 @@ export default function TeacherCalendarPage() {
               <div className="flex gap-2">
                 <Select
                   value={newAttachment.tipo}
-                  onValueChange={(value: 'pdf' | 'link') => setNewAttachment({ ...newAttachment, tipo: value })}
+                  onValueChange={(value) => setNewAttachment({ ...newAttachment, tipo: value as 'pdf' | 'link' | 'imagen' | 'documento' | 'otro' })}
                 >
                   <SelectTrigger className="w-28 bg-white/5 border-white/10 text-white">
                     <SelectValue />

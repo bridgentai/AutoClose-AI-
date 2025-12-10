@@ -33,8 +33,11 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Materia no encontrada.' });
     }
 
-    // Verificar que el profesor es el dueño de la materia
-    if (course.profesorId.toString() !== user._id.toString()) {
+    // Verificar que el profesor es uno de los profesores de la materia
+    const isProfesorOfCourse = course.profesorIds.some(
+      (pId: any) => pId.toString() === user._id.toString()
+    );
+    if (!isProfesorOfCourse) {
       return res.status(403).json({ 
         message: 'No puedes asignar tareas para una materia que no dictas.' 
       });

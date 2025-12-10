@@ -26,6 +26,8 @@ import NotFound from "@/pages/not-found";
 // Role-specific pages
 import StudentPage from "@/pages/student";
 import TeacherPage from "@/pages/teacher";
+import TeacherCalendarPage from "@/pages/teacher-calendar";
+import AssignmentDetailPage from "@/pages/assignment-detail";
 import DirectorPage from "@/pages/director";
 import ParentPage from "@/pages/parent";
 import DirectivoPage from "@/pages/directivo";
@@ -208,6 +210,18 @@ function Router() {
       <Route path="/calendar">
         <AuthGuard>
           <CalendarPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/teacher-calendar">
+        <AuthGuard>
+          <TeacherCalendarPage />
+        </AuthGuard>
+      </Route>
+
+      <Route path="/assignment/:id">
+        <AuthGuard>
+          <AssignmentDetailPage />
         </AuthGuard>
       </Route>
 
