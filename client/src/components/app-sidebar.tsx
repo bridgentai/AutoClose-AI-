@@ -27,6 +27,7 @@ export function AppSidebar() {
   const menuItems = [
     { icon: Home, label: 'Dashboard', path: '/dashboard', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
     { icon: MessageSquare, label: 'Chat AI', path: '/chat', roles: ['estudiante', 'profesor', 'directivo', 'padre'] },
+    { icon: GraduationCap, label: 'Mi Aprendizaje', path: '/mi-aprendizaje', roles: ['estudiante'] },
     { icon: BookOpen, label: 'Mis Materias', path: '/subjects', roles: ['estudiante'] },
     { icon: Calendar, label: 'Calendario', path: '/calendar', roles: ['estudiante'] },
     { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
