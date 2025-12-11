@@ -12,7 +12,7 @@ const router = express.Router();
 router.get('/subjects', protect, async (req: AuthRequest, res) => {
   try {
     const estudianteId = req.user?.id;
-    const colegioId = req.user?.colegioId || 'default_colegio';
+    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
 
     if (!estudianteId) {
       return res.status(401).json({ message: 'No autorizado.' });

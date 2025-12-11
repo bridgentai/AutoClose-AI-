@@ -19,7 +19,7 @@ const GRUPOS_FIJOS = [
 ];
 
 // Seed: Crear grupos fijos si no existen
-export async function seedGroups(colegioId: string = 'default_colegio') {
+export async function seedGroups(colegioId: string = 'COLEGIO_DEMO_2025') {
   try {
     for (const grupo of GRUPOS_FIJOS) {
       await Group.findByIdAndUpdate(
@@ -37,7 +37,7 @@ export async function seedGroups(colegioId: string = 'default_colegio') {
 // GET /api/groups/all - Obtener todos los grupos
 router.get('/all', protect, async (req: AuthRequest, res) => {
   try {
-    const colegioId = req.user?.colegioId || 'default_colegio';
+    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
     
     // Buscar grupos del colegio
     let groups = await Group.find({ colegioId }).select('_id nombre').lean();

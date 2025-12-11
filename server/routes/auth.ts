@@ -14,9 +14,9 @@ const generateToken = (id: string) => jwt.sign({ id }, JWT_SECRET, { expiresIn: 
 
 // Códigos de acceso por colegio (en producción esto estaría en una base de datos)
 const CODIGOS_COLEGIO: Record<string, string> = {
-  'COLEGIO_DEMO_2025': 'default_colegio',
-  'SAN_JOSE_2025': 'colegio_san_jose',
-  'SANTA_MARIA_2025': 'colegio_santa_maria',
+  'COLEGIO_DEMO_2025': 'COLEGIO_DEMO_2025',
+  'SAN_JOSE_2025': 'SAN_JOSE_2025',
+  'SANTA_MARIA_2025': 'SANTA_MARIA_2025',
 };
 
 // POST /api/auth/register
@@ -33,7 +33,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Validar código de acceso para profesor y directivo
-    let colegioId = 'default_colegio';
+    let colegioId = 'COLEGIO_DEMO_2025';
     if (rol === 'profesor' || rol === 'directivo') {
       if (!codigoAcceso) {
         return res.status(400).json({ message: 'El código del colegio es obligatorio para profesores y directivos.' });

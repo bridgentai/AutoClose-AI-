@@ -9,7 +9,7 @@ interface IGroup extends Document {
 const groupSchema = new Schema<IGroup>({
   _id: { type: String, required: true },
   nombre: { type: String, required: true },
-  colegioId: { type: String, required: true, default: 'default_colegio' },
+  colegioId: { type: String, required: true, default: 'COLEGIO_DEMO_2025' },
 }, { timestamps: true });
 
 export const Group = model<IGroup>('Group', groupSchema);

@@ -50,7 +50,7 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
   try {
     const { materiaId, grupoIds, profesorId } = req.body;
     const userId = req.user?.id;
-    const colegioId = req.user?.colegioId || 'default_colegio';
+    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
 
     // Validaciones
     if (!grupoIds || !Array.isArray(grupoIds)) {
@@ -133,7 +133,7 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
 router.get('/courses', protect, async (req: AuthRequest, res) => {
   try {
     const profesorId = req.user?.id;
-    const colegioId = req.user?.colegioId || 'default_colegio';
+    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
 
     if (!profesorId) {
       return res.status(401).json({ message: 'No autorizado.' });
@@ -174,7 +174,7 @@ router.get('/courses', protect, async (req: AuthRequest, res) => {
 router.get('/my-groups', protect, async (req: AuthRequest, res) => {
   try {
     const profesorId = req.user?.id;
-    const colegioId = req.user?.colegioId || 'default_colegio';
+    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
 
     // Buscar cursos donde el profesor está asignado (usando ObjectId para comparación correcta)
     const courses = await Course.find({ 

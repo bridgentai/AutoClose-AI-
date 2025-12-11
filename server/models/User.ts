@@ -28,7 +28,7 @@ const userSchema = new Schema<IUser>({
     type: [String],
     default: [] 
   },
-  colegioId: { type: String, required: true, default: 'default_colegio' },
+  colegioId: { type: String, required: true, default: 'COLEGIO_DEMO_2025' },
   hijoId: { type: String },
   createdAt: { type: Date, default: Date.now },
 });
