@@ -298,18 +298,18 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
   }
 });
 
-// GET /api/assignments/profesor/:profesorId/:mes/:año - Obtener tareas creadas por un profesor en un mes
-router.get('/profesor/:profesorId/:mes/:año', protect, async (req: AuthRequest, res) => {
+// GET /api/assignments/profesor/:profesorId/:mes/:year - Obtener tareas creadas por un profesor en un mes
+router.get('/profesor/:profesorId/:mes/:year', protect, async (req: AuthRequest, res) => {
   try {
-    const { profesorId, mes, año } = req.params;
+    const { profesorId, mes, year } = req.params;
     
     const mesNum = parseInt(mes);
-    const añoNum = parseInt(año);
+    const yearNum = parseInt(year);
     
-    const primerDia = new Date(añoNum, mesNum - 1, 1);
-    const ultimoDia = new Date(añoNum, mesNum, 0, 23, 59, 59);
+    const primerDia = new Date(yearNum, mesNum - 1, 1);
+    const ultimoDia = new Date(yearNum, mesNum, 0, 23, 59, 59);
 
-    console.log(`GET profesor assignments: profesorId=${profesorId}, mes=${mes}, año=${año}`);
+    console.log(`GET profesor assignments: profesorId=${profesorId}, mes=${mes}, year=${year}`);
     console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
 
     // Buscar directamente - mongoose hace la conversión automáticamente
