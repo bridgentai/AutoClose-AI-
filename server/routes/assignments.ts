@@ -249,13 +249,20 @@ router.get('/profesor/:profesorId/:mes/:año', protect, async (req: AuthRequest,
     const primerDia = new Date(añoNum, mesNum - 1, 1);
     const ultimoDia = new Date(añoNum, mesNum, 0, 23, 59, 59);
 
+    // Buscar por string o ObjectId para compatibilidad
+    const { Types } = require('mongoose');
     const assignments = await Assignment.find({
-      profesorId,
+      $or: [
+        { profesorId: profesorId },
+        { profesorId: new Types.ObjectId(profesorId) }
+      ],
       fechaEntrega: {
         $gte: primerDia,
         $lte: ultimoDia,
       },
     }).sort({ fechaEntrega: 1 });
+
+    console.log(`GET /profesor/${profesorId}/${mes}/${año}: found ${assignments.length} assignments`);
 
     return res.json(assignments);
   } catch (err: any) {
