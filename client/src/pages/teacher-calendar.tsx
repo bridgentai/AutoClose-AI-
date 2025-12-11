@@ -70,12 +70,15 @@ export default function TeacherCalendarPage() {
     enabled: !!user?.id,
   });
 
-  const { data: professorGroups = [] } = useQuery<ProfessorGroupAssignment[]>({
+  const { data: professorGroups = [], isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
     queryKey: ['/api/professor/my-groups'],
     enabled: !!user?.id,
+    staleTime: 0,
   });
 
+  console.log('professorGroups:', professorGroups);
   const availableGroups = professorGroups.map(g => g.groupId);
+  console.log('availableGroups:', availableGroups);
   const getSubjectsForGroup = (groupId: string) => {
     const group = professorGroups.find(g => g.groupId === groupId);
     return group?.subjects || [];
@@ -300,10 +303,14 @@ export default function TeacherCalendarPage() {
               <Select
                 value={formData.curso}
                 onValueChange={(value) => setFormData({ ...formData, curso: value })}
-                disabled={availableGroups.length === 0}
+                disabled={isLoadingGroups || availableGroups.length === 0}
               >
                 <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-curso">
-                  <SelectValue placeholder={availableGroups.length === 0 ? "Sin grupos asignados" : "Selecciona grupo"} />
+                  <SelectValue placeholder={
+                    isLoadingGroups ? "Cargando grupos..." :
+                    availableGroups.length === 0 ? "Sin grupos asignados" : 
+                    "Selecciona grupo"
+                  } />
                 </SelectTrigger>
                 <SelectContent className="bg-[#1a001c] border-white/10">
                   {availableGroups.map((grupo) => (
@@ -318,9 +325,9 @@ export default function TeacherCalendarPage() {
                   Materia: {getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')}
                 </p>
               )}
-              {availableGroups.length === 0 && (
+              {!isLoadingGroups && availableGroups.length === 0 && (
                 <p className="text-xs text-amber-400">
-                  Primero debes asignar grupos a tu materia desde la configuración.
+                  Primero debes asignar grupos a tu materia desde "Mis Cursos" → "Gestionar Asignaciones".
                 </p>
               )}
             </div>
