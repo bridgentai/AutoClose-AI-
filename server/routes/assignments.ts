@@ -26,6 +26,44 @@ router.get('/debug/all', async (req, res) => {
   }
 });
 
+// DEBUG: Test profesor query directly
+router.get('/debug/profesor/:profesorId/:mes/:year', async (req, res) => {
+  try {
+    const { profesorId, mes, year } = req.params;
+    const mesNum = parseInt(mes);
+    const yearNum = parseInt(year);
+    
+    const primerDia = new Date(yearNum, mesNum - 1, 1);
+    const ultimoDia = new Date(yearNum, mesNum, 0, 23, 59, 59);
+    
+    console.log(`DEBUG profesor: ${profesorId}, mes=${mes}, year=${year}`);
+    console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
+    
+    const assignments = await Assignment.find({
+      profesorId: profesorId,
+      fechaEntrega: { $gte: primerDia, $lte: ultimoDia }
+    }).lean();
+    
+    console.log(`Found ${assignments.length} assignments`);
+    
+    return res.json({
+      profesorId,
+      mes: mesNum,
+      year: yearNum,
+      dateRange: { start: primerDia.toISOString(), end: ultimoDia.toISOString() },
+      total: assignments.length,
+      assignments: assignments.map((a: any) => ({
+        _id: a._id,
+        titulo: a.titulo,
+        profesorId: String(a.profesorId),
+        fechaEntrega: a.fechaEntrega
+      }))
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/assignments - Crear nueva tarea (solo profesores)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {

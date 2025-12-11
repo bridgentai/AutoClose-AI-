@@ -67,7 +67,12 @@ export default function TeacherCalendarPage() {
 
   const { data: assignments = [], refetch: refetchAssignments } = useQuery<Assignment[]>({
     queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
-    queryFn: () => apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`),
+    queryFn: async () => {
+      console.log('Fetching assignments for professor:', user?.id, currentMonth, currentYear);
+      const result = await apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
+      console.log('Assignments received:', result);
+      return result;
+    },
     enabled: !!user?.id,
     staleTime: 0,
   });
