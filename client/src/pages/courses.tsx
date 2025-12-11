@@ -16,87 +16,72 @@ import { apiRequest } from '@/lib/queryClient';
 // =========================================================
 
 interface Professor {
-    _id: string;
-    nombre: string;
-    email: string;
+_id: string;
+nombre: string;
+email: string;
 }
 
 // 🎯 INTERFAZ DE MATERIA (Course Subject) - Lo que ve el Estudiante/Padre/Directivo
-// Para el Profesor, cada 'Course' es una Materia que PUEDE enseñar.
 interface Course {
-    _id: string; // ID de la Materia (ej. Matemáticas)
-    nombre: string;
-    descripcion?: string;
-    // Campos que solo aparecen si está asignada:
-    profesorIds?: Professor[]; 
-    cursos?: string[]; // IDs de grupo (ej. ['10A', '10B'])
-    colorAcento?: string;
-    icono?: string;
+_id: string; // ID de la Materia (ej. Matemáticas)
+nombre: string;
+descripcion?: string;
+profesorIds?: Professor[]; 
+cursos?: string[]; 
+colorAcento?: string;
+icono?: string;
 }
 
 // Interfaz para la vista de Profesor (Sus asignaciones de Grupos)
-// Opcionalmente, el backend puede devolver las asignaciones de grupo directamente.
 interface ProfessorGroupAssignment {
-    groupId: string; // El ID del grupo (ej. "10A")
-    subjects: Course[]; // Las materias que imparte en ese grupo
-    totalStudents: number;
+groupId: string; // El ID del grupo (ej. "10A")
+subjects: Course[]; // Las materias que imparte en ese grupo
+totalStudents: number;
 }
 
 
 const GRADIENT_COLORS = [
-    'from-purple-500 to-pink-500',
-    'from-blue-500 to-cyan-500',
-    'from-green-500 to-emerald-500',
-    'from-yellow-500 to-orange-500',
-    'from-red-500 to-rose-500',
-    'from-indigo-500 to-purple-500',
-    'from-teal-500 to-cyan-500',
-    'from-amber-500 to-yellow-500',
-    'from-violet-500 to-purple-500',
-    'from-fuchsia-500 to-pink-500',
+'from-purple-500 to-pink-500',
+'from-blue-500 to-cyan-500',
+'from-green-500 to-emerald-500',
+'from-yellow-500 to-orange-500',
+'from-red-500 to-rose-500',
+'from-indigo-500 to-purple-500',
+'from-teal-500 to-cyan-500',
+'from-amber-500 to-yellow-500',
+'from-violet-500 to-purple-500',
+'from-fuchsia-500 to-pink-500',
 ];
 
 // 🎯 FUNCIÓN DE FETCHING - MODIFICADA para reflejar la nueva lógica
 const fetchCoursesByRole = async (userRole: string | undefined): Promise<Course[]> => {
-    if (!userRole) return [];
+if (!userRole) return [];
 
-    let endpoint = '';
+let endpoint = '';
 
-    switch (userRole) {
-        case 'estudiante':
-        case 'padre':
-            // El backend debe devolver las MATERIAS a las que está asignado el estudiante/hijo
-            endpoint = '/api/users/me/courses'; 
-            break;
-        case 'profesor':
-            // El backend debe devolver los GRUPOS a los que el profesor se ha auto-asignado.
-            // Para la vista principal, vamos a pedir los grupos activos del profesor.
-            // Esto difiere del código original que pedía '/api/courses/mine' (que suena a materias).
-            // ASUMIMOS que /api/courses/mine ahora devuelve una lista de los GRUPOS (IDs) que el profesor dicta,
-            // pero mantenemos la interfaz Course[] para no romper la estructura de Query.
-            // **ALTERNATIVAMENTE**, ajustamos la lógica de fetch para PROFESOR:
-            endpoint = '/api/professor/my-groups'; 
-            // La respuesta de esta API será un array de ProfessorGroupAssignment.
-            // Si la API no está lista, usaremos la lógica anterior y simulamos la lista de Grupos
-            // a partir de los datos existentes. Por ahora, ajustamos la API para que devuelva los Grupos.
-            // **Vamos a crear un nuevo fetch para el profesor para manejar la respuesta GroupAssignment**
-            return apiRequest('GET', endpoint);
+switch (userRole) {
+case 'estudiante':
+case 'padre':
+endpoint = '/api/users/me/courses'; 
+break;
+case 'profesor':
+            // Esta función ya no se usa para el profesor, pero se mantiene por estructura
+return []; 
 
-        case 'directivo':
-            // El directivo ve todas las MATERIAS disponibles
-            endpoint = '/api/courses/all';
-            break;
-        default:
-            return [];
-    }
+case 'directivo':
+endpoint = '/api/courses/all';
+break;
+default:
+return [];
+}
 
-    // Para Estudiante, Padre, Directivo, usamos Course[]
-    return apiRequest('GET', endpoint);
+return apiRequest('GET', endpoint);
 };
 
 // 🎯 FETCH ESPECÍFICO PARA PROFESOR (Grupos Asignados)
 const fetchProfessorGroups = async (): Promise<ProfessorGroupAssignment[]> => {
-    return apiRequest('GET', '/api/professor/my-groups');
+    // Asumiendo que el backend maneja esta ruta para devolver los grupos que dicta
+return apiRequest('GET', '/api/professor/my-groups');
 };
 
 // =========================================================
@@ -104,344 +89,340 @@ const fetchProfessorGroups = async (): Promise<ProfessorGroupAssignment[]> => {
 // =========================================================
 
 export default function CoursesPage() {
-    const { user } = useAuth();
-    const [, setLocation] = useLocation();
-    const userRole = user?.rol;
+const { user } = useAuth();
+const [, setLocation] = useLocation();
+const userRole = user?.rol;
 
-    // Query para Estudiante, Padre, Directivo (devuelve Course[])
-    const { data: courses = [], isLoading: isLoadingCourses, error: errorCourses } = useQuery<Course[]>({
-        queryKey: ['courses', userRole],
-        queryFn: () => fetchCoursesByRole(userRole),
-        enabled: !!userRole && userRole !== 'profesor',
-    });
+// Query para Estudiante, Padre, Directivo (devuelve Course[])
+const { data: courses = [], isLoading: isLoadingCourses, error: errorCourses } = useQuery<Course[]>({
+queryKey: ['courses', userRole],
+queryFn: () => fetchCoursesByRole(userRole),
+enabled: !!userRole && userRole !== 'profesor',
+});
 
-    // 🎯 Query específica para Profesor (devuelve ProfessorGroupAssignment[])
-    const { data: professorGroups = [], isLoading: isLoadingGroups, error: errorGroups } = useQuery<ProfessorGroupAssignment[]>({
-        queryKey: ['professorGroups'],
-        queryFn: fetchProfessorGroups,
-        enabled: userRole === 'profesor',
-    });
+// 🎯 Query específica para Profesor (devuelve ProfessorGroupAssignment[])
+const { data: professorGroups = [], isLoading: isLoadingGroups, error: errorGroups } = useQuery<ProfessorGroupAssignment[]>({
+queryKey: ['professorGroups'],
+queryFn: fetchProfessorGroups,
+enabled: userRole === 'profesor',
+});
 
-    const isLoading = isLoadingCourses || isLoadingGroups;
-    const error = errorCourses || errorGroups;
-    const coursesToRender = userRole === 'profesor' ? professorGroups : courses;
+const isLoading = isLoadingCourses || isLoadingGroups;
+const error = errorCourses || errorGroups;
+const coursesToRender = userRole === 'profesor' ? professorGroups : courses;
 
-    // ------------------------------
-    // Handlers
-    // ------------------------------
+// ------------------------------
+// Handlers
+// ------------------------------
 
-    const handleCourseClick = (id: string, isGroup = false) => {
-        // Si es un grupo, vamos a la página de detalle del grupo (que es la vista de profesor)
-        // La ruta /course-detail/:id ahora maneja tanto el ID de Materia (Estudiante) como el ID de Grupo (Profesor)
-        setLocation(`/course-detail/${id}`);
-    };
+const handleCourseClick = (id: string, isGroup = false) => {
+setLocation(`/course-detail/${id}`);
+};
 
-    // ------------------------------
-    // Vistas por rol
-    // ------------------------------
+// ------------------------------
+// Vistas por rol
+// ------------------------------
 
-    // 🎯 VISTA PARA PROFESOR - Muestra los GRUPOS que está dictando
-    const renderProfessorView = () => {
+// 🎯 VISTA PARA PROFESOR - Muestra los GRUPOS que está dictando
+const renderProfessorView = () => {
 
-        // Mapea los grupos a los que está asignado
-        const groups = professorGroups;
+const groups = professorGroups;
 
-        return (
-            <>
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-3xl font-bold text-white font-['Poppins']">Mis Grupos Asignados</h2>
-                    <Button 
-                        variant="outline" 
-                        className="border-white/10 text-white hover:bg-white/10"
-                        onClick={() => setLocation('/group-assignment')} 
-                    >
-                        <Settings className="w-4 h-4 mr-2" />
-                        Gestionar Asignaciones
-                    </Button>
-                </div>
-                <p className="text-white/60 mb-8">
-                    Estos son los grupos a los que has asignado tus materias. Haz clic para gestionarlos.
-                </p>
+return (
+<>
+{/* 🎯 CAMBIO APLICADO: Botón de Asignación junto al título */}
+<div className="flex justify-between items-center mb-6">
+<h2 className="text-3xl font-bold text-white font-['Poppins']">Mis Grupos Asignados</h2>
+<Button 
+variant="outline" 
+className="border-white/10 text-white hover:bg-white/10"
+onClick={() => setLocation('/group-assignment')} 
+>
+<Settings className="w-4 h-4 mr-2" />
+Gestionar Asignaciones
+</Button>
+</div>
+<p className="text-white/60 mb-8">
+Estos son los grupos a los que has asignado tus materias. Haz clic para gestionarlos.
+</p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {groups.map((group, index) => {
-                        // Usamos un color fijo o uno basado en el índice para los grupos
-                        const colorClass = GRADIENT_COLORS[index % GRADIENT_COLORS.length];
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+{groups.map((group, index) => {
+const colorClass = GRADIENT_COLORS[index % GRADIENT_COLORS.length];
 
-                        // Muestra solo los nombres de las materias
-                        const subjectNames = group.subjects.map(s => s.nombre);
+const subjectNames = group.subjects.map(s => s.nombre);
 
-                        return (
-                            <Card
-                                key={group.groupId}
-                                className={`bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group`}
-                                onClick={() => handleCourseClick(group.groupId, true)} // Envía el ID del Grupo
-                            >
-                                <CardHeader className="p-4 md:p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div
-                                            className={`w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r ${colorClass}`}
-                                        >
-                                            <Users className="w-8 h-8 text-white" />
-                                        </div>
-                                        <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
-                                    </div>
+return (
+<Card
+key={group.groupId}
+className={`bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group`}
+onClick={() => handleCourseClick(group.groupId, true)} // Envía el ID del Grupo
+>
+<CardHeader className="p-4 md:p-6">
+<div className="flex items-center justify-between mb-4">
+<div
+className={`w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r ${colorClass}`}
+>
+<Users className="w-8 h-8 text-white" />
+</div>
+<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
+</div>
 
-                                    <CardTitle className="text-white text-3xl font-bold">{group.groupId}</CardTitle>
-                                    <CardDescription className="text-white/60 line-clamp-2 mt-1">
-                                        Materias: {subjectNames.join(', ') || 'Sin materias asignadas'}
-                                    </CardDescription>
-                                    <p className="text-sm text-white/40 mt-1">Estudiantes: {group.totalStudents}</p>
-                                </CardHeader>
+<CardTitle className="text-white text-3xl font-bold">{group.groupId}</CardTitle>
+<CardDescription className="text-white/60 line-clamp-2 mt-1">
+Materias: {subjectNames.join(', ') || 'Sin materias asignadas'}
+</CardDescription>
+<p className="text-sm text-white/40 mt-1">Estudiantes: {group.totalStudents}</p>
+</CardHeader>
 
-                                <CardContent className="p-4 pt-0 md:p-6 md:pt-0">
-                                    <Button
-                                        variant="outline"
-                                        className="w-full border-white/10 text-white hover:bg-white/10"
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            handleCourseClick(group.groupId, true);
-                                        }}
-                                    >
-                                        Gestionar Tareas
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </div>
-            </>
-        );
-    };
+<CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+<Button
+variant="outline"
+className="w-full border-white/10 text-white hover:bg-white/10"
+onClick={e => {
+e.stopPropagation();
+handleCourseClick(group.groupId, true);
+}}
+>
+Gestionar Tareas
+</Button>
+</CardContent>
+</Card>
+);
+})}
+</div>
+</>
+);
+};
 
 
-    // VISTA PARA ESTUDIANTE / DIRECTIVO (SIN CAMBIOS Mayores)
-    const renderCourseListView = (isDirectivo = false) => {
-        const title = isDirectivo ? 'Catálogo de Cursos (Directivo)' : 'Mis Materias Asignadas';
-        const description = isDirectivo
-            ? 'Lista de todas las materias creadas en el sistema.'
-            : 'Explora tus materias, revisa tareas y mantente al día.';
+// VISTA PARA ESTUDIANTE / DIRECTIVO (SIN CAMBIOS Mayores)
+const renderCourseListView = (isDirectivo = false) => {
+const title = isDirectivo ? 'Catálogo de Cursos (Directivo)' : 'Mis Materias Asignadas';
+const description = isDirectivo
+? 'Lista de todas las materias creadas en el sistema.'
+: 'Explora tus materias, revisa tareas y mantente al día.';
 
-        return (
-            <>
-                <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">{title}</h2>
-                <p className="text-white/60 mb-8">{description}</p>
+return (
+<>
+<h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">{title}</h2>
+<p className="text-white/60 mb-8">{description}</p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {courses.map((course, index) => {
-                        const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
-                        const displayColor =
-                            course.colorAcento ||
-                            GRADIENT_COLORS[index % GRADIENT_COLORS.length].split(' ')[0].replace('from-', '');
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+{courses.map((course, index) => {
+const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
+const displayColor =
+course.colorAcento ||
+GRADIENT_COLORS[index % GRADIENT_COLORS.length].split(' ')[0].replace('from-', '');
 
-                        return (
-                            <Card
-                                key={course._id}
-                                className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
-                                onClick={() => handleCourseClick(course._id)} // Envía el ID de la Materia
-                            >
-                                <CardHeader className="p-4 md:p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div
-                                            className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                                            style={{ backgroundColor: displayColor }}
-                                        >
-                                            <BookOpen className="w-8 h-8 text-white" />
-                                        </div>
-                                        <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
-                                    </div>
+return (
+<Card
+key={course._id}
+className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
+onClick={() => handleCourseClick(course._id)} // Envía el ID de la Materia
+>
+<CardHeader className="p-4 md:p-6">
+<div className="flex items-center justify-between mb-4">
+<div
+className="w-16 h-16 rounded-2xl flex items-center justify-center"
+style={{ backgroundColor: displayColor }}
+>
+<BookOpen className="w-8 h-8 text-white" />
+</div>
+<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
+</div>
 
-                                    <CardTitle className="text-white text-2xl font-bold">{course.nombre}</CardTitle>
-                                    <CardDescription className="text-white/60 line-clamp-2">
-                                        {course.descripcion || 'Sin descripción.'}
-                                    </CardDescription>
-                                    <p className="text-sm text-white/40 mt-1">Profesor: {primaryProfessor}</p>
-                                    <p className="text-xs text-white/30">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
-                                </CardHeader>
+<CardTitle className="text-white text-2xl font-bold">{course.nombre}</CardTitle>
+<CardDescription className="text-white/60 line-clamp-2">
+{course.descripcion || 'Sin descripción.'}
+</CardDescription>
+<p className="text-sm text-white/40 mt-1">Profesor: {primaryProfessor}</p>
+<p className="text-xs text-white/30">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
+</CardHeader>
 
-                                <CardContent className="p-4 pt-0 md:p-6 md:pt-0">
-                                    <Button
-                                        variant="outline"
-                                        className="w-full border-white/10 text-white hover:bg-white/10"
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            handleCourseClick(course._id);
-                                        }}
-                                    >
-                                        {isDirectivo ? 'Ver Detalle' : 'Ingresar'}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </div>
-            </>
-        );
-    };
+<CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+<Button
+variant="outline"
+className="w-full border-white/10 text-white hover:bg-white/10"
+onClick={e => {
+e.stopPropagation();
+handleCourseClick(course._id);
+}}
+>
+{isDirectivo ? 'Ver Detalle' : 'Ingresar'}
+</Button>
+</CardContent>
+</Card>
+);
+})}
+</div>
+</>
+);
+};
 
-    // VISTA PARA PADRE (SIN CAMBIOS Mayores)
-    const renderParentView = () => {
-        return (
-            <>
-                <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Materias de tus Hijos</h2>
-                <p className="text-white/60 mb-8">
-                    Revisa las materias y el progreso de los estudiantes a tu cargo.
-                </p>
+// VISTA PARA PADRE (SIN CAMBIOS Mayores)
+const renderParentView = () => {
+return (
+<>
+<h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Materias de tus Hijos</h2>
+<p className="text-white/60 mb-8">
+Revisa las materias y el progreso de los estudiantes a tu cargo.
+</p>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {courses.map((course, index) => {
-                        const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
-                        const displayColor =
-                            course.colorAcento ||
-                            GRADIENT_COLORS[index % GRADIENT_COLORS.length].split(' ')[0].replace('from-', '');
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+{courses.map((course, index) => {
+const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
+const displayColor =
+course.colorAcento ||
+GRADIENT_COLORS[index % GRADIENT_COLORS.length].split(' ')[0].replace('from-', '');
 
-                        return (
-                            <Card
-                                key={course._id}
-                                className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
-                                onClick={() => handleCourseClick(course._id)}
-                            >
-                                <CardHeader className="p-4 md:p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div
-                                            className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                                            style={{ backgroundColor: displayColor }}
-                                        >
-                                            <ClipboardList className="w-8 h-8 text-white" />
-                                        </div>
-                                        <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
-                                    </div>
+return (
+<Card
+key={course._id}
+className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
+onClick={() => handleCourseClick(course._id)}
+>
+<CardHeader className="p-4 md:p-6">
+<div className="flex items-center justify-between mb-4">
+<div
+className="w-16 h-16 rounded-2xl flex items-center justify-center"
+style={{ backgroundColor: displayColor }}
+>
+<ClipboardList className="w-8 h-8 text-white" />
+</div>
+<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
+</div>
 
-                                    <CardTitle className="text-white text-2xl font-bold">{course.nombre}</CardTitle>
-                                    <CardDescription className="text-white/60 line-clamp-2">
-                                        Materia en el grupo: {course.cursos?.join(', ') || 'N/A'}
-                                    </CardDescription>
-                                    <p className="text-sm text-white/40 mt-1">Profesor: {primaryProfessor}</p>
-                                </CardHeader>
+<CardTitle className="text-white text-2xl font-bold">{course.nombre}</CardTitle>
+<CardDescription className="text-white/60 line-clamp-2">
+Materia en el grupo: {course.cursos?.join(', ') || 'N/A'}
+</CardDescription>
+<p className="text-sm text-white/40 mt-1">Profesor: {primaryProfessor}</p>
+</CardHeader>
 
-                                <CardContent className="p-4 pt-0 md:p-6 md:pt-0">
-                                    <Button
-                                        variant="outline"
-                                        className="w-full border-white/10 text-white hover:bg-white/10"
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            handleCourseClick(course._id);
-                                        }}
-                                    >
-                                        Ver Progreso
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </div>
-            </>
-        );
-    };
+<CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+<Button
+variant="outline"
+className="w-full border-white/10 text-white hover:bg-white/10"
+onClick={e => {
+e.stopPropagation();
+handleCourseClick(course._id);
+}}
+>
+Ver Progreso
+</Button>
+</CardContent>
+</Card>
+);
+})}
+</div>
+</>
+);
+};
 
-    // =========================================================
-    // 3. RENDER PRINCIPAL
-    // =========================================================
+// =========================================================
+// 3. RENDER PRINCIPAL
+// =========================================================
 
-    const viewToRender = () => {
-        if (isLoading) {
-            return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {[...Array(4)].map((_, i) => (
-                        <Card key={i} className="bg-white/5 border-white/10 backdrop-blur-md">
-                            <CardHeader className="p-4 md:p-6">
-                                <Skeleton className="w-16 h-16 rounded-2xl bg-white/10" />
-                                <Skeleton className="w-24 h-8 mt-4 bg-white/10" />
-                                <Skeleton className="w-32 h-4 mt-2 bg-white/10" />
-                            </CardHeader>
-                            <CardContent className="p-4 pt-0 md:p-6 md:pt-0">
-                                <Skeleton className="w-full h-10 bg-white/10" />
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            );
-        }
+const viewToRender = () => {
+if (isLoading) {
+return (
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+{[...Array(4)].map((_, i) => (
+<Card key={i} className="bg-white/5 border-white/10 backdrop-blur-md">
+<CardHeader className="p-4 md:p-6">
+<Skeleton className="w-16 h-16 rounded-2xl bg-white/10" />
+<Skeleton className="w-24 h-8 mt-4 bg-white/10" />
+<Skeleton className="w-32 h-4 mt-2 bg-white/10" />
+</CardHeader>
+<CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+<Skeleton className="w-full h-10 bg-white/10" />
+</CardContent>
+</Card>
+))}
+</div>
+);
+}
 
-        if (error) {
-            return (
-                <Alert className="bg-red-500/10 border-red-500/50">
-                    <AlertCircle className="h-4 w-4 text-red-400" />
-                    <AlertTitle className="text-red-200">Error al cargar datos</AlertTitle>
-                    <AlertDescription className="text-red-200">
-                        Ocurrió un error al intentar cargar los datos de cursos/grupos.
-                    </AlertDescription>
-                </Alert>
-            );
-        }
+if (error) {
+return (
+<Alert className="bg-red-500/10 border-red-500/50">
+<AlertCircle className="h-4 w-4 text-red-400" />
+<AlertTitle className="text-red-200">Error al cargar datos</AlertTitle>
+<AlertDescription className="text-red-200">
+Ocurrió un error al intentar cargar los datos de cursos/grupos.
+</AlertDescription>
+</Alert>
+);
+}
 
-        if (coursesToRender.length === 0) {
-            let emptyMessage = '';
-            let alertTitle = 'Sin Asignaciones';
+if (coursesToRender.length === 0) {
+let emptyMessage = '';
+let alertTitle = 'Sin Asignaciones';
 
-            if (userRole === 'profesor') {
-                emptyMessage = 'Aún no te has auto-asignado materias a ningún grupo. Haz clic en "Gestionar Asignaciones" para empezar.';
-                alertTitle = 'Sin Grupos Activos';
-            } else if (userRole === 'estudiante') {
-                emptyMessage = 'No tienes materias inscritas. Por favor, verifica con tu directivo.';
-            } else if (userRole === 'directivo') {
-                emptyMessage = 'No hay materias registradas en la plataforma. Crea una nueva materia para empezar.';
-            } else if (userRole === 'padre') {
-                emptyMessage = 'No se encontraron materias para tus hijos.';
-            }
+if (userRole === 'profesor') {
+emptyMessage = 'Aún no te has auto-asignado materias a ningún grupo. Haz clic en "Gestionar Asignaciones" para empezar.';
+alertTitle = 'Sin Grupos Activos';
+} else if (userRole === 'estudiante') {
+emptyMessage = 'No tienes materias inscritas. Por favor, verifica con tu directivo.';
+} else if (userRole === 'directivo') {
+emptyMessage = 'No hay materias registradas en la plataforma. Crea una nueva materia para empezar.';
+} else if (userRole === 'padre') {
+emptyMessage = 'No se encontraron materias para tus hijos.';
+}
 
-            return (
-                <Alert className="bg-blue-500/10 border-blue-500/50">
-                    <AlertCircle className="h-4 w-4 text-blue-400" />
-                    <AlertTitle className="text-blue-200">{alertTitle}</AlertTitle>
-                    <AlertDescription className="text-blue-200">
-                        {emptyMessage}
-                    </AlertDescription>
-                </Alert>
-            );
-        }
+return (
+<Alert className="bg-blue-500/10 border-blue-500/50">
+<AlertCircle className="h-4 w-4 text-blue-400" />
+<AlertTitle className="text-blue-200">{alertTitle}</AlertTitle>
+<AlertDescription className="text-blue-200">
+{emptyMessage}
+</AlertDescription>
+</Alert>
+);
+}
 
-        // Llamada a la vista específica
-        if (userRole === 'profesor') return renderProfessorView();
-        if (userRole === 'estudiante') return renderCourseListView();
-        if (userRole === 'directivo') return renderCourseListView(true);
-        if (userRole === 'padre') return renderParentView();
+// Llamada a la vista específica
+if (userRole === 'profesor') return renderProfessorView();
+if (userRole === 'estudiante') return renderCourseListView();
+if (userRole === 'directivo') return renderCourseListView(true);
+if (userRole === 'padre') return renderParentView();
 
-        return <p className="text-white/60">Tu rol no tiene una vista definida para esta sección.</p>;
-    };
+return <p className="text-white/60">Tu rol no tiene una vista definida para esta sección.</p>;
+};
 
-    // =========================================================
-    // RETURN FINAL
-    // =========================================================
+// =========================================================
+// RETURN FINAL
+// =========================================================
 
-    return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-                <AppSidebar />
+return (
+<SidebarProvider>
+<div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+<AppSidebar />
 
-                <SidebarInset className="flex flex-col flex-1">
-                    <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
-                        <div className="flex items-center gap-3">
-                            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-                            <h1 className="text-xl font-bold text-white font-['Poppins']">
-                                {userRole === 'profesor' ? 'Mis Grupos' : 'Mis Cursos'}
-                            </h1>
-                        </div>
+<SidebarInset className="flex flex-col flex-1">
+<header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
+<div className="flex items-center gap-3">
+<SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
+<h1 className="text-xl font-bold text-white font-['Poppins']">
+{userRole === 'profesor' ? 'Mis Grupos' : 'Mis Cursos'}
+</h1>
+</div>
 
-                        <Button
-                            onClick={() => setLocation('/account')}
-                            variant="ghost"
-                            size="icon"
-                            className="text-white hover:bg-white/10"
-                            data-testid="button-account"
-                        >
-                            <User className="h-5 w-5" />
-                        </Button>
-                    </header>
+<Button
+onClick={() => setLocation('/account')}
+variant="ghost"
+size="icon"
+className="text-white hover:bg-white/10"
+data-testid="button-account"
+>
+<User className="h-5 w-5" />
+</Button>
+</header>
 
-                    <main className="flex-1 overflow-y-auto p-6 md:p-10">{viewToRender()}</main>
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
-    );
+<main className="flex-1 overflow-y-auto p-6 md:p-10">{viewToRender()}</main>
+</SidebarInset>
+</div>
+</SidebarProvider>
+);
 }

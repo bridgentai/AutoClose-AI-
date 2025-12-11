@@ -2,11 +2,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { ArrowLeft, BookOpen, Users, Check, AlertCircle, Loader2, User } from 'lucide-react'; // 🎯 MODIFICADO: Añadido 'User'
+import { ArrowLeft, BookOpen, Users, Check, AlertCircle, Loader2, User } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // 🎯 ELIMINADO: Ya no se necesita
 import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -20,10 +19,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 // 1. INTERFACES
 // =========================================================
 
-// 🎯 ELIMINADO CourseSubject interface
-
 interface Group {
-    _id: string; // ID del Grupo (ej. '10A', '10B')
+    _id: string;
     nombre: string;
 }
 
@@ -33,24 +30,32 @@ interface AssignmentData {
     profesorId: string;
 }
 
+interface CourseByNameResponse {
+    _id: string;
+    nombre: string;
+}
+
 // =========================================================
 // 2. FETCHING DE DATOS
 // =========================================================
 
-// 🎯 ELIMINADO fetchAllSubjects
-
-// Obtener todos los grupos disponibles (para que el profesor se asigne)
 const fetchAllGroups = async (): Promise<Group[]> => {
-    // Endpoint ASUMIDO: /api/groups/all
     return apiRequest('GET', '/api/groups/all');
 };
 
-// Obtener asignaciones actuales del profesor para la materia seleccionada
 const fetchCurrentAssignments = async (materiaId: string): Promise<string[]> => {
     if (!materiaId) return [];
-    // Endpoint ASUMIDO: /api/professor/assignments/:materiaId
     const response = await apiRequest('GET', `/api/professor/assignments/${materiaId}`);
     return response.grupoIds || [];
+};
+
+const fetchCourseByName = async (nombre: string): Promise<CourseByNameResponse | null> => {
+    if (!nombre) return null;
+    try {
+        return await apiRequest('GET', `/api/courses/by-name?nombre=${encodeURIComponent(nombre)}`);
+    } catch {
+        return null;
+    }
 };
 
 // =========================================================
@@ -62,10 +67,11 @@ export default function GroupAssignmentPage() {
     const [, setLocation] = useLocation();
     const { toast } = useToast();
 
-    const professorId = user?._id || '';
-    // 🎯 MODIFICADO: Materia tomada directamente del perfil del profesor
-    const selectedMateriaId = user?.materiaId || ''; // Asume que el ID de la materia está aquí
-    const selectedMateriaNombre = user?.materiaNombre || 'Materia No Definida'; // Asume que el nombre está aquí
+    // Usar el campo correcto de AuthResponse
+    const professorId = user?.id || '';
+    
+    // La materia principal es la primera del array de materias del profesor
+    const materiaPrincipalNombre = user?.materias?.[0] || '';
 
     // Estado para los IDs de Grupo seleccionados
     const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
@@ -74,7 +80,15 @@ export default function GroupAssignmentPage() {
     // Queries
     // ------------------------------------
 
-    // 🎯 ELIMINADO Q1: Todas las Materias
+    // Q1: Buscar el ID de la materia por nombre
+    const { data: courseData, isLoading: isLoadingCourse } = useQuery({
+        queryKey: ['courseByName', materiaPrincipalNombre],
+        queryFn: () => fetchCourseByName(materiaPrincipalNombre),
+        enabled: !!materiaPrincipalNombre,
+    });
+
+    const selectedMateriaId = courseData?._id || '';
+    const selectedMateriaNombre = materiaPrincipalNombre || 'Materia No Definida';
 
     // Q2: Todos los Grupos
     const { data: groups = [], isLoading: isLoadingGroups } = useQuery<Group[]>({
@@ -90,7 +104,6 @@ export default function GroupAssignmentPage() {
     } = useQuery<string[]>({
         queryKey: ['currentAssignments', selectedMateriaId],
         queryFn: () => fetchCurrentAssignments(selectedMateriaId),
-        // Se habilita si el profesor tiene una materia ID válida
         enabled: !!selectedMateriaId, 
     });
 
@@ -102,7 +115,6 @@ export default function GroupAssignmentPage() {
             setSelectedGroupIds([]);
         }
     }, [currentGroupAssignments, isLoadingCurrentAssignments, selectedMateriaId]);
-
 
     // ------------------------------------
     // Mutations (Guardar Asignaciones)
@@ -118,7 +130,6 @@ export default function GroupAssignmentPage() {
                 description: `La materia ${selectedMateriaNombre} ha sido asignada a los grupos.`, 
                 className: 'bg-green-500 text-white' 
             });
-            // Invalidar caché de grupos del profesor para actualizar CoursesPage
             queryClient.invalidateQueries({ queryKey: ['professorGroups'] }); 
             refetchCurrentAssignments();
         },
@@ -135,8 +146,6 @@ export default function GroupAssignmentPage() {
     // ------------------------------------
     // Handlers
     // ------------------------------------
-
-    // 🎯 ELIMINADO handleMateriaSelect
 
     const handleGroupToggle = (groupId: string, isChecked: boolean) => {
         setSelectedGroupIds(prev => 
@@ -158,11 +167,11 @@ export default function GroupAssignmentPage() {
         });
     };
 
-    const isGroupsLoading = isLoadingGroups || isLoadingCurrentAssignments;
+    const isGroupsLoading = isLoadingGroups || isLoadingCurrentAssignments || isLoadingCourse;
     const isSaving = assignmentMutation.isPending;
 
+    // Verificar rol de profesor
     if (user?.rol !== 'profesor') {
-        // ... (Mostrar error de acceso denegado) ...
         return (
             <div className="p-6 md:p-10 w-full">
                 <Alert className="bg-red-500/10 border-red-500/50 mt-8 max-w-lg mx-auto">
@@ -176,9 +185,9 @@ export default function GroupAssignmentPage() {
         );
     }
 
-    // Si la materia principal no está definida
-    if (!selectedMateriaId) {
-         return (
+    // Si no tiene materia principal definida
+    if (!materiaPrincipalNombre) {
+        return (
             <div className="p-6 md:p-10 w-full">
                 <Alert className="bg-yellow-500/10 border-yellow-500/50 mt-8 max-w-lg mx-auto">
                     <AlertCircle className="h-4 w-4 text-yellow-400" />
@@ -204,10 +213,11 @@ export default function GroupAssignmentPage() {
                             <Button
                                 variant="ghost" size="icon" onClick={() => setLocation('/courses')}
                                 className="text-white hover:bg-white/10"
+                                data-testid="button-back"
                             >
                                 <ArrowLeft className="w-5 h-5" />
                             </Button>
-                            <SidebarTrigger className="text-white" />
+                            <SidebarTrigger className="text-white" data-testid="button-sidebar-trigger" />
                             <h1 className="text-xl font-bold text-white font-['Poppins']">
                                 Gestión de Asignación de Grupos
                             </h1>
@@ -215,6 +225,7 @@ export default function GroupAssignmentPage() {
                         <Button
                             onClick={() => setLocation('/mi-perfil')} variant="ghost" size="icon"
                             className="text-white hover:bg-white/10"
+                            data-testid="button-profile"
                         >
                             <User className="w-5 h-5" />
                         </Button>
@@ -229,7 +240,7 @@ export default function GroupAssignmentPage() {
                                         Asignación de Cursos: {selectedMateriaNombre}
                                     </CardTitle>
                                     <p className="text-white/60">
-                                        Marca los grupos (IDs) a los que se les mostrará el contenido de tu materia: **{selectedMateriaNombre}**.
+                                        Marca los grupos (IDs) a los que se les mostrará el contenido de tu materia: <strong>{selectedMateriaNombre}</strong>.
                                     </p>
                                     <div className="mt-2">
                                         <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40">
@@ -239,9 +250,7 @@ export default function GroupAssignmentPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <form onSubmit={handleSubmit} className="space-y-6">
-                                        {/* 🎯 ELIMINADO: Paso 1. Selección de Materia */}
-
-                                        {/* Paso 2: Selección de Grupos */}
+                                        {/* Selección de Grupos */}
                                         <div>
                                             <Label className="text-white mb-2 block">1. Selecciona los Grupos/IDs (Ej. 10A)</Label>
                                             <Card className="bg-white/5 border-white/10">
@@ -262,6 +271,7 @@ export default function GroupAssignmentPage() {
                                                                     checked={selectedGroupIds.includes(group._id)}
                                                                     onCheckedChange={(checked) => handleGroupToggle(group._id, checked === true)}
                                                                     className="border-white/50 data-[state=checked]:bg-[#9f25b8] data-[state=checked]:border-[#9f25b8]"
+                                                                    data-testid={`checkbox-group-${group._id}`}
                                                                 />
                                                                 <Label htmlFor={`group-${group._id}`} className="text-white flex items-center gap-2 cursor-pointer">
                                                                     <Users className="w-4 h-4 text-white/70" />
@@ -296,6 +306,7 @@ export default function GroupAssignmentPage() {
                                             type="submit" 
                                             disabled={!selectedMateriaId || isSaving || selectedGroupIds.length === 0}
                                             className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 mt-6"
+                                            data-testid="button-submit"
                                         >
                                             {isSaving ? (
                                                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Guardando Asignación...</>

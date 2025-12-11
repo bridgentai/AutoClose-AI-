@@ -127,6 +127,7 @@ export interface InsertInstitutionConfig {
 // Auth Response Types
 export interface AuthResponse {
   id: string;
+  _id?: string; // Alias para compatibilidad
   nombre: string;
   email: string;
   rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';

@@ -62,8 +62,6 @@ const menuItems = [
 // Cursos: Se mantiene solo para 'profesor'
 { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
 
-    // 🎯 NUEVO: Gestión de Asignaciones (Solo para Profesor)
-    { icon: Settings, label: 'Gestión Asignaciones', path: '/group-assignment', roles: ['profesor'] },
 
 // Plataformas: Se quita 'estudiante'
 { icon: Globe, label: 'Plataformas', path: '/plataformas', roles: ['profesor', 'directivo', 'padre'] },
