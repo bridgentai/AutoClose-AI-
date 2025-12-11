@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { Course, User } from '../models'; // Asegúrate de que los modelos Course y User estén importados aquí
 import { protect, AuthRequest } from '../middleware/auth';
+import { Types } from 'mongoose'; // Necesitamos Types para interactuar con IDs
 
 const router = express.Router();
 
@@ -13,6 +14,7 @@ const checkIsDirectivo = (req: AuthRequest, res: Response, next: NextFunction) =
         res.status(403).json({ message: 'Acceso denegado. Solo Directivos pueden realizar esta acción.' });
     }
 };
+
 
 // =========================================================================
 // RUTA ACTUALIZADA (ADAPTADA AL ARRAY profesorIds)
@@ -91,7 +93,8 @@ return res.status(403).json({ message: 'Solo profesores y directivos pueden crea
 
 try {
 // Inicializar el array de profesores con el ID del creador (profesor o directivo)
-const profesorIds = user.rol === 'profesor' ? [user._id] : [];
+// Nota: req.userId es un string, pero Mongoose lo maneja al compararlo con ObjectId
+const profesorIds: (string | Types.ObjectId)[] = user.rol === 'profesor' ? [user._id as Types.ObjectId] : []; 
 
 const nuevoCurso = await Course.create({
 colegioId: user.colegioId,
@@ -103,9 +106,11 @@ colorAcento: colorAcento || '#9f25b8',
 icono,
 });
 
-// Si el creador es profesor, añadir el curso a su lista de materias
+// Si el creador es profesor, añadir el *NOMBRE* del curso a su lista de materias (mantiene la estructura actual)
 if (user.rol === 'profesor') {
-await User.findByIdAndUpdate(user._id, { $addToSet: { materias: nuevoCurso._id } });
+    // Si la lista de materias en el usuario es de STRINGS (nombres), añadimos el nombre.
+    // Si la lista fuera de IDs, añadiríamos nuevoCurso._id. Mantenemos el nombre por tu modelo de User.ts.
+    await User.findByIdAndUpdate(user._id, { $addToSet: { materias: nuevoCurso.nombre } }); 
 }
 
 res.status(201).json(nuevoCurso);
@@ -119,111 +124,139 @@ res.status(500).json({ message: 'Error en el servidor al crear el curso.' });
 // RUTA ACTUALIZADA: PUT /api/courses/assign-professor (NUEVA RUTA DE ASIGNACIÓN)
 // Función: Asigna un profesor a un curso y viceversa. Solo para Directivos.
 router.put('/assign-professor', protect, checkIsDirectivo, async (req: AuthRequest, res) => {
-    try {
-        const { courseId, professorId } = req.body;
+try {
+const { courseId, professorId } = req.body;
 
-        if (!courseId || !professorId) {
-            return res.status(400).json({ message: 'Se requiere el ID del curso y el ID del profesor.' });
-        }
+if (!courseId || !professorId) {
+return res.status(400).json({ message: 'Se requiere el ID del curso y el ID del profesor.' });
+}
 
-        // 1. Encontrar y actualizar el Curso (añadir el profesor al array)
-        const course = await Course.findByIdAndUpdate(
-            courseId,
-            { $addToSet: { profesorIds: professorId } },
-            { new: true }
-        );
+// 1. Encontrar y actualizar el Curso (añadir el profesor al array)
+const course = await Course.findByIdAndUpdate(
+courseId,
+{ $addToSet: { profesorIds: professorId } },
+{ new: true }
+);
 
-        if (!course) {
-            return res.status(404).json({ message: 'Curso no encontrado.' });
-        }
+if (!course) {
+return res.status(404).json({ message: 'Curso no encontrado.' });
+}
 
-        // 2. Encontrar y actualizar el Profesor (añadir el curso a su lista de materias)
-        const professor = await User.findByIdAndUpdate(
-            professorId,
-            { $addToSet: { materias: courseId } },
-            { new: true }
-        );
+// 2. Encontrar y actualizar el Profesor (añadir el curso *NOMBRE* a su lista de materias)
+const professor = await User.findByIdAndUpdate(
+professorId,
+{ $addToSet: { materias: course.nombre } }, // Se añade el NOMBRE del curso
+{ new: true }
+);
 
-        if (!professor || professor.rol !== 'profesor') {
-            // Revertir el cambio en el curso si el profesor no se encuentra o no es profesor
-            await Course.findByIdAndUpdate(courseId, { $pull: { profesorIds: professorId } });
-            return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
-        }
+if (!professor || professor.rol !== 'profesor') {
+// Revertir el cambio en el curso si el profesor no se encuentra o no es profesor
+await Course.findByIdAndUpdate(courseId, { $pull: { profesorIds: professorId } });
+return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
+}
 
-        res.status(200).json({ 
-            message: `Profesor ${professor.nombre} asignado correctamente al curso ${course.nombre}.`,
-            course,
-            professor
-        });
+res.status(200).json({ 
+message: `Profesor ${professor.nombre} asignado correctamente al curso ${course.nombre}.`,
+course,
+professor
+});
 
-    } catch (error) {
-        console.error('Error al asignar profesor:', error);
-        res.status(500).json({ message: 'Error interno del servidor al procesar la asignación.' });
-    }
+} catch (error) {
+console.error('Error al asignar profesor:', error);
+res.status(500).json({ message: 'Error interno del servidor al procesar la asignación.' });
+}
 });
 
 // =========================================================================
 // RUTA ACTUALIZADA: PUT /api/courses/enroll-students (NUEVA RUTA DE INSCRIPCIÓN)
 // Función: Inscribe una lista de estudiantes a un curso y viceversa. Solo para Directivos.
 router.put('/enroll-students', protect, checkIsDirectivo, async (req: AuthRequest, res) => {
+try {
+const { courseId, studentIds } = req.body; // studentIds debe ser un array
+
+if (!courseId || !Array.isArray(studentIds) || studentIds.length === 0) {
+return res.status(400).json({ message: 'Se requiere el ID del curso y una lista de IDs de estudiantes.' });
+}
+
+// 1. Encontrar y actualizar el Curso (añadir todos los estudiantes al array)
+const course = await Course.findByIdAndUpdate(
+courseId,
+{ $addToSet: { estudianteIds: { $each: studentIds } } },
+{ new: true }
+);
+
+if (!course) {
+return res.status(404).json({ message: 'Curso no encontrado.' });
+}
+
+// 2. Encontrar y actualizar los Estudiantes (añadir el curso *NOMBRE* a su lista de materias)
+// Usamos updateMany para eficiencia en la base de datos
+await User.updateMany(
+{ _id: { $in: studentIds }, rol: 'estudiante' },
+{ $addToSet: { materias: course.nombre } } // Se añade el NOMBRE del curso
+);
+
+res.status(200).json({ 
+message: `Se inscribieron ${studentIds.length} estudiantes al curso ${course.nombre}.`,
+course
+});
+
+} catch (error) {
+console.error('Error al inscribir estudiantes:', error);
+res.status(500).json({ message: 'Error interno del servidor al procesar la inscripción.' });
+}
+});
+
+// =========================================================================
+// NUEVA RUTA: GET Materia por Nombre (Para el Frontend de Asignaciones)
+// GET /api/courses/by-name?name=Matemáticas
+// =========================================================================
+router.get('/by-name', protect, async (req: AuthRequest, res) => { // Agregué 'protect' para seguridad
+    const { name } = req.query; 
+
+    if (!name || typeof name !== 'string') {
+        return res.status(400).json({ message: 'El parámetro de nombre es obligatorio.' });
+    }
+
     try {
-        const { courseId, studentIds } = req.body; // studentIds debe ser un array
-
-        if (!courseId || !Array.isArray(studentIds) || studentIds.length === 0) {
-            return res.status(400).json({ message: 'Se requiere el ID del curso y una lista de IDs de estudiantes.' });
-        }
-
-        // 1. Encontrar y actualizar el Curso (añadir todos los estudiantes al array)
-        const course = await Course.findByIdAndUpdate(
-            courseId,
-            { $addToSet: { estudianteIds: { $each: studentIds } } },
-            { new: true }
-        );
+        // Buscamos el curso (materia) exacto por nombre y colegio
+        const course = await Course.findOne({ 
+            nombre: name,
+            colegioId: req.user?.colegioId // Aseguramos que solo busque en el colegio del usuario
+        }).select('_id nombre cursos'); 
 
         if (!course) {
-            return res.status(404).json({ message: 'Curso no encontrado.' });
+            return res.status(404).json({ message: 'Materia no encontrada con ese nombre en este colegio.' });
         }
 
-        // 2. Encontrar y actualizar los Estudiantes (añadir el curso a su lista de materias)
-        // Usamos updateMany para eficiencia en la base de datos
-        await User.updateMany(
-            { _id: { $in: studentIds }, rol: 'estudiante' },
-            { $addToSet: { materias: courseId } }
-        );
-
-        res.status(200).json({ 
-            message: `Se inscribieron ${studentIds.length} estudiantes al curso ${course.nombre}.`,
-            course
-        });
+        res.json(course);
 
     } catch (error) {
-        console.error('Error al inscribir estudiantes:', error);
-        res.status(500).json({ message: 'Error interno del servidor al procesar la inscripción.' });
+        console.error('Error al buscar materia por nombre:', error);
+        res.status(500).json({ message: 'Error interno del servidor al buscar la materia.' });
     }
 });
+
 
 // =========================================================================
 // OTRAS RUTAS (Se mantienen, pero se pueden refactorizar)
 // PUT /api/courses/:id - Actualizar curso
 router.put('/:id', protect, async (req: AuthRequest, res) => {
-    // ... (El código de actualización se mantiene igual)
-    // Nota: Esta ruta debería ser adaptada para manejar profesorIds si se usa para cambiar la asignación
-    // ...
+// ... (El código de actualización se mantiene igual)
+// ...
 });
 
 // POST /api/courses/assign - Asignar grupos a profesor (solo directivos)
-// ESTA RUTA ESTÁ DUPLICANDO LA LÓGICA DE 'assign-professor' y 'enroll-students' 
-// y usa lógica antigua (profesorId, nombre de materia). 
-// Recomiendo ELIMINAR O REFACTORIZAR esta ruta y usar las nuevas de PUT.
+// Recomiendo ELIMINAR O REFACTORIZAR esta ruta y usar las nuevas de PUT (assign-professor, enroll-students).
 router.post('/assign', protect, async (req: AuthRequest, res) => {
-    // ... (El código existente se mantiene, pero tiene inconsistencias con los nuevos modelos)
-    // ...
+// ... (El código existente se mantiene, pero tiene inconsistencias con los nuevos modelos)
+// ...
 });
 
 // DELETE /api/courses/:id - Eliminar curso
 router.delete('/:id', protect, async (req: AuthRequest, res) => {
-    // ... (El código de eliminación se mantiene igual)
-    // ...
+// ... (El código de eliminación se mantiene igual)
+// ...
 });
 
 

@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // =========================================================
-// 1. INTERFACES ADICIONALES
+// 1. INTERFACES
 // =========================================================
 
 interface Assignment {
@@ -73,15 +73,16 @@ const fetchAssignments = async (id: string, isGroup: boolean, month: number, yea
 // =========================================================
 
 export default function CourseDetailPage() {
-    // La ruta es dinámica. cursoId puede ser:
-    // 1. ID de la materia (Estudiante/Padre/Directivo)
-    // 2. Nombre del Grupo (Profesor)
+    // La ruta es dinámica. cursoId puede ser: ID de materia o Nombre del Grupo
     const [, params] = useRoute('/course-detail/:cursoId'); 
     const cursoId = params?.cursoId || ''; 
     const { user } = useAuth();
     const userRole = user?.rol;
+
+    // Roles de la aplicación
     const isProfessor = userRole === 'profesor';
     const isStudentOrParent = userRole === 'estudiante' || userRole === 'padre';
+    // El directivo ya no tiene lógica de gestión aquí, solo de visualización.
 
     const [, setLocation] = useLocation();
     const { toast } = useToast();
@@ -100,18 +101,17 @@ export default function CourseDetailPage() {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    // Determinar si el cursoId es un ID de Materia o un ID de Grupo (Heurística simple: ¿Es un ID de MongoDB o un nombre de grupo?)
-    // Lo más seguro es que el backend diferencie, pero aquí asumimos que el PROFESOR usa el ID de grupo.
+    // Lógica para determinar si se maneja un grupo (siempre TRUE para el Profesor)
     const isHandlingGroup = isProfessor; 
 
-    // Query 1: Detalles de la Materia (Solo si no es Profesor o si el Profesor no está gestionando un grupo)
+    // Query 1: Detalles de la Materia (Habilitada para Estudiante, Padre y Directivo)
     const { data: courseDetails, isLoading: isLoadingDetails } = useQuery<CourseSubject>({
         queryKey: ['courseDetails', cursoId],
         queryFn: () => fetchCourseDetails(cursoId),
-        enabled: !isProfessor, // Se habilita si es Estudiante, Padre o Directivo
+        enabled: !isProfessor, // Se habilita si el rol NO es profesor
     });
 
-    // Query 2: Materias del Profesor para este Grupo (Solo si es Profesor)
+    // Query 2: Materias del Profesor para este Grupo (Habilitada SOLO para Profesor)
     const { data: subjectsForGroup = [], isLoading: isLoadingSubjects } = useQuery<CourseSubject[]>({
         queryKey: ['subjectsForGroup', cursoId],
         queryFn: () => fetchSubjectsForGroup(cursoId),
@@ -214,62 +214,62 @@ export default function CourseDetailPage() {
 
                 {showAssignmentForm && (
                     <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
-                         <CardHeader>
-                            <CardTitle className="text-white">Nueva Tarea</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {subjects.length === 0 && (
-                                <Alert className="mb-4 bg-red-500/10 border-red-500/50">
-                                    <AlertCircle className="h-4 w-4 text-red-400" />
-                                    <AlertDescription className="text-red-200">
-                                        No tienes materias asignadas a este curso ({cursoId}). Por favor contacta al administrador.
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                {/* Selector de Materia */}
-                                {subjects.length > 1 && (
-                                    <div>
-                                        <Label htmlFor="materia" className="text-white">Materia *</Label>
-                                        <Select
-                                            value={formData.courseId}
-                                            onValueChange={(value) => setFormData({ ...formData, courseId: value })}
-                                            required
-                                        >
-                                            <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
-                                            <SelectContent>
-                                                {subjects.map((subject) => (
-                                                    <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                           <CardHeader>
+                                <CardTitle className="text-white">Nueva Tarea</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                {subjects.length === 0 && (
+                                    <Alert className="mb-4 bg-red-500/10 border-red-500/50">
+                                        <AlertCircle className="h-4 w-4 text-red-400" />
+                                        <AlertDescription className="text-red-200">
+                                            No tienes materias asignadas a este curso ({cursoId}). Por favor contacta al administrador.
+                                        </AlertDescription>
+                                    </Alert>
                                 )}
 
-                                {/* Badge de Materia auto-seleccionada */}
-                                {subjects.length === 1 && (
-                                    <div>
-                                        <Label className="text-white mb-2 block">Materia</Label>
-                                        <div className="flex items-center gap-2">
-                                            <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40 text-base px-4 py-2">
-                                                {subjects[0].nombre}
-                                            </Badge>
-                                            <span className="text-white/50 text-sm">(auto-seleccionada)</span>
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    {/* Selector de Materia */}
+                                    {subjects.length > 1 && (
+                                        <div>
+                                            <Label htmlFor="materia" className="text-white">Materia *</Label>
+                                            <Select
+                                                value={formData.courseId}
+                                                onValueChange={(value) => setFormData({ ...formData, courseId: value })}
+                                                required
+                                            >
+                                                <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
+                                                <SelectContent>
+                                                    {subjects.map((subject) => (
+                                                        <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
 
-                                {/* Campos de Título, Descripción y Fecha (Sin cambios) */}
-                                <div><Label htmlFor="titulo" className="text-white">Título</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Título de la tarea" /></div>
-                                <div><Label htmlFor="descripcion" className="text-white">Descripción</Label><Textarea id="descripcion" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Descripción de la tarea" rows={4} /></div>
-                                <div><Label htmlFor="fechaEntrega" className="text-white">Fecha de Entrega</Label><Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="bg-white/5 border-white/10 text-white" /></div>
+                                    {/* Badge de Materia auto-seleccionada */}
+                                    {subjects.length === 1 && (
+                                        <div>
+                                            <Label className="text-white mb-2 block">Materia</Label>
+                                            <div className="flex items-center gap-2">
+                                                <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40 text-base px-4 py-2">
+                                                    {subjects[0].nombre}
+                                                </Badge>
+                                                <span className="text-white/50 text-sm">(auto-seleccionada)</span>
+                                            </div>
+                                        </div>
+                                    )}
 
-                                <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0} className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90">
-                                    {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Tarea'}
-                                </Button>
-                            </form>
-                        </CardContent>
+                                    {/* Campos de Título, Descripción y Fecha (Sin cambios) */}
+                                    <div><Label htmlFor="titulo" className="text-white">Título</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Título de la tarea" /></div>
+                                    <div><Label htmlFor="descripcion" className="text-white">Descripción</Label><Textarea id="descripcion" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Descripción de la tarea" rows={4} /></div>
+                                    <div><Label htmlFor="fechaEntrega" className="text-white">Fecha de Entrega</Label><Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="bg-white/5 border-white/10 text-white" /></div>
+
+                                    <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0} className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90">
+                                        {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Tarea'}
+                                    </Button>
+                                </form>
+                            </CardContent>
                     </Card>
                 )}
 
@@ -320,10 +320,10 @@ export default function CourseDetailPage() {
                         <BookOpen className="w-12 h-12 text-white/50" />
                     </div>
                     <div className="mt-4 text-sm text-white/80 flex items-center gap-4">
-                         <div className="flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            <span>**Profesor:** {details.profesor?.nombre || 'No Asignado'}</span>
-                        </div>
+                           <div className="flex items-center gap-2">
+                                <User className="w-4 h-4" />
+                                <span>**Profesor:** {details.profesor?.nombre || 'No Asignado'}</span>
+                            </div>
                     </div>
                 </div>
 
@@ -403,7 +403,7 @@ export default function CourseDetailPage() {
     );
 
     // --------------------------------------------------
-    // 4. Renderizado Final
+    // 4. Renderizado Final (Lógica centralizada)
     // --------------------------------------------------
 
     const renderContent = () => {
@@ -411,12 +411,8 @@ export default function CourseDetailPage() {
             return renderProfessorView();
         } 
 
-        if (isStudentOrParent) {
-            return renderStudentView();
-        }
-
-        // Caso Directivo: por ahora pueden ver la vista de estudiante, ya que es el detalle de la materia
-        if (userRole === 'directivo') {
+        // Estudiante, Padre, y ahora Directivo (solo para visualización) usan renderStudentView
+        if (isStudentOrParent || userRole === 'directivo') {
             return renderStudentView();
         }
 
