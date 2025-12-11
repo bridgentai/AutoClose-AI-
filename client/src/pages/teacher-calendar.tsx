@@ -32,6 +32,12 @@ interface Course {
   cursos: string[];
 }
 
+interface ProfessorGroupAssignment {
+  groupId: string;
+  subjects: Course[];
+  totalStudents: number;
+}
+
 type AttachmentType = 'pdf' | 'link' | 'imagen' | 'documento' | 'otro';
 
 interface Attachment {
@@ -64,13 +70,16 @@ export default function TeacherCalendarPage() {
     enabled: !!user?.id,
   });
 
-  const { data: courses = [] } = useQuery<Course[]>({
-    queryKey: ['/api/courses/mine'],
+  const { data: professorGroups = [] } = useQuery<ProfessorGroupAssignment[]>({
+    queryKey: ['/api/professor/my-groups'],
     enabled: !!user?.id,
   });
 
-  const teacherCourse = courses.length > 0 ? courses[0] : null;
-  const availableGroups = teacherCourse?.cursos || [];
+  const availableGroups = professorGroups.map(g => g.groupId);
+  const getSubjectsForGroup = (groupId: string) => {
+    const group = professorGroups.find(g => g.groupId === groupId);
+    return group?.subjects || [];
+  };
 
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -122,18 +131,20 @@ export default function TeacherCalendarPage() {
       return;
     }
 
-    if (!teacherCourse) {
-      toast({ title: 'Error', description: 'No tienes una materia asignada. Configura tus grupos primero.', variant: 'destructive' });
+    const subjectsForGroup = getSubjectsForGroup(formData.curso);
+    if (subjectsForGroup.length === 0) {
+      toast({ title: 'Error', description: 'No tienes materias asignadas a este grupo.', variant: 'destructive' });
       return;
     }
 
+    const courseId = subjectsForGroup[0]._id;
     const fechaEntregaCompleta = new Date(`${formData.fechaEntrega}T${formData.horaEntrega}`);
 
     createAssignmentMutation.mutate({
       titulo: formData.titulo,
       descripcion: formData.descripcion,
       curso: formData.curso,
-      courseId: teacherCourse._id,
+      courseId,
       fechaEntrega: fechaEntregaCompleta.toISOString(),
       adjuntos,
     });
@@ -302,9 +313,9 @@ export default function TeacherCalendarPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {teacherCourse && (
+              {formData.curso && getSubjectsForGroup(formData.curso).length > 0 && (
                 <p className="text-xs text-white/50">
-                  Materia: {teacherCourse.nombre}
+                  Materia: {getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')}
                 </p>
               )}
               {availableGroups.length === 0 && (
