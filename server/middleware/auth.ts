@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { User } from '../models';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -9,6 +10,13 @@ if (!JWT_SECRET) {
 
 export interface AuthRequest extends Request {
   userId?: string;
+  user?: {
+    id: string;
+    colegioId: string;
+    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';
+    curso?: string;
+    materias?: string[];
+  };
 }
 
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -27,6 +35,18 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     // Verificar token
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
     req.userId = decoded.id;
+
+    // Cargar datos del usuario para tener acceso a rol, colegioId, etc.
+    const userDoc = await User.findById(decoded.id).select('-password');
+    if (userDoc) {
+      req.user = {
+        id: userDoc._id.toString(),
+        colegioId: userDoc.colegioId,
+        rol: userDoc.rol,
+        curso: userDoc.curso,
+        materias: userDoc.materias,
+      };
+    }
 
     next();
   } catch (error) {
