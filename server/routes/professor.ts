@@ -169,30 +169,49 @@ router.get('/courses', protect, async (req: AuthRequest, res) => {
 
 // =========================================================================
 // GET /api/professor/my-groups
-// Obtener los grupos del profesor autenticado
+// Obtener los grupos del profesor autenticado en formato ProfessorGroupAssignment[]
 // =========================================================================
 router.get('/my-groups', protect, async (req: AuthRequest, res) => {
   try {
     const profesorId = req.user?.id;
     const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
 
-    // Buscar cursos donde el profesor está asignado (usando ObjectId para comparación correcta)
+    // Buscar cursos donde el profesor está asignado
     const courses = await Course.find({ 
       profesorIds: new Types.ObjectId(profesorId),
       colegioId 
-    }).select('nombre cursos');
+    }).select('nombre descripcion cursos estudianteIds colorAcento icono');
 
-    // Extraer los grupos de todos los cursos
-    const groups = courses.flatMap(course => course.cursos || []);
+    // Agrupar por grupo (groupId)
+    const groupMap = new Map<string, { subjects: any[], studentIds: Set<string> }>();
     
-    res.json({ 
-      groups: Array.from(new Set(groups)), // Eliminar duplicados
-      courses: courses.map(c => ({
-        _id: c._id,
-        nombre: c.nombre,
-        grupoIds: c.cursos || []
-      }))
-    });
+    for (const course of courses) {
+      const grupoIds = course.cursos || [];
+      for (const groupId of grupoIds) {
+        if (!groupMap.has(groupId)) {
+          groupMap.set(groupId, { subjects: [], studentIds: new Set() });
+        }
+        const entry = groupMap.get(groupId)!;
+        entry.subjects.push({
+          _id: course._id,
+          nombre: course.nombre,
+          descripcion: course.descripcion,
+          colorAcento: course.colorAcento,
+          icono: course.icono,
+        });
+        // Agregar estudiantes del curso a este grupo
+        (course.estudianteIds || []).forEach(id => entry.studentIds.add(id.toString()));
+      }
+    }
+
+    // Convertir a array de ProfessorGroupAssignment
+    const result = Array.from(groupMap.entries()).map(([groupId, data]) => ({
+      groupId,
+      subjects: data.subjects,
+      totalStudents: data.studentIds.size,
+    }));
+
+    res.json(result);
 
   } catch (error) {
     console.error('Error al obtener grupos del profesor:', error);
