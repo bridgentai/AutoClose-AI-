@@ -165,16 +165,27 @@ export default function Register() {
 
               {formData.rol === 'estudiante' && (
                 <div>
-                  <Label htmlFor="curso" className="text-white/90 mb-2 block">Curso</Label>
-                  <Input
-                    id="curso"
+                  <Label className="text-white/90 mb-2 block">Grupo / Curso</Label>
+                  <Select
                     value={formData.curso}
-                    onChange={(e) => setFormData({ ...formData, curso: e.target.value })}
-                    required
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
-                    placeholder="ej: 10A, 11B"
-                    data-testid="input-curso"
-                  />
+                    onValueChange={(value) => setFormData({ ...formData, curso: value })}
+                  >
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-curso">
+                      <SelectValue placeholder="Selecciona tu grupo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="9A">9A - Noveno A</SelectItem>
+                      <SelectItem value="9B">9B - Noveno B</SelectItem>
+                      <SelectItem value="10A">10A - Décimo A</SelectItem>
+                      <SelectItem value="10B">10B - Décimo B</SelectItem>
+                      <SelectItem value="11C">11C - Once C</SelectItem>
+                      <SelectItem value="11D">11D - Once D</SelectItem>
+                      <SelectItem value="11H">11H - Once H</SelectItem>
+                      <SelectItem value="12C">12C - Doce C</SelectItem>
+                      <SelectItem value="12D">12D - Doce D</SelectItem>
+                      <SelectItem value="12H">12H - Doce H</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
