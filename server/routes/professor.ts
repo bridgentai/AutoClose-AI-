@@ -71,6 +71,15 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'El profesor no tiene materia asignada.' });
     }
 
+    // Buscar todos los estudiantes que pertenecen a los grupos seleccionados
+    const estudiantesEnGrupos = await User.find({
+      rol: 'estudiante',
+      curso: { $in: grupoIds }, // Estudiantes cuyo grupo está en la lista seleccionada
+      colegioId
+    }).select('_id');
+    
+    const estudianteIds = estudiantesEnGrupos.map(e => e._id);
+
     // Buscar o crear el curso/materia
     let course = await Course.findOne({ 
       nombre: materiaNombre, 
@@ -84,8 +93,8 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
         descripcion: `Curso de ${materiaNombre}`,
         colegioId,
         profesorIds: [profesorId],
-        cursos: grupoIds, // Array de grupos asignados
-        estudianteIds: [],
+        cursos: grupoIds, // Array de grupos asignados (9A, 10B, etc.)
+        estudianteIds: estudianteIds, // Estudiantes de esos grupos
       });
       await course.save();
     } else {
@@ -96,6 +105,7 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
         course.profesorIds.push(profesorId as any);
       }
       course.cursos = grupoIds;
+      course.estudianteIds = estudianteIds; // Actualizar estudiantes vinculados
       await course.save();
     }
 
@@ -105,6 +115,7 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
         _id: course._id,
         nombre: course.nombre,
         grupoIds: course.cursos,
+        estudiantesVinculados: estudianteIds.length,
       }
     });
 
@@ -123,9 +134,9 @@ router.get('/my-groups', protect, async (req: AuthRequest, res) => {
     const profesorId = req.user?.id;
     const colegioId = req.user?.colegioId || 'default_colegio';
 
-    // Buscar cursos donde el profesor está asignado
+    // Buscar cursos donde el profesor está asignado (usando profesorIds array)
     const courses = await Course.find({ 
-      profesorId,
+      profesorIds: profesorId,
       colegioId 
     }).select('nombre cursos');
 

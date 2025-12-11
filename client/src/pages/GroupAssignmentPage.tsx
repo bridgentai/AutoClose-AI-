@@ -107,13 +107,13 @@ export default function GroupAssignmentPage() {
         enabled: !!selectedMateriaId, 
     });
 
-    // Efecto para sincronizar los checkboxes con las asignaciones actuales
+    // Efecto para sincronizar los checkboxes SOLO cuando hay datos del servidor
     useEffect(() => {
-        if (selectedMateriaId && !isLoadingCurrentAssignments) {
+        // Solo sincronizar si hay un curso existente Y los datos ya cargaron
+        if (selectedMateriaId && !isLoadingCurrentAssignments && currentGroupAssignments.length > 0) {
             setSelectedGroupIds(currentGroupAssignments);
-        } else if (!selectedMateriaId) {
-            setSelectedGroupIds([]);
         }
+        // NO resetear a [] cuando no hay materiaId - permite selección local
     }, [currentGroupAssignments, isLoadingCurrentAssignments, selectedMateriaId]);
 
     // ------------------------------------
