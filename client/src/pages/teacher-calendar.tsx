@@ -71,14 +71,13 @@ export default function TeacherCalendarPage() {
   });
 
   const { data: professorGroups = [], isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
-    queryKey: ['/api/professor/my-groups'],
+    queryKey: ['professorGroups'],
+    queryFn: () => apiRequest('GET', '/api/professor/my-groups'),
     enabled: !!user?.id,
     staleTime: 0,
   });
 
-  console.log('professorGroups:', professorGroups);
   const availableGroups = professorGroups.map(g => g.groupId);
-  console.log('availableGroups:', availableGroups);
   const getSubjectsForGroup = (groupId: string) => {
     const group = professorGroups.find(g => g.groupId === groupId);
     return group?.subjects || [];
