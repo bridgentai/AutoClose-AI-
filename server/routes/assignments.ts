@@ -4,6 +4,28 @@ import { protect, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+// DEBUG: Ver todas las tareas
+router.get('/debug/all', async (req, res) => {
+  try {
+    const all = await Assignment.find({}).lean();
+    console.log('DEBUG: Total assignments in DB:', all.length);
+    return res.json({
+      total: all.length,
+      assignments: all.map((a: any) => ({
+        _id: a._id,
+        titulo: a.titulo,
+        profesorId: a.profesorId,
+        profesorIdType: typeof a.profesorId,
+        profesorIdStr: String(a.profesorId),
+        curso: a.curso,
+        fechaEntrega: a.fechaEntrega
+      }))
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/assignments - Crear nueva tarea (solo profesores)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
@@ -249,20 +271,19 @@ router.get('/profesor/:profesorId/:mes/:año', protect, async (req: AuthRequest,
     const primerDia = new Date(añoNum, mesNum - 1, 1);
     const ultimoDia = new Date(añoNum, mesNum, 0, 23, 59, 59);
 
-    // Buscar por string o ObjectId para compatibilidad
-    const { Types } = require('mongoose');
+    console.log(`GET profesor assignments: profesorId=${profesorId}, mes=${mes}, año=${año}`);
+    console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
+
+    // Buscar directamente - mongoose hace la conversión automáticamente
     const assignments = await Assignment.find({
-      $or: [
-        { profesorId: profesorId },
-        { profesorId: new Types.ObjectId(profesorId) }
-      ],
+      profesorId: profesorId,
       fechaEntrega: {
         $gte: primerDia,
         $lte: ultimoDia,
       },
     }).sort({ fechaEntrega: 1 });
 
-    console.log(`GET /profesor/${profesorId}/${mes}/${año}: found ${assignments.length} assignments`);
+    console.log(`Found ${assignments.length} assignments for profesor ${profesorId}`);
 
     return res.json(assignments);
   } catch (err: any) {
