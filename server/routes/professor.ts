@@ -126,6 +126,47 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
 });
 
 // =========================================================================
+// GET /api/professor/courses
+// Obtener todas las materias del profesor con sus grupos asignados
+// =========================================================================
+router.get('/courses', protect, async (req: AuthRequest, res) => {
+  try {
+    const profesorId = req.user?.id;
+    const colegioId = req.user?.colegioId || 'default_colegio';
+
+    if (!profesorId) {
+      return res.status(401).json({ message: 'No autorizado.' });
+    }
+
+    // Buscar todos los cursos donde el profesor está asignado
+    const courses = await Course.find({ 
+      profesorIds: profesorId,
+      colegioId 
+    }).select('nombre descripcion cursos estudianteIds colorAcento icono createdAt');
+
+    // Formatear la respuesta con información detallada
+    const formattedCourses = courses.map(course => ({
+      _id: course._id,
+      nombre: course.nombre,
+      descripcion: course.descripcion,
+      grupoIds: course.cursos || [],
+      totalEstudiantes: course.estudianteIds?.length || 0,
+      colorAcento: course.colorAcento,
+      icono: course.icono,
+    }));
+
+    res.json({ 
+      courses: formattedCourses,
+      total: formattedCourses.length
+    });
+
+  } catch (error) {
+    console.error('Error al obtener cursos del profesor:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// =========================================================================
 // GET /api/professor/my-groups
 // Obtener los grupos del profesor autenticado
 // =========================================================================
