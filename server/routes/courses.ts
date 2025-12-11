@@ -211,8 +211,9 @@ res.status(500).json({ message: 'Error interno del servidor al procesar la inscr
 // NUEVA RUTA: GET Materia por Nombre (Para el Frontend de Asignaciones)
 // GET /api/courses/by-name?name=Matemáticas
 // =========================================================================
-router.get('/by-name', protect, async (req: AuthRequest, res) => { // Agregué 'protect' para seguridad
-    const { name } = req.query; 
+router.get('/by-name', protect, async (req: AuthRequest, res) => {
+    // Acepta tanto 'name' como 'nombre' como parámetro
+    const name = req.query.name || req.query.nombre;
 
     if (!name || typeof name !== 'string') {
         return res.status(400).json({ message: 'El parámetro de nombre es obligatorio.' });

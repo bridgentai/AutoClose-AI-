@@ -61,7 +61,13 @@ const menuItems = [
 
 // Cursos: Se mantiene solo para 'profesor'
 { icon: BookOpen, label: 'Cursos', path: '/courses', roles: ['profesor'] },
-
+  
+  { 
+      icon: Users, 
+      label: 'Asignación de Grupos', 
+      path: '/group-assignment', 
+      roles: ['profesor', 'directivo'] 
+  },
 
 // Plataformas: Se quita 'estudiante'
 { icon: Globe, label: 'Plataformas', path: '/plataformas', roles: ['profesor', 'directivo', 'padre'] },
