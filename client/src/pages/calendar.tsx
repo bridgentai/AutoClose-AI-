@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 
 interface Assignment {
   _id: string;
@@ -21,15 +22,12 @@ export default function CalendarPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Obtener mes y año actuales
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
-
   // Query para obtener tareas del estudiante basado en su grupo
   const { data: assignments = [] } = useQuery<Assignment[]>({
-    queryKey: ['/api/assignments/student'],
-    enabled: !!user?.id,
+    queryKey: ['studentAssignments', user?.curso],
+    queryFn: () => apiRequest('GET', '/api/assignments/student'),
+    enabled: !!user?.id && !!user?.curso,
+    staleTime: 0,
   });
 
   const handleDayClick = (assignment: Assignment) => {

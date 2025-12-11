@@ -66,8 +66,10 @@ export default function TeacherCalendarPage() {
   const currentYear = now.getFullYear();
 
   const { data: assignments = [], refetch: refetchAssignments } = useQuery<Assignment[]>({
-    queryKey: ['/api/assignments/profesor', user?.id, currentMonth, currentYear],
+    queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
+    queryFn: () => apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`),
     enabled: !!user?.id,
+    staleTime: 0,
   });
 
   const { data: professorGroups = [], isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
@@ -91,7 +93,7 @@ export default function TeacherCalendarPage() {
       toast({ title: 'Tarea creada exitosamente' });
       setIsDialogOpen(false);
       resetForm();
-      queryClient.invalidateQueries({ queryKey: ['/api/assignments/profesor'] });
+      queryClient.invalidateQueries({ queryKey: ['teacherAssignments'] });
       refetchAssignments();
     },
     onError: (error: any) => {
