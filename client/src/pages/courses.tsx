@@ -364,7 +364,8 @@ if (userRole === 'profesor') {
 emptyMessage = 'Aún no te has auto-asignado materias a ningún grupo. Haz clic en "Gestionar Asignaciones" para empezar.';
 alertTitle = 'Sin Grupos Activos';
 } else if (userRole === 'estudiante') {
-emptyMessage = 'No tienes materias inscritas. Por favor, verifica con tu directivo.';
+emptyMessage = 'Aún no hay materias asignadas a tu grupo. Los profesores deben asignar sus materias a tu curso para que aparezcan aquí.';
+alertTitle = 'Sin Materias Asignadas';
 } else if (userRole === 'directivo') {
 emptyMessage = 'No hay materias registradas en la plataforma. Crea una nueva materia para empezar.';
 } else if (userRole === 'padre') {
@@ -405,7 +406,7 @@ return (
 <div className="flex items-center gap-3">
 <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
 <h1 className="text-xl font-bold text-white font-['Poppins']">
-{userRole === 'profesor' ? 'Mis Grupos' : 'Mis Cursos'}
+{userRole === 'profesor' ? 'Mis Grupos' : 'Mis Materias'}
 </h1>
 </div>
 
