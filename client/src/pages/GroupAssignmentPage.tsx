@@ -155,13 +155,13 @@ export default function GroupAssignmentPage() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedMateriaId || !professorId) {
+        if (!professorId || !materiaPrincipalNombre) {
             toast({ title: 'Error', description: 'Tu materia principal no está definida.', variant: 'destructive' });
             return;
         }
 
         assignmentMutation.mutate({
-            materiaId: selectedMateriaId,
+            materiaId: selectedMateriaId || 'new', // El backend usará el nombre del profesor si no existe
             grupoIds: selectedGroupIds,
             profesorId: professorId,
         });
@@ -304,7 +304,7 @@ export default function GroupAssignmentPage() {
 
                                         <Button 
                                             type="submit" 
-                                            disabled={!selectedMateriaId || isSaving || selectedGroupIds.length === 0}
+                                            disabled={!materiaPrincipalNombre || isSaving || selectedGroupIds.length === 0}
                                             className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 mt-6"
                                             data-testid="button-submit"
                                         >
