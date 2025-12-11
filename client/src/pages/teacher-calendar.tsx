@@ -49,7 +49,6 @@ export default function TeacherCalendarPage() {
     titulo: '',
     descripcion: '',
     curso: '',
-    courseId: '',
     fechaEntrega: '',
     horaEntrega: '23:59',
   });
@@ -69,6 +68,9 @@ export default function TeacherCalendarPage() {
     queryKey: ['/api/courses/mine'],
     enabled: !!user?.id,
   });
+
+  const teacherCourse = courses.length > 0 ? courses[0] : null;
+  const availableGroups = teacherCourse?.cursos || [];
 
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -91,7 +93,6 @@ export default function TeacherCalendarPage() {
       titulo: '',
       descripcion: '',
       curso: '',
-      courseId: '',
       fechaEntrega: '',
       horaEntrega: '23:59',
     });
@@ -116,8 +117,13 @@ export default function TeacherCalendarPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.titulo || !formData.descripcion || !formData.curso || !formData.courseId || !formData.fechaEntrega) {
+    if (!formData.titulo || !formData.descripcion || !formData.curso || !formData.fechaEntrega) {
       toast({ title: 'Error', description: 'Por favor completa todos los campos obligatorios', variant: 'destructive' });
+      return;
+    }
+
+    if (!teacherCourse) {
+      toast({ title: 'Error', description: 'No tienes una materia asignada. Configura tus grupos primero.', variant: 'destructive' });
       return;
     }
 
@@ -127,14 +133,11 @@ export default function TeacherCalendarPage() {
       titulo: formData.titulo,
       descripcion: formData.descripcion,
       curso: formData.curso,
-      courseId: formData.courseId,
+      courseId: teacherCourse._id,
       fechaEntrega: fechaEntregaCompleta.toISOString(),
       adjuntos,
     });
   };
-
-  const selectedCourse = courses.find(c => c._id === formData.courseId);
-  const availableGroups = selectedCourse?.cursos || [];
 
   return (
     <SidebarProvider>
@@ -281,45 +284,34 @@ export default function TeacherCalendarPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Materia *</Label>
-                <Select
-                  value={formData.courseId}
-                  onValueChange={(value) => setFormData({ ...formData, courseId: value, curso: '' })}
-                >
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-materia">
-                    <SelectValue placeholder="Selecciona materia" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#1a001c] border-white/10">
-                    {courses.map((course) => (
-                      <SelectItem key={course._id} value={course._id} className="text-white hover:bg-white/10">
-                        {course.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Grupo/Curso *</Label>
-                <Select
-                  value={formData.curso}
-                  onValueChange={(value) => setFormData({ ...formData, curso: value })}
-                  disabled={!formData.courseId}
-                >
-                  <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-curso">
-                    <SelectValue placeholder="Selecciona grupo" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#1a001c] border-white/10">
-                    {availableGroups.map((grupo) => (
-                      <SelectItem key={grupo} value={grupo} className="text-white hover:bg-white/10">
-                        {grupo}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label>Grupo/Curso *</Label>
+              <Select
+                value={formData.curso}
+                onValueChange={(value) => setFormData({ ...formData, curso: value })}
+                disabled={availableGroups.length === 0}
+              >
+                <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-curso">
+                  <SelectValue placeholder={availableGroups.length === 0 ? "Sin grupos asignados" : "Selecciona grupo"} />
+                </SelectTrigger>
+                <SelectContent className="bg-[#1a001c] border-white/10">
+                  {availableGroups.map((grupo) => (
+                    <SelectItem key={grupo} value={grupo} className="text-white hover:bg-white/10">
+                      {grupo}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {teacherCourse && (
+                <p className="text-xs text-white/50">
+                  Materia: {teacherCourse.nombre}
+                </p>
+              )}
+              {availableGroups.length === 0 && (
+                <p className="text-xs text-amber-400">
+                  Primero debes asignar grupos a tu materia desde la configuración.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

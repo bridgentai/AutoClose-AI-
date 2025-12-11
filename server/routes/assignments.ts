@@ -164,6 +164,45 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/assignments/student - Obtener tareas del estudiante autenticado basado en su grupoId
+router.get('/student', protect, async (req: AuthRequest, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    if (user.rol !== 'estudiante') {
+      return res.status(403).json({ message: 'Solo los estudiantes pueden acceder a este endpoint.' });
+    }
+
+    if (!user.curso) {
+      return res.json([]);
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const primerDia = new Date(currentYear, currentMonth, 1);
+    const ultimoDia = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
+
+    const assignments = await Assignment.find({
+      curso: user.curso,
+      colegioId: user.colegioId,
+      fechaEntrega: {
+        $gte: primerDia,
+        $lte: ultimoDia,
+      },
+    }).sort({ fechaEntrega: 1 });
+
+    return res.json(assignments);
+  } catch (err: any) {
+    console.error('Error al obtener tareas del estudiante:', err.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 // GET /api/assignments/curso/:curso/:mes/:año - Obtener tareas de un curso en un mes específico
 router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) => {
   try {

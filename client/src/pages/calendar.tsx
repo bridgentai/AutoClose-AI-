@@ -26,10 +26,10 @@ export default function CalendarPage() {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // Query para obtener tareas del curso del estudiante
+  // Query para obtener tareas del estudiante basado en su grupo
   const { data: assignments = [] } = useQuery<Assignment[]>({
-    queryKey: ['/api/assignments/curso', user?.curso, currentMonth, currentYear],
-    enabled: !!user?.curso,
+    queryKey: ['/api/assignments/student'],
+    enabled: !!user?.id,
   });
 
   const handleDayClick = (assignment: Assignment) => {
