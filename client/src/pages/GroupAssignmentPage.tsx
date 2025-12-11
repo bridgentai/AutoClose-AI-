@@ -124,13 +124,18 @@ export default function GroupAssignmentPage() {
         mutationFn: async (data: AssignmentData) => {
             return await apiRequest('POST', '/api/professor/assign-groups', data);
         },
-        onSuccess: () => {
+        onSuccess: (response: any) => {
+            const estudiantesVinculados = response?.course?.estudiantesVinculados || 0;
             toast({ 
                 title: '¡Asignación Exitosa!', 
-                description: `La materia ${selectedMateriaNombre} ha sido asignada a los grupos.`, 
+                description: `La materia ${selectedMateriaNombre} ha sido asignada a los grupos. ${estudiantesVinculados} estudiantes vinculados.`, 
                 className: 'bg-green-500 text-white' 
             });
+            // Invalidar caché de ambas vistas (profesor y estudiante)
             queryClient.invalidateQueries({ queryKey: ['professorGroups'] }); 
+            queryClient.invalidateQueries({ queryKey: ['professorCourses'] }); 
+            queryClient.invalidateQueries({ queryKey: ['studentSubjects'] }); 
+            queryClient.invalidateQueries({ queryKey: ['currentAssignments'] }); 
             refetchCurrentAssignments();
         },
         onError: (error: any) => {
