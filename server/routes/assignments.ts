@@ -237,6 +237,7 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
     }
 
     if (!user.curso) {
+      console.log('Student has no curso assigned');
       return res.json([]);
     }
 
@@ -247,6 +248,9 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
     const primerDia = new Date(currentYear, currentMonth, 1);
     const ultimoDia = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
 
+    console.log(`Student assignments query: curso=${user.curso}, colegioId=${user.colegioId}`);
+    console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
+
     const assignments = await Assignment.find({
       curso: user.curso,
       colegioId: user.colegioId,
@@ -255,6 +259,8 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
         $lte: ultimoDia,
       },
     }).sort({ fechaEntrega: 1 });
+
+    console.log(`Found ${assignments.length} assignments for student in curso ${user.curso}`);
 
     return res.json(assignments);
   } catch (err: any) {
