@@ -87,23 +87,26 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
       colegioId 
     });
 
+    // Convertir profesorId a ObjectId para consistencia
+    const profesorObjectId = new Types.ObjectId(profesorId);
+
     if (!course) {
       // Crear el curso si no existe
       course = new Course({
         nombre: materiaNombre,
         descripcion: `Curso de ${materiaNombre}`,
         colegioId,
-        profesorIds: [profesorId],
+        profesorIds: [profesorObjectId],
         cursos: grupoIds, // Array de grupos asignados (9A, 10B, etc.)
         estudianteIds: estudianteIds, // Estudiantes de esos grupos
       });
       await course.save();
     } else {
       // Actualizar el curso existente
-      // Añadir profesor si no está ya asignado
+      // Añadir profesor si no está ya asignado (comparar como strings para compatibilidad)
       if (!course.profesorIds?.some(id => id.toString() === profesorId)) {
         course.profesorIds = course.profesorIds || [];
-        course.profesorIds.push(profesorId as any);
+        course.profesorIds.push(profesorObjectId as any);
       }
       course.cursos = grupoIds;
       course.estudianteIds = estudianteIds; // Actualizar estudiantes vinculados
