@@ -176,11 +176,18 @@ router.get('/my-groups', protect, async (req: AuthRequest, res) => {
     const profesorId = req.user?.id;
     const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
 
-    // Buscar cursos donde el profesor está asignado
+    console.log('my-groups: profesorId=', profesorId, 'colegioId=', colegioId);
+
+    // Buscar cursos donde el profesor está asignado (buscar con string y ObjectId)
     const courses = await Course.find({ 
-      profesorIds: new Types.ObjectId(profesorId),
+      $or: [
+        { profesorIds: profesorId },
+        { profesorIds: new Types.ObjectId(profesorId) }
+      ],
       colegioId 
     }).select('nombre descripcion cursos estudianteIds colorAcento icono');
+
+    console.log('my-groups: found courses=', courses.length);
 
     // Agrupar por grupo (groupId)
     const groupMap = new Map<string, { subjects: any[], studentIds: Set<string> }>();
