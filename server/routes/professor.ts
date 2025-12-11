@@ -1,4 +1,5 @@
 import express from 'express';
+import { Types } from 'mongoose';
 import { protect, AuthRequest } from '../middleware/auth';
 import { Course } from '../models/Course';
 import { User } from '../models/User';
@@ -138,9 +139,9 @@ router.get('/courses', protect, async (req: AuthRequest, res) => {
       return res.status(401).json({ message: 'No autorizado.' });
     }
 
-    // Buscar todos los cursos donde el profesor está asignado
+    // Buscar todos los cursos donde el profesor está asignado (usando ObjectId para comparación correcta)
     const courses = await Course.find({ 
-      profesorIds: profesorId,
+      profesorIds: new Types.ObjectId(profesorId),
       colegioId 
     }).select('nombre descripcion cursos estudianteIds colorAcento icono createdAt');
 
@@ -175,9 +176,9 @@ router.get('/my-groups', protect, async (req: AuthRequest, res) => {
     const profesorId = req.user?.id;
     const colegioId = req.user?.colegioId || 'default_colegio';
 
-    // Buscar cursos donde el profesor está asignado (usando profesorIds array)
+    // Buscar cursos donde el profesor está asignado (usando ObjectId para comparación correcta)
     const courses = await Course.find({ 
-      profesorIds: profesorId,
+      profesorIds: new Types.ObjectId(profesorId),
       colegioId 
     }).select('nombre cursos');
 

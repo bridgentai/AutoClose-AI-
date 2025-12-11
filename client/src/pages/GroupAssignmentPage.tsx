@@ -133,8 +133,8 @@ export default function GroupAssignmentPage() {
             });
             // Invalidar caché de ambas vistas (profesor y estudiante)
             queryClient.invalidateQueries({ queryKey: ['professorGroups'] }); 
-            queryClient.invalidateQueries({ queryKey: ['professorCourses'] }); 
-            queryClient.invalidateQueries({ queryKey: ['studentSubjects'] }); 
+            queryClient.invalidateQueries({ queryKey: ['/api/professor/courses'] }); 
+            queryClient.invalidateQueries({ queryKey: ['/api/student/subjects'] }); 
             queryClient.invalidateQueries({ queryKey: ['currentAssignments'] }); 
             refetchCurrentAssignments();
         },
