@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { Calendar as CalendarIcon, ClipboardList, User, ArrowLeft, AlertCircle, BookOpen, Clock } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, ArrowLeft, AlertCircle, BookOpen, Clock, User } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -333,7 +331,7 @@ export default function CourseDetailPage() {
                     <CardContent className="p-6 text-white/60 text-center">
                         <Clock className="w-8 h-8 mx-auto mb-3 text-white/40" />
                         <p>Esta sección contendrá los módulos, documentos y recursos del curso.</p>
-                        <Button variant="link" className="text-[#9f25b8] mt-2" onClick={() => setLocation('/materials')}>
+                        <Button variant="ghost" className="text-[#9f25b8] mt-2" onClick={() => setLocation('/materials')}>
                             Ir a Materiales Generales
                         </Button>
                     </CardContent>
@@ -428,38 +426,10 @@ export default function CourseDetailPage() {
     };
 
     return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-                <AppSidebar />
-                <SidebarInset className="flex flex-col flex-1">
-                    <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
-                        <div className="flex items-center gap-3">
-                            <Button
-                                variant="ghost" size="icon" onClick={() => setLocation('/courses')}
-                                className="text-white hover:bg-white/10" data-testid="button-back"
-                            >
-                                <ArrowLeft className="w-5 h-5" />
-                            </Button>
-                            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-                            <h1 className="text-xl font-bold text-white font-['Poppins']">
-                                {isProfessor ? `Grupo ${cursoId}` : courseDetails?.nombre || 'Cargando Materia...'}
-                            </h1>
-                        </div>
-                        <Button
-                            onClick={() => setLocation('/account')} variant="ghost" size="icon"
-                            className="text-white hover:bg-white/10" data-testid="button-account"
-                        >
-                            <User className="w-5 h-5" />
-                        </Button>
-                    </header>
-
-                    <main className="flex-1 overflow-auto p-8">
-                        <div className="max-w-7xl mx-auto">
-                            {renderContent()}
-                        </div>
-                    </main>
-                </SidebarInset>
+        <div className="flex-1 overflow-auto p-8">
+            <div className="max-w-7xl mx-auto">
+                {renderContent()}
             </div>
-        </SidebarProvider>
+        </div>
     );
 }

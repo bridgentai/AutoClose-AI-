@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { Calendar as CalendarIcon, User, Plus, X, Paperclip, Link2, FileText } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, X, Paperclip, Link2, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -160,29 +158,8 @@ export default function TeacherCalendarPage() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-              <h1 className="text-xl font-bold text-white font-['Poppins']">
-                Calendario de Tareas
-              </h1>
-            </div>
-            <Button
-              onClick={() => setLocation('/account')}
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/10"
-              data-testid="button-account"
-            >
-              <User className="w-5 h-5" />
-            </Button>
-          </header>
-
-          <main className="flex-1 overflow-auto p-8 relative">
+    <>
+    <div className="flex-1 overflow-auto p-8 relative">
             <div className="max-w-5xl mx-auto">
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
@@ -266,9 +243,7 @@ export default function TeacherCalendarPage() {
             >
               <Plus className="w-6 h-6" />
             </Button>
-          </main>
-        </SidebarInset>
-      </div>
+          </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="bg-[#1a001c] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -446,6 +421,6 @@ export default function TeacherCalendarPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </SidebarProvider>
+    </>
   );
 }

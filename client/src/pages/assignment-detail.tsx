@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { User, ArrowLeft, Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -149,68 +147,23 @@ export default function AssignmentDetailPage() {
 
   if (isLoading) {
     return (
-      <SidebarProvider>
-        <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-          <AppSidebar />
-          <SidebarInset className="flex flex-col flex-1">
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-white">Cargando...</div>
-            </div>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-white">Cargando...</div>
+      </div>
     );
   }
 
   if (!assignment) {
     return (
-      <SidebarProvider>
-        <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-          <AppSidebar />
-          <SidebarInset className="flex flex-col flex-1">
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-white">Tarea no encontrada</div>
-            </div>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-white">Tarea no encontrada</div>
+      </div>
     );
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setLocation(isProfesor ? '/teacher-calendar' : '/calendar')}
-                className="text-white hover:bg-white/10"
-                data-testid="button-back"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-              <h1 className="text-xl font-bold text-white font-['Poppins']">
-                Detalle de Tarea
-              </h1>
-            </div>
-            <Button
-              onClick={() => setLocation('/account')}
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/10"
-              data-testid="button-account"
-            >
-              <User className="w-5 h-5" />
-            </Button>
-          </header>
-
-          <main className="flex-1 overflow-auto p-8">
-            <div className="max-w-4xl mx-auto">
+    <div className="flex-1 overflow-auto p-8">
+      <div className="max-w-4xl mx-auto">
               {isProfesor ? (
                 <Tabs defaultValue="info" className="w-full">
                   <TabsList className="bg-white/5 border border-white/10 mb-6">
@@ -643,10 +596,7 @@ export default function AssignmentDetailPage() {
                   </Card>
                 </div>
               )}
-            </div>
-          </main>
-        </SidebarInset>
       </div>
-    </SidebarProvider>
+    </div>
   );
 }

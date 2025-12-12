@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { GraduationCap, User, ArrowRight, AlertCircle, BookOpen, Users, Home, ClipboardList, Settings } from 'lucide-react';
+import { GraduationCap, ArrowRight, AlertCircle, BookOpen, Users, Home, ClipboardList, Settings } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -397,33 +395,6 @@ return <p className="text-white/60">Tu rol no tiene una vista definida para esta
 // =========================================================
 
 return (
-<SidebarProvider>
-<div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-<AppSidebar />
-
-<SidebarInset className="flex flex-col flex-1">
-<header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
-<div className="flex items-center gap-3">
-<SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-<h1 className="text-xl font-bold text-white font-['Poppins']">
-{userRole === 'profesor' ? 'Mis Grupos' : 'Mis Materias'}
-</h1>
-</div>
-
-<Button
-onClick={() => setLocation('/account')}
-variant="ghost"
-size="icon"
-className="text-white hover:bg-white/10"
-data-testid="button-account"
->
-<User className="h-5 w-5" />
-</Button>
-</header>
-
-<main className="flex-1 overflow-y-auto p-6 md:p-10">{viewToRender()}</main>
-</SidebarInset>
-</div>
-</SidebarProvider>
+<div className="flex-1 overflow-y-auto p-6 md:p-10">{viewToRender()}</div>
 );
 }

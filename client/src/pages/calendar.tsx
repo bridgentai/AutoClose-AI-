@@ -1,7 +1,5 @@
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { Calendar as CalendarIcon, User } from 'lucide-react';
+import { Calendar as CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
@@ -36,29 +34,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full bg-[#001855]">
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <header className="flex items-center justify-between p-4 border-b border-[#3b82f6]/20 backdrop-blur-xl bg-[#001855]/80">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-              <h1 className="text-xl font-bold text-white font-['Poppins']">
-                Calendario de Tareas
-              </h1>
-            </div>
-            <Button
-              onClick={() => setLocation('/account')}
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/10"
-              data-testid="button-account"
-            >
-              <User className="w-5 h-5" />
-            </Button>
-          </header>
-
-          <main className="flex-1 overflow-auto p-8">
+    <div className="flex-1 overflow-auto p-8">
             <div className="max-w-5xl mx-auto">
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
@@ -149,9 +125,6 @@ export default function CalendarPage() {
                 </Card>
               )}
             </div>
-          </main>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+          </div>
   );
 }

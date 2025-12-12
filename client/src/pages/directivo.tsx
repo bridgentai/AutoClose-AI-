@@ -1,7 +1,5 @@
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { User, Users, Save, AlertCircle, ChevronDown } from 'lucide-react';
+import { Users, Save, AlertCircle, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -9,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { queryClient, apiRequest } from '@/lib/queryClient';
+import { queryClient } from '@/lib/queryClient';
 import { useState } from 'react';
 import {
   Select,
@@ -55,17 +53,14 @@ export default function DirectivoPage() {
   const { toast } = useToast();
   const [openProfesorId, setOpenProfesorId] = useState<string | null>(null);
 
-  // Fetch all teachers from the institution
   const { data: profesores = [], isLoading: loadingProfesores, error: errorProfesores } = useQuery<Profesor[]>({
     queryKey: ['/api/users/profesores'],
   });
 
-  // Fetch all courses to show current assignments
   const { data: allCourses = [], isLoading: loadingCourses } = useQuery<Course[]>({
     queryKey: ['/api/courses'],
   });
 
-  // Mutation to assign groups to teacher
   const assignMutation = useMutation({
     mutationFn: async (data: { profesorId: string; materia: string; grupos: string[] }) => {
       const response = await fetch('/api/courses/assign', {
@@ -85,7 +80,7 @@ export default function DirectivoPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
       toast({
-        title: '¡Asignación exitosa!',
+        title: 'Asignacion exitosa!',
         description: 'Los grupos han sido asignados al profesor.',
       });
     },
@@ -98,7 +93,6 @@ export default function DirectivoPage() {
     },
   });
 
-  // Get current assignments for a teacher's subject
   const getCurrentAssignments = (profesorId: string, materia: string): string[] => {
     const course = allCourses.find(
       c => c.profesorId === profesorId && c.nombre === materia
@@ -107,95 +101,64 @@ export default function DirectivoPage() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-              <h1 className="text-xl font-bold text-white font-['Poppins']">
-                Panel de Directivo
-              </h1>
-            </div>
-            <Button
-              onClick={() => window.location.href = '/account'}
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/10"
-              data-testid="button-account"
-            >
-              <User className="w-5 h-5" />
-            </Button>
-          </header>
-
-          <main className="flex-1 overflow-auto p-8">
-            <div className="max-w-7xl mx-auto">
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-                  Gestión de Profesores
-                </h2>
-                <p className="text-white/60">
-                  Asigna grupos a cada profesor según sus materias
-                </p>
-              </div>
-
-              {/* Loading State */}
-              {(loadingProfesores || loadingCourses) && (
-                <div className="space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <Card key={i} className="bg-white/5 border-white/10 backdrop-blur-md">
-                      <CardHeader>
-                        <Skeleton className="w-48 h-6 bg-white/10" />
-                        <Skeleton className="w-64 h-4 mt-2 bg-white/10" />
-                      </CardHeader>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {/* Error State */}
-              {errorProfesores && (
-                <Alert className="bg-red-500/10 border-red-500/50">
-                  <AlertCircle className="h-4 w-4 text-red-400" />
-                  <AlertTitle className="text-red-200">Error al cargar profesores</AlertTitle>
-                  <AlertDescription className="text-red-200">
-                    No se pudieron cargar los profesores. Por favor, intenta de nuevo más tarde.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Empty State */}
-              {!loadingProfesores && !errorProfesores && profesores.length === 0 && (
-                <Alert className="bg-blue-500/10 border-blue-500/50">
-                  <Users className="h-4 w-4 text-blue-400" />
-                  <AlertTitle className="text-blue-200">No hay profesores registrados</AlertTitle>
-                  <AlertDescription className="text-blue-200">
-                    Aún no hay profesores registrados en tu institución.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* List of Teachers */}
-              {!loadingProfesores && !loadingCourses && profesores.length > 0 && (
-                <div className="space-y-4">
-                  {profesores.map((profesor) => (
-                    <ProfesorCard
-                      key={profesor._id}
-                      profesor={profesor}
-                      isOpen={openProfesorId === profesor._id}
-                      onToggle={() => setOpenProfesorId(openProfesorId === profesor._id ? null : profesor._id)}
-                      getCurrentAssignments={getCurrentAssignments}
-                      assignMutation={assignMutation}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </main>
-        </SidebarInset>
+    <div data-testid="directivo-page">
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
+          Gestion de Profesores
+        </h2>
+        <p className="text-white/60">
+          Asigna grupos a cada profesor segun sus materias
+        </p>
       </div>
-    </SidebarProvider>
+
+      {(loadingProfesores || loadingCourses) && (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="bg-white/5 border-white/10 backdrop-blur-md">
+              <CardHeader>
+                <Skeleton className="w-48 h-6 bg-white/10" />
+                <Skeleton className="w-64 h-4 mt-2 bg-white/10" />
+              </CardHeader>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {errorProfesores && (
+        <Alert className="bg-red-500/10 border-red-500/50">
+          <AlertCircle className="h-4 w-4 text-red-400" />
+          <AlertTitle className="text-red-200">Error al cargar profesores</AlertTitle>
+          <AlertDescription className="text-red-200">
+            No se pudieron cargar los profesores. Por favor, intenta de nuevo mas tarde.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!loadingProfesores && !errorProfesores && profesores.length === 0 && (
+        <Alert className="bg-blue-500/10 border-blue-500/50">
+          <Users className="h-4 w-4 text-blue-400" />
+          <AlertTitle className="text-blue-200">No hay profesores registrados</AlertTitle>
+          <AlertDescription className="text-blue-200">
+            Aun no hay profesores registrados en tu institucion.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!loadingProfesores && !loadingCourses && profesores.length > 0 && (
+        <div className="space-y-4">
+          {profesores.map((profesor) => (
+            <ProfesorCard
+              key={profesor._id}
+              profesor={profesor}
+              isOpen={openProfesorId === profesor._id}
+              onToggle={() => setOpenProfesorId(openProfesorId === profesor._id ? null : profesor._id)}
+              getCurrentAssignments={getCurrentAssignments}
+              assignMutation={assignMutation}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -211,7 +174,6 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
   const [selectedMateria, setSelectedMateria] = useState<string>('');
   const [selectedGrupos, setSelectedGrupos] = useState<string[]>([]);
 
-  // Update selected grupos when materia changes
   const handleMateriaChange = (materia: string) => {
     setSelectedMateria(materia);
     const currentAssignments = getCurrentAssignments(profesor._id, materia);
@@ -273,7 +235,6 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
 
         <CollapsibleContent>
           <CardContent className="space-y-4 pt-4">
-            {/* Subject Selector */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-white">Selecciona una materia:</label>
               <Select value={selectedMateria} onValueChange={handleMateriaChange}>
@@ -298,7 +259,6 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
               </Select>
             </div>
 
-            {/* Groups Multi-select */}
             {selectedMateria && (
               <>
                 <div className="space-y-2">
@@ -321,7 +281,6 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
                   </div>
                 </div>
 
-                {/* Save Button */}
                 <div className="flex justify-end pt-4">
                   <Button
                     onClick={handleSave}
@@ -330,7 +289,7 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
                     data-testid="button-save-assignment"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    {assignMutation.isPending ? 'Guardando...' : 'Guardar Asignación'}
+                    {assignMutation.isPending ? 'Guardando...' : 'Guardar Asignacion'}
                   </Button>
                 </div>
               </>

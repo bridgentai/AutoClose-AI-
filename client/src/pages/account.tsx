@@ -1,9 +1,7 @@
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { User, Mail, GraduationCap, Shield, BookOpen } from 'lucide-react';
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
 export default function Account() {
   const { user } = useAuth();
@@ -17,11 +15,7 @@ export default function Account() {
     : 'bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]';
 
   return (
-    <SidebarProvider>
-      <div className={`flex h-screen w-full ${bgGradient}`}>
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <div className="flex-1 overflow-auto p-8">
+    <div className="flex-1 overflow-auto p-8">
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
@@ -121,9 +115,6 @@ export default function Account() {
             </Card>
           </div>
         </div>
-          </div>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 }

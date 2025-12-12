@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { ArrowLeft, BookOpen, Users, Check, AlertCircle, Loader2, User } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -209,34 +207,7 @@ export default function GroupAssignmentPage() {
     // Renderizado
     // ------------------------------------
     return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
-                <AppSidebar />
-                <SidebarInset className="flex flex-col flex-1">
-                    <header className="flex items-center justify-between p-4 border-b border-white/10 backdrop-blur-xl bg-black/20">
-                        <div className="flex items-center gap-3">
-                            <Button
-                                variant="ghost" size="icon" onClick={() => setLocation('/courses')}
-                                className="text-white hover:bg-white/10"
-                                data-testid="button-back"
-                            >
-                                <ArrowLeft className="w-5 h-5" />
-                            </Button>
-                            <SidebarTrigger className="text-white" data-testid="button-sidebar-trigger" />
-                            <h1 className="text-xl font-bold text-white font-['Poppins']">
-                                Gestión de Asignación de Grupos
-                            </h1>
-                        </div>
-                        <Button
-                            onClick={() => setLocation('/mi-perfil')} variant="ghost" size="icon"
-                            className="text-white hover:bg-white/10"
-                            data-testid="button-profile"
-                        >
-                            <User className="w-5 h-5" />
-                        </Button>
-                    </header>
-
-                    <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="flex-1 overflow-y-auto p-6 md:p-10">
                         <div className="max-w-4xl mx-auto">
                             <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                                 <CardHeader>
@@ -323,9 +294,6 @@ export default function GroupAssignmentPage() {
                                 </CardContent>
                             </Card>
                         </div>
-                    </main>
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
+        </div>
     );
 }

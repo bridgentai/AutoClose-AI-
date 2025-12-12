@@ -1,7 +1,5 @@
 import { useAuth } from '@/lib/authContext';
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
-import { User, ExternalLink, Mail, Calendar, FileText, FolderOpen, Video, MessageCircle, Users, PenTool, BarChart3, Globe, MonitorPlay } from 'lucide-react';
+import { ExternalLink, Mail, Calendar, FileText, FolderOpen, Video, MessageCircle, Users, PenTool, BarChart3, Globe, MonitorPlay } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
@@ -115,29 +113,7 @@ export default function PlataformasPage() {
     : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
   
   return (
-    <SidebarProvider>
-      <div className={`flex h-screen w-full ${bgGradient}`}>
-        <AppSidebar />
-        <SidebarInset className="flex flex-col flex-1">
-          <header className={`flex items-center justify-between p-4 border-b backdrop-blur-xl ${isEstudiante ? 'border-[#3b82f6]/20 bg-[#001855]/80' : 'border-white/10 bg-black/20'}`}>
-            <div className="flex items-center gap-3">
-              <SidebarTrigger data-testid="button-sidebar-toggle" className="text-white" />
-              <h1 className="text-xl font-bold text-white font-['Poppins']">
-                Google Workspace
-              </h1>
-            </div>
-            <Button
-              onClick={() => setLocation('/account')}
-              variant="ghost"
-              size="icon"
-              className="text-white hover:bg-white/10"
-              data-testid="button-account"
-            >
-              <User className="w-5 h-5" />
-            </Button>
-          </header>
-
-          <main className="flex-1 overflow-auto p-8">
+    <div className="flex-1 overflow-auto p-8">
             <div className="max-w-7xl mx-auto">
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
@@ -183,9 +159,6 @@ export default function PlataformasPage() {
                 })}
               </div>
             </div>
-          </main>
-        </SidebarInset>
-      </div>
-    </SidebarProvider>
+    </div>
   );
 }

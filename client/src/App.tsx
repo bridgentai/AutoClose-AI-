@@ -5,13 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/authContext";
 import { AuthGuard, GuestGuard } from "@/components/auth-guard";
 
-// Layout global
-import { AppSidebar } from "@/components/app-sidebar";
-import { AppLayout } from "@/layout/AppLayout";
-
-// =========================================================================
-// P A G E S
-// =========================================================================
+import { TopNavigation } from "@/components/TopNavigation";
 
 import Home from "@/pages/home";
 import Login from "@/pages/login";
@@ -51,129 +45,125 @@ import GroupAssignmentPage from "@/pages/GroupAssignmentPage";
 
 const queryClient = new QueryClient();
 
-// ==============================================================
-//   R O U T E R   C O N   L A Y O U T
-// ==============================================================
-
 function AppRouter() {
   const { user } = useAuth();
-
   const isLogged = Boolean(user);
 
   return (
     <>
-      {/* Sidebar SOLO si está autenticado */}
-      {isLogged && <AppSidebar />}
-
-      {/* El layout global SOLO cuando hay usuario */}
       {isLogged ? (
-        <AppLayout>
-          <Switch>
-            {/* Home */}
-            <Route path="/" component={Home} />
+        <div className="min-h-screen w-full bg-gradient-to-b from-black via-[#1a0020] to-[#0c0010] text-white">
+          <TopNavigation />
+          <main className="pt-16">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
+              <Switch>
+                <Route path="/" component={Home} />
 
-            {/* Interfaces principales */}
-            <Route path="/dashboard">
-              <AuthGuard><Dashboard /></AuthGuard>
-            </Route>
-            <Route path="/chat">
-              <AuthGuard><Chat /></AuthGuard>
-            </Route>
+                <Route path="/dashboard">
+                  <AuthGuard><Dashboard /></AuthGuard>
+                </Route>
+                <Route path="/chat">
+                  <AuthGuard><Chat /></AuthGuard>
+                </Route>
 
-            {/* Roles */}
-            <Route path="/student">
-              <AuthGuard><StudentPage /></AuthGuard>
-            </Route>
-            <Route path="/teacher">
-              <AuthGuard><TeacherPage /></AuthGuard>
-            </Route>
-            <Route path="/director">
-              <AuthGuard><DirectorPage /></AuthGuard>
-            </Route>
-            <Route path="/parent">
-              <AuthGuard><ParentPage /></AuthGuard>
-            </Route>
-            <Route path="/directivo">
-              <AuthGuard><DirectivoPage /></AuthGuard>
-            </Route>
+                <Route path="/student">
+                  <AuthGuard><StudentPage /></AuthGuard>
+                </Route>
+                <Route path="/teacher">
+                  <AuthGuard><TeacherPage /></AuthGuard>
+                </Route>
+                <Route path="/director">
+                  <AuthGuard><DirectorPage /></AuthGuard>
+                </Route>
+                <Route path="/parent">
+                  <AuthGuard><ParentPage /></AuthGuard>
+                </Route>
+                <Route path="/directivo">
+                  <AuthGuard><DirectivoPage /></AuthGuard>
+                </Route>
 
-            {/* Materias / Cursos */}
-            <Route path="/subjects">
-              <AuthGuard><Courses /></AuthGuard>
-            </Route>
-            <Route path="/courses">
-              <AuthGuard><Courses /></AuthGuard>
-            </Route>
-            <Route path="/course/:cursoId">
-              <AuthGuard><CourseDetail /></AuthGuard>
-            </Route>
+                <Route path="/subjects">
+                  <AuthGuard><Courses /></AuthGuard>
+                </Route>
+                <Route path="/courses">
+                  <AuthGuard><Courses /></AuthGuard>
+                </Route>
+                <Route path="/course/:cursoId">
+                  <AuthGuard><CourseDetail /></AuthGuard>
+                </Route>
 
-            {/* Mi Aprendizaje */}
-            <Route path="/mi-aprendizaje">
-              <AuthGuard><MiAprendizajeLayout /></AuthGuard>
-            </Route>
+                <Route path="/mi-aprendizaje">
+                  <AuthGuard><MiAprendizajeLayout /></AuthGuard>
+                </Route>
 
-            {/* Mi Perfil */}
-            <Route path="/mi-perfil">
-              <AuthGuard><PerfilLayout /></AuthGuard>
-            </Route>
-            <Route path="/mi-perfil/personal">
-              <AuthGuard><InformacionPersonal /></AuthGuard>
-            </Route>
-            <Route path="/mi-perfil/medica">
-              <AuthGuard><FichaMedica /></AuthGuard>
-            </Route>
-            <Route path="/mi-perfil/cuenta">
-              <AuthGuard><Account /></AuthGuard>
-            </Route>
+                <Route path="/mi-perfil">
+                  <AuthGuard><PerfilLayout /></AuthGuard>
+                </Route>
+                <Route path="/mi-perfil/personal">
+                  <AuthGuard><InformacionPersonal /></AuthGuard>
+                </Route>
+                <Route path="/mi-perfil/medica">
+                  <AuthGuard><FichaMedica /></AuthGuard>
+                </Route>
+                <Route path="/mi-perfil/cuenta">
+                  <AuthGuard><Account /></AuthGuard>
+                </Route>
 
-            {/* Comunicación */}
-            <Route path="/comunicacion">
-              <AuthGuard><ComunicacionHome /></AuthGuard>
-            </Route>
+                <Route path="/comunicacion">
+                  <AuthGuard><ComunicacionHome /></AuthGuard>
+                </Route>
 
-            {/* Comunidad */}
-            <Route path="/comunidad">
-              <AuthGuard><ComunidadLayout /></AuthGuard>
-            </Route>
-            <Route path="/comunidad/calendario">
-              <AuthGuard><CalendarioEventos /></AuthGuard>
-            </Route>
-            <Route path="/comunidad/noticias">
-              <AuthGuard><AvisosNoticias /></AuthGuard>
-            </Route>
+                <Route path="/comunidad">
+                  <AuthGuard><ComunidadLayout /></AuthGuard>
+                </Route>
+                <Route path="/comunidad/calendario">
+                  <AuthGuard><CalendarioEventos /></AuthGuard>
+                </Route>
+                <Route path="/comunidad/noticias">
+                  <AuthGuard><AvisosNoticias /></AuthGuard>
+                </Route>
 
-            {/* Calendarios */}
-            <Route path="/calendar">
-              <AuthGuard><CalendarPage /></AuthGuard>
-            </Route>
-            <Route path="/teacher-calendar">
-              <AuthGuard><TeacherCalendarPage /></AuthGuard>
-            </Route>
+                <Route path="/calendar">
+                  <AuthGuard><CalendarPage /></AuthGuard>
+                </Route>
+                <Route path="/teacher-calendar">
+                  <AuthGuard><TeacherCalendarPage /></AuthGuard>
+                </Route>
 
-            {/* Grupos */}
-            <Route path="/group-assignment">
-              <AuthGuard><GroupAssignmentPage /></AuthGuard>
-            </Route>
+                <Route path="/group-assignment">
+                  <AuthGuard><GroupAssignmentPage /></AuthGuard>
+                </Route>
 
-            {/* Materiales */}
-            <Route path="/materials">
-              <AuthGuard><Materials /></AuthGuard>
-            </Route>
+                <Route path="/materials">
+                  <AuthGuard><Materials /></AuthGuard>
+                </Route>
 
-            {/* Asignaciones */}
-            <Route path="/assignment/:id">
-              <AuthGuard><AssignmentDetailPage /></AuthGuard>
-            </Route>
+                <Route path="/assignment/:id">
+                  <AuthGuard><AssignmentDetailPage /></AuthGuard>
+                </Route>
 
-            {/* 404 */}
-            <Route component={NotFound} />
-          </Switch>
-        </AppLayout>
+                <Route path="/setup">
+                  <AuthGuard><Setup /></AuthGuard>
+                </Route>
+
+                <Route path="/settings">
+                  <AuthGuard><Setup /></AuthGuard>
+                </Route>
+
+                <Route path="/account">
+                  <AuthGuard><Account /></AuthGuard>
+                </Route>
+
+                <Route path="/plataformas">
+                  <AuthGuard><PlataformasPage /></AuthGuard>
+                </Route>
+
+                <Route component={NotFound} />
+              </Switch>
+            </div>
+          </main>
+        </div>
       ) : (
-        // ===========================================
-        // RUTAS SIN LAYOUT (Login / Register)
-        // ===========================================
         <Switch>
           <Route path="/login">
             <GuestGuard><Login /></GuestGuard>
@@ -183,17 +173,12 @@ function AppRouter() {
             <GuestGuard><Register /></GuestGuard>
           </Route>
 
-          {/* fallback cuando no está autenticado */}
           <Route component={Login} />
         </Switch>
       )}
     </>
   );
 }
-
-// ==============================================================
-//   A P P   W R A P P E R S
-// ==============================================================
 
 function App() {
   return (
