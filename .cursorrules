@@ -1,0 +1,38 @@
+# AutoClose AI - Contexto Fijo del Proyecto
+
+## Archivos de Referencia Principal
+
+### PROJECT_GOLAS.md
+Siempre consulta y considera el archivo `PROJECT_GOLAS.md` como la referencia principal del proyecto. Este archivo contiene:
+
+- La visión y arquitectura completa de AutoClose AI
+- Los objetivos principales del proyecto
+- La estructura del frontend y backend
+- Los principios de desarrollo
+- Las integraciones externas requeridas
+- Los requisitos de entorno
+
+### design_guidelines.md
+Siempre consulta y considera el archivo `design_guidelines.md` para mantener la consistencia visual y de UX. Este archivo contiene:
+
+- Filosofía de diseño y principios centrales
+- Sistema de colores (paleta púrpura institucional #9f25b8)
+- Tipografía (Inter, Poppins, JetBrains Mono)
+- Sistema de navegación next-gen (Command Palette, Quick Actions, AI Dock)
+- Componentes core, cards, formularios y microinteracciones
+- Responsive behavior y accesibilidad
+- Integración visual con Google Workspace
+
+## Instrucciones
+- Antes de realizar cualquier cambio significativo, revisa `PROJECT_GOLAS.md` para asegurar alineación con la visión del proyecto
+- Antes de realizar cambios de diseño o UI, revisa `design_guidelines.md` para mantener la consistencia visual
+- La IA es el centro operativo del sistema, no un módulo aparte
+- Todo debe poder hacerse manualmente o mediante IA
+- Mantén el diseño moderno, limpio y minimalista con paleta púrpura (#9f25b8)
+- Respeta la arquitectura definida: React + TypeScript en frontend, Express + MongoDB en backend
+- Considera siempre los roles: estudiante, profesor, directivo, padre
+
+## Archivos de Referencia
+Lee siempre `PROJECT_GOLAS.md` para entender el contexto completo del proyecto antes de hacer cambios.
+Lee siempre `design_guidelines.md` para mantener la consistencia visual y de UX en todos los componentes.
+
