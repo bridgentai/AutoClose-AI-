@@ -13,7 +13,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     colegioId: string;
-    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';
+    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
     curso?: string;
     materias?: string[];
   };

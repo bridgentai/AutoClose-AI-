@@ -2,9 +2,12 @@ import { Schema, model } from 'mongoose';
 
 interface IInstitutionConfig {
   colegioId: string;
-  nombreIA: string;
-  logo?: string;
-  colorPrimario: string;
+  nombre: string;
+  logoUrl: string;
+  parametros: Record<string, any>;
+  // Campos adicionales para compatibilidad
+  nombreIA?: string;
+  colorPrimario?: string;
   colorSecundario?: string;
   metodologia?: string;
   curriculum?: string;
@@ -14,9 +17,12 @@ interface IInstitutionConfig {
 
 const institutionConfigSchema = new Schema<IInstitutionConfig>({
   colegioId: { type: String, required: true, unique: true },
-  nombreIA: { type: String, required: true, default: 'AutoClose AI' },
-  logo: { type: String },
-  colorPrimario: { type: String, required: true, default: '#9f25b8' },
+  nombre: { type: String, required: true },
+  logoUrl: { type: String, required: true },
+  parametros: { type: Schema.Types.Mixed, default: {} },
+  // Campos adicionales para compatibilidad
+  nombreIA: { type: String, default: 'AutoClose AI' },
+  colorPrimario: { type: String, default: '#9f25b8' },
   colorSecundario: { type: String, default: '#6a0dad' },
   metodologia: { type: String },
   curriculum: { type: String },
@@ -29,4 +35,4 @@ institutionConfigSchema.pre('save', function(next) {
   next();
 });
 
-export const InstitutionConfig = model<IInstitutionConfig>('InstitutionConfig', institutionConfigSchema);
+export const InstitutionConfig = model<IInstitutionConfig>('config_institucion', institutionConfigSchema);

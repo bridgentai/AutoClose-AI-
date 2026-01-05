@@ -6,6 +6,13 @@ export interface IAttachment {
   url: string;
 }
 
+export interface IEntrega {
+  estudianteId: Types.ObjectId;
+  archivoUrl: string;
+  fechaEntrega: Date;
+  nota?: number;
+}
+
 export interface ISubmission {
   estudianteId: Types.ObjectId;
   estudianteNombre: string;
@@ -19,16 +26,26 @@ export interface ISubmission {
 export interface IAssignment {
   titulo: string;
   descripcion: string;
-  curso: string; // ej: "11H", "10A"
-  courseId?: Types.ObjectId; // Referencia al Course (materia como Matemáticas, Física)
-  fechaEntrega: Date;
+  cursoId: Types.ObjectId;
+  materiaId: Types.ObjectId;
   profesorId: Types.ObjectId;
-  profesorNombre: string;
+  fechaEntrega: Date;
+  entregas: IEntrega[];
+  adjuntos: string[];
   colegioId: string;
-  adjuntos: IAttachment[];
-  entregas: ISubmission[];
   createdAt: Date;
+  // Campos adicionales para compatibilidad
+  curso?: string;
+  courseId?: Types.ObjectId;
+  profesorNombre?: string;
 }
+
+const entregaSchema = new Schema<IEntrega>({
+  estudianteId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
+  archivoUrl: { type: String, required: true },
+  fechaEntrega: { type: Date, default: Date.now },
+  nota: { type: Number },
+}, { _id: true });
 
 const attachmentSchema = new Schema<IAttachment>({
   tipo: { type: String, enum: ['pdf', 'link', 'imagen', 'documento', 'otro'], required: true },
@@ -37,7 +54,7 @@ const attachmentSchema = new Schema<IAttachment>({
 }, { _id: false });
 
 const submissionSchema = new Schema<ISubmission>({
-  estudianteId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  estudianteId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
   estudianteNombre: { type: String, required: true },
   archivos: [attachmentSchema],
   comentario: { type: String },
@@ -49,19 +66,23 @@ const submissionSchema = new Schema<ISubmission>({
 const assignmentSchema = new Schema<IAssignment>({
   titulo: { type: String, required: true },
   descripcion: { type: String, required: true },
-  curso: { type: String, required: true },
-  courseId: { type: Schema.Types.ObjectId, ref: 'Course' },
+  cursoId: { type: Schema.Types.ObjectId, ref: 'cursos', required: true },
+  materiaId: { type: Schema.Types.ObjectId, ref: 'materias', required: true },
+  profesorId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
   fechaEntrega: { type: Date, required: true },
-  profesorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  profesorNombre: { type: String, required: true },
+  entregas: { type: [entregaSchema], default: [] },
+  adjuntos: { type: [String], default: [] },
   colegioId: { type: String, required: true },
-  adjuntos: { type: [attachmentSchema], default: [] },
-  entregas: { type: [submissionSchema], default: [] },
   createdAt: { type: Date, default: Date.now },
+  // Campos adicionales para compatibilidad
+  curso: { type: String },
+  courseId: { type: Schema.Types.ObjectId, ref: 'cursos' },
+  profesorNombre: { type: String },
 });
 
-// Índice para búsquedas rápidas por curso y fecha
-assignmentSchema.index({ curso: 1, fechaEntrega: 1 });
-assignmentSchema.index({ colegioId: 1, curso: 1 });
+// Índices para búsquedas rápidas
+assignmentSchema.index({ cursoId: 1, fechaEntrega: 1 });
+assignmentSchema.index({ colegioId: 1, cursoId: 1 });
+assignmentSchema.index({ profesorId: 1, fechaEntrega: 1 });
 
-export const Assignment = model<IAssignment>('Assignment', assignmentSchema);
+export const Assignment = model<IAssignment>('tareas', assignmentSchema);

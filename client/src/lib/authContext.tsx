@@ -26,9 +26,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = (userData: AuthResponse) => {
+    console.log('[AUTH] Login con datos:', userData);
+    console.log('[AUTH] Código único recibido:', userData.codigoUnico);
     setUser(userData);
     localStorage.setItem('autoclose_user', JSON.stringify(userData));
     localStorage.setItem('autoclose_token', userData.token);
+    console.log('[AUTH] Usuario guardado en localStorage');
   };
 
   const logout = () => {

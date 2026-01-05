@@ -91,9 +91,25 @@ router.post('/assign-groups', protect, async (req: AuthRequest, res) => {
     const profesorObjectId = new Types.ObjectId(profesorId);
 
     if (!course) {
+      // Buscar o crear la materia correspondiente
+      const { Materia } = await import('../models/Materia');
+      let materia = await Materia.findOne({ nombre: materiaNombre });
+      if (!materia) {
+        // Crear materia si no existe
+        materia = await Materia.create({
+          nombre: materiaNombre,
+          descripcion: `Materia ${materiaNombre}`,
+          area: 'General',
+        });
+      }
+
       // Crear el curso si no existe
       course = new Course({
         nombre: materiaNombre,
+        materiaId: materia._id, // Campo requerido en nueva estructura
+        profesorId: profesorObjectId, // Campo requerido
+        estudiantes: estudianteIds, // Campo requerido
+        // Campos adicionales para compatibilidad
         descripcion: `Curso de ${materiaNombre}`,
         colegioId,
         profesorIds: [profesorObjectId],

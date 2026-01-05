@@ -26,33 +26,33 @@ export default function Setup() {
             <div className="bg-white/5 rounded-xl p-5">
               <h3 className="text-white font-semibold mb-3">📝 Pasos para configurar:</h3>
               <ol className="list-decimal list-inside space-y-2 text-white/80 text-sm">
-                <li>Abre el panel de <strong className="text-white">Secrets</strong> en Replit</li>
-                <li>Edita el secreto <code className="bg-black/30 px-2 py-1 rounded">MONGO_URI</code></li>
+                <li>Abre el archivo <code className="bg-black/30 px-2 py-1 rounded">.env</code> en la raíz del proyecto</li>
+                <li>Agrega o edita la variable <code className="bg-black/30 px-2 py-1 rounded">MONGO_URI</code></li>
                 <li>Ingresa tu URL de MongoDB Atlas completa</li>
-                <li>Ejemplo: <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs">mongodb+srv://usuario:contraseña@cluster.mongodb.net/database</code></li>
-                <li>Guarda y reinicia la aplicación</li>
+                <li>Ejemplo: <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs">MONGO_URI=mongodb+srv://usuario:contraseña@cluster.mongodb.net/database</code></li>
+                <li>Guarda el archivo y reinicia la aplicación</li>
               </ol>
             </div>
 
             <div className="bg-white/5 rounded-xl p-5">
-              <h3 className="text-white font-semibold mb-3">🔐 Requisitos de Secrets:</h3>
+              <h3 className="text-white font-semibold mb-3">🔐 Variables de entorno requeridas:</h3>
               <ul className="space-y-2 text-white/80 text-sm">
                 <li className="flex items-start gap-2">
                   <span className="text-green-400">✓</span>
                   <div>
-                    <strong className="text-white">MONGO_URI:</strong> URL de conexión a MongoDB Atlas
+                    <strong className="text-white">MONGO_URI:</strong> URL de conexión a MongoDB Atlas (en <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs">.env</code> de la raíz)
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-green-400">✓</span>
                   <div>
-                    <strong className="text-white">JWT_SECRET:</strong> Clave secreta para tokens JWT
+                    <strong className="text-white">JWT_SECRET:</strong> Clave secreta para tokens JWT (en <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs">.env</code> de la raíz)
                   </div>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-green-400">✓</span>
                   <div>
-                    <strong className="text-white">OPENAI_API_KEY:</strong> Clave API de OpenAI
+                    <strong className="text-white">OPENAI_API_KEY:</strong> Clave API de OpenAI (en <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs">.env</code> de la raíz)
                   </div>
                 </li>
               </ul>

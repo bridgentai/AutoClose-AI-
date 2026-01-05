@@ -1,13 +1,28 @@
 import OpenAI from 'openai';
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
+
+if (!OPENAI_API_KEY || OPENAI_API_KEY.includes('placeholder')) {
+  console.warn('⚠️  OPENAI_API_KEY no está configurado o es un placeholder. El chat IA no funcionará correctamente.');
+  if (process.env.OPENAI_API_KEY) {
+    console.warn(`   Valor detectado (primeros 10 caracteres): ${process.env.OPENAI_API_KEY.substring(0, 10)}...`);
+  }
+}
+
+const openai = OPENAI_API_KEY && !OPENAI_API_KEY.includes('placeholder') && OPENAI_API_KEY.trim().length > 0
+  ? new OpenAI({ apiKey: OPENAI_API_KEY.trim() })
+  : null;
 
 export async function generateAIResponse(userMessage: string, context: {
   rol: string;
   colegioId: string;
   contextoTipo?: string;
 }): Promise<string> {
+  if (!openai) {
+    throw new Error('OPENAI_API_KEY no está configurada. Por favor, configura una clave válida de OpenAI en el archivo .env');
+  }
+
   try {
     const systemPrompt = `Eres AutoClose AI, un asistente educativo personalizado para instituciones académicas.
 
@@ -44,6 +59,12 @@ Importante:
     return response.choices[0].message.content || 'Lo siento, no pude generar una respuesta.';
   } catch (error: any) {
     console.error('Error en OpenAI:', error.message);
-    throw new Error('Error al generar respuesta de IA');
+    if (error.message?.includes('API key')) {
+      throw new Error('La clave de API de OpenAI no es válida. Por favor, verifica OPENAI_API_KEY en el archivo .env');
+    }
+    if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
+      throw new Error('Se ha excedido el límite de uso de la API de OpenAI. Por favor, intenta más tarde.');
+    }
+    throw new Error(`Error al generar respuesta de IA: ${error.message || 'Error desconocido'}`);
   }
 }

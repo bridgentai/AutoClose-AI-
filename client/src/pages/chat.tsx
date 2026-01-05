@@ -67,7 +67,7 @@ export default function Chat() {
       console.error('Error en chat:', error);
       const errorMessage: Message = {
         emisor: 'ai',
-        contenido: 'Lo siento, ocurrio un error al procesar tu mensaje. Por favor intenta de nuevo.',
+        contenido: error.message || 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);

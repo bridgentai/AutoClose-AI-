@@ -27,8 +27,6 @@ export function AppSidebar() {
 
     { icon: Calendar, label: "Comunidad", path: "/comunidad", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
-    { icon: BookOpen, label: "Mis Materias", path: "/subjects", roles: ["profesor"] },
-
     { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
     { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
 

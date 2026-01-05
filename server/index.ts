@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
@@ -66,16 +67,20 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
+  // Serve the app on the port specified in the environment variable PORT
+  // Defaults to 5000 if not specified.
+  // This serves both the API and the client.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  const host = process.env.NODE_ENV === 'production' ? "0.0.0.0" : "127.0.0.1";
+  const listenOptions: any = { port, host };
+  if (process.env.NODE_ENV === 'production') {
+    listenOptions.reusePort = true;
+  }
+  server.listen(listenOptions, () => {
+    const url = `http://${host}:${port}`;
     log(`serving on port ${port}`);
+    console.log(`\n🚀 Servidor iniciado exitosamente!`);
+    console.log(`📍 URL de previsualización: ${url}`);
+    console.log(`   También disponible en: http://localhost:${port}\n`);
   });
 })();

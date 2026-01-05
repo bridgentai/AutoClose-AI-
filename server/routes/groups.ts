@@ -1,5 +1,8 @@
 import express from 'express';
 import { Group } from '../models/Group';
+import { GroupStudent } from '../models/GroupStudent';
+import { User } from '../models/User';
+import { Assignment } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
@@ -21,10 +24,21 @@ const GRUPOS_FIJOS = [
 // Seed: Crear grupos fijos si no existen
 export async function seedGroups(colegioId: string = 'COLEGIO_DEMO_2025') {
   try {
+    // Verificar si MongoDB está conectado antes de intentar el seed
+    const { mongoose } = await import('../config/db');
+    if (mongoose.connection.readyState !== 1) {
+      console.log('⏭️  Saltando seed de grupos: MongoDB no está conectado');
+      return;
+    }
+    
     for (const grupo of GRUPOS_FIJOS) {
-      await Group.findByIdAndUpdate(
-        grupo._id,
-        { ...grupo, colegioId },
+      await Group.findOneAndUpdate(
+        { nombre: grupo.nombre, colegioId },
+        { 
+          nombre: grupo.nombre,
+          descripcion: `Grupo ${grupo.nombre}`,
+          colegioId 
+        },
         { upsert: true, new: true }
       );
     }
@@ -55,7 +69,205 @@ router.get('/all', protect, async (req: AuthRequest, res) => {
   }
 });
 
-// GET /api/groups/:id - Obtener un grupo por ID
+// IMPORTANTE: Las rutas específicas deben ir ANTES de las rutas genéricas
+// Función auxiliar para calcular el estado basado en el promedio
+const calcularEstado = (promedio?: number): 'excelente' | 'bueno' | 'regular' | 'bajo' => {
+  if (!promedio || promedio === 0) return 'regular';
+  if (promedio >= 4.5) return 'excelente';
+  if (promedio >= 4.0) return 'bueno';
+  if (promedio >= 3.5) return 'regular';
+  return 'bajo';
+};
+
+// GET /api/groups/:groupId/students - Obtener estudiantes de un grupo (optimizado: solo nombre y estado)
+router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
+  try {
+    const { groupId } = req.params;
+    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
+
+    // Normalizar groupId a mayúsculas
+    const grupoIdNormalizado = groupId.toUpperCase().trim();
+    console.log(`[GROUPS] Buscando estudiantes para grupo: ${grupoIdNormalizado}, colegio: ${colegioId}`);
+
+    // Buscar el grupo primero para obtener su ObjectId
+    const grupo = await Group.findOne({ nombre: grupoIdNormalizado, colegioId });
+    if (!grupo) {
+      return res.status(404).json({ message: 'Grupo no encontrado.' });
+    }
+
+    // Buscar estudiantes del grupo en GroupStudent usando ObjectId
+    const groupStudents = await GroupStudent.find({ 
+      grupoId: grupo._id,
+      colegioId 
+    })
+    .populate('estudianteId', 'nombre curso')
+    .select('estudianteId createdAt')
+    .lean();
+
+    console.log(`[GROUPS] Encontrados ${groupStudents.length} registros en GroupStudent para ${grupoIdNormalizado}`);
+
+    // Obtener IDs de estudiantes
+    const estudianteIds = groupStudents
+      .filter(gs => gs.estudianteId)
+      .map(gs => (gs.estudianteId as any)._id.toString());
+
+    // Calcular promedios y estados desde las calificaciones de tareas
+    const assignments = await Assignment.find({
+      curso: grupoIdNormalizado,
+      colegioId
+    })
+    .select('entregas')
+    .lean();
+
+    // Calcular promedio por estudiante
+    const promediosPorEstudiante: Record<string, { suma: number; cantidad: number }> = {};
+    
+    assignments.forEach(assignment => {
+      if (assignment.entregas && Array.isArray(assignment.entregas)) {
+        assignment.entregas.forEach((entrega: any) => {
+          if (entrega.calificacion && entrega.calificacion > 0) {
+            const estudianteId = entrega.estudianteId?.toString();
+            if (estudianteId) {
+              if (!promediosPorEstudiante[estudianteId]) {
+                promediosPorEstudiante[estudianteId] = { suma: 0, cantidad: 0 };
+              }
+              promediosPorEstudiante[estudianteId].suma += entrega.calificacion;
+              promediosPorEstudiante[estudianteId].cantidad += 1;
+            }
+          }
+        });
+      }
+    });
+
+    // Formatear respuesta con solo nombre y estado
+    const students = groupStudents
+      .filter(gs => gs.estudianteId) // Filtrar estudiantes que existan
+      .map(gs => {
+        const estudiante = gs.estudianteId as any;
+        const estudianteId = estudiante._id.toString();
+        const promedioData = promediosPorEstudiante[estudianteId];
+        const promedio = promedioData && promedioData.cantidad > 0
+          ? promedioData.suma / promedioData.cantidad
+          : undefined;
+        const estado = calcularEstado(promedio);
+
+        return {
+          _id: estudianteId,
+          nombre: estudiante.nombre,
+          estado: estado,
+        };
+      });
+
+    console.log(`[GROUPS] Retornando ${students.length} estudiantes para ${grupoIdNormalizado}`);
+    res.json(students);
+  } catch (error) {
+    console.error('Error al obtener estudiantes del grupo:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// POST /api/groups/:groupId/sync-students - Sincronizar estudiantes existentes de un grupo
+// Este endpoint sincroniza todos los estudiantes que tienen el curso asignado en User pero no están en GroupStudent
+router.post('/:groupId/sync-students', protect, async (req: AuthRequest, res) => {
+  try {
+    const { groupId } = req.params;
+    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
+    const grupoIdNormalizado = groupId.toUpperCase().trim();
+    
+    console.log(`[SYNC] Iniciando sincronización para grupo: ${grupoIdNormalizado}, colegio: ${colegioId}`);
+
+    // Buscar todos los estudiantes que tienen este curso asignado en User
+    // Buscar tanto con mayúsculas como con el formato original
+    const estudiantesEnUser = await User.find({
+      rol: 'estudiante',
+      $or: [
+        { curso: grupoIdNormalizado },
+        { curso: groupId }, // También buscar con el formato original
+        { curso: groupId.toLowerCase() }, // Y en minúsculas
+      ],
+      colegioId
+    }).select('_id nombre email curso').lean();
+
+    console.log(`[SYNC] Encontrados ${estudiantesEnUser.length} estudiantes en User con curso relacionado a ${grupoIdNormalizado}`);
+
+    // Buscar el grupo primero para obtener su ObjectId
+    const grupo = await Group.findOne({ nombre: grupoIdNormalizado, colegioId });
+    if (!grupo) {
+      return res.status(404).json({ message: 'Grupo no encontrado.' });
+    }
+
+    // Buscar estudiantes que ya están en GroupStudent usando ObjectId
+    const estudiantesEnGroupStudent = await GroupStudent.find({
+      grupoId: grupo._id,
+      colegioId
+    }).select('estudianteId').lean();
+
+    const idsExistentes = new Set(
+      estudiantesEnGroupStudent.map(gs => gs.estudianteId.toString())
+    );
+
+    console.log(`[SYNC] Ya existen ${idsExistentes.size} estudiantes en GroupStudent para ${grupoIdNormalizado}`);
+
+    // Filtrar estudiantes que no están en GroupStudent
+    const estudiantesASincronizar = estudiantesEnUser.filter(
+      estudiante => !idsExistentes.has(estudiante._id.toString())
+    );
+
+    console.log(`[SYNC] Estudiantes a sincronizar: ${estudiantesASincronizar.length}`);
+
+    // Si no hay estudiantes para sincronizar
+    if (estudiantesASincronizar.length === 0) {
+      return res.json({
+        message: 'Todos los estudiantes ya están sincronizados',
+        grupoId: grupoIdNormalizado,
+        estudiantesSincronizados: 0,
+        totalEstudiantes: estudiantesEnUser.length
+      });
+    }
+
+    // Crear registros en GroupStudent usando ObjectId del grupo
+    try {
+      const nuevosRegistros = await GroupStudent.insertMany(
+        estudiantesASincronizar.map(estudiante => ({
+          grupoId: grupo!._id, // Usar ObjectId del grupo
+          estudianteId: estudiante._id,
+          colegioId
+        })),
+        { ordered: false } // Continuar aunque haya duplicados
+      );
+
+      console.log(`[SYNC] ✅ Sincronizados ${nuevosRegistros.length} estudiantes para ${grupoIdNormalizado}`);
+
+      res.json({
+        message: 'Sincronización completada',
+        grupoId: grupoIdNormalizado,
+        estudiantesSincronizados: nuevosRegistros.length,
+        totalEstudiantes: estudiantesEnUser.length
+      });
+    } catch (insertError: any) {
+      // Si hay errores de duplicado, contar los insertados
+      if (insertError.code === 11000 || insertError.writeErrors) {
+        const sincronizados = insertError.insertedIds?.length || 0;
+        console.log(`[SYNC] ⚠️ Sincronización parcial: ${sincronizados} estudiantes sincronizados`);
+        return res.json({
+          message: 'Sincronización completada con algunos duplicados',
+          grupoId: grupoIdNormalizado,
+          estudiantesSincronizados: sincronizados,
+          totalEstudiantes: estudiantesEnUser.length
+        });
+      }
+      throw insertError;
+    }
+  } catch (error: any) {
+    console.error('[SYNC] ❌ Error al sincronizar estudiantes:', error);
+    res.status(500).json({ 
+      message: 'Error interno del servidor.',
+      error: error.message 
+    });
+  }
+});
+
+// GET /api/groups/:id - Obtener un grupo por ID (DEBE IR AL FINAL)
 router.get('/:id', protect, async (req: AuthRequest, res) => {
   try {
     const group = await Group.findById(req.params.id);

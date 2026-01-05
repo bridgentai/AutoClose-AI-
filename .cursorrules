@@ -1,9 +1,11 @@
 # AutoClose AI - Contexto Fijo del Proyecto
 
-## Archivos de Referencia Principal
+## ⚠️ REGLA CRÍTICA: Archivos de Referencia Obligatorios
 
-### PROJECT_GOLAS.md
-Siempre consulta y considera el archivo `PROJECT_GOLAS.md` como la referencia principal del proyecto. Este archivo contiene:
+**ANTES DE CUALQUIER ACCIÓN, DEBES LEER Y CONSIDERAR ESTOS ARCHIVOS:**
+
+### 📋 PROJECT_GOLAS.md (OBLIGATORIO)
+**SIEMPRE** lee y consulta `PROJECT_GOLAS.md` antes de realizar cualquier cambio en el proyecto. Este archivo contiene:
 
 - La visión y arquitectura completa de AutoClose AI
 - Los objetivos principales del proyecto
@@ -11,9 +13,13 @@ Siempre consulta y considera el archivo `PROJECT_GOLAS.md` como la referencia pr
 - Los principios de desarrollo
 - Las integraciones externas requeridas
 - Los requisitos de entorno
+- La arquitectura de datos y modelos
+- Los roles del sistema (estudiante, profesor, directivo, padre)
 
-### design_guidelines.md
-Siempre consulta y considera el archivo `design_guidelines.md` para mantener la consistencia visual y de UX. Este archivo contiene:
+**Este archivo define QUÉ es el proyecto y CÓMO debe funcionar.**
+
+### 🎨 design_guidelines.md (OBLIGATORIO)
+**SIEMPRE** lee y consulta `design_guidelines.md` antes de realizar cualquier cambio visual, de UI o de diseño. Este archivo contiene:
 
 - Filosofía de diseño y principios centrales
 - Sistema de colores (paleta púrpura institucional #9f25b8)
@@ -22,17 +28,51 @@ Siempre consulta y considera el archivo `design_guidelines.md` para mantener la 
 - Componentes core, cards, formularios y microinteracciones
 - Responsive behavior y accesibilidad
 - Integración visual con Google Workspace
+- Glassmorphism y efectos visuales
 
-## Instrucciones
-- Antes de realizar cualquier cambio significativo, revisa `PROJECT_GOLAS.md` para asegurar alineación con la visión del proyecto
-- Antes de realizar cambios de diseño o UI, revisa `design_guidelines.md` para mantener la consistencia visual
+**Este archivo define CÓMO debe verse y sentirse el proyecto.**
+
+## 🔄 Flujo de Trabajo Obligatorio
+
+1. **Al recibir cualquier petición del usuario:**
+   - Lee `PROJECT_GOLAS.md` para entender el contexto del proyecto
+   - Lee `design_guidelines.md` para entender el diseño esperado
+
+2. **Antes de realizar cambios de código:**
+   - Verifica que los cambios estén alineados con `PROJECT_GOLAS.md`
+   - Verifica que los cambios visuales cumplan con `design_guidelines.md`
+
+3. **Antes de crear nuevos componentes:**
+   - Consulta `design_guidelines.md` para el estilo visual
+   - Consulta `PROJECT_GOLAS.md` para la arquitectura y estructura
+
+## Principios Fundamentales (de PROJECT_GOLAS.md)
+
 - La IA es el centro operativo del sistema, no un módulo aparte
 - Todo debe poder hacerse manualmente o mediante IA
-- Mantén el diseño moderno, limpio y minimalista con paleta púrpura (#9f25b8)
-- Respeta la arquitectura definida: React + TypeScript en frontend, Express + MongoDB en backend
-- Considera siempre los roles: estudiante, profesor, directivo, padre
+- Navegación flexible (no sidebar obligatorio)
+- Tipado estricto (nada de `any`)
+- Seguridad por rol con validaciones obligatorias
+- Integración profunda con Google Workspace
 
-## Archivos de Referencia
-Lee siempre `PROJECT_GOLAS.md` para entender el contexto completo del proyecto antes de hacer cambios.
-Lee siempre `design_guidelines.md` para mantener la consistencia visual y de UX en todos los componentes.
+## Principios de Diseño (de design_guidelines.md)
+
+- Paleta púrpura institucional: #9f25b8 (core), #6a0dad (deep), #c66bff (light)
+- Glassmorphism: `bg-white/5 border-white/10 backdrop-blur-md`
+- Tipografías: Inter (UI/cuerpo), Poppins (títulos/branding)
+- Diseño moderno, limpio y minimalista
+- AI-First Experience
+- Navegación flexible y adaptable
+
+## Instrucciones Específicas
+
+- **NO modifiques lógica, rutas, backend ni modelos** sin consultar primero `PROJECT_GOLAS.md`
+- **NO cambies colores ni estilos** sin consultar primero `design_guidelines.md`
+- **SIEMPRE** mantén la consistencia con ambos archivos
+- **SIEMPRE** considera los roles: estudiante, profesor, directivo, padre
+- **SIEMPRE** respeta la arquitectura: React + TypeScript (frontend), Express + MongoDB (backend)
+
+## Recordatorio Final
+
+Estos dos archivos (`PROJECT_GOLAS.md` y `design_guidelines.md`) son la fuente de verdad del proyecto. Deben estar presentes en el contexto de cada petición y deben ser consultados antes de cualquier acción.
 

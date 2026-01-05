@@ -47,6 +47,92 @@ res.status(500).json({ message: 'Error en el servidor al cargar los cursos.' });
 });
 
 // =========================================================================
+// GET /api/courses/:id/details - Obtener detalles de una materia por ID
+// Solo accesible para estudiantes del curso asignado a la materia
+// IMPORTANTE: Esta ruta debe estar ANTES de otras rutas que usen :id para evitar conflictos
+router.get('/:id/details', protect, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[DEBUG] GET /api/courses/${id}/details - Usuario: ${req.userId}`);
+    
+    // Optimizar: solo seleccionar campos necesarios del usuario
+    const user = await User.findById(req.userId).select('rol curso colegioId').lean();
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // VALIDACIÓN ESTRICTA: Solo estudiantes pueden acceder a esta ruta
+    if (user.rol !== 'estudiante') {
+      return res.status(403).json({ 
+        message: 'Solo los estudiantes pueden acceder a los detalles de materias desde esta ruta' 
+      });
+    }
+
+    // VALIDACIÓN: El estudiante debe tener un curso asignado
+    if (!user.curso) {
+      return res.status(403).json({ 
+        message: 'No tienes un curso asignado. Contacta al administrador.' 
+      });
+    }
+
+    // Buscar la materia - optimizado con .lean() y campos específicos
+    const course = await Course.findById(id)
+      .populate('profesorIds', 'nombre email')
+      .select('nombre descripcion colorAcento icono cursos profesorIds colegioId')
+      .lean();
+
+    if (!course) {
+      return res.status(404).json({ message: 'Materia no encontrada' });
+    }
+
+    // Verificar que pertenezca al mismo colegio
+    if (course.colegioId !== user.colegioId) {
+      return res.status(403).json({ 
+        message: 'No tienes acceso a esta materia. La materia pertenece a otro colegio.' 
+      });
+    }
+
+    // VALIDACIÓN CRÍTICA: Verificar que la materia se imparta en el curso del estudiante
+    if (!course.cursos || !Array.isArray(course.cursos) || course.cursos.length === 0) {
+      return res.status(403).json({ 
+        message: 'Esta materia no está asignada a ningún curso.' 
+      });
+    }
+
+    if (!course.cursos.includes(user.curso)) {
+      return res.status(403).json({ 
+        message: `No tienes acceso a esta materia. Esta materia se imparte en: ${course.cursos.join(', ')}. Tu curso es: ${user.curso}.` 
+      });
+    }
+
+    // Formatear respuesta
+    const response = {
+      _id: course._id,
+      nombre: course.nombre,
+      descripcion: course.descripcion,
+      colorAcento: course.colorAcento,
+      icono: course.icono,
+      cursos: course.cursos,
+      cursoAsignado: user.curso,
+      profesor: course.profesorIds && course.profesorIds.length > 0 
+        ? {
+            _id: (course.profesorIds[0] as any)._id,
+            nombre: (course.profesorIds[0] as any).nombre,
+            email: (course.profesorIds[0] as any).email
+          }
+        : null,
+      profesorIds: course.profesorIds
+    };
+
+    res.json(response);
+  } catch (error: any) {
+    console.error('Error al obtener materia:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al obtener la materia.' });
+  }
+});
+
+// =========================================================================
 // RUTA ACTUALIZADA (ADAPTADA AL ARRAY profesorIds)
 // GET /api/courses/for-group/:grupo - Obtener materias del profesor para un grupo específico
 router.get('/for-group/:grupo', protect, async (req: AuthRequest, res) => {
@@ -96,14 +182,31 @@ try {
 // Nota: req.userId es un string, pero Mongoose lo maneja al compararlo con ObjectId
 const profesorIds: (string | Types.ObjectId)[] = user.rol === 'profesor' ? [user._id as Types.ObjectId] : []; 
 
+// Buscar o crear la materia correspondiente
+const { Materia } = await import('../models/Materia');
+let materia = await Materia.findOne({ nombre });
+if (!materia) {
+  // Crear materia si no existe
+  materia = await Materia.create({
+    nombre,
+    descripcion: descripcion || `Materia ${nombre}`,
+    area: 'General', // Valor por defecto
+  });
+}
+
 const nuevoCurso = await Course.create({
-colegioId: user.colegioId,
-nombre,
-descripcion,
-profesorIds: profesorIds, // <--- ADAPTACIÓN a profesorIds (array)
-cursos: Array.isArray(cursos) ? cursos : [],
-colorAcento: colorAcento || '#9f25b8',
-icono,
+  nombre,
+  materiaId: materia._id, // Campo requerido en nueva estructura
+  profesorId: user.rol === 'profesor' ? user._id : undefined, // Campo requerido
+  estudiantes: [], // Campo requerido
+  // Campos adicionales para compatibilidad
+  colegioId: user.colegioId,
+  descripcion,
+  profesorIds: profesorIds,
+  cursos: Array.isArray(cursos) ? cursos : [],
+  estudianteIds: [],
+  colorAcento: colorAcento || '#9f25b8',
+  icono,
 });
 
 // Si el creador es profesor, añadir el *NOMBRE* del curso a su lista de materias (mantiene la estructura actual)

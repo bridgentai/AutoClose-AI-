@@ -218,7 +218,7 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
                     <Badge
                       key={materia}
                       variant="secondary"
-                      className="bg-purple-500/20 text-purple-200 border-purple-500/30"
+                      className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40"
                       data-testid={`badge-materia-${materia}`}
                     >
                       {materia}
@@ -285,7 +285,7 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
                   <Button
                     onClick={handleSave}
                     disabled={assignMutation.isPending}
-                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
                     data-testid="button-save-assignment"
                   >
                     <Save className="w-4 h-4 mr-2" />

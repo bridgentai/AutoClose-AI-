@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, ArrowLeft, AlertCircle, BookOpen, Clock, User } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, ArrowLeft, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useLocation, useRoute } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -43,6 +48,12 @@ interface CourseSubject {
     cursoAsignado?: string; 
 }
 
+interface Student {
+    _id: string;
+    nombre: string;
+    estado: 'excelente' | 'bueno' | 'regular' | 'bajo';
+}
+
 // =========================================================
 // 2. FETCHING DE DATOS (CONDICIONAL)
 // =========================================================
@@ -65,6 +76,24 @@ const fetchAssignments = async (id: string, isGroup: boolean, month: number, yea
     return apiRequest('GET', `/api/assignments?${queryParam}&month=${month}&year=${year}`);
 };
 
+// Función para obtener estudiantes de un grupo (Usado por Profesor)
+const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
+    try {
+        // Normalizar groupId a mayúsculas para consistencia
+        const grupoIdNormalizado = groupId.toUpperCase().trim();
+        console.log(`[FRONTEND] Buscando estudiantes para grupo: ${grupoIdNormalizado}`);
+        
+        // Obtener estudiantes del grupo desde el endpoint
+        const response = await apiRequest('GET', `/api/groups/${grupoIdNormalizado}/students`);
+        const students = Array.isArray(response) ? response : [];
+        console.log(`[FRONTEND] Recibidos ${students.length} estudiantes para ${grupoIdNormalizado}`);
+        return students;
+    } catch (error) {
+        console.error('Error al obtener estudiantes:', error);
+        return [];
+    }
+};
+
 
 // =========================================================
 // 3. COMPONENTE PRINCIPAL
@@ -77,22 +106,74 @@ export default function CourseDetailPage() {
     const { user } = useAuth();
     const userRole = user?.rol;
 
-    // Roles de la aplicación
+    // VALIDACIÓN: Solo estudiantes pueden acceder a esta página desde /course-detail
+    // Los profesores usan otra ruta (/course/:cursoId para grupos)
+    const isStudent = userRole === 'estudiante';
     const isProfessor = userRole === 'profesor';
     const isStudentOrParent = userRole === 'estudiante' || userRole === 'padre';
-    // El directivo ya no tiene lógica de gestión aquí, solo de visualización.
 
     const [, setLocation] = useLocation();
     const { toast } = useToast();
 
+    // Redirigir si no es estudiante (esta ruta es solo para estudiantes)
+    useEffect(() => {
+        if (user && !isStudent && !isProfessor) {
+            toast({
+                title: 'Acceso denegado',
+                description: 'Solo los estudiantes pueden acceder a esta página.',
+                variant: 'destructive'
+            });
+            setLocation('/courses');
+        }
+    }, [user, isStudent, isProfessor, setLocation, toast]);
+
     // Estados del Formulario
     const [showAssignmentForm, setShowAssignmentForm] = useState(false);
+    const [showStudentsDialog, setShowStudentsDialog] = useState(false);
     const [formData, setFormData] = useState({
         titulo: '',
         descripcion: '',
         fechaEntrega: '',
         courseId: '', // ID de la materia
     });
+
+    // Estado para notas editables (estructura: { estudianteId: { actividadId: nota } })
+    const [editableNotes, setEditableNotes] = useState<Record<string, Record<string, string>>>({});
+
+    // Estado para actividades/trabajos (personalizable)
+    const [actividades, setActividades] = useState([
+        { id: 'act1', nombre: 'Examen Parcial 1' },
+        { id: 'act2', nombre: 'Tarea de Álgebra' },
+        { id: 'act3', nombre: 'Proyecto Final' },
+        { id: 'act4', nombre: 'Quiz Semanal' },
+    ]);
+
+    const [newActivityName, setNewActivityName] = useState('');
+    const [showAddActivity, setShowAddActivity] = useState(false);
+
+    // Función para agregar nueva actividad
+    const handleAddActivity = () => {
+        if (newActivityName.trim()) {
+            const newId = `act${Date.now()}`;
+            setActividades([...actividades, { id: newId, nombre: newActivityName.trim() }]);
+            setNewActivityName('');
+            setShowAddActivity(false);
+        }
+    };
+
+    // Función para eliminar actividad
+    const handleRemoveActivity = (activityId: string) => {
+        setActividades(actividades.filter(a => a.id !== activityId));
+        // Limpiar notas de esa actividad
+        setEditableNotes(prev => {
+            const updated = { ...prev };
+            Object.keys(updated).forEach(studentId => {
+                const { [activityId]: removed, ...rest } = updated[studentId];
+                updated[studentId] = rest;
+            });
+            return updated;
+        });
+    };
 
     // Obtener mes y año actuales
     const now = new Date();
@@ -102,11 +183,14 @@ export default function CourseDetailPage() {
     // Lógica para determinar si se maneja un grupo (siempre TRUE para el Profesor)
     const isHandlingGroup = isProfessor; 
 
-    // Query 1: Detalles de la Materia (Habilitada para Estudiante, Padre y Directivo)
-    const { data: courseDetails, isLoading: isLoadingDetails } = useQuery<CourseSubject>({
+    // Query 1: Detalles de la Materia (Solo para Estudiante desde esta ruta)
+    const { data: courseDetails, isLoading: isLoadingDetails, error: courseDetailsError } = useQuery<CourseSubject>({
         queryKey: ['courseDetails', cursoId],
         queryFn: () => fetchCourseDetails(cursoId),
-        enabled: !isProfessor, // Se habilita si el rol NO es profesor
+        enabled: isStudent && !!cursoId, // Solo para estudiantes y si hay cursoId
+        retry: false, // No reintentar si falla (probablemente es un error de acceso)
+        staleTime: 5 * 60 * 1000, // 5 minutos - los detalles de materia no cambian frecuentemente
+        gcTime: 10 * 60 * 1000, // 10 minutos de caché
     });
 
     // Query 2: Materias del Profesor para este Grupo (Habilitada SOLO para Profesor)
@@ -114,12 +198,25 @@ export default function CourseDetailPage() {
         queryKey: ['subjectsForGroup', cursoId],
         queryFn: () => fetchSubjectsForGroup(cursoId),
         enabled: isProfessor,
+        staleTime: 5 * 60 * 1000, // 5 minutos
+        gcTime: 10 * 60 * 1000, // 10 minutos de caché
     });
 
     // Query 3: Tareas del Curso/Grupo
     const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
         queryKey: ['assignments', cursoId, currentMonth, currentYear],
         queryFn: () => fetchAssignments(cursoId, isHandlingGroup, currentMonth, currentYear),
+        staleTime: 2 * 60 * 1000, // 2 minutos - las tareas pueden cambiar más frecuentemente
+        gcTime: 5 * 60 * 1000, // 5 minutos de caché
+    });
+
+    // Query 4: Estudiantes del Grupo (Solo para Profesor)
+    const { data: students = [], isLoading: isLoadingStudents } = useQuery<Student[]>({
+        queryKey: ['students', cursoId],
+        queryFn: () => fetchStudentsByGroup(cursoId),
+        enabled: isProfessor && !!cursoId,
+        staleTime: 5 * 60 * 1000, // 5 minutos
+        gcTime: 10 * 60 * 1000, // 10 minutos de caché
     });
 
     // Efecto para Profesor (Auto-seleccionar materia)
@@ -178,14 +275,34 @@ export default function CourseDetailPage() {
     // Vistas por Rol
     // --------------------------------------------------
 
+    // Función auxiliar para obtener el color del estado
+    const getEstadoColor = (estado?: string) => {
+        switch (estado) {
+            case 'excelente':
+                return 'bg-green-500/20 text-green-400 border-green-500/40';
+            case 'bueno':
+                return 'bg-blue-500/20 text-blue-400 border-blue-500/40';
+            case 'regular':
+                return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40';
+            case 'bajo':
+                return 'bg-red-500/20 text-red-400 border-red-500/40';
+            default:
+                return 'bg-white/10 text-white/70 border-white/20';
+        }
+    };
+
+
     // 🎯 Vista para Profesor (Gestión de Grupo)
     const renderProfessorView = () => {
-        const loading = isLoadingSubjects || isLoadingAssignments;
+        const loading = isLoadingSubjects || isLoadingAssignments || isLoadingStudents;
         const subjects = subjectsForGroup;
 
         if (loading) {
             return <div className="space-y-4"><Skeleton className="h-10 w-full bg-white/10" /><Skeleton className="h-96 w-full bg-white/10" /></div>;
         }
+
+        // Obtener la primera materia para usar su ID en las notas (si hay materias)
+        const firstSubjectId = subjects.length > 0 ? subjects[0]._id : null;
 
         return (
             <>
@@ -194,12 +311,321 @@ export default function CourseDetailPage() {
                         Gestión del Grupo {cursoId}
                     </h2>
                     <p className="text-white/60">
-                        Asigna tareas a tus materias en este grupo y revisa el calendario
+                        Gestiona estudiantes, notas, tareas y calendario del grupo
                     </p>
                 </div>
 
-                {/* Botones de acción y Formulario para asignar tarea (Lógica existente) */}
-                <div className="flex gap-4 mb-8">
+                {/* 2 Cartas Centradas */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-4xl mx-auto">
+                    {/* Carta 1: Estudiantes */}
+                    <Card 
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#9f25b8]/20"
+                        onClick={() => setShowStudentsDialog(true)}
+                    >
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#9f25b8] via-[#6a0dad] to-[#c66bff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#9f25b8]/30">
+                                <Users className="w-10 h-10 text-white" />
+                            </div>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Estudiantes</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} registrados
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0">
+                            <Button
+                                variant="outline"
+                                className="border-[#9f25b8]/50 text-[#9f25b8] hover:bg-[#9f25b8]/20 hover:border-[#9f25b8] w-full font-semibold"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowStudentsDialog(true);
+                                }}
+                            >
+                                <Users className="w-4 h-4 mr-2" />
+                                Ver Lista Completa
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Carta 2: Tareas */}
+                    <Card 
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-orange-500/20"
+                        onClick={() => {
+                            // Navegar a la página de tareas del grupo
+                            setLocation(`/profesor/cursos/${cursoId}/tareas`);
+                        }}
+                    >
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-orange-500/30">
+                                <ClipboardList className="w-10 h-10 text-white" />
+                            </div>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Tareas</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} asignadas
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0">
+                            <Button
+                                variant="outline"
+                                className="border-orange-500/50 text-orange-400 hover:bg-orange-500/20 hover:border-orange-500 w-full font-semibold"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLocation(`/profesor/cursos/${cursoId}/tareas`);
+                                }}
+                            >
+                                <ClipboardList className="w-4 h-4 mr-2" />
+                                Corregir Tareas
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Tabla General de Notas Editable (Estilo Excel) */}
+                {firstSubjectId && (
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
+                        <CardHeader>
+                            <div className="flex items-center justify-between flex-wrap gap-4">
+                                <div>
+                                    <CardTitle className="text-white flex items-center gap-2">
+                                        <Award className="w-5 h-5 text-[#9f25b8]" />
+                                        Tabla General de Notas
+                                    </CardTitle>
+                                    <CardDescription className="text-white/60">
+                                        Ingresa las notas directamente en las celdas (Escala: 10-100) - Grupo {cursoId}
+                                        {subjects.length > 0 && ` - ${subjects[0].nombre}`}
+                                    </CardDescription>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                                        onClick={() => setShowAddActivity(!showAddActivity)}
+                                    >
+                                        <Plus className="w-4 h-4 mr-2" />
+                                        Agregar Actividad
+                                    </Button>
+                                    <Button
+                                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                                        onClick={() => {
+                                            if (firstSubjectId) {
+                                                setLocation(`/profesor/cursos/${cursoId}/notas`);
+                                            }
+                                        }}
+                                    >
+                                        <Settings className="w-4 h-4 mr-2" />
+                                        Gestionar Notas
+                                    </Button>
+                                </div>
+                            </div>
+                            {showAddActivity && (
+                                <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg">
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={newActivityName}
+                                            onChange={(e) => setNewActivityName(e.target.value)}
+                                            placeholder="Nombre de la actividad (ej: Examen Final)"
+                                            className="bg-white/10 border-white/20 text-white flex-1"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    handleAddActivity();
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            onClick={handleAddActivity}
+                                            disabled={!newActivityName.trim()}
+                                            className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                                        >
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Agregar
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                setShowAddActivity(false);
+                                                setNewActivityName('');
+                                            }}
+                                            className="border-white/20 text-white hover:bg-white/10"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </CardHeader>
+                        <CardContent>
+                            {isLoadingStudents ? (
+                                <div className="space-y-2">
+                                    <Skeleton className="h-12 w-full bg-white/10" />
+                                    <Skeleton className="h-12 w-full bg-white/10" />
+                                    <Skeleton className="h-12 w-full bg-white/10" />
+                                </div>
+                            ) : students.length > 0 ? (
+                                <div className="overflow-x-auto rounded-xl border-2 border-[#9f25b8]/30 shadow-2xl">
+                                    <div className="inline-block min-w-full align-middle">
+                                        <table className="min-w-full border-collapse bg-[#1a001c]/80">
+                                            <thead>
+                                                <tr className="bg-gradient-to-r from-[#9f25b8]/40 via-[#6a0dad]/35 to-[#9f25b8]/40 border-b-2 border-[#9f25b8]/50">
+                                                    <th className="sticky left-0 z-20 bg-gradient-to-r from-[#9f25b8]/40 to-[#6a0dad]/35 px-3 py-3 text-left text-xs font-bold text-white border-r-2 border-[#9f25b8]/50 min-w-[200px] shadow-lg">
+                                                        <div className="flex items-center gap-2">
+                                                            <User className="w-3.5 h-3.5 text-white" />
+                                                            <span>Estudiante</span>
+                                                        </div>
+                                                    </th>
+                                                    {actividades.map((actividad, idx) => (
+                                                        <th
+                                                            key={actividad.id}
+                                                            className="relative px-2 py-3 text-center text-xs font-bold text-white border-r border-[#9f25b8]/30 min-w-[130px] group"
+                                                            style={{
+                                                                background: idx % 2 === 0 
+                                                                    ? 'linear-gradient(to bottom, rgba(159,37,184,0.35), rgba(106,13,173,0.25))'
+                                                                    : 'linear-gradient(to bottom, rgba(198,107,255,0.30), rgba(159,37,184,0.20))'
+                                                            }}
+                                                        >
+                                                            <div className="flex items-center justify-center gap-1.5">
+                                                                <span className="truncate max-w-[110px] text-[11px]">{actividad.nombre}</span>
+                                                                {actividades.length > 1 && (
+                                                                    <button
+                                                                        onClick={() => handleRemoveActivity(actividad.id)}
+                                                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-500/30 rounded"
+                                                                        title="Eliminar actividad"
+                                                                    >
+                                                                        <X className="w-3 h-3 text-red-300" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </th>
+                                                    ))}
+                                                    <th className="px-3 py-3 text-center text-xs font-bold text-white bg-gradient-to-br from-[#9f25b8]/50 via-[#6a0dad]/40 to-[#9f25b8]/50 min-w-[100px] border-l-2 border-[#9f25b8]/60">
+                                                        Promedio
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {students.map((student, studentIdx) => {
+                                                    const notasEstudiante = editableNotes[student._id] || {};
+                                                    // Calcular promedio de las notas ingresadas (escala 10-100)
+                                                    const notasValidas = Object.values(notasEstudiante)
+                                                        .map(n => parseFloat(n))
+                                                        .filter(n => !isNaN(n) && n >= 10 && n <= 100);
+                                                    const promedio = notasValidas.length > 0
+                                                        ? Math.round(notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length)
+                                                        : '-';
+
+                                                    return (
+                                                        <tr
+                                                            key={student._id}
+                                                            className={`border-b border-[#9f25b8]/20 hover:bg-[#9f25b8]/10 transition-all ${
+                                                                studentIdx % 2 === 0 ? 'bg-[#1a001c]/60' : 'bg-[#25003d]/40'
+                                                            }`}
+                                                        >
+                                                            <td className="sticky left-0 z-10 px-3 py-2.5 bg-inherit border-r-2 border-[#9f25b8]/30 shadow-md">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Avatar className="w-7 h-7 flex-shrink-0">
+                                                                        <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-[10px] font-semibold">
+                                                                            {student.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                                                                        </AvatarFallback>
+                                                                    </Avatar>
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <div className="font-semibold text-white text-sm truncate leading-tight">{student.nombre}</div>
+                                                                        {student.email && (
+                                                                            <div className="text-[10px] text-[#c66bff]/70 truncate leading-tight">{student.email}</div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            {actividades.map((actividad, actIdx) => (
+                                                                <td
+                                                                    key={actividad.id}
+                                                                    className="px-1.5 py-1.5 border-r border-[#9f25b8]/20"
+                                                                    style={{
+                                                                        backgroundColor: actIdx % 2 === 0 
+                                                                            ? 'rgba(26,0,28,0.4)' 
+                                                                            : 'rgba(159,37,184,0.08)'
+                                                                    }}
+                                                                >
+                                                                    <Input
+                                                                        type="text"
+                                                                        inputMode="numeric"
+                                                                        value={notasEstudiante[actividad.id] || ''}
+                                                                        onChange={(e) => {
+                                                                            const value = e.target.value;
+                                                                            // Permitir solo números y validar rango 10-100
+                                                                            if (value === '') {
+                                                                                setEditableNotes(prev => ({
+                                                                                    ...prev,
+                                                                                    [student._id]: {
+                                                                                        ...(prev[student._id] || {}),
+                                                                                        [actividad.id]: ''
+                                                                                    }
+                                                                                }));
+                                                                                return;
+                                                                            }
+                                                                            // Solo permitir números
+                                                                            if (/^\d+$/.test(value) || /^\d+\.\d*$/.test(value)) {
+                                                                                const numValue = parseFloat(value);
+                                                                                if (numValue >= 10 && numValue <= 100) {
+                                                                                    setEditableNotes(prev => ({
+                                                                                        ...prev,
+                                                                                        [student._id]: {
+                                                                                            ...(prev[student._id] || {}),
+                                                                                            [actividad.id]: value
+                                                                                        }
+                                                                                    }));
+                                                                                }
+                                                                            }
+                                                                        }}
+                                                                        onBlur={(e) => {
+                                                                            const value = e.target.value;
+                                                                            const numValue = parseFloat(value);
+                                                                            // Si está fuera del rango, limpiar o ajustar
+                                                                            if (value && (!isNaN(numValue) && (numValue < 10 || numValue > 100))) {
+                                                                                setEditableNotes(prev => ({
+                                                                                    ...prev,
+                                                                                    [student._id]: {
+                                                                                        ...(prev[student._id] || {}),
+                                                                                        [actividad.id]: ''
+                                                                                    }
+                                                                                }));
+                                                                            }
+                                                                        }}
+                                                                        className="w-full h-9 bg-[#25003d]/60 border-[#9f25b8]/40 text-white text-center font-bold text-sm focus:bg-[#9f25b8]/20 focus:border-[#c66bff]/60 focus:ring-1 focus:ring-[#c66bff]/50 hover:bg-[#9f25b8]/15 hover:border-[#c66bff]/50 transition-all rounded-md"
+                                                                        placeholder="--"
+                                                                    />
+                                                                </td>
+                                                            ))}
+                                                            <td className="px-3 py-2.5 text-center bg-gradient-to-br from-[#9f25b8]/25 to-[#6a0dad]/20 border-l-2 border-[#9f25b8]/40">
+                                                                <div className="flex items-center justify-center gap-1">
+                                                                    <span className="text-lg font-bold text-white">
+                                                                        {promedio}
+                                                                    </span>
+                                                                    {promedio !== '-' && (
+                                                                        <span className="text-[#c66bff]/60 text-[10px]">/ 100</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-8">
+                                    <Award className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <p className="text-white/60">No hay estudiantes para mostrar notas</p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Calendario */}
+                {renderCalendarAndAssignmentList(assignments, `Grupo ${cursoId}`)}
+
+                {/* Botones de acción y Formulario para asignar tarea (Movido debajo del calendario) */}
+                <div className="flex gap-4 mb-8 mt-8">
                     <Button
                         onClick={() => setShowAssignmentForm(!showAssignmentForm)}
                         className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
@@ -271,8 +697,87 @@ export default function CourseDetailPage() {
                     </Card>
                 )}
 
-                {/* Calendario y Lista de Tareas (Común) */}
-                {renderCalendarAndAssignmentList(assignments, `Grupo ${cursoId}`)}
+                {/* Dialog para Lista de Estudiantes */}
+                <Dialog open={showStudentsDialog} onOpenChange={setShowStudentsDialog}>
+                    <DialogContent className="bg-[#1a001c] border-white/10 text-white max-w-4xl max-h-[80vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="text-white flex items-center gap-2">
+                                <Users className="w-5 h-5 text-[#9f25b8]" />
+                                Estudiantes del Grupo {cursoId}
+                            </DialogTitle>
+                            <DialogDescription className="text-white/60">
+                                {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} conectados a este grupo
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="mt-4">
+                            <div className="flex items-center justify-between mb-4">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/20 text-white hover:bg-white/10"
+                                    onClick={async () => {
+                                        try {
+                                            const grupoIdNormalizado = cursoId.toUpperCase();
+                                            const response = await apiRequest('POST', `/api/groups/${grupoIdNormalizado}/sync-students`);
+                                            toast({
+                                                title: 'Sincronización completada',
+                                                description: response.message || `Se sincronizaron ${response.estudiantesSincronizados || 0} estudiantes.`,
+                                            });
+                                            queryClient.invalidateQueries({ queryKey: ['students', cursoId] });
+                                        } catch (error: any) {
+                                            console.error('Error al sincronizar estudiantes:', error);
+                                            const errorMessage = error?.response?.data?.message || error?.message || 'No se pudo sincronizar los estudiantes';
+                                            toast({
+                                                title: 'Error',
+                                                description: errorMessage,
+                                                variant: 'destructive',
+                                            });
+                                        }
+                                    }}
+                                >
+                                    <Users className="w-4 h-4 mr-2" />
+                                    Sincronizar Estudiantes
+                                </Button>
+                            </div>
+                            {isLoadingStudents ? (
+                                <div className="space-y-3">
+                                    <Skeleton className="h-16 w-full bg-white/10" />
+                                    <Skeleton className="h-16 w-full bg-white/10" />
+                                    <Skeleton className="h-16 w-full bg-white/10" />
+                                </div>
+                            ) : students.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {students.map((student) => {
+                                        return (
+                                            <div
+                                                key={student._id}
+                                                className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
+                                                onClick={() => {
+                                                    setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}`);
+                                                    setShowStudentsDialog(false);
+                                                }}
+                                            >
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <h4 className="font-semibold text-white truncate flex-1">{student.nombre}</h4>
+                                                </div>
+                                                <div className="flex items-center justify-start">
+                                                    <Badge className={getEstadoColor(student.estado)}>
+                                                        {student.estado.charAt(0).toUpperCase() + student.estado.slice(1)}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8">
+                                    <Users className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <p className="text-white/60">No hay estudiantes registrados en este grupo</p>
+                                </div>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </>
         );
     };
@@ -283,67 +788,505 @@ export default function CourseDetailPage() {
         const details = courseDetails;
 
         if (loading) {
-            return <div className="space-y-4"><Skeleton className="h-40 w-full bg-white/10" /><Skeleton className="h-96 w-full bg-white/10" /></div>;
+            return (
+                <div className="space-y-6">
+                    <Skeleton className="h-48 w-full bg-white/10" />
+                    <Skeleton className="h-32 w-full bg-white/10" />
+                    <Skeleton className="h-96 w-full bg-white/10" />
+                </div>
+            );
+        }
+
+        // Manejar errores de la query
+        if (courseDetailsError) {
+            // Extraer el mensaje de error del objeto Error
+            const errorMessage = courseDetailsError instanceof Error 
+                ? courseDetailsError.message 
+                : 'Error al cargar la materia';
+            
+            return (
+                <div className="space-y-4">
+                    <Alert className="bg-red-500/10 border-red-500/50">
+                        <AlertCircle className="h-4 w-4 text-red-400" />
+                        <AlertTitle className="text-red-200">Error de acceso</AlertTitle>
+                        <AlertDescription className="text-red-200">
+                            {errorMessage}
+                        </AlertDescription>
+                    </Alert>
+                    <Button
+                        onClick={() => setLocation('/courses')}
+                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                    >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Volver a Materias
+                    </Button>
+                </div>
+            );
         }
 
         if (!details) {
             return (
+                <div className="space-y-4">
                 <Alert className="bg-red-500/10 border-red-500/50">
                     <AlertCircle className="h-4 w-4 text-red-400" />
                     <AlertTitle className="text-red-200">Materia no encontrada</AlertTitle>
                     <AlertDescription className="text-red-200">
-                        El ID de materia proporcionado es inválido o no tienes acceso.
+                            El ID de materia proporcionado es inválido o no tienes acceso a esta materia.
                     </AlertDescription>
                 </Alert>
+                    <Button
+                        onClick={() => setLocation('/courses')}
+                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                    >
+                        <ArrowLeft className="w-4 h-4 mr-2" />
+                        Volver a Materias
+                    </Button>
+                </div>
             );
         }
 
         const titleColor = details.colorAcento || '#9f25b8';
+        const cursoAsignado = details.cursoAsignado || user?.curso || 'N/A';
+        
+        // Calcular estadísticas de la materia
+        const now = new Date();
+        const tareasPendientes = assignments.filter(a => {
+            const fechaEntrega = new Date(a.fechaEntrega);
+            return fechaEntrega >= now;
+        });
+        const proximaTarea = tareasPendientes.length > 0 
+            ? tareasPendientes.sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())[0]
+            : null;
+        
+        // Datos mock para el resumen (en producción vendrían del backend)
+        const promedioMock = 4.2;
+        const ultimaNotaMock = 4.5;
+        const estadoMock = promedioMock >= 4.5 ? 'excelente' : promedioMock >= 4.0 ? 'bueno' : promedioMock >= 3.5 ? 'regular' : 'bajo';
+        
+        const getEstadoColor = (estado: string) => {
+            switch (estado) {
+                case 'excelente':
+                    return 'bg-green-500/20 text-green-400 border-green-500/40';
+                case 'bueno':
+                    return 'bg-blue-500/20 text-blue-400 border-blue-500/40';
+                case 'regular':
+                    return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40';
+                case 'bajo':
+                    return 'bg-red-500/20 text-red-400 border-red-500/40';
+                default:
+                    return 'bg-white/10 text-white/70 border-white/20';
+            }
+        };
 
         return (
             <>
-                <div className="mb-8 p-6 rounded-xl" style={{ backgroundColor: `${titleColor}20`, borderLeft: `5px solid ${titleColor}` }}>
-                    <div className="flex items-start justify-between">
+                {/* Breadcrumbs */}
+                <Breadcrumb className="mb-6">
+                    <BreadcrumbList>
+                        <BreadcrumbItem>
+                            <BreadcrumbLink 
+                                onClick={() => setLocation('/courses')}
+                                className="text-white/70 hover:text-white cursor-pointer"
+                            >
+                                <Home className="w-4 h-4 mr-1" />
+                                Materias
+                            </BreadcrumbLink>
+                        </BreadcrumbItem>
+                        <BreadcrumbSeparator className="text-white/40" />
+                        <BreadcrumbItem>
+                            <BreadcrumbPage className="text-white">{details.nombre}</BreadcrumbPage>
+                        </BreadcrumbItem>
+                    </BreadcrumbList>
+                </Breadcrumb>
+
+                {/* Encabezado Visual Mejorado */}
+                <div className="mb-8 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#9f25b8]/20 via-[#6a0dad]/20 to-[#c66bff]/20 border border-white/10 backdrop-blur-md">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent"></div>
+                    <div className="relative p-8">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div
+                                        className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg"
+                                        style={{ 
+                                            backgroundColor: titleColor,
+                                            boxShadow: `0 8px 32px ${titleColor}40`
+                                        }}
+                                    >
+                                        <BookOpen className="w-8 h-8 text-white" />
+                                    </div>
                         <div>
-                            <Badge variant="outline" className={`border-white/20 text-white mb-2`} style={{ backgroundColor: titleColor }}>
-                                {userRole === 'estudiante' ? details.cursoAsignado || 'Tu Materia' : 'Materia Oficial'}
+                                        <Badge 
+                                            className="bg-white/10 text-white border-white/20 mb-2"
+                                        >
+                                            {cursoAsignado}
                             </Badge>
-                            <h2 className="text-4xl font-extrabold text-white mb-1 font-['Poppins']">
+                                        <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-2 font-['Poppins']">
                                 {details.nombre}
-                            </h2>
-                            <p className="text-white/70 text-lg">
-                                {details.descripcion || 'Sin descripción detallada.'}
-                            </p>
-                        </div>
-                        <BookOpen className="w-12 h-12 text-white/50" />
-                    </div>
-                    <div className="mt-4 text-sm text-white/80 flex items-center gap-4">
-                           <div className="flex items-center gap-2">
-                                <User className="w-4 h-4" />
-                                <span>**Profesor:** {details.profesor?.nombre || 'No Asignado'}</span>
+                                        </h1>
+                                    </div>
+                                </div>
+                                
+                                {details.descripcion && (
+                                    <p className="text-white/80 text-lg mb-4 max-w-2xl">
+                                        {details.descripcion}
+                                    </p>
+                                )}
+                                
+                                <div className="flex flex-wrap items-center gap-4 text-white/70">
+                                    <div className="flex items-center gap-2">
+                                        <User className="w-5 h-5 text-white/60" />
+                                        <span className="font-medium text-white/90">
+                                            {details.profesor?.nombre || 'No Asignado'}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <CalendarIcon className="w-5 h-5 text-white/60" />
+                                        <span>Curso: {cursoAsignado}</span>
+                                    </div>
+                                </div>
                             </div>
+                            
+                            {/* Botones de Acción Rápida */}
+                            <div className="flex flex-col gap-3">
+                                <Button
+                                    variant="outline"
+                                    className="bg-white/5 border-white/20 text-white hover:bg-white/10 backdrop-blur-sm"
+                                    onClick={() => setLocation('/courses')}
+                                >
+                                    <ArrowLeft className="w-4 h-4 mr-2" />
+                                    Volver a Materias
+                                </Button>
+                                <Button
+                                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                                    onClick={() => setLocation('/mi-aprendizaje/tareas')}
+                                >
+                                    <ClipboardList className="w-4 h-4 mr-2" />
+                                    Ver Tareas
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="bg-white/5 border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10 backdrop-blur-sm"
+                                    onClick={() => setLocation('/mi-aprendizaje/notas')}
+                                >
+                                    <Award className="w-4 h-4 mr-2" />
+                                    Ver Notas
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                {/* SECCIÓN DE CONTENIDO (FALTA IMPLEMENTAR) */}
-                <h3 className="text-2xl font-bold text-white mb-4 mt-8">Materiales y Módulos</h3>
+                {/* Resumen General */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                                    <TrendingUp className="w-6 h-6 text-white" />
+                                </div>
+                            </div>
+                            <p className="text-white/60 text-sm mb-1">Promedio</p>
+                            <p className="text-3xl font-bold text-white">{promedioMock.toFixed(1)}</p>
+                            <p className="text-white/40 text-xs mt-1">/ 5.0</p>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-500 to-cyan-500">
+                                    <Award className="w-6 h-6 text-white" />
+                                </div>
+                            </div>
+                            <p className="text-white/60 text-sm mb-1">Última Nota</p>
+                            <p className="text-3xl font-bold text-white">{ultimaNotaMock.toFixed(1)}</p>
+                            <p className="text-white/40 text-xs mt-1">/ 5.0</p>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-green-500 to-emerald-500">
+                                    <Badge className={getEstadoColor(estadoMock)}>
+                                        {estadoMock.charAt(0).toUpperCase() + estadoMock.slice(1)}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <p className="text-white/60 text-sm mb-1">Estado</p>
+                            <Badge className={`${getEstadoColor(estadoMock)} text-base px-3 py-1`}>
+                                {estadoMock.charAt(0).toUpperCase() + estadoMock.slice(1)}
+                            </Badge>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-yellow-500 to-orange-500">
+                                    <Clock className="w-6 h-6 text-white" />
+                            </div>
+                    </div>
+                            <p className="text-white/60 text-sm mb-1">Próxima Tarea</p>
+                            {proximaTarea ? (
+                                <>
+                                    <p className="text-lg font-semibold text-white line-clamp-1">{proximaTarea.titulo}</p>
+                                    <p className="text-white/40 text-xs mt-1">
+                                        {new Date(proximaTarea.fechaEntrega).toLocaleDateString('es-CO', {
+                                            day: 'numeric',
+                                            month: 'short'
+                                        })}
+                                    </p>
+                                </>
+                            ) : (
+                                <p className="text-white/60 text-sm">Sin tareas pendientes</p>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Secciones con Pestañas */}
+                <Tabs defaultValue="tareas" className="w-full">
+                    <TabsList className="bg-white/5 border border-white/10 backdrop-blur-md mb-6">
+                        <TabsTrigger 
+                            value="tareas" 
+                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                        >
+                            <ClipboardList className="w-4 h-4 mr-2" />
+                            Tareas ({assignments.length})
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="notas" 
+                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                        >
+                            <Award className="w-4 h-4 mr-2" />
+                            Notas
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="materiales" 
+                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                        >
+                            <FileText className="w-4 h-4 mr-2" />
+                            Materiales
+                        </TabsTrigger>
+                        <TabsTrigger 
+                            value="anuncios" 
+                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                        >
+                            <Bell className="w-4 h-4 mr-2" />
+                            Anuncios
+                        </TabsTrigger>
+                    </TabsList>
+
+                    {/* Pestaña de Tareas */}
+                    <TabsContent value="tareas" className="space-y-6">
+                        {assignments.length > 0 ? (
+                            <>
                 <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-                    <CardContent className="p-6 text-white/60 text-center">
-                        <Clock className="w-8 h-8 mx-auto mb-3 text-white/40" />
-                        <p>Esta sección contendrá los módulos, documentos y recursos del curso.</p>
-                        <Button variant="ghost" className="text-[#9f25b8] mt-2" onClick={() => setLocation('/materials')}>
-                            Ir a Materiales Generales
-                        </Button>
+                                    <CardHeader>
+                                        <CardTitle className="text-white flex items-center gap-2">
+                                            <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                                            Calendario de Tareas
+                                        </CardTitle>
+                                        <CardDescription className="text-white/60">
+                                            Tareas asignadas para {details.nombre}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <Calendar assignments={assignments} onDayClick={handleDayClick} />
                     </CardContent>
                 </Card>
 
-                {/* Calendario y Lista de Tareas (Común) */}
-                {renderCalendarAndAssignmentList(assignments, details.nombre)}
+                                <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                                    <CardHeader>
+                                        <CardTitle className="text-white">Lista de Tareas</CardTitle>
+                                        <CardDescription className="text-white/60">
+                                            {assignments.length} {assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="space-y-3">
+                                            {assignments
+                                                .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
+                                                .map((assignment) => {
+                                                    const fechaEntrega = new Date(assignment.fechaEntrega);
+                                                    const diasRestantes = Math.ceil((fechaEntrega.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                                                    const isVencida = fechaEntrega < now;
+                                                    
+                                                    return (
+                                                        <div
+                                                            key={assignment._id}
+                                                            className="p-5 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer group"
+                                                            onClick={() => setLocation(`/assignment/${assignment._id}`)}
+                                                        >
+                                                            <div className="flex items-start justify-between gap-4">
+                                                                <div className="flex-1">
+                                                                    <div className="flex items-center gap-3 mb-2">
+                                                                        <h4 className="font-semibold text-white text-lg group-hover:text-[#9f25b8] transition-colors">
+                                                                            {assignment.titulo}
+                                                                        </h4>
+                                                                        {isVencida ? (
+                                                                            <Badge className="bg-red-500/20 text-red-400 border-red-500/40">
+                                                                                Vencida
+                                                                            </Badge>
+                                                                        ) : diasRestantes <= 3 ? (
+                                                                            <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/40">
+                                                                                Próxima
+                                                                            </Badge>
+                                                                        ) : null}
+                                                                    </div>
+                                                                    <p className="text-sm text-white/70 mb-3 line-clamp-2">
+                                                                        {assignment.descripcion}
+                                                                    </p>
+                                                                    <div className="flex flex-wrap items-center gap-4 text-sm text-white/60">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <User className="w-4 h-4" />
+                                                                            <span>{assignment.profesorNombre}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <CalendarIcon className="w-4 h-4" />
+                                                                            <span>
+                                                                                {fechaEntrega.toLocaleDateString('es-CO', {
+                                                                                    day: 'numeric',
+                                                                                    month: 'long',
+                                                                                    year: 'numeric'
+                                                                                })}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Clock className="w-4 h-4" />
+                                                                            <span>
+                                                                                {fechaEntrega.toLocaleTimeString('es-CO', {
+                                                                                    hour: '2-digit',
+                                                                                    minute: '2-digit'
+                                                                                })}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <ChevronRight className="w-5 h-5 text-white/40 group-hover:text-[#9f25b8] transition-colors flex-shrink-0 mt-1" />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </>
+                        ) : (
+                            <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                                <CardContent className="p-12 text-center">
+                                    <ClipboardList className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <h3 className="text-xl font-semibold text-white mb-2">
+                                        No hay tareas asignadas
+                                    </h3>
+                                    <p className="text-white/60">
+                                        Aún no se han asignado tareas para esta materia.
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </TabsContent>
+
+                    {/* Pestaña de Notas */}
+                    <TabsContent value="notas">
+                        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                            <CardHeader>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <Award className="w-5 h-5 text-[#9f25b8]" />
+                                    Notas de {details.nombre}
+                                </CardTitle>
+                                <CardDescription className="text-white/60">
+                                    Revisa tu rendimiento académico en esta materia
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-center py-12">
+                                    <Award className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <h3 className="text-xl font-semibold text-white mb-2">
+                                        Ver todas tus notas
+                                    </h3>
+                                    <p className="text-white/60 mb-6">
+                                        Accede a la sección completa de notas para ver tu historial detallado.
+                                    </p>
+                                    <Button
+                                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                                        onClick={() => setLocation('/mi-aprendizaje/notas')}
+                                    >
+                                        <Award className="w-4 h-4 mr-2" />
+                                        Ir a Mis Notas
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* Pestaña de Materiales */}
+                    <TabsContent value="materiales">
+                        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                            <CardHeader>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <FileText className="w-5 h-5 text-[#9f25b8]" />
+                                    Materiales de {details.nombre}
+                                </CardTitle>
+                                <CardDescription className="text-white/60">
+                                    Documentos, recursos y materiales del curso
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-center py-12">
+                                    <FileText className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <h3 className="text-xl font-semibold text-white mb-2">
+                                        Materiales del curso
+                                    </h3>
+                                    <p className="text-white/60 mb-6">
+                                        Los materiales y recursos estarán disponibles próximamente.
+                                    </p>
+                                    <Button
+                                        variant="outline"
+                                        className="bg-white/5 border-white/20 text-white hover:bg-white/10"
+                                        onClick={() => setLocation('/materials')}
+                                    >
+                                        <FileText className="w-4 h-4 mr-2" />
+                                        Ver Materiales Generales
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* Pestaña de Anuncios */}
+                    <TabsContent value="anuncios">
+                        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                            <CardHeader>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <Bell className="w-5 h-5 text-[#9f25b8]" />
+                                    Anuncios del Profesor
+                                </CardTitle>
+                                <CardDescription className="text-white/60">
+                                    Comunicaciones importantes de {details.profesor?.nombre || 'tu profesor'}
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-center py-12">
+                                    <Bell className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <h3 className="text-xl font-semibold text-white mb-2">
+                                        Sin anuncios
+                                    </h3>
+                                    <p className="text-white/60">
+                                        No hay anuncios nuevos del profesor en este momento.
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+                </Tabs>
             </>
         );
     };
 
-    // 🎯 Renderizado Común: Calendario y Lista de Tareas
+    // 🎯 Renderizado Común: Solo Calendario (sin lista de tareas)
     const renderCalendarAndAssignmentList = (assignments: Assignment[], titleContext: string) => (
         <>
             {/* Calendario del curso */}
@@ -361,42 +1304,6 @@ export default function CourseDetailPage() {
                     <Calendar assignments={assignments} onDayClick={handleDayClick} />
                 </CardContent>
             </Card>
-
-            {/* Lista de tareas */}
-            {assignments.length > 0 && (
-                <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
-                    <CardHeader>
-                        <CardTitle className="text-white">Próximas Tareas</CardTitle>
-                        <CardDescription className="text-white/60">
-                            {assignments.length} {assignments.length === 1 ? 'tarea pendiente' : 'tareas pendientes'}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            {assignments.map((assignment) => (
-                                <div
-                                    key={assignment._id}
-                                    className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                                    onClick={() => setLocation(`/assignment/${assignment._id}`)}
-                                >
-                                    <h4 className="font-semibold text-white mb-1">{assignment.titulo}</h4>
-                                    <p className="text-sm text-white/70 mb-2">
-                                        {assignment.descripcion.substring(0, 80)}...
-                                    </p>
-                                    <div className="flex justify-between items-center text-xs">
-                                        <p className="text-[#9f25b8] font-medium">
-                                            Entrega: {new Date(assignment.fechaEntrega).toLocaleString('es-CO')}
-                                        </p>
-                                        <Badge variant="outline" className="border-white/20 text-white/70">
-                                            {isProfessor ? assignment.curso : assignment.profesorNombre}
-                                        </Badge>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
         </>
     );
 

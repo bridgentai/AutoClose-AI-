@@ -1,150 +1,299 @@
-# AutoClose AI - Design Guidelines
+AutoClose AI – Design Guidelines (Next‑Gen Edition)
+1. Design Philosophy
+AutoClose AI no es una plataforma educativa tradicional. Es un sistema académico accionable, donde la IA es el centro operativo y el diseño debe reflejar:
 
-## Design Approach
+modernidad
 
-**Selected Approach:** Modern Glassmorphism with Academic Purple Theme
+claridad
 
-**Justification:** AutoClose AI es una plataforma educativa institucional que requiere un diseño moderno, confiable y profesional. El estilo glassmorphism con tonos morados (#9f25b8) crea una identidad visual distintiva que inspira innovación tecnológica mientras mantiene la seriedad académica.
+velocidad
 
-**Key Principles:**
-1. Identidad Visual Distintiva - Color morado característico (#9f25b8) de Bridgent AI
-2. Glassmorphism - Efectos de transparencia y blur para modernidad
-3. Interfaz AI-First - El chat inteligente como centro de la experiencia
-4. Multi-Rol - Dashboards diferenciados para estudiante/profesor/directivo/padre
-5. Responsive & Professional - Diseño adaptable y de nivel empresarial
+inteligencia
 
----
+enfoque humano
 
-## Color Palette
+flexibilidad
 
-**Primary Colors:**
-- **Accent Purple:** `#9f25b8` - Color principal de AutoClose AI
-- **Accent Dark:** `#6a0dad` - Morado oscuro para hover states
-- **Accent Light:** `#c66bff` - Morado claro para gradientes
+cero fricción
 
-**Backgrounds:**
-- **Dark Base:** Gradiente `linear-gradient(135deg, #0a0a0c, #1a001c, #3d0045)`
-- **Card/Glass:** `rgba(255, 255, 255, 0.05)` con `backdrop-filter: blur(14px)`
-- **Sidebar:** `rgba(0, 0, 0, 0.64)` con hover transparencia
+El objetivo es superar por completo la experiencia rígida, aburrida y anticuada de plataformas como Phidias.
 
-**Text Colors:**
-- **Primary Text:** `#ffffff` (blanco)
-- **Secondary Text:** `rgba(255, 255, 255, 0.7)`
-- **Muted Text:** `#aaa`, `#bbb`, `#ccc`
+Principios centrales
+AI‑First Experience La IA es el punto de entrada principal. La interfaz debe permitir que todo se haga:
 
----
+manualmente
 
-## Typography
+o mediante instrucciones naturales al asistente
 
-**Font System (Google Fonts):**
-- **Primary:** Inter (cuerpo, UI elements, texto general)
-- **Display:** Poppins (títulos, headings, branding - peso 600-800)
+Navegación Flexible (No Sidebar Obligatorio) La estructura clásica de sidebar fijo se reemplaza por:
 
-**Hierarchy:**
-- **Hero/Display:** text-5xl to text-6xl (Poppins SemiBold)
-- **H1:** text-4xl (Poppins SemiBold)
-- **H2:** text-3xl (Poppins Medium)
-- **H3:** text-2xl (Poppins Medium)
-- **Body Large:** text-lg (Inter Regular)
-- **Body:** text-base (Inter Regular)
-- **Small/Meta:** text-sm (Inter Regular)
-- **Micro:** text-xs (Inter Medium for labels)
+Command Palette
 
----
+Quick Actions
 
-## Layout System
+IA contextual
 
-**Spacing Units:** Tailwind scale of 2, 3, 4, 6, 8, 12, 16, 20, 24
-- Tight spacing: p-2, gap-3, m-4
-- Standard spacing: p-6, gap-8, m-12
-- Generous spacing: p-16, gap-20, py-24
+Navegación basada en intención
 
-**Grid System:**
-- Desktop dashboards: 12-column grid with gap-6
-- Content max-width: max-w-7xl for main layouts
-- Sidebar: Fixed 280px (desktop), full-width drawer (mobile)
-- Chat interface: max-w-4xl centered conversation area
+Glassmorphism Moderno + Identidad Púrpura Institucional Transparencias, blur, gradientes profundos y acentos vibrantes.
 
----
+Interfaz Profesional, Limpia y Minimalista Nada de ruido visual. Nada de elementos viejos. Nada de saturación.
 
-## Core Component Library
+Acciones Inteligentes La UI debe sugerir acciones basadas en:
 
-**Navigation:**
-- **Main App:** Persistent left sidebar (280px) with institutional logo, role-based menu items, and AI assistant quick access
-- **Top Bar:** Institution name, user profile, notifications, settings
-- **Mobile:** Hamburger menu with slide-out drawer
+rol
 
-**Dashboard Layouts:**
-- **Student View:** Card-based grid (grid-cols-1 md:grid-cols-2 lg:grid-cols-3) for courses/subjects
-- **Teacher View:** Split layout - course list sidebar (320px) + main content area for materials/planning
-- **Admin View:** Stats cards in 4-column grid + data tables with action menus
+contexto
 
-**Chat/AI Assistant:**
-- Full-screen dedicated chat page with conversation history sidebar (240px)
-- Message bubbles: User (right-aligned, rounded-2xl), AI (left-aligned, rounded-2xl)
-- Input area: Fixed bottom with attachment button, text field (h-12), send button
-- Context pills above input showing active subject/course context
+actividad reciente
 
-**Cards:**
-- Course cards: Elevated with shadow-md, rounded-xl, p-6
-- Material cards: Compact design with icon, title, metadata (rounded-lg, p-4)
-- Stat cards: Bordered with subtle shadow, rounded-lg, featuring large numbers and micro labels
+urgencia
 
-**Forms:**
-- Input fields: h-12, rounded-lg, border with focus states
-- Labels: text-sm font-medium, mb-2
-- Form sections: Space with gap-6 between field groups
-- Submit buttons: Full-width on mobile, inline on desktop
+Diseño Modular y Adaptable La interfaz se adapta al usuario, no al revés.
 
-**Data Display:**
-- Tables: Striped rows, sticky headers, hover states on rows
-- List items: py-4 with dividers, hover background transitions
-- Empty states: Centered with illustration placeholder + descriptive text
+2. Color System
+Primary Brand Colors
+Purple Core: #9f25b8
 
----
+Purple Deep: #6a0dad
 
-## Images
+Purple Light: #c66bff
 
-**Hero Section (Marketing/Login Pages):**
-- Large hero image showing diverse students collaborating with technology
-- Dimension: Full-width, h-screen or min-h-[600px]
-- Overlay: Gradient overlay for text legibility
-- Placement: Landing page hero, login page background (blurred)
+Backgrounds
+Dark Gradient Base: linear-gradient(135deg, #0a0a0c, #1a001c, #3d0045)
 
-**Dashboard Imagery:**
-- Institutional logo: Top-left sidebar (h-12 to h-16)
-- Empty state illustrations: Centered in content areas when no data exists
-- Course thumbnails: Aspect ratio 16:9, rounded-lg
-- Profile avatars: rounded-full, h-10 w-10 (standard), h-16 w-16 (profile pages)
+Glass Panels: rgba(255, 255, 255, 0.05) + backdrop-blur-xl
 
-**AI Assistant Branding:**
-- Custom institution AI avatar: rounded-full, h-12 w-12 in chat messages
-- AI personality icon in sidebar navigation
+Surface Hover: rgba(255, 255, 255, 0.08)
 
-**Note:** All buttons on hero images use backdrop-blur-md background treatment for clarity.
+Text Colors
+Primary: #ffffff
 
----
+Secondary: rgba(255, 255, 255, 0.7)
 
-## Responsive Behavior
+Muted: rgba(255, 255, 255, 0.45)
 
-**Breakpoints:**
-- Mobile: Base styles, single column layouts
-- Tablet (md:): 2-column grids, collapsible sidebar to drawer
-- Desktop (lg:): Full multi-column layouts, persistent sidebar
+3. Typography
+Font System
+Inter → UI, cuerpo, formularios
 
-**Mobile Optimizations:**
-- Bottom navigation bar for primary actions
-- Swipeable course/subject cards
-- Full-screen chat interface
-- Collapsible filters and settings panels
+Poppins → títulos, branding, secciones importantes
 
----
+Hierarchy
+Hero: text-6xl (Poppins 700)
 
-## Accessibility Standards
+H1: text-4xl (Poppins 600)
 
-- Minimum touch targets: 44px × 44px
-- Focus indicators: 2px ring with offset
-- ARIA labels on all interactive elements
-- Keyboard navigation throughout
-- Screen reader-friendly table markup
-- Contrast ratios meeting WCAG AA standards
+H2: text-3xl (Poppins 500)
+
+H3: text-2xl (Poppins 500)
+
+Body: text-base (Inter 400)
+
+Meta: text-sm (Inter 400)
+
+4. Layout System
+Spacing
+Tight: 2–4
+
+Standard: 6–12
+
+Spacious: 16–24
+
+Grid
+12 columnas en desktop
+
+max-w-7xl para contenido principal
+
+tarjetas responsivas con gap-6
+
+5. Navigation System (Next‑Gen)
+La navegación tradicional queda atrás. AutoClose AI adopta un sistema moderno y flexible:
+
+✅ 1. Command Palette (Ctrl/Cmd + K)
+El usuario escribe lo que quiere hacer:
+
+“crear tarea”
+
+“ver mis materias”
+
+“abrir calendario”
+
+“generar documento en Drive”
+
+La IA interpreta y ejecuta.
+
+✅ 2. Quick Actions
+Botón flotante con:
+
+acciones frecuentes
+
+sugerencias de IA
+
+accesos directos dinámicos
+
+✅ 3. AI Dock
+Un panel lateral minimalista que:
+
+muestra contexto
+
+sugiere acciones
+
+permite ejecutar tareas sin navegar
+
+✅ 4. Navegación Adaptativa
+La interfaz cambia según:
+
+rol
+
+actividad reciente
+
+urgencia
+
+calendario
+
+tareas pendientes
+
+Esto supera completamente a Phidias.
+
+6. Core Components
+AI Assistant
+Página dedicada full-screen
+
+Sidebar con historial
+
+Mensajes con contexto dinámico
+
+Acciones sugeridas por IA
+
+Botones de acción rápida dentro del chat
+
+Dashboards Inteligentes
+Estudiante
+timeline unificado
+
+materias con progreso
+
+tareas urgentes arriba
+
+recomendaciones de estudio por IA
+
+Profesor
+vista de cursos
+
+tareas por estado
+
+automatizaciones sugeridas
+
+accesos rápidos a Drive/Docs
+
+Directivo
+métricas
+
+asignación de grupos
+
+reportes generados por IA
+
+7. Cards & Data Display
+Cards Inteligentes
+cambian según estado
+
+muestran acciones sugeridas
+
+integran mini‑previews de Drive
+
+glassmorphism con sombras suaves
+
+Tablas Modernas
+sticky headers
+
+filas con hover suave
+
+acciones inline
+
+filtros inteligentes
+
+Empty States
+ilustraciones limpias
+
+mensajes amigables
+
+botón de acción sugerida por IA
+
+8. Forms & Inputs
+inputs redondeados
+
+focus rings visibles
+
+labels claras
+
+secciones con spacing amplio
+
+botones con gradientes suaves
+
+9. Responsive Behavior
+Mobile
+navegación inferior
+
+chat full-screen
+
+tarjetas swipeables
+
+drawers para filtros
+
+Tablet
+2 columnas
+
+AI Dock colapsable
+
+Desktop
+layout completo
+
+paneles simultáneos
+
+10. Microinteractions
+animaciones suaves (150–250ms)
+
+hover con blur y elevación
+
+transiciones entre páginas
+
+loaders con gradiente animado
+
+feedback inmediato en cada acción
+
+11. Accessibility
+ARIA labels
+
+contraste AA
+
+navegación por teclado
+
+targets de 44px
+
+textos legibles
+
+12. Visual Integration with Google Workspace
+miniaturas reales de Drive
+
+chips de documentos
+
+iconografía estilo Material
+
+acciones rápidas: “Abrir en Drive”, “Compartir”, “Generar copia”
+
+13. Focus Mode
+Modo especial para estudiar o trabajar:
+
+oculta navegación
+
+elimina distracciones
+
+deja solo el contenido
+
+IA sugiere pausas, resúmenes, recordatorios
+
+14. Summary
+Este diseño:
+
+✅ supera a Phidias ✅ es moderno, limpio y profesional ✅ es IA‑first ✅ es flexible y adaptable ✅ integra Google Workspace ✅ permite navegación por intención ✅ ofrece microinteracciones premium ✅ es accesible y responsivo ✅ está alineado con tu visión de AutoClose AI

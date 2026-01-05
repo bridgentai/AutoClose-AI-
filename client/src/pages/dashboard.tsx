@@ -1,10 +1,22 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/Calendar';
+import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+
+interface Assignment {
+  _id: string;
+  titulo: string;
+  descripcion: string;
+  curso: string;
+  fechaEntrega: string;
+  profesorNombre: string;
+}
 
 interface Message {
   emisor: 'user' | 'ai';
@@ -159,16 +171,33 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 }
 
 function EstudianteDashboard() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const RED_ALERT = 'text-red-400';
   const YELLOW_TROPHY = '#facc15';
+
+  // Query para obtener tareas del estudiante
+  const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
+    queryKey: ['studentAssignments', user?.curso],
+    queryFn: () => apiRequest('GET', '/api/assignments/student'),
+    enabled: !!user?.id && !!user?.curso,
+    staleTime: 0,
+  });
+
+  const handleDayClick = (assignment: Assignment) => {
+    setLocation(`/assignment/${assignment._id}`);
+  };
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/mi-aprendizaje/cursos')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Mis Materias</CardTitle>
-            <BookOpen className={`w-5 h-5 text-[${PURPLE_ACCENT}]`} />
+            <BookOpen className="w-5 h-5 text-[#9f25b8]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white">4</div>
@@ -176,18 +205,24 @@ function EstudianteDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/mi-aprendizaje/tareas')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Tareas Pendientes</CardTitle>
-            <GraduationCap className={`w-5 h-5 text-[${PURPLE_ACCENT}]`} />
+            <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">7</div>
+            <div className="text-3xl font-bold text-white">{assignments.length}</div>
             <p className="text-xs text-white/60 mt-1">Por entregar esta semana</p>
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/mi-aprendizaje/notas')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Materias Perdidas</CardTitle>
             <AlertTriangle className={`w-5 h-5 ${RED_ALERT}`} />
@@ -198,7 +233,10 @@ function EstudianteDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/mi-aprendizaje/notas')}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Puesto en el Salon</CardTitle>
             <Trophy className={`w-5 h-5 text-[${YELLOW_TROPHY}]`} />
@@ -210,16 +248,70 @@ function EstudianteDashboard() {
         </Card>
       </div>
 
-      <AIChatBox rol="estudiante" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/mi-aprendizaje/calendario')}
+        >
+          <CardHeader>
+            <CardTitle className="text-white">Calendario de Tareas</CardTitle>
+            <CardDescription className="text-white/60">
+              {isLoadingAssignments 
+                ? 'Cargando tareas...' 
+                : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingAssignments ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-white/60">Cargando calendario...</p>
+              </div>
+            ) : (
+              <div onClick={(e) => e.stopPropagation()}>
+                <Calendar assignments={assignments} onDayClick={handleDayClick} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <AIChatBox rol="estudiante" />
+      </div>
     </div>
   );
 }
 
 function ProfesorDashboard() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  // Query para obtener tareas del profesor
+  const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
+    queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
+    queryFn: async () => {
+      return apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
+    },
+    enabled: !!user?.id,
+    staleTime: 0,
+  });
+
+  const handleDayClick = (assignment: Assignment, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation(); // Prevenir que se active el onClick de la Card
+    }
+    setLocation(`/assignment/${assignment._id}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/courses')}
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
               <BookOpen className="w-5 h-5 text-[#9f25b8]" />
@@ -232,7 +324,10 @@ function ProfesorDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/courses')}
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
               <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
@@ -245,7 +340,10 @@ function ProfesorDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/materials')}
+        >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
               <MessageSquare className="w-5 h-5 text-[#9f25b8]" />
@@ -272,16 +370,49 @@ function ProfesorDashboard() {
         </Card>
       </div>
 
-      <AIChatBox rol="profesor" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/teacher-calendar')}
+        >
+          <CardHeader>
+            <CardTitle className="text-white">Calendario de Tareas</CardTitle>
+            <CardDescription className="text-white/60">
+              {isLoadingAssignments 
+                ? 'Cargando tareas...' 
+                : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingAssignments ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-white/60">Cargando calendario...</p>
+              </div>
+            ) : (
+              <div onClick={(e) => e.stopPropagation()}>
+                <Calendar assignments={assignments} onDayClick={handleDayClick} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <AIChatBox rol="profesor" />
+      </div>
     </div>
   );
 }
 
 function DirectivoDashboard() {
+  const [, setLocation] = useLocation();
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/directivo')}
+        >
           <CardHeader>
             <CardTitle className="text-white text-sm">Profesores</CardTitle>
           </CardHeader>
@@ -290,7 +421,10 @@ function DirectivoDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/directivo')}
+        >
           <CardHeader>
             <CardTitle className="text-white text-sm">Estudiantes</CardTitle>
           </CardHeader>
@@ -299,7 +433,10 @@ function DirectivoDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/courses')}
+        >
           <CardHeader>
             <CardTitle className="text-white text-sm">Cursos Activos</CardTitle>
           </CardHeader>
@@ -325,41 +462,163 @@ function DirectivoDashboard() {
 }
 
 function PadreDashboard() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Para padres, intentamos obtener las tareas del hijo si tienen hijoId
+  // Si no, mostramos un mensaje o datos mock
+  const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
+    queryKey: ['parentAssignments', user?.hijoId],
+    queryFn: async () => {
+      // Si el padre tiene un hijoId, podríamos obtener las tareas del hijo
+      // Por ahora, retornamos array vacío ya que no hay endpoint específico
+      return [];
+    },
+    enabled: !!user?.hijoId,
+    staleTime: 0,
+  });
+
+  const handleDayClick = (assignment: Assignment) => {
+    setLocation(`/assignment/${assignment._id}`);
+  };
+
   return (
     <div className="space-y-6">
-      <Card className={CARD_STYLE}>
-        <CardHeader>
-          <CardTitle className="text-white">Seguimiento del Estudiante</CardTitle>
-          <CardDescription className="text-white/60">Progreso academico de su hijo/a</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {['Matematicas', 'Ciencias', 'Historia'].map((materia, index) => {
-              const score = [4.5, 4.2, 4.7][index];
-              const widthPercent = (score / 5.0) * 100;
-              return (
-                <div key={materia} className="p-4 bg-white/5 rounded-xl">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-white font-medium">{materia}</span>
-                    <span className="text-[#9f25b8] font-bold">{score}/5.0</span>
-                  </div>
-                  <div className="w-full bg-white/10 rounded-full h-2">
-                    <div className={`bg-gradient-to-r ${GRADIENT_STYLE} h-2 rounded-full`} style={{ width: `${widthPercent}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/parent')}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+            <CardTitle className="text-sm font-medium text-white">Progreso Académico</CardTitle>
+            <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">4.3</div>
+            <p className="text-xs text-white/60 mt-1">Promedio general</p>
+          </CardContent>
+        </Card>
 
-      <AIChatBox rol="padre" />
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/parent')}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+            <CardTitle className="text-sm font-medium text-white">Tareas del Hijo</CardTitle>
+            <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{assignments.length}</div>
+            <p className="text-xs text-white/60 mt-1">Tareas este mes</p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/parent')}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+            <CardTitle className="text-sm font-medium text-white">Materias</CardTitle>
+            <BookOpen className="w-5 h-5 text-[#9f25b8]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">5</div>
+            <p className="text-xs text-white/60 mt-1">Materias activas</p>
+          </CardContent>
+        </Card>
+
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/parent')}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+            <CardTitle className="text-sm font-medium text-white">Asistencia</CardTitle>
+            <Trophy className="w-5 h-5 text-[#facc15]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">95%</div>
+            <p className="text-xs text-white/60 mt-1">Este mes</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className={CARD_STYLE}>
+          <CardHeader>
+            <CardTitle className="text-white">Seguimiento del Estudiante</CardTitle>
+            <CardDescription className="text-white/60">Progreso academico de su hijo/a</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {['Matematicas', 'Ciencias', 'Historia'].map((materia, index) => {
+                const score = [4.5, 4.2, 4.7][index];
+                const widthPercent = (score / 5.0) * 100;
+                return (
+                  <div key={materia} className="p-4 bg-white/5 rounded-xl">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-white font-medium">{materia}</span>
+                      <span className="text-[#9f25b8] font-bold">{score}/5.0</span>
+                    </div>
+                    <div className="w-full bg-white/10 rounded-full h-2">
+                      <div className={`bg-gradient-to-r ${GRADIENT_STYLE} h-2 rounded-full`} style={{ width: `${widthPercent}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {assignments.length > 0 ? (
+          <Card 
+            className={`${CARD_STYLE} cursor-pointer`}
+            onClick={() => setLocation('/calendar')}
+          >
+            <CardHeader>
+              <CardTitle className="text-white">Calendario de Tareas</CardTitle>
+              <CardDescription className="text-white/60">
+                Tareas de tu hijo/a este mes
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div onClick={(e) => e.stopPropagation()}>
+                <Calendar assignments={assignments} onDayClick={handleDayClick} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <AIChatBox rol="padre" />
+        )}
+      </div>
+
+      {assignments.length === 0 && (
+        <AIChatBox rol="padre" />
+      )}
     </div>
   );
 }
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  React.useEffect(() => {
+    // Redirigir nuevos roles a sus páginas específicas
+    if (user?.rol) {
+      const roleRedirects: Record<string, string> = {
+        'administrador-general': '/administrador-general',
+        'transporte': '/transporte',
+        'tesoreria': '/tesoreria',
+        'nutricion': '/nutricion',
+        'cafeteria': '/cafeteria',
+      };
+      
+      if (roleRedirects[user.rol]) {
+        setLocation(roleRedirects[user.rol]);
+        return;
+      }
+    }
+  }, [user?.rol, setLocation]);
 
   const getDashboardContent = () => {
     switch (user?.rol) {
@@ -371,6 +630,13 @@ export default function Dashboard() {
         return <DirectivoDashboard />;
       case 'padre':
         return <PadreDashboard />;
+      case 'administrador-general':
+      case 'transporte':
+      case 'tesoreria':
+      case 'nutricion':
+      case 'cafeteria':
+        // Estos roles se redirigen a sus páginas específicas
+        return null;
       default:
         return null;
     }

@@ -7,14 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { X, Plus } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
+import { useAuth } from '@/lib/authContext';
+import { getRoleHomePath } from '@/lib/roleRedirect';
+import type { AuthResponse } from '@shared/schema';
 
 export default function Register() {
   const [, setLocation] = useLocation();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     nombre: '',
     email: '',
     password: '',
-    rol: '' as 'estudiante' | 'profesor' | 'directivo' | 'padre' | '',
+    rol: '' as 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | '',
     curso: '',
     codigoAcceso: '', // Código del colegio para profesor/directivo
     colegioId: 'default_colegio',
@@ -24,7 +28,6 @@ export default function Register() {
   const [currentMateria, setCurrentMateria] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +46,7 @@ export default function Register() {
       return;
     }
 
-    if ((formData.rol === 'profesor' || formData.rol === 'directivo') && !formData.codigoAcceso) {
+    if ((formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria') && !formData.codigoAcceso) {
       setError('Debes ingresar el código del colegio');
       setLoading(false);
       return;
@@ -57,17 +60,19 @@ export default function Register() {
     }
 
     try {
-      await apiRequest('POST', '/api/auth/register', {
+      const data = await apiRequest<AuthResponse>('POST', '/api/auth/register', {
         ...formData,
         materias: formData.rol === 'profesor' ? materias : undefined
       });
       
-      setSuccess(true);
-      // Redirigir a login después de 2 segundos
-      setTimeout(() => setLocation('/login'), 2000);
+      // Iniciar sesión automáticamente con la cuenta recién creada
+      login(data);
+      
+      // Redirigir directamente al dashboard según el rol
+      const homePath = getRoleHomePath(data.rol);
+      setLocation(homePath);
     } catch (err: any) {
       setError(err.message || 'Error al registrar usuario');
-    } finally {
       setLoading(false);
     }
   };
@@ -97,13 +102,7 @@ export default function Register() {
           </h2>
           <p className="text-white/70 mb-8">Únete a AutoClose AI</p>
 
-          {success ? (
-            <div className="text-center py-8">
-              <p className="text-green-400 font-semibold mb-2">¡Registro exitoso!</p>
-              <p className="text-white/70 text-sm">Ahora puedes iniciar sesión con tu cuenta</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <Label htmlFor="nombre" className="text-white/90 mb-2 block">Nombre completo</Label>
                 <Input
@@ -159,6 +158,11 @@ export default function Register() {
                     <SelectItem value="profesor">Profesor</SelectItem>
                     <SelectItem value="directivo">Directivo</SelectItem>
                     <SelectItem value="padre">Padre/Madre</SelectItem>
+                    <SelectItem value="administrador-general">Administrador General</SelectItem>
+                    <SelectItem value="transporte">Transporte</SelectItem>
+                    <SelectItem value="tesoreria">Tesorería</SelectItem>
+                    <SelectItem value="nutricion">Nutrición</SelectItem>
+                    <SelectItem value="cafeteria">Cafetería</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -246,7 +250,7 @@ export default function Register() {
                 </div>
               )}
 
-              {(formData.rol === 'profesor' || formData.rol === 'directivo') && (
+              {(formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria') && (
                 <div>
                   <Label htmlFor="codigoAcceso" className="text-white/90 mb-2 block">Código del Colegio</Label>
                   <Input
@@ -274,7 +278,6 @@ export default function Register() {
                 {loading ? 'Registrando...' : 'Crear cuenta'}
               </Button>
             </form>
-          )}
 
           <div className="mt-6 text-center">
             <button

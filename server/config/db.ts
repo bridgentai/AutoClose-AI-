@@ -7,7 +7,7 @@ export let mongoError: string | null = null;
 
 export async function connectDB() {
   if (!MONGO_URI) {
-    const error = '❌ Error: MONGO_URI no está configurado en las variables de entorno. Por favor configura MONGO_URI en Replit Secrets con tu URL de MongoDB Atlas';
+    const error = '❌ Error: MONGO_URI no está configurado en las variables de entorno. Por favor configura MONGO_URI en el archivo .env de la raíz del proyecto con tu URL de MongoDB Atlas';
     console.error(error);
     mongoError = error;
     return; // No exit, permitir que la app arranque

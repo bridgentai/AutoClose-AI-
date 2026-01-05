@@ -7,11 +7,19 @@ const router = express.Router();
 
 // POST /api/chat/new - Crear nueva sesión de chat
 router.post('/new', protect, async (req: AuthRequest, res) => {
-  const { titulo, contextoTipo, contextoReferenciaId } = req.body;
+  const { titulo, contextoTipo, contextoReferenciaId, cursoId } = req.body;
   const { id: userId, colegioId, rol } = req.user!;
 
   try {
+    // Validar que se proporcione cursoId (requerido en nueva estructura)
+    if (!cursoId) {
+      return res.status(400).json({ message: 'cursoId es obligatorio para crear un chat.' });
+    }
+
     const newChat = await ChatSession.create({
+      cursoId, // Campo requerido en nueva estructura
+      participantes: [userId], // Campo requerido - incluir al usuario actual
+      // Campos adicionales para compatibilidad
       colegioId,
       userId,
       titulo: titulo || `Chat ${new Date().toLocaleDateString('es-CO')}`,
@@ -80,7 +88,8 @@ router.post('/:sessionId/message', protect, async (req: AuthRequest, res) => {
     });
   } catch (error: any) {
     console.error('Error al enviar mensaje:', error.message);
-    res.status(500).json({ message: 'Error en el servidor al procesar el chat.' });
+    const errorMessage = error.message || 'Error en el servidor al procesar el chat.';
+    res.status(500).json({ message: errorMessage });
   }
 });
 

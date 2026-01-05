@@ -29,17 +29,24 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 
 // POST /api/materials - Crear material (profesor/directivo)
 router.post('/', protect, restrictTo('profesor', 'directivo'), async (req: AuthRequest, res) => {
-  const { cursoId, titulo, descripcion, tipo, url, contenido } = req.body;
+  const { cursoId, materiaId, titulo, descripcion, tipo, url, contenido } = req.body;
   const { colegioId, id: uploadedBy } = req.user!;
 
   try {
+    // Validar que se proporcionen los campos requeridos
+    if (!cursoId || !materiaId) {
+      return res.status(400).json({ message: 'cursoId y materiaId son obligatorios.' });
+    }
+
     const nuevoMaterial = await Material.create({
-      colegioId,
-      cursoId,
       titulo,
+      tipo: tipo || 'otro',
+      url: url || '',
+      cursoId,
+      materiaId, // Campo requerido en nueva estructura
+      // Campos adicionales para compatibilidad
+      colegioId,
       descripcion,
-      tipo,
-      url,
       contenido,
       uploadedBy,
     });

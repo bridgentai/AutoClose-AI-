@@ -38,13 +38,12 @@ export default function StudentPage() {
     enabled: !!user?.id,
   });
 
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
-
-  const { data: assignments = [] } = useQuery<Assignment[]>({
-    queryKey: ['/api/assignments/curso', user?.curso, currentMonth, currentYear],
-    enabled: !!user?.curso,
+  // Query para obtener tareas del estudiante basado en su grupo (igual que el calendario oficial)
+  const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
+    queryKey: ['studentAssignments', user?.curso],
+    queryFn: () => apiRequest('GET', '/api/assignments/student'),
+    enabled: !!user?.id && !!user?.curso,
+    staleTime: 0,
   });
 
   const handleDayClick = (assignment: any) => {
@@ -152,11 +151,20 @@ export default function StudentPage() {
           <CardHeader>
             <CardTitle className="text-white">Calendario de Tareas</CardTitle>
             <CardDescription className="text-white/60">
-              {isLoadingCourses ? 'Cargando cursos...' : `Tareas de ${numCursos} cursos activos.`}
+              {isLoadingAssignments 
+                ? 'Cargando tareas...' 
+                : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Calendar assignments={assignments} onDayClick={handleDayClick} />
+            {isLoadingAssignments ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-white/60">Cargando calendario...</p>
+              </div>
+            ) : (
+              <Calendar assignments={assignments} onDayClick={handleDayClick} />
+            )}
           </CardContent>
         </Card>
       </div>

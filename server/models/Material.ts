@@ -1,31 +1,31 @@
-import { Schema, model } from 'mongoose';
+import { Schema, model, Types } from 'mongoose';
 
 interface IMaterial {
-  colegioId: string;
-  cursoId: Schema.Types.ObjectId;
   titulo: string;
+  tipo: string;
+  url: string;
+  cursoId: Types.ObjectId;
+  materiaId: Types.ObjectId;
+  // Campos adicionales para compatibilidad
+  colegioId?: string;
   descripcion?: string;
-  tipo: 'pdf' | 'documento' | 'video' | 'enlace' | 'otro';
-  url?: string;
   contenido?: string;
-  uploadedBy: Schema.Types.ObjectId;
+  uploadedBy?: Types.ObjectId;
   createdAt: Date;
 }
 
 const materialSchema = new Schema<IMaterial>({
-  colegioId: { type: String, required: true },
-  cursoId: { type: Schema.Types.ObjectId, ref: 'Course', required: true },
   titulo: { type: String, required: true },
+  tipo: { type: String, required: true },
+  url: { type: String, required: true },
+  cursoId: { type: Schema.Types.ObjectId, ref: 'cursos', required: true },
+  materiaId: { type: Schema.Types.ObjectId, ref: 'materias', required: true },
+  // Campos adicionales para compatibilidad
+  colegioId: { type: String },
   descripcion: { type: String },
-  tipo: { 
-    type: String, 
-    required: true, 
-    enum: ['pdf', 'documento', 'video', 'enlace', 'otro'] 
-  },
-  url: { type: String },
-  contenido: { type: String }, // Para contexto de IA
-  uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  contenido: { type: String },
+  uploadedBy: { type: Schema.Types.ObjectId, ref: 'usuarios' },
   createdAt: { type: Date, default: Date.now },
 });
 
-export const Material = model<IMaterial>('Material', materialSchema);
+export const Material = model<IMaterial>('materiales', materialSchema);

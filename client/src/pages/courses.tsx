@@ -173,7 +173,7 @@ Materias: {subjectNames.join(', ') || 'Sin materias asignadas'}
 <p className="text-sm text-white/40 mt-1">Estudiantes: {group.totalStudents}</p>
 </CardHeader>
 
-<CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+<CardContent className="p-4 pt-0 md:p-6 md:pt-0 space-y-2">
 <Button
 variant="outline"
 className="w-full border-white/10 text-white hover:bg-white/10"
@@ -184,6 +184,17 @@ handleCourseClick(group.groupId, true);
 >
 Gestionar Tareas
 </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setLocation(`/profesor/cursos/${group.groupId}/notas`);
+                    }}
+                  >
+                    <GraduationCap className="w-4 h-4 mr-2" />
+                    Notas del Curso
+                  </Button>
 </CardContent>
 </Card>
 );
@@ -238,7 +249,7 @@ style={{ backgroundColor: displayColor }}
 <p className="text-xs text-white/30">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
 </CardHeader>
 
-<CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+<CardContent className="p-4 pt-0 md:p-6 md:pt-0 space-y-2">
 <Button
 variant="outline"
 className="w-full border-white/10 text-white hover:bg-white/10"
@@ -249,6 +260,19 @@ handleCourseClick(course._id);
 >
 {isDirectivo ? 'Ver Detalle' : 'Ingresar'}
 </Button>
+{!isDirectivo && (
+<Button
+variant="outline"
+className="w-full border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+onClick={e => {
+e.stopPropagation();
+setLocation('/mi-aprendizaje/notas');
+}}
+>
+<GraduationCap className="w-4 h-4 mr-2" />
+Ver Notas
+</Button>
+)}
 </CardContent>
 </Card>
 );

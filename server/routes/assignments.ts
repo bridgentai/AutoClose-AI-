@@ -110,16 +110,23 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       });
     }
 
+    // Obtener materiaId del curso
+    const materiaId = course.materiaId || course._id; // Fallback si no tiene materiaId
+    
     const newAssignment = new Assignment({
       titulo,
       descripcion,
-      curso,
-      courseId: courseId || undefined,
-      fechaEntrega: new Date(fechaEntrega),
+      cursoId: courseId, // Campo requerido en nueva estructura
+      materiaId: materiaId, // Campo requerido en nueva estructura
       profesorId: user._id,
-      profesorNombre: user.nombre,
-      colegioId: user.colegioId,
+      fechaEntrega: new Date(fechaEntrega),
+      entregas: [],
       adjuntos: adjuntos || [],
+      colegioId: user.colegioId,
+      // Campos adicionales para compatibilidad
+      curso: curso,
+      courseId: courseId,
+      profesorNombre: user.nombre,
     });
 
     await newAssignment.save();
@@ -127,6 +134,59 @@ router.post('/', protect, async (req: AuthRequest, res) => {
     return res.status(201).json(newAssignment);
   } catch (err: any) {
     console.error('Error al crear tarea:', err.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// GET /api/assignments - Obtener tareas con query params (courseId, groupId, month, year)
+router.get('/', protect, async (req: AuthRequest, res) => {
+  try {
+    const { courseId, groupId, month, year } = req.query;
+    
+    // Obtener el usuario para filtrar por colegio
+    const user = await User.findById(req.userId).select('rol curso colegioId').lean();
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    // Construir query base
+    const query: any = {
+      colegioId: user.colegioId,
+    };
+
+    // Filtrar por courseId o groupId
+    if (courseId) {
+      query.courseId = courseId;
+    } else if (groupId) {
+      query.curso = groupId;
+    }
+
+    // Filtrar por mes y año si se proporcionan
+    if (month && year) {
+      const mesNum = parseInt(month as string);
+      const yearNum = parseInt(year as string);
+      const primerDia = new Date(yearNum, mesNum - 1, 1);
+      const ultimoDia = new Date(yearNum, mesNum, 0, 23, 59, 59);
+      
+      query.fechaEntrega = {
+        $gte: primerDia,
+        $lte: ultimoDia,
+      };
+    }
+
+    // Si es estudiante, también filtrar por su curso
+    if (user.rol === 'estudiante' && user.curso) {
+      query.curso = user.curso;
+    }
+
+    const assignments = await Assignment.find(query)
+      .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
+      .sort({ fechaEntrega: 1 })
+      .lean();
+
+    return res.json(assignments);
+  } catch (err: any) {
+    console.error('Error al obtener tareas:', err.message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -227,7 +287,7 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
 // GET /api/assignments/student - Obtener tareas del estudiante autenticado basado en su grupoId
 router.get('/student', protect, async (req: AuthRequest, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findById(req.userId).select('rol curso colegioId').lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
@@ -258,7 +318,10 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
         $gte: primerDia,
         $lte: ultimoDia,
       },
-    }).sort({ fechaEntrega: 1 });
+    })
+    .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
+    .sort({ fechaEntrega: 1 })
+    .lean();
 
     console.log(`Found ${assignments.length} assignments for student in curso ${user.curso}`);
 
@@ -274,8 +337,8 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
   try {
     const { curso, mes, año } = req.params;
     
-    // Obtener el usuario para filtrar por colegio
-    const user = await User.findById(req.userId);
+    // Obtener el usuario para filtrar por colegio - optimizado
+    const user = await User.findById(req.userId).select('colegioId').lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
@@ -295,7 +358,10 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
         $gte: primerDia,
         $lte: ultimoDia,
       },
-    }).sort({ fechaEntrega: 1 });
+    })
+    .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
+    .sort({ fechaEntrega: 1 })
+    .lean();
 
     return res.json(assignments);
   } catch (err: any) {
@@ -325,7 +391,10 @@ router.get('/profesor/:profesorId/:mes/:year', protect, async (req: AuthRequest,
         $gte: primerDia,
         $lte: ultimoDia,
       },
-    }).sort({ fechaEntrega: 1 });
+    })
+    .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
+    .sort({ fechaEntrega: 1 })
+    .lean();
 
     console.log(`Found ${assignments.length} assignments for profesor ${profesorId}`);
 

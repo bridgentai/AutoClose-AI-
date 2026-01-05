@@ -1,9 +1,12 @@
 import { useAuth } from '@/lib/authContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Link as LinkIcon, Video, Download } from 'lucide-react';
+import { FileText, Link as LinkIcon, Video, Download, GraduationCap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useLocation } from 'wouter';
 
 export default function Materials() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
 
   const materials = [
     { id: 1, titulo: 'Guía de Estudio - Cálculo Diferencial', tipo: 'pdf', curso: 'Matemáticas', fecha: '2025-01-10' },
@@ -28,11 +31,6 @@ export default function Materials() {
     }
   };
 
-  const isEstudiante = user?.rol === 'estudiante';
-  const bgGradient = isEstudiante 
-    ? 'bg-[#001855]'
-    : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
-
   return (
     <div className="flex-1 overflow-auto p-8">
         <div className="max-w-7xl mx-auto">
@@ -47,21 +45,31 @@ export default function Materials() {
             </p>
           </div>
 
-          {user?.rol === 'profesor' && (
-            <div className="mb-6">
+          <div className="mb-6 flex gap-4">
+            {user?.rol === 'profesor' && (
               <button className="px-6 py-3 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white rounded-xl font-medium transition-opacity">
                 + Subir Nuevo Material
               </button>
-            </div>
-          )}
+            )}
+            {user?.rol === 'estudiante' && (
+              <Button
+                variant="outline"
+                className="border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                onClick={() => setLocation('/mi-aprendizaje/notas')}
+              >
+                <GraduationCap className="w-4 h-4 mr-2" />
+                Ver mis Notas
+              </Button>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 gap-4">
             {materials.map((material) => (
-              <Card key={material.id} className={`backdrop-blur-md hover-elevate transition-all cursor-pointer ${isEstudiante ? 'bg-[#1e3a8a]/20 border-[#3b82f6]/30' : 'bg-white/5 border-white/10'}`}>
+              <Card key={material.id} className="backdrop-blur-md hover-elevate transition-all cursor-pointer bg-white/5 border-white/10">
                 <CardContent className="p-5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${isEstudiante ? 'bg-gradient-to-br from-[#3b82f6] to-[#1e3a8a]' : 'bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]'}`}>
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
                         {getIcon(material.tipo)}
                       </div>
                       
@@ -77,7 +85,7 @@ export default function Materials() {
                       </div>
                     </div>
 
-                    <button className={`p-2 rounded-lg transition-colors ${isEstudiante ? 'hover:bg-[#3b82f6]/20 text-[#facc15]' : 'hover:bg-white/5 text-white/70 hover:text-white'}`}>
+                    <button className="p-2 rounded-lg transition-colors hover:bg-white/5 text-white/70 hover:text-white">
                       <Download className="w-5 h-5" />
                     </button>
                   </div>

@@ -1,4 +1,4 @@
-import { Schema, model } from 'mongoose';
+import { Schema, model, Types } from 'mongoose';
 
 interface IChatMessage {
   emisor: 'user' | 'ai';
@@ -6,39 +6,45 @@ interface IChatMessage {
   timestamp: Date;
 }
 
-interface IChatSession {
-  colegioId: string;
-  userId: Schema.Types.ObjectId;
-  titulo: string;
-  contexto: {
+interface IChat {
+  cursoId: Types.ObjectId;
+  participantes: Types.ObjectId[];
+  // Campos adicionales para compatibilidad
+  colegioId?: string;
+  userId?: Types.ObjectId;
+  titulo?: string;
+  contexto?: {
     tipo: string;
     referenciaId?: string;
   };
-  historial: IChatMessage[];
+  historial?: IChatMessage[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-const chatSessionSchema = new Schema<IChatSession>({
-  colegioId: { type: String, required: true },
-  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  titulo: { type: String, required: true },
+const chatSchema = new Schema<IChat>({
+  cursoId: { type: Schema.Types.ObjectId, ref: 'cursos', required: true },
+  participantes: [{ type: Schema.Types.ObjectId, ref: 'usuarios', default: [] }],
+  // Campos adicionales para compatibilidad
+  colegioId: { type: String },
+  userId: { type: Schema.Types.ObjectId, ref: 'usuarios' },
+  titulo: { type: String },
   contexto: {
-    tipo: { type: String, required: true },
+    tipo: { type: String },
     referenciaId: { type: String },
   },
   historial: [{
-    emisor: { type: String, enum: ['user', 'ai'], required: true },
-    contenido: { type: String, required: true },
+    emisor: { type: String, enum: ['user', 'ai'] },
+    contenido: { type: String },
     timestamp: { type: Date, default: Date.now },
   }],
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
 
-chatSessionSchema.pre('save', function(next) {
+chatSchema.pre('save', function(next) {
   this.updatedAt = new Date();
   next();
 });
 
-export const ChatSession = model<IChatSession>('ChatSession', chatSessionSchema);
+export const ChatSession = model<IChat>('chats', chatSchema);

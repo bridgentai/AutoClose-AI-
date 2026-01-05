@@ -106,11 +106,6 @@ const plataformas = [
 export default function PlataformasPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-
-  const isEstudiante = user?.rol === 'estudiante';
-  const bgGradient = isEstudiante 
-    ? 'bg-[#001855]'
-    : 'bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]';
   
   return (
     <div className="flex-1 overflow-auto p-8">
@@ -130,7 +125,7 @@ export default function PlataformasPage() {
                   return (
                     <Card 
                       key={plataforma.id} 
-                      className={`backdrop-blur-md hover-elevate group ${isEstudiante ? 'bg-[#1e3a8a]/20 border-[#3b82f6]/30' : 'bg-white/5 border-white/10'}`}
+                      className="backdrop-blur-md hover-elevate group bg-white/5 border-white/10"
                       data-testid={`card-plataforma-${plataforma.id}`}
                     >
                       <CardHeader className="pb-3">
@@ -147,7 +142,7 @@ export default function PlataformasPage() {
                       <CardContent className="pt-0">
                         <Button
                           onClick={() => window.open(plataforma.url, '_blank')}
-                          className={`w-full hover:opacity-90 ${isEstudiante ? 'bg-[#facc15] text-[#1e3a8a] hover:bg-[#eab308]' : 'bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]'}`}
+                          className="w-full hover:opacity-90 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]"
                           data-testid={`button-open-${plataforma.id}`}
                         >
                           <ExternalLink className="w-4 h-4 mr-2" />

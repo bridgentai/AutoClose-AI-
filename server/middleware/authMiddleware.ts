@@ -5,8 +5,7 @@ import { User } from '../models';
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
-  console.error('❌ Error: JWT_SECRET no está configurado');
-  process.exit(1);
+  throw new Error('JWT_SECRET no está configurado');
 }
 
 interface JwtPayload {
@@ -17,7 +16,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     colegioId: string;
-    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre';
+    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
     curso?: string;
   };
 }
