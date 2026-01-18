@@ -120,20 +120,21 @@ export function QuickActions() {
                     onClick={() => handlePageClick(page.path)}
                     className={cn(
                       "group flex items-center gap-3 px-4 py-3 rounded-xl",
-                      "bg-white/5 backdrop-blur-xl border border-white/10",
+                      "glass-enhanced border border-white/10",
                       "hover:bg-white/10 hover:border-white/20",
-                      "transition-all duration-200 shadow-lg",
-                      "text-white text-sm font-medium",
-                      "animate-in fade-in slide-in-from-left-2",
+                      "transition-all duration-300 transition-bounce shadow-lg depth-1",
+                      "text-white text-sm font-medium text-expressive-subtitle",
+                      "hover-lift",
                       "min-w-[200px]",
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <div className={cn(
                       "w-10 h-10 rounded-lg bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center",
-                      "group-hover:scale-110 transition-transform"
+                      "group-hover:scale-110 transition-transform duration-300",
+                      "badge-glow"
                     )}>
-                      <Icon className="w-5 h-5 text-white" />
+                      <Icon className="w-5 h-5 text-white animate-float" style={{ animationDelay: `${index * 0.1}s` }} />
                     </div>
                     <span className="flex-1 text-left">{page.label}</span>
                   </button>
@@ -156,18 +157,20 @@ export function QuickActions() {
             "hover:from-[#c66bff] hover:to-[#9f25b8]",
             "shadow-lg shadow-[#9f25b8]/30",
             "hover:shadow-xl hover:shadow-[#9f25b8]/50",
-            "transition-all duration-200",
+            "transition-all duration-300 transition-bounce",
             "flex items-center justify-center",
             "hover:scale-110 active:scale-95",
             "border border-white/20",
             "relative z-50",
+            "hover-glow pulse-purple",
+            "badge-glow",
           )}
           aria-label="Páginas recientes"
         >
           {isOpen ? (
-            <X className="w-6 h-6 text-white" />
+            <X className="w-6 h-6 text-white animate-rotate-diagonal" />
           ) : (
-            <Clock className="w-6 h-6 text-white" />
+            <Clock className="w-6 h-6 text-white animate-float" />
           )}
         </button>
       </div>

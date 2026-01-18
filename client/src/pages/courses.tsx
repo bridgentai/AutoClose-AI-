@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { GraduationCap, ArrowRight, AlertCircle, BookOpen, Users, Home, ClipboardList, Settings } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLocation } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { NavBackButton } from '@/components/nav-back-button';
 
 // =========================================================
 // 1. INTERFACES Y CONSTANTES
@@ -51,6 +52,47 @@ const GRADIENT_COLORS = [
 'from-fuchsia-500 to-pink-500',
 ];
 
+// Función para generar un color único basado en un curso/grupo (igual que en Calendar.tsx)
+const generateColorFromId = (id: string): string => {
+  if (!id) return '#9f25b8'; // Color por defecto si no hay ID
+  
+  // Hash simple basado en el string
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  // Paleta de colores vibrantes (incluyendo púrpuras y otros colores)
+  const colors = [
+    '#9f25b8', // Purple Core
+    '#6a0dad', // Purple Deep
+    '#c66bff', // Purple Light
+    '#3b82f6', // Blue
+    '#10b981', // Green
+    '#f59e0b', // Amber
+    '#ef4444', // Red
+    '#8b5cf6', // Violet
+    '#06b6d4', // Cyan
+    '#f97316', // Orange
+    '#ec4899', // Pink
+    '#14b8a6', // Teal
+    '#6366f1', // Indigo
+    '#84cc16', // Lime
+    '#f43f5e', // Rose
+  ];
+  
+  // Usar el hash para seleccionar un color de la paleta
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+};
+
+// Función para obtener el nombre del grupo desde el grupoId
+const getGroupDisplayName = (groupId: string): string => {
+  // El backend ahora siempre devuelve el nombre del grupo, no ObjectIds
+  // Solo normalizamos a mayúsculas para consistencia
+  return groupId.toUpperCase().trim();
+};
+
 // 🎯 FUNCIÓN DE FETCHING - MODIFICADA para reflejar la nueva lógica
 const fetchCoursesByRole = async (userRole: string | undefined): Promise<Course[]> => {
 if (!userRole) return [];
@@ -82,6 +124,19 @@ const fetchProfessorGroups = async (): Promise<ProfessorGroupAssignment[]> => {
 return apiRequest('GET', '/api/professor/my-groups');
 };
 
+// Función para obtener estudiantes de un grupo (igual que en course-detail.tsx)
+const fetchStudentsByGroup = async (groupId: string): Promise<number> => {
+  try {
+    const grupoIdNormalizado = groupId.toUpperCase().trim();
+    const response = await apiRequest('GET', `/api/groups/${grupoIdNormalizado}/students`);
+    const students = Array.isArray(response) ? response : [];
+    return students.length;
+  } catch (error) {
+    console.error('Error al obtener estudiantes:', error);
+    return 0;
+  }
+};
+
 // =========================================================
 // 2. COMPONENTE PRINCIPAL
 // =========================================================
@@ -109,6 +164,43 @@ const isLoading = isLoadingCourses || isLoadingGroups;
 const error = errorCourses || errorGroups;
 const coursesToRender = userRole === 'profesor' ? professorGroups : courses;
 
+// Generar colores únicos para cada grupo (garantiza consistencia) - al nivel del componente
+const groupColorsMap = useMemo(() => {
+  if (userRole !== 'profesor' || !professorGroups || professorGroups.length === 0) {
+    return new Map<string, string>();
+  }
+  const map = new Map<string, string>();
+  professorGroups.forEach((group) => {
+    if (!map.has(group.groupId)) {
+      map.set(group.groupId, generateColorFromId(group.groupId));
+    }
+  });
+  return map;
+}, [professorGroups, userRole]);
+
+// Obtener el número real de estudiantes para cada grupo
+const studentsQueries = useQueries({
+  queries: userRole === 'profesor' && professorGroups ? professorGroups.map((group) => ({
+    queryKey: ['groupStudents', group.groupId],
+    queryFn: () => fetchStudentsByGroup(group.groupId),
+    enabled: !!group.groupId,
+    staleTime: 5 * 60 * 1000, // 5 minutos
+    gcTime: 10 * 60 * 1000, // 10 minutos de caché
+  })) : [],
+});
+
+// Crear un mapa de grupoId -> número de estudiantes
+const studentsCountMap = useMemo(() => {
+  const map = new Map<string, number>();
+  if (userRole === 'profesor' && professorGroups && studentsQueries.length > 0) {
+    professorGroups.forEach((group, index) => {
+      const studentCount = studentsQueries[index]?.data ?? group.totalStudents ?? 0;
+      map.set(group.groupId, studentCount);
+    });
+  }
+  return map;
+}, [studentsQueries, professorGroups, userRole]);
+
 // ------------------------------
 // Handlers
 // ------------------------------
@@ -124,78 +216,81 @@ setLocation(`/course-detail/${id}`);
 // 🎯 VISTA PARA PROFESOR - Muestra los GRUPOS que está dictando
 const renderProfessorView = () => {
 
-const groups = professorGroups;
+const groups = professorGroups || [];
 
 return (
 <>
+<NavBackButton to="/profesor/academia" label="Academia" />
 {/* 🎯 CAMBIO APLICADO: Botón de Asignación junto al título */}
-<div className="flex justify-between items-center mb-6">
+<div className="flex justify-between items-center mb-6 mt-4">
 <h2 className="text-3xl font-bold text-white font-['Poppins']">Mis Grupos Asignados</h2>
-<Button 
-variant="outline" 
+<Button 
+variant="outline" 
 className="border-white/10 text-white hover:bg-white/10"
-onClick={() => setLocation('/group-assignment')} 
+onClick={() => setLocation('/group-assignment')} 
 >
 <Settings className="w-4 h-4 mr-2" />
 Gestionar Asignaciones
 </Button>
 </div>
-<p className="text-white/60 mb-8">
+<p className="text-white/60 mb-8 font-['Inter']">
 Estos son los grupos a los que has asignado tus materias. Haz clic para gestionarlos.
 </p>
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-{groups.map((group, index) => {
-const colorClass = GRADIENT_COLORS[index % GRADIENT_COLORS.length];
-
-const subjectNames = group.subjects.map(s => s.nombre);
+{groups.map((group) => {
+const groupDisplayName = getGroupDisplayName(group.groupId);
+const groupColor = groupColorsMap.get(group.groupId) || '#9f25b8';
 
 return (
 <Card
 key={group.groupId}
-className={`bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group`}
-onClick={() => handleCourseClick(group.groupId, true)} // Envía el ID del Grupo
+className="relative bg-white/5 border border-white/10 backdrop-blur-md cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:bg-white/[0.07] overflow-hidden"
+style={{
+  boxShadow: '0 0 0 0px transparent',
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+}}
+onMouseEnter={(e) => {
+  e.currentTarget.style.boxShadow = `0 8px 32px -4px ${groupColor}40, 0 0 0 1px ${groupColor}30`;
+  e.currentTarget.style.borderColor = `${groupColor}50`;
+}}
+onMouseLeave={(e) => {
+  e.currentTarget.style.boxShadow = '0 0 0 0px transparent';
+  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+}}
+onClick={() => handleCourseClick(group.groupId, true)}
 >
-<CardHeader className="p-4 md:p-6">
+{/* Gradiente animado sutil de fondo */}
+<div 
+  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+  style={{
+    background: `radial-gradient(circle at 50% 0%, ${groupColor}08 0%, transparent 70%)`,
+  }}
+/>
+
+<CardHeader className="relative p-6 pb-4">
 <div className="flex items-center justify-between mb-4">
 <div
-className={`w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r ${colorClass}`}
->
-<Users className="w-8 h-8 text-white" />
-</div>
-<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
-</div>
-
-<CardTitle className="text-white text-3xl font-bold">{group.groupId}</CardTitle>
-<CardDescription className="text-white/60 line-clamp-2 mt-1">
-Materias: {subjectNames.join(', ') || 'Sin materias asignadas'}
-</CardDescription>
-<p className="text-sm text-white/40 mt-1">Estudiantes: {group.totalStudents}</p>
-</CardHeader>
-
-<CardContent className="p-4 pt-0 md:p-6 md:pt-0 space-y-2">
-<Button
-variant="outline"
-className="w-full border-white/10 text-white hover:bg-white/10"
-onClick={e => {
-e.stopPropagation();
-handleCourseClick(group.groupId, true);
+className="relative w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg"
+style={{ 
+  backgroundColor: `${groupColor}20`, 
+  borderColor: groupColor, 
+  borderWidth: '2px',
+  boxShadow: `0 0 20px ${groupColor}30`,
+  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
 }}
 >
-Gestionar Tareas
-</Button>
-                  <Button
-                    variant="outline"
-                    className="w-full border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
-                    onClick={e => {
-                      e.stopPropagation();
-                      setLocation(`/profesor/cursos/${group.groupId}/notas`);
-                    }}
-                  >
-                    <GraduationCap className="w-4 h-4 mr-2" />
-                    Notas del Curso
-                  </Button>
-</CardContent>
+<Users className="w-10 h-10 transition-all duration-300" style={{ color: groupColor }} />
+</div>
+<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300" />
+</div>
+
+<CardTitle className="text-white text-3xl font-bold mb-3 font-['Poppins']">{groupDisplayName}</CardTitle>
+{/* Subtexto informativo */}
+<p className="text-sm text-white/60 font-['Inter'] font-medium">
+  <span className="text-white/70">Estudiantes:</span> {studentsCountMap.get(group.groupId) ?? group.totalStudents ?? 0}
+</p>
+</CardHeader>
 </Card>
 );
 })}
@@ -214,7 +309,8 @@ const description = isDirectivo
 
 return (
 <>
-<h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">{title}</h2>
+<NavBackButton to="/dashboard" label="Dashboard" />
+<h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">{title}</h2>
 <p className="text-white/60 mb-8">{description}</p>
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -286,7 +382,8 @@ Ver Notas
 const renderParentView = () => {
 return (
 <>
-<h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Materias de tus Hijos</h2>
+<NavBackButton to="/dashboard" label="Dashboard" />
+<h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Materias de tus Hijos</h2>
 <p className="text-white/60 mb-8">
 Revisa las materias y el progreso de los estudiantes a tu cargo.
 </p>

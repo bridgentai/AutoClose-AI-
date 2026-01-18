@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot } from 'lucide-react';
+import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ interface AIChatBoxProps {
 }
 
 function AIChatBox({ rol }: AIChatBoxProps) {
+  const [, setLocation] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -41,11 +42,19 @@ function AIChatBox({ rol }: AIChatBoxProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Usar requestAnimationFrame para asegurar que el DOM se haya actualizado
+    requestAnimationFrame(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    // Scroll suave cuando se agregan nuevos mensajes
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
   }, [messages]);
 
   const handleSend = useCallback(async () => {
@@ -53,119 +62,150 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 
     const userMessage: Message = { emisor: 'user', contenido: input, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setLoading(true);
 
     try {
-      let currentSessionId = sessionId;
-      if (!currentSessionId) {
-        const newSession = await apiRequest<{ sessionId: string }>('POST', '/api/chat/new', {
-          titulo: `Chat ${new Date().toLocaleDateString()}`,
-          contextoTipo: `${rol}_dashboard`,
-        });
-        currentSessionId = newSession.sessionId;
-        setSessionId(currentSessionId);
-      }
+      // Construir historial de conversación para el contexto
+      const conversationHistory = messages.map(msg => ({
+        role: msg.emisor === 'user' ? 'user' as const : 'assistant' as const,
+        content: msg.contenido
+      }));
 
-      const response = await apiRequest<{ aiResponse: string }>('POST', `/api/chat/${currentSessionId}/message`, {
-        mensaje: userMessage.contenido,
-        emisor: 'user',
+      // Llamar al nuevo endpoint del Chat AI Global
+      const response = await apiRequest<{ success: boolean; response: string; error?: string }>('POST', '/api/ai/chat', {
+        message: currentInput,
+        contexto_extra: {
+          rol,
+          contextoTipo: `${rol}_dashboard`,
+        },
+        conversationHistory,
       });
 
-      const aiMessage: Message = { emisor: 'ai', contenido: response.aiResponse, timestamp: new Date() };
+      if (!response.success) {
+        throw new Error(response.error || 'Error al procesar el mensaje');
+      }
+
+      const aiMessage: Message = { emisor: 'ai', contenido: response.response, timestamp: new Date() };
       setMessages(prev => [...prev, aiMessage]);
+      // Scroll después de agregar el mensaje de AI
+      setTimeout(() => scrollToBottom(), 100);
     } catch (error: any) {
       console.error('Error en chat:', error);
-      const errorMessage: Message = { emisor: 'ai', contenido: 'Lo siento, ocurrio un error al procesar tu mensaje.', timestamp: new Date() };
+      let errorText = 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
+      
+      if (error.message) {
+        errorText = error.message;
+      } else if (error.response) {
+        errorText = error.response.message || error.response.error || errorText;
+      }
+      
+      const errorMessage: Message = { 
+        emisor: 'ai', 
+        contenido: errorText, 
+        timestamp: new Date() 
+      };
       setMessages(prev => [...prev, errorMessage]);
+      // Scroll después de agregar el mensaje de error
+      setTimeout(() => scrollToBottom(), 100);
     } finally {
       setLoading(false);
     }
-  }, [input, loading, sessionId, rol]);
+  }, [input, loading, messages, rol]);
 
   return (
-    <Card className={`${CARD_STYLE} flex flex-col h-[60vh] min-h-[400px] mt-6`}>
-      <CardHeader className="border-b border-white/10 p-4">
-        <CardTitle className="text-white flex items-center gap-2">
-          <Bot className="w-6 h-6 text-[#9f25b8]" />
+    <Card
+      className={`${CARD_STYLE} cursor-pointer flex flex-col h-full gradient-overlay-purple hover-glow`}
+      onClick={() => setLocation('/chat')}
+    >
+      <CardHeader className="pb-3 flex-shrink-0">
+        <CardTitle className="text-white flex items-center gap-2 text-lg text-expressive">
+          <Bot className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
           Asistente AutoClose IA ({rol.toUpperCase()})
         </CardTitle>
-        <CardDescription className="text-white/60">
+        <CardDescription className="text-white/60 text-sm text-expressive-subtitle">
           Pide tareas, revisa pendientes o crea materiales.
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="flex-1 overflow-y-auto p-6 space-y-4">
-        {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className={`w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br ${GRADIENT_STYLE}`}>
-                <MessageSquare className={`w-8 h-8 text-white`} />
+      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-0 min-h-0">
+        <div className="flex-1 space-y-3 overflow-y-auto pr-2">
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className={`w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center bg-gradient-to-br ${GRADIENT_STYLE} badge-glow animate-float`}>
+                  <MessageSquare className="w-7 h-7 text-white" />
+                </div>
+                <h2 className="text-lg font-semibold text-white mb-1.5 text-expressive">
+                  {rol === 'estudiante' ? 'Tu centro de comandos' : 'Asistente de Productividad'}
+                </h2>
+                <p className="text-white/60 text-sm text-expressive-subtitle">
+                  Escribe un comando o una pregunta para comenzar.
+                </p>
               </div>
-              <h2 className="text-xl font-bold text-white mb-2">
-                {rol === 'estudiante' ? 'Tu centro de comandos' : 'Asistente de Productividad'}
-              </h2>
-              <p className="text-white/60 text-sm">
-                Escribe un comando o una pregunta para comenzar.
-              </p>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.emisor === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+          ) : (
+            <div className="space-y-3 py-2">
+              {messages.map((msg, idx) => (
                 <div
-                  className={`max-w-[80%] px-4 py-2 rounded-xl text-sm ${
-                    msg.emisor === 'user'
-                      ? 'bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white rounded-br-sm'
-                      : 'bg-white/95 text-gray-900 border border-[#9f25b8] rounded-bl-sm'
-                  }`}
+                  key={idx}
+                  className={`flex ${msg.emisor === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
+                  <div
+                    className={`max-w-[85%] px-3 py-2 rounded-lg text-sm transition-smooth reveal-scale ${msg.emisor === 'user'
+                      ? 'bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white hover-glow'
+                      : 'bg-white/10 text-white border border-white/20 glass-enhanced'
+                      }`}
+                    style={{ animationDelay: `${idx * 0.1}s` }}
+                  >
+                    <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-            {loading && (
-              <div className="flex justify-start">
-                <div className="bg-white/10 px-4 py-2 rounded-xl rounded-bl-sm flex items-center gap-2 text-white/70">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="italic">Escribiendo...</span>
+              ))}
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="bg-white/10 px-3 py-2 rounded-lg flex items-center gap-2 text-white/70">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span className="text-sm italic">Escribiendo...</span>
+                  </div>
                 </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
+        <div className="border-t border-white/10 pt-3 mt-3 flex-shrink-0">
+          <div className="flex gap-2 items-center">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Escribe tu mensaje..."
+              className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-white/40 focus:border-[#9f25b8]/50 focus:ring-1 focus:ring-[#9f25b8]/30"
+              disabled={loading}
+              data-testid="input-dashboard-chat"
+            />
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSend();
+              }}
+              disabled={loading || !input.trim()}
+              size="icon"
+              className="w-10 h-10 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              data-testid="button-dashboard-send"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </Button>
           </div>
-        )}
+        </div>
       </CardContent>
-
-      <div className="p-4 border-t border-white/10 flex gap-3 items-center flex-shrink-0">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder="Escribe un comando o pregunta..."
-          className={`h-10 rounded-xl px-4 text-white placeholder:text-white/40 bg-white/5 border-white/10 flex-grow`}
-          disabled={loading}
-          data-testid="input-dashboard-chat"
-        />
-        <Button
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-          className={`w-10 h-10 rounded-full flex-shrink-0`}
-          style={{ background: `linear-gradient(to right, ${PURPLE_ACCENT}, ${ACCENT_DARK})` }}
-          data-testid="button-dashboard-send"
-        >
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-        </Button>
-      </div>
     </Card>
   );
 }
@@ -191,73 +231,78 @@ function EstudianteDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/mi-aprendizaje/cursos')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Mis Materias</CardTitle>
-            <BookOpen className="w-5 h-5 text-[#9f25b8]" />
+            <BookOpen className="w-5 h-5 text-[#9f25b8] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">4</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">4</div>
             <p className="text-xs text-white/60 mt-1">Materias este ano</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/mi-aprendizaje/tareas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Tareas Pendientes</CardTitle>
-            <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
+            <GraduationCap className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">{assignments.length}</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
             <p className="text-xs text-white/60 mt-1">Por entregar esta semana</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Materias Perdidas</CardTitle>
-            <AlertTriangle className={`w-5 h-5 ${RED_ALERT}`} />
+            <AlertTriangle className={`w-5 h-5 ${RED_ALERT} animate-pulse-glow`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold ${RED_ALERT}`}>2</div>
+            <div className={`text-3xl font-bold ${RED_ALERT} font-['Poppins']`}>2</div>
             <p className="text-xs text-white/60 mt-1">Requieren atencion</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple badge-glow`}
+          style={{ animationDelay: '0.4s' }}
           onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Puesto en el Salon</CardTitle>
-            <Trophy className={`w-5 h-5 text-[${YELLOW_TROPHY}]`} />
+            <Trophy className="w-5 h-5 text-[#facc15] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold text-[${YELLOW_TROPHY}]`}>#5</div>
+            <div className="text-3xl font-bold text-[#facc15] font-['Poppins']">#5</div>
             <p className="text-xs text-white/60 mt-1">De 32 estudiantes</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-purple`}
+          style={{ animationDelay: '0.5s' }}
           onClick={() => setLocation('/mi-aprendizaje/calendario')}
         >
           <CardHeader>
-            <CardTitle className="text-white">Calendario de Tareas</CardTitle>
-            <CardDescription className="text-white/60">
-              {isLoadingAssignments 
-                ? 'Cargando tareas...' 
+            <CardTitle className="text-white text-expressive">Calendario de Tareas</CardTitle>
+            <CardDescription className="text-white/60 text-expressive-subtitle">
+              {isLoadingAssignments
+                ? 'Cargando tareas...'
                 : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
               }
             </CardDescription>
@@ -268,14 +313,16 @@ function EstudianteDashboard() {
                 <p className="text-white/60">Cargando calendario...</p>
               </div>
             ) : (
-              <div onClick={(e) => e.stopPropagation()}>
+              <div onClick={(e) => e.stopPropagation()} className="pulse-purple">
                 <Calendar assignments={assignments} onDayClick={handleDayClick} />
               </div>
             )}
           </CardContent>
         </Card>
 
-        <AIChatBox rol="estudiante" />
+        <div className="reveal-slide" style={{ animationDelay: '0.6s' }}>
+          <AIChatBox rol="estudiante" />
+        </div>
       </div>
     </div>
   );
@@ -307,79 +354,53 @@ function ProfesorDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/courses')}
         >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <BookOpen className="w-5 h-5 text-[#9f25b8]" />
+            <CardTitle className="flex items-center gap-2 text-white text-expressive">
+              <BookOpen className="w-5 h-5 text-[#9f25b8] animate-float" />
               Mis Cursos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">5</div>
-            <p className="text-sm text-white/50 mt-1">Cursos a cargo</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">5</div>
+            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Cursos a cargo</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
-          onClick={() => setLocation('/courses')}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.2s' }}
+          onClick={() => setLocation('/profesor/academia/tareas')}
         >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
-              Estudiantes
+            <CardTitle className="flex items-center gap-2 text-white text-expressive">
+              <ClipboardList className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
+              Tareas por revisar
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">142</div>
-            <p className="text-sm text-white/50 mt-1">Estudiantes totales</p>
-          </CardContent>
-        </Card>
-
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
-          onClick={() => setLocation('/materials')}
-        >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <MessageSquare className="w-5 h-5 text-[#9f25b8]" />
-              Materiales
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">38</div>
-            <p className="text-sm text-white/50 mt-1">Subidos este mes</p>
-          </CardContent>
-        </Card>
-
-        <Card className={CARD_STYLE}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
-              Engagement
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">85%</div>
-            <p className="text-sm text-white/50 mt-1">Participacion promedio</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
+            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Pendientes de revisión</p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-purple`}
+          style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/teacher-calendar')}
         >
           <CardHeader>
-            <CardTitle className="text-white">Calendario de Tareas</CardTitle>
-            <CardDescription className="text-white/60">
-              {isLoadingAssignments 
-                ? 'Cargando tareas...' 
+            <CardTitle className="text-white text-expressive">Calendario de Tareas</CardTitle>
+            <CardDescription className="text-white/60 text-expressive-subtitle">
+              {isLoadingAssignments
+                ? 'Cargando tareas...'
                 : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
               }
             </CardDescription>
@@ -390,14 +411,16 @@ function ProfesorDashboard() {
                 <p className="text-white/60">Cargando calendario...</p>
               </div>
             ) : (
-              <div onClick={(e) => e.stopPropagation()}>
+              <div onClick={(e) => e.stopPropagation()} className="pulse-purple">
                 <Calendar assignments={assignments} onDayClick={handleDayClick} />
               </div>
             )}
           </CardContent>
         </Card>
 
-        <AIChatBox rol="profesor" />
+        <div className="reveal-slide" style={{ animationDelay: '0.4s' }}>
+          <AIChatBox rol="profesor" />
+        </div>
       </div>
     </div>
   );
@@ -409,54 +432,62 @@ function DirectivoDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/directivo')}
         >
           <CardHeader>
-            <CardTitle className="text-white text-sm">Profesores</CardTitle>
+            <CardTitle className="text-white text-sm text-expressive-subtitle">Profesores</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">24</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">24</div>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/directivo')}
         >
           <CardHeader>
-            <CardTitle className="text-white text-sm">Estudiantes</CardTitle>
+            <CardTitle className="text-white text-sm text-expressive-subtitle">Estudiantes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">680</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">680</div>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/courses')}
         >
           <CardHeader>
-            <CardTitle className="text-white text-sm">Cursos Activos</CardTitle>
+            <CardTitle className="text-white text-sm text-expressive-subtitle">Cursos Activos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">42</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">42</div>
           </CardContent>
         </Card>
 
-        <Card className={CARD_STYLE}>
+        <Card 
+          className={`${CARD_STYLE} reveal-scale gradient-overlay-purple hover-glow`}
+          style={{ animationDelay: '0.4s' }}
+        >
           <CardHeader>
-            <CardTitle className="text-white text-sm">Uso IA</CardTitle>
+            <CardTitle className="text-white text-sm text-expressive-subtitle">Uso IA</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">1.2k</div>
-            <p className="text-sm text-white/50 mt-1">Consultas/mes</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">1.2k</div>
+            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Consultas/mes</p>
           </CardContent>
         </Card>
       </div>
 
-      <AIChatBox rol="directivo" />
+      <div className="reveal-fade" style={{ animationDelay: '0.5s' }}>
+        <AIChatBox rol="directivo" />
+      </div>
     </div>
   );
 }
@@ -485,58 +516,62 @@ function PadreDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/parent')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Progreso Académico</CardTitle>
-            <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Progreso Académico</CardTitle>
+            <TrendingUp className="w-5 h-5 text-[#9f25b8] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">4.3</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">4.3</div>
             <p className="text-xs text-white/60 mt-1">Promedio general</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/parent')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Tareas del Hijo</CardTitle>
-            <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Tareas del Hijo</CardTitle>
+            <GraduationCap className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">{assignments.length}</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
             <p className="text-xs text-white/60 mt-1">Tareas este mes</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/parent')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Materias</CardTitle>
-            <BookOpen className="w-5 h-5 text-[#9f25b8]" />
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias</CardTitle>
+            <BookOpen className="w-5 h-5 text-[#9f25b8] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">5</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">5</div>
             <p className="text-xs text-white/60 mt-1">Materias activas</p>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer`}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple badge-glow`}
+          style={{ animationDelay: '0.4s' }}
           onClick={() => setLocation('/parent')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Asistencia</CardTitle>
-            <Trophy className="w-5 h-5 text-[#facc15]" />
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Asistencia</CardTitle>
+            <Trophy className="w-5 h-5 text-[#facc15] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">95%</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">95%</div>
             <p className="text-xs text-white/60 mt-1">Este mes</p>
           </CardContent>
         </Card>
@@ -554,13 +589,20 @@ function PadreDashboard() {
                 const score = [4.5, 4.2, 4.7][index];
                 const widthPercent = (score / 5.0) * 100;
                 return (
-                  <div key={materia} className="p-4 bg-white/5 rounded-xl">
+                  <div 
+                    key={materia} 
+                    className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-purple"
+                    style={{ animationDelay: `${0.7 + index * 0.1}s` }}
+                  >
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-white font-medium">{materia}</span>
-                      <span className="text-[#9f25b8] font-bold">{score}/5.0</span>
+                      <span className="text-white font-medium text-expressive-subtitle">{materia}</span>
+                      <span className="text-[#9f25b8] font-bold font-['Poppins']">{score}/5.0</span>
                     </div>
-                    <div className="w-full bg-white/10 rounded-full h-2">
-                      <div className={`bg-gradient-to-r ${GRADIENT_STYLE} h-2 rounded-full`} style={{ width: `${widthPercent}%` }} />
+                    <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
+                      <div 
+                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] h-3 rounded-full transition-all duration-1000 ease-out hover-glow"
+                        style={{ width: `${widthPercent}%` }}
+                      />
                     </div>
                   </div>
                 );
@@ -570,7 +612,7 @@ function PadreDashboard() {
         </Card>
 
         {assignments.length > 0 ? (
-          <Card 
+          <Card
             className={`${CARD_STYLE} cursor-pointer`}
             onClick={() => setLocation('/calendar')}
           >
@@ -612,7 +654,7 @@ export default function Dashboard() {
         'nutricion': '/nutricion',
         'cafeteria': '/cafeteria',
       };
-      
+
       if (roleRedirects[user.rol]) {
         setLocation(roleRedirects[user.rol]);
         return;
@@ -644,11 +686,11 @@ export default function Dashboard() {
 
   return (
     <div data-testid="dashboard-page">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+      <div className="mb-8 reveal-fade">
+        <h1 className="text-4xl font-bold text-white mb-2 text-expressive">
           Bienvenido, {user?.nombre?.split(' ')[0] || 'Usuario'}
         </h1>
-        <p className="text-white/60">
+        <p className="text-white/60 text-expressive-subtitle">
           {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </div>

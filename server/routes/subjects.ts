@@ -3,14 +3,15 @@ import { Course } from '../models/Course';
 import { Assignment } from '../models/Assignment';
 import { User } from '../models/User';
 import { protect, AuthRequest } from '../middleware/auth';
+import { normalizeIdForQuery } from '../utils/idGenerator';
 
 const router = Router();
 
 // GET /api/subjects/mine - Obtener materias del curso del estudiante
 router.get('/mine', protect, async (req: AuthRequest, res) => {
   try {
-    const userId = req.userId;
-    const user = await User.findById(userId);
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId);
 
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
@@ -52,8 +53,8 @@ router.get('/mine', protect, async (req: AuthRequest, res) => {
 router.get('/:id/overview', protect, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    const userId = req.userId;
-    const user = await User.findById(userId);
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId);
 
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });

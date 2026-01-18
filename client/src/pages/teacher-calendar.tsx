@@ -13,6 +13,7 @@ import { Calendar } from '@/components/Calendar';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { NavBackButton } from '@/components/nav-back-button';
 
 interface Assignment {
   _id: string;
@@ -21,6 +22,7 @@ interface Assignment {
   curso: string;
   fechaEntrega: string;
   profesorNombre: string;
+  courseId?: string;
   adjuntos?: { tipo: string; nombre: string; url: string }[];
 }
 
@@ -62,6 +64,9 @@ export default function TeacherCalendarPage() {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
+  
+  // Calcular días del mes actual para la barra de progreso
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
 
   const { data: assignments = [], refetch: refetchAssignments } = useQuery<Assignment[]>({
     queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
@@ -69,6 +74,12 @@ export default function TeacherCalendarPage() {
       console.log('Fetching assignments for professor:', user?.id, currentMonth, currentYear);
       const result = await apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
       console.log('Assignments received:', result);
+      // Debug: Verificar si courseId está presente
+      if (result && Array.isArray(result)) {
+        result.forEach((assignment: Assignment) => {
+          console.log(`Assignment: ${assignment.titulo}, curso: ${assignment.curso}, courseId: ${assignment.courseId}`);
+        });
+      }
       return result;
     },
     enabled: !!user?.id,
@@ -96,8 +107,24 @@ export default function TeacherCalendarPage() {
       toast({ title: 'Tarea creada exitosamente' });
       setIsDialogOpen(false);
       resetForm();
+      
+      // Invalidar queries del profesor
       queryClient.invalidateQueries({ queryKey: ['teacherAssignments'] });
       refetchAssignments();
+      
+      // CRÍTICO: Invalidar queries de estudiantes para que vean la tarea automáticamente
+      queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      queryClient.invalidateQueries({ 
+        queryKey: ['/api/assignments/student'],
+        exact: false 
+      });
+      
+      // Invalidar queries de calendarios de estudiantes
+      queryClient.invalidateQueries({ 
+        queryKey: ['studentAssignments'],
+        exact: false 
+      });
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'No se pudo crear la tarea', variant: 'destructive' });
@@ -116,7 +143,10 @@ export default function TeacherCalendarPage() {
   };
 
   const handleDayClick = (assignment: Assignment) => {
-    setLocation(`/assignment/${assignment._id}`);
+    // Navegar a la página de tareas del grupo (curso)
+    if (assignment.curso) {
+      setLocation(`/profesor/cursos/${assignment.curso}/tareas`);
+    }
   };
 
   const handleAddAttachment = () => {
@@ -162,23 +192,53 @@ export default function TeacherCalendarPage() {
     <div className="flex-1 overflow-auto p-8 relative">
             <div className="max-w-5xl mx-auto">
               <div className="mb-8">
-                <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-                  Mis Tareas Asignadas
+                <NavBackButton to="/dashboard" label="Dashboard" />
+                <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">
+                  Calendario General
                 </h2>
                 <p className="text-white/60">
-                  Gestiona las tareas y trabajos para tus estudiantes
+                  Acomoda tus días a tu gusto
                 </p>
               </div>
 
-              <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+              <Card className="bg-white/5 border-white/10 backdrop-blur-md relative">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-white">
-                    <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
-                    Calendario del Mes
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                      <CardTitle className="text-white">
+                        Calendario del Mes
+                      </CardTitle>
+                    </div>
+                    <Button
+                      onClick={() => setIsDialogOpen(true)}
+                      className="w-10 h-10 rounded-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 shadow-lg shadow-purple-500/30"
+                      size="icon"
+                      data-testid="button-create-assignment"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </Button>
+                  </div>
                   <CardDescription className="text-white/60">
                     {assignments.length} {assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes
                   </CardDescription>
+                  {/* Barra de progreso mensual */}
+                  {assignments.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-white/70">Progreso del mes</span>
+                        <span className="text-white font-medium">{assignments.length} tareas</span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] transition-all duration-300"
+                          style={{ 
+                            width: `${Math.min(100, (assignments.length / Math.max(1, daysInMonth)) * 100)}%` 
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="pt-6">
                   <Calendar assignments={assignments} onDayClick={handleDayClick} />
@@ -190,59 +250,31 @@ export default function TeacherCalendarPage() {
                   <CardHeader>
                     <CardTitle className="text-white">Tareas del Mes</CardTitle>
                     <CardDescription className="text-white/60">
-                      Todas las tareas que has asignado
+                      Resumen organizado de todas las tareas asignadas
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {assignments
-                        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
-                        .map((assignment) => (
-                          <div
-                            key={assignment._id}
-                            className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                            onClick={() => setLocation(`/assignment/${assignment._id}`)}
-                            data-testid={`assignment-item-${assignment._id}`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h4 className="font-semibold text-white mb-1">{assignment.titulo}</h4>
-                                <p className="text-sm text-white/70 mb-2 line-clamp-2">{assignment.descripcion}</p>
-                                <p className="text-xs text-white/50">
-                                  Curso: {assignment.curso}
-                                </p>
-                              </div>
-                              <div className="text-right ml-4">
-                                <p className="text-sm font-semibold text-[#9f25b8]">
-                                  {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO', { 
-                                    day: 'numeric',
-                                    month: 'short'
-                                  })}
-                                </p>
-                                <p className="text-xs text-white/50">
-                                  {new Date(assignment.fechaEntrega).toLocaleTimeString('es-CO', { 
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                      <div>
+                        <p className="text-white font-medium mb-1">
+                          {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} este mes
+                        </p>
+                        <p className="text-sm text-white/60">
+                          Ver resumen detallado y organizado
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => setLocation('/profesor/tareas/resumen')}
+                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                      >
+                        Ver Resumen
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
               )}
-            </div>
 
-            <Button
-              onClick={() => setIsDialogOpen(true)}
-              className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 shadow-lg shadow-purple-500/30"
-              size="icon"
-              data-testid="button-create-assignment"
-            >
-              <Plus className="w-6 h-6" />
-            </Button>
+            </div>
           </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -280,30 +312,41 @@ export default function TeacherCalendarPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Grupo/Curso *</Label>
+              <Label>Curso/Materia *</Label>
               <Select
                 value={formData.curso}
                 onValueChange={(value) => setFormData({ ...formData, curso: value })}
                 disabled={isLoadingGroups || availableGroups.length === 0}
               >
-                <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-curso">
+                <SelectTrigger className="bg-white/5 border-white/10 text-white h-auto py-2" data-testid="select-curso">
                   <SelectValue placeholder={
                     isLoadingGroups ? "Cargando grupos..." :
                     availableGroups.length === 0 ? "Sin grupos asignados" : 
-                    "Selecciona grupo"
-                  } />
+                    "Selecciona curso"
+                  }>
+                    {formData.curso && getSubjectsForGroup(formData.curso).length > 0
+                      ? getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')
+                      : formData.curso || ''}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-[#1a001c] border-white/10">
-                  {availableGroups.map((grupo) => (
-                    <SelectItem key={grupo} value={grupo} className="text-white hover:bg-white/10">
-                      {grupo}
-                    </SelectItem>
-                  ))}
+                  {availableGroups.map((grupo) => {
+                    const subjects = getSubjectsForGroup(grupo);
+                    const subjectNames = subjects.map(s => s.nombre).join(', ') || 'Sin materia asignada';
+                    return (
+                      <SelectItem key={grupo} value={grupo} className="text-white hover:bg-white/10">
+                        <div className="flex flex-col items-start py-1">
+                          <span className="font-semibold">{subjectNames}</span>
+                          <span className="text-xs text-white/60">Grupo: {grupo}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               {formData.curso && getSubjectsForGroup(formData.curso).length > 0 && (
                 <p className="text-xs text-white/50">
-                  Materia: {getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')}
+                  Grupo: {formData.curso} • Materia: {getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')}
                 </p>
               )}
               {!isLoadingGroups && availableGroups.length === 0 && (

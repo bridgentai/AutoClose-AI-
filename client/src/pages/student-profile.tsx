@@ -159,7 +159,7 @@ export default function StudentProfilePage() {
             <p className="text-white/60">Estudiante no encontrado</p>
             <Button
               variant="ghost"
-              onClick={() => setLocation(`/profesor/cursos/${cursoId}`)}
+              onClick={() => setLocation(`/course-detail/${cursoId}`)}
               className="text-white/70 hover:text-white mt-4"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -191,7 +191,7 @@ export default function StudentProfilePage() {
             <p className="text-white/60">Error al cargar la información del estudiante</p>
             <Button
               variant="ghost"
-              onClick={() => setLocation(`/profesor/cursos/${cursoId}`)}
+              onClick={() => setLocation(`/course-detail/${cursoId}`)}
               className="text-white/70 hover:text-white mt-4"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -210,7 +210,7 @@ export default function StudentProfilePage() {
         <div className="mb-8">
           <Button
             variant="ghost"
-            onClick={() => setLocation(`/profesor/cursos/${cursoId}`)}
+            onClick={() => setLocation(`/course-detail/${cursoId}`)}
             className="text-white/70 hover:text-white mb-4"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />

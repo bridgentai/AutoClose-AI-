@@ -1,5 +1,6 @@
 import { Schema, model } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { generateUserId } from '../utils/idGenerator';
 
 interface IUser {
   nombre: string;
@@ -22,6 +23,8 @@ interface IUser {
   ciudad?: string;
   fechaNacimiento?: Date;
   createdAt: Date;
+  // NUEVO: ID categorizado por rol
+  userId?: string; // ID categorizado (ej: "PROF-507f1f77bcf86cd799439011")
   matchPassword(enteredPassword: string): Promise<boolean>;
 }
 
@@ -55,6 +58,13 @@ const userSchema = new Schema<IUser>({
   ciudad: { type: String },
   fechaNacimiento: { type: Date },
   createdAt: { type: Date, default: Date.now },
+  // NUEVO: ID categorizado por rol
+  userId: { 
+    type: String, 
+    unique: true, 
+    sparse: true,
+    index: true 
+  },
 });
 
 userSchema.pre('save', async function(next) {
@@ -64,6 +74,17 @@ userSchema.pre('save', async function(next) {
   }
   if (this.correo && !this.email) {
     this.email = this.correo;
+  }
+  
+  // Generar userId categorizado si no existe y tenemos rol
+  if (!this.userId && this.rol && this._id) {
+    try {
+      const categorizedId = generateUserId(this.rol, this._id);
+      this.userId = categorizedId.fullId;
+    } catch (error: any) {
+      console.error('Error al generar userId categorizado:', error.message);
+      // Continuar sin userId si hay error (para compatibilidad)
+    }
   }
   
   // Hash de password

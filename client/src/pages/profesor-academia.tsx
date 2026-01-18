@@ -1,9 +1,10 @@
 import { Link } from "wouter";
-import { BookOpen, Users, FileText, CheckSquare, ClipboardList, Globe } from "lucide-react";
+import { BookOpen, Users, CheckSquare, Globe } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -12,24 +13,9 @@ const navigationItems = [
     icon: BookOpen,
   },
   {
-    title: "Materiales",
-    path: "/profesor/academia/materiales",
-    icon: FileText,
-  },
-  {
-    title: "Asignación de Grupos",
-    path: "/profesor/academia/grupos",
-    icon: Users,
-  },
-  {
     title: "Tareas",
     path: "/profesor/academia/tareas",
     icon: CheckSquare,
-  },
-  {
-    title: "Notas",
-    path: "/profesor/academia/notas",
-    icon: ClipboardList,
   },
   {
     title: "Plataformas",
@@ -54,7 +40,8 @@ export default function ProfesorAcademiaLayout() {
 
   return (
     <div className="p-6" data-testid="profesor-academia-layout">
-      <h1 className="text-2xl font-bold mb-6" data-testid="text-title">
+      <NavBackButton to="/dashboard" label="Dashboard" />
+      <h1 className="text-2xl font-bold mb-6 mt-4" data-testid="text-title">
         Academia: Inicio
       </h1>
 

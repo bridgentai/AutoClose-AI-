@@ -1,6 +1,7 @@
 import { Briefcase, Users, AlertTriangle, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useLocation } from 'wouter';
 
 const resumenAcademico = {
   mensajesNuevos: 5,
@@ -27,9 +28,10 @@ interface ResumenCardProps {
   icon: React.ReactElement;
   data: any;
   type: 'academico' | 'comunidad';
+  onClick?: () => void;
 }
 
-const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type }) => {
+const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onClick }) => {
   const isAcademico = type === 'academico';
   const IconWithStyle = () => {
     const iconClass = `w-10 h-10 ${isAcademico ? 'text-[#9f25b8]' : 'text-teal-400'}`;
@@ -73,6 +75,7 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type }) =>
       <Button 
         className="w-full mt-8 flex items-center justify-center gap-2 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
         data-testid={`button-bandeja-${type}`}
+        onClick={onClick}
       >
         Ir a la Bandeja de {title}
         <ChevronRight className="w-5 h-5" />
@@ -82,6 +85,17 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type }) =>
 };
 
 const ComunicacionHome: React.FC = () => {
+  const [, setLocation] = useLocation();
+
+  const handleAcademicoClick = () => {
+    setLocation('/comunicacion/academico');
+  };
+
+  const handleComunidadClick = () => {
+    // TODO: Implementar navegación a comunidad cuando esté lista
+    setLocation('/comunicacion/comunidad');
+  };
+
   return (
     <div data-testid="comunicacion-page">
       <div className="mb-10">
@@ -95,6 +109,7 @@ const ComunicacionHome: React.FC = () => {
           icon={<Briefcase />}
           data={resumenAcademico}
           type="academico"
+          onClick={handleAcademicoClick}
         />
 
         <ResumenCard
@@ -102,6 +117,7 @@ const ComunicacionHome: React.FC = () => {
           icon={<Users />}
           data={resumenComunidad}
           type="comunidad"
+          onClick={handleComunidadClick}
         />
       </div>
     </div>

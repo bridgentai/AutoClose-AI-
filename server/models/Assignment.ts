@@ -26,11 +26,12 @@ export interface ISubmission {
 export interface IAssignment {
   titulo: string;
   descripcion: string;
+  contenidoDocumento?: string; // Contenido HTML del documento extendido
   cursoId: Types.ObjectId;
   materiaId: Types.ObjectId;
   profesorId: Types.ObjectId;
   fechaEntrega: Date;
-  entregas: IEntrega[];
+  submissions: ISubmission[];
   adjuntos: string[];
   colegioId: string;
   createdAt: Date;
@@ -38,6 +39,8 @@ export interface IAssignment {
   curso?: string;
   courseId?: Types.ObjectId;
   profesorNombre?: string;
+  // Campo legacy para migración gradual
+  entregas?: IEntrega[];
 }
 
 const entregaSchema = new Schema<IEntrega>({
@@ -66,11 +69,12 @@ const submissionSchema = new Schema<ISubmission>({
 const assignmentSchema = new Schema<IAssignment>({
   titulo: { type: String, required: true },
   descripcion: { type: String, required: true },
+  contenidoDocumento: { type: String }, // Contenido HTML del documento extendido
   cursoId: { type: Schema.Types.ObjectId, ref: 'cursos', required: true },
   materiaId: { type: Schema.Types.ObjectId, ref: 'materias', required: true },
   profesorId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
   fechaEntrega: { type: Date, required: true },
-  entregas: { type: [entregaSchema], default: [] },
+  submissions: { type: [submissionSchema], default: [] },
   adjuntos: { type: [String], default: [] },
   colegioId: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
@@ -78,6 +82,8 @@ const assignmentSchema = new Schema<IAssignment>({
   curso: { type: String },
   courseId: { type: Schema.Types.ObjectId, ref: 'cursos' },
   profesorNombre: { type: String },
+  // Campo legacy para migración gradual
+  entregas: { type: [entregaSchema], default: [] },
 });
 
 // Índices para búsquedas rápidas
@@ -86,3 +92,5 @@ assignmentSchema.index({ colegioId: 1, cursoId: 1 });
 assignmentSchema.index({ profesorId: 1, fechaEntrega: 1 });
 
 export const Assignment = model<IAssignment>('tareas', assignmentSchema);
+
+export type { IAssignment, ISubmission, IAttachment };

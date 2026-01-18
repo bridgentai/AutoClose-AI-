@@ -19,7 +19,7 @@ const facturaSchema = new Schema<IFactura>({
 // Índices para búsquedas rápidas
 facturaSchema.index({ usuarioId: 1, fecha: -1 });
 facturaSchema.index({ estado: 1, fecha: -1 });
-facturaSchema.index({ facturaId: 1 });
+// facturaId ya tiene índice único por el unique: true en la definición del campo
 
 export const Factura = model<IFactura>('facturas', facturaSchema);
 

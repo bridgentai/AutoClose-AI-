@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { ArrowLeft, Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users } from 'lucide-react';
+import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,8 @@ import { useLocation, useParams } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { NavBackButton } from '@/components/nav-back-button';
+import { DocumentEditor } from '@/components/document-editor';
 
 type AttachmentType = 'pdf' | 'link' | 'imagen' | 'documento' | 'otro';
 
@@ -29,19 +31,23 @@ interface Submission {
   comentario?: string;
   fechaEntrega: string;
   calificacion?: number;
+  retroalimentacion?: string;
 }
 
 interface Assignment {
   _id: string;
   titulo: string;
   descripcion: string;
+  contenidoDocumento?: string;
   curso: string;
   courseId?: string;
   fechaEntrega: string;
   profesorId: string;
   profesorNombre: string;
   adjuntos: Attachment[];
-  entregas: Submission[];
+  submissions?: Submission[];
+  entregas?: Submission[]; // Legacy support
+  estado?: 'pendiente' | 'entregada' | 'calificada';
 }
 
 export default function AssignmentDetailPage() {
@@ -57,12 +63,31 @@ export default function AssignmentDetailPage() {
   const [submitData, setSubmitData] = useState({ comentario: '' });
   const [submitArchivos, setSubmitArchivos] = useState<Attachment[]>([]);
   const [newSubmitAttachment, setNewSubmitAttachment] = useState<Attachment>({ tipo: 'link', nombre: '', url: '' });
+  
+  // Estados para calificación (profesor)
+  const [gradingStudent, setGradingStudent] = useState<string | null>(null);
+  const [gradeData, setGradeData] = useState({ calificacion: '', retroalimentacion: '', logro: '' });
 
   const isProfesor = user?.rol === 'profesor';
 
-  const { data: assignment, isLoading, refetch } = useQuery<Assignment>({
+  const { data: assignment, isLoading, error, refetch } = useQuery<Assignment>({
     queryKey: ['/api/assignments', params.id],
+    queryFn: async () => {
+      try {
+        const result = await apiRequest('GET', `/api/assignments/${params.id}`);
+        console.log('Assignment data received:', result);
+        // Asegurar que adjuntos sea un array
+        if (result && !Array.isArray(result.adjuntos)) {
+          result.adjuntos = [];
+        }
+        return result;
+      } catch (err) {
+        console.error('Error fetching assignment:', err);
+        throw err;
+      }
+    },
     enabled: !!params.id,
+    staleTime: 0,
   });
 
   const updateAssignmentMutation = useMutation({
@@ -89,10 +114,30 @@ export default function AssignmentDetailPage() {
       setSubmitData({ comentario: '' });
       setSubmitArchivos([]);
       queryClient.invalidateQueries({ queryKey: ['/api/assignments', params.id] });
+      queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
       refetch();
     },
     onError: (error: any) => {
       toast({ title: 'Error', description: error.message || 'No se pudo enviar la entrega', variant: 'destructive' });
+    },
+  });
+
+  const gradeAssignmentMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest('PUT', `/api/assignments/${params.id}/grade`, data);
+    },
+    onSuccess: () => {
+      toast({ title: 'Tarea calificada exitosamente' });
+      setGradingStudent(null);
+      setGradeData({ calificacion: '', retroalimentacion: '', logro: '' });
+      queryClient.invalidateQueries({ queryKey: ['/api/assignments', params.id] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['studentNotes'] }); // Invalidar notas del estudiante
+      queryClient.invalidateQueries({ queryKey: ['studentAssignments'] }); // Invalidar tareas del estudiante
+      refetch();
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'No se pudo calificar la tarea', variant: 'destructive' });
     },
   });
 
@@ -142,13 +187,60 @@ export default function AssignmentDetailPage() {
     });
   };
 
-  const mySubmission = assignment?.entregas?.find(e => e.estudianteId === user?.id);
+  // Usar submissions si existe, sino usar entregas (legacy)
+  const submissions = assignment?.submissions || assignment?.entregas || [];
+  const mySubmission = submissions.find((e: Submission) => e.estudianteId === user?.id);
   const isPastDue = assignment ? new Date(assignment.fechaEntrega) < new Date() : false;
+  const estado = assignment?.estado || (mySubmission 
+    ? (mySubmission.calificacion !== undefined ? 'calificada' : 'entregada')
+    : 'pendiente');
+  
+  const handleGrade = (estudianteId: string) => {
+    const submission = submissions.find((s: Submission) => s.estudianteId === estudianteId);
+    setGradingStudent(estudianteId);
+    setGradeData({
+      calificacion: submission?.calificacion?.toString() || '',
+      retroalimentacion: submission?.retroalimentacion || '',
+      logro: '',
+    });
+  };
+
+  const handleSubmitGrade = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gradingStudent || !gradeData.calificacion) {
+      toast({ title: 'Error', description: 'La calificación es obligatoria', variant: 'destructive' });
+      return;
+    }
+    
+    const calificacion = parseFloat(gradeData.calificacion);
+    if (isNaN(calificacion) || calificacion < 0 || calificacion > 100) {
+      toast({ title: 'Error', description: 'La calificación debe estar entre 0 y 100', variant: 'destructive' });
+      return;
+    }
+
+    gradeAssignmentMutation.mutate({
+      estudianteId: gradingStudent,
+      calificacion,
+      retroalimentacion: gradeData.retroalimentacion || undefined,
+      logro: gradeData.logro || undefined,
+    });
+  };
 
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-white">Cargando...</div>
+        <div className="text-white">Cargando información de la tarea...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-white">
+          <p className="text-red-400 mb-2">Error al cargar la tarea</p>
+          <p className="text-white/60 text-sm">{(error as any)?.message || 'Intenta recargar la página'}</p>
+        </div>
       </div>
     );
   }
@@ -164,12 +256,18 @@ export default function AssignmentDetailPage() {
   return (
     <div className="flex-1 overflow-auto p-8">
       <div className="max-w-4xl mx-auto">
+        {!isProfesor && (
+          <NavBackButton to="/mi-aprendizaje/tareas" label="Tareas" />
+        )}
+        {isProfesor && (
+          <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+        )}
               {isProfesor ? (
                 <Tabs defaultValue="info" className="w-full">
                   <TabsList className="bg-white/5 border border-white/10 mb-6">
                     <TabsTrigger value="info" className="data-[state=active]:bg-[#9f25b8]">Información</TabsTrigger>
                     <TabsTrigger value="entregas" className="data-[state=active]:bg-[#9f25b8]">
-                      Entregas ({assignment.entregas?.length || 0})
+                      Entregas ({submissions.length})
                     </TabsTrigger>
                   </TabsList>
 
@@ -201,15 +299,25 @@ export default function AssignmentDetailPage() {
                             </div>
                           </div>
                           {!isEditing ? (
-                            <Button
-                              variant="outline"
-                              onClick={startEditing}
-                              className="border-white/10 text-white hover:bg-white/10"
-                              data-testid="button-edit"
-                            >
-                              <Edit className="w-4 h-4 mr-2" />
-                              Editar
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={() => setLocation(`/profesor/academia/tareas/editor/${assignment._id}`)}
+                                className="border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                              >
+                                <Maximize2 className="w-4 h-4 mr-2" />
+                                {assignment.contenidoDocumento ? 'Editar Documento' : 'Extender Documento'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={startEditing}
+                                className="border-white/10 text-white hover:bg-white/10"
+                                data-testid="button-edit"
+                              >
+                                <Edit className="w-4 h-4 mr-2" />
+                                Editar
+                              </Button>
+                            </div>
                           ) : (
                             <div className="flex gap-2">
                               <Button
@@ -265,6 +373,20 @@ export default function AssignmentDetailPage() {
                                 value={editData.horaEntrega}
                                 onChange={(e) => setEditData({ ...editData, horaEntrega: e.target.value })}
                                 className="bg-white/5 border-white/10 text-white"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Mostrar documento si existe */}
+                        {!isEditing && assignment.contenidoDocumento && (
+                          <div className="mt-6">
+                            <Label className="text-white/60 mb-2 block">Documento Extendido</Label>
+                            <div className="mt-2">
+                              <DocumentEditor
+                                content={assignment.contenidoDocumento}
+                                onChange={() => {}} // Read-only en vista
+                                readOnly={true}
                               />
                             </div>
                           </div>
@@ -359,31 +481,42 @@ export default function AssignmentDetailPage() {
                           Entregas de Estudiantes
                         </CardTitle>
                         <CardDescription className="text-white/60">
-                          {assignment.entregas?.length || 0} estudiantes han entregado
+                          {submissions.length} estudiantes han entregado
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        {assignment.entregas && assignment.entregas.length > 0 ? (
+                        {submissions.length > 0 ? (
                           <div className="space-y-4">
-                            {assignment.entregas.map((entrega, index) => (
+                            {submissions.map((submission, index) => (
                               <div key={index} className="p-4 bg-white/5 rounded-lg border border-white/10">
                                 <div className="flex items-start justify-between mb-3">
-                                  <div>
-                                    <h4 className="font-semibold text-white">{entrega.estudianteNombre}</h4>
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-white">{submission.estudianteNombre}</h4>
                                     <p className="text-sm text-white/50">
-                                      Entregado: {new Date(entrega.fechaEntrega).toLocaleString('es-CO')}
+                                      Entregado: {new Date(submission.fechaEntrega).toLocaleString('es-CO')}
                                     </p>
                                   </div>
-                                  {entrega.calificacion !== undefined && (
-                                    <Badge className="bg-green-600">{entrega.calificacion}/100</Badge>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {submission.calificacion !== undefined && (
+                                      <Badge className="bg-green-600">{submission.calificacion}/100</Badge>
+                                    )}
+                                    {submission.calificacion === undefined && (
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleGrade(submission.estudianteId)}
+                                        className="bg-[#9f25b8] hover:bg-[#6a0dad]"
+                                      >
+                                        Calificar
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
-                                {entrega.comentario && (
-                                  <p className="text-white/70 text-sm mb-3">{entrega.comentario}</p>
+                                {submission.comentario && (
+                                  <p className="text-white/70 text-sm mb-3">{submission.comentario}</p>
                                 )}
-                                {entrega.archivos && entrega.archivos.length > 0 && (
-                                  <div className="space-y-2">
-                                    {entrega.archivos.map((archivo, idx) => (
+                                {submission.archivos && submission.archivos.length > 0 && (
+                                  <div className="space-y-2 mb-3">
+                                    {submission.archivos.map((archivo, idx) => (
                                       <a
                                         key={idx}
                                         href={archivo.url}
@@ -397,6 +530,68 @@ export default function AssignmentDetailPage() {
                                     ))}
                                   </div>
                                 )}
+                                {submission.retroalimentacion && (
+                                  <div className="mt-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                                    <p className="text-sm font-semibold text-green-400 mb-1">Retroalimentación:</p>
+                                    <p className="text-sm text-white/80">{submission.retroalimentacion}</p>
+                                  </div>
+                                )}
+                                {gradingStudent === submission.estudianteId && (
+                                  <form onSubmit={handleSubmitGrade} className="mt-4 p-4 bg-white/5 rounded-lg border border-[#9f25b8]/30">
+                                    <div className="space-y-3">
+                                      <div>
+                                        <Label className="text-white/60 mb-1 block">Calificación (0-100) *</Label>
+                                        <Input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          value={gradeData.calificacion}
+                                          onChange={(e) => setGradeData({ ...gradeData, calificacion: e.target.value })}
+                                          className="bg-white/5 border-white/10 text-white"
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-white/60 mb-1 block">Retroalimentación</Label>
+                                        <Textarea
+                                          value={gradeData.retroalimentacion}
+                                          onChange={(e) => setGradeData({ ...gradeData, retroalimentacion: e.target.value })}
+                                          className="bg-white/5 border-white/10 text-white"
+                                          rows={3}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-white/60 mb-1 block">Logro (opcional)</Label>
+                                        <Input
+                                          value={gradeData.logro}
+                                          onChange={(e) => setGradeData({ ...gradeData, logro: e.target.value })}
+                                          className="bg-white/5 border-white/10 text-white"
+                                          placeholder="Ej: Superado, En proceso..."
+                                        />
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <Button
+                                          type="submit"
+                                          disabled={gradeAssignmentMutation.isPending}
+                                          className="bg-[#9f25b8] hover:bg-[#6a0dad]"
+                                        >
+                                          {gradeAssignmentMutation.isPending ? 'Calificando...' : 'Calificar y Devolver'}
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setGradingStudent(null);
+                                            setGradeData({ calificacion: '', retroalimentacion: '', logro: '' });
+                                          }}
+                                          className="border-white/10 text-white hover:bg-white/10"
+                                        >
+                                          Cancelar
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </form>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -409,6 +604,7 @@ export default function AssignmentDetailPage() {
                 </Tabs>
               ) : (
                 <div className="space-y-6">
+                  {/* Header con información de la tarea */}
                   <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                     <CardHeader>
                       <CardTitle className="text-2xl font-bold text-white mb-2">{assignment.titulo}</CardTitle>
@@ -424,36 +620,69 @@ export default function AssignmentDetailPage() {
                         </span>
                         <span className="text-sm">Por: {assignment.profesorNombre}</span>
                         {isPastDue && <Badge variant="destructive">Fecha límite pasada</Badge>}
+                        {estado === 'pendiente' && <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/40">Pendiente</Badge>}
+                        {estado === 'entregada' && <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/40">Entregada</Badge>}
+                        {estado === 'calificada' && <Badge className="bg-green-500/20 text-green-400 border-green-500/40">Calificada</Badge>}
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent>
                       <div>
                         <Label className="text-white/60 mb-2 block">Descripción</Label>
                         <p className="text-white whitespace-pre-wrap">{assignment.descripcion}</p>
                       </div>
+                    </CardContent>
+                  </Card>
 
-                      {assignment.adjuntos && assignment.adjuntos.length > 0 && (
-                        <div>
-                          <Label className="text-white/60 mb-2 block">Recursos</Label>
-                          <div className="space-y-2">
-                            {assignment.adjuntos.map((adj, index) => (
+                  {/* Documento extendido */}
+                  {assignment.contenidoDocumento && assignment.contenidoDocumento.trim() !== '' && (
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                      <CardHeader>
+                        <CardTitle className="text-white flex items-center gap-2">
+                          <FileText className="w-5 h-5 text-[#9f25b8]" />
+                          Instrucciones y Contenido
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <DocumentEditor
+                          content={assignment.contenidoDocumento || ''}
+                          onChange={() => {}} // Read-only para estudiantes
+                          readOnly={true}
+                        />
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Recursos adjuntos */}
+                  {assignment.adjuntos && Array.isArray(assignment.adjuntos) && assignment.adjuntos.length > 0 && (
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                      <CardHeader>
+                        <CardTitle className="text-white text-lg">Recursos Adicionales</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {assignment.adjuntos.map((adj, index) => {
+                            // Manejar tanto objetos Attachment como strings
+                            const adjunto = typeof adj === 'string' 
+                              ? { tipo: 'link' as const, nombre: adj, url: adj }
+                              : adj;
+                            return (
                               <a
                                 key={index}
-                                href={adj.url}
+                                href={adjunto.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-2 p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
                                 data-testid={`adjunto-${index}`}
                               >
-                                {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#9f25b8]" /> : <FileText className="w-4 h-4 text-[#9f25b8]" />}
-                                <span className="text-white">{adj.nombre}</span>
+                                {adjunto.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#9f25b8]" /> : <FileText className="w-4 h-4 text-[#9f25b8]" />}
+                                <span className="text-white">{adjunto.nombre}</span>
                               </a>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                     <CardHeader>
@@ -496,8 +725,14 @@ export default function AssignmentDetailPage() {
                             </div>
                           )}
                           {mySubmission.calificacion !== undefined && (
-                            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-                              <p className="text-green-400 font-semibold">Calificación: {mySubmission.calificacion}/100</p>
+                            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-2">
+                              <p className="text-green-400 font-semibold text-lg">Calificación: {mySubmission.calificacion}/100</p>
+                              {mySubmission.retroalimentacion && (
+                                <div className="mt-2">
+                                  <p className="text-sm font-semibold text-white/80 mb-1">Retroalimentación:</p>
+                                  <p className="text-sm text-white/70">{mySubmission.retroalimentacion}</p>
+                                </div>
+                              )}
                             </div>
                           )}
                           <Button
@@ -588,6 +823,7 @@ export default function AssignmentDetailPage() {
                             className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
                             data-testid="button-submit-entrega"
                           >
+                            <Send className="w-4 h-4 mr-2" />
                             {submitAssignmentMutation.isPending ? 'Enviando...' : 'Enviar Entrega'}
                           </Button>
                         </form>

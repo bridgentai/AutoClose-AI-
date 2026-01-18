@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -39,7 +40,8 @@ export default function ProfesorComunicacionLayout() {
 
   return (
     <div className="p-6" data-testid="profesor-comunicacion-layout">
-      <h1 className="text-2xl font-bold mb-6" data-testid="text-title">
+      <NavBackButton to="/dashboard" label="Dashboard" />
+      <h1 className="text-2xl font-bold mb-6 mt-4" data-testid="text-title">
         Comunicación: Inicio
       </h1>
 

@@ -2,6 +2,7 @@ import express from 'express';
 import { User } from '../models';
 import { Course } from '../models/Course';
 import { protect, AuthRequest } from '../middleware/auth';
+import { normalizeIdForQuery, generateUserId } from '../utils/idGenerator';
 
 const router = express.Router();
 
@@ -31,7 +32,8 @@ const generarCodigoUnico = async (): Promise<string> => {
 // RUTA EXISTENTE: GET /api/users/profesores - Obtener todos los profesores
 router.get('/profesores', protect, async (req: AuthRequest, res) => {
 try {
-const user = await User.findById(req.userId);
+const normalizedUserId = normalizeIdForQuery(req.userId || '');
+const user = await User.findById(normalizedUserId);
 if (!user) {
 return res.status(404).json({ message: 'Usuario no encontrado' });
 }
@@ -46,10 +48,21 @@ const profesores = await User.find({
 colegioId: user.colegioId,
 rol: 'profesor'
 })
-.select('nombre email materias createdAt')
+.select('nombre email materias createdAt userId')
 .sort({ nombre: 1 });
 
-res.json(profesores);
+// Incluir userId categorizado en la respuesta
+const profesoresConId = profesores.map(prof => ({
+  _id: prof._id,
+  id: prof._id.toString(),
+  userId: prof.userId || generateUserId(prof.rol, prof._id).fullId,
+  nombre: prof.nombre,
+  email: prof.email,
+  materias: prof.materias,
+  createdAt: prof.createdAt,
+}));
+
+res.json(profesoresConId);
 } catch (error: any) {
 console.error('Error al obtener profesores:', error.message);
 res.status(500).json({ message: 'Error en el servidor al cargar los profesores.' });
@@ -61,7 +74,8 @@ res.status(500).json({ message: 'Error en el servidor al cargar los profesores.'
 // Para estudiantes: busca materias asignadas a su grupo
 router.get('/me/courses', protect, async (req: AuthRequest, res) => {
     try {
-        const user = await User.findById(req.userId).select('rol curso colegioId');
+        const normalizedUserId = normalizeIdForQuery(req.userId || '');
+        const user = await User.findById(normalizedUserId).select('rol curso colegioId');
 
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado.' });
@@ -75,13 +89,34 @@ router.get('/me/courses', protect, async (req: AuthRequest, res) => {
                 return res.status(200).json([]);
             }
 
+            // Normalizar grupoId para búsqueda consistente (mayúsculas)
+            const grupoIdNormalizado = (grupoId as string).toUpperCase().trim();
+            const colegioId = user.colegioId || 'COLEGIO_DEMO_2025';
+
+            console.log(`[DEBUG /api/users/me/courses] Buscando materias para estudiante:`);
+            console.log(`  - Estudiante ID: ${normalizedUserId}`);
+            console.log(`  - Grupo del estudiante: ${grupoId} (normalizado: ${grupoIdNormalizado})`);
+            console.log(`  - ColegioId: ${colegioId}`);
+
             // Buscar materias (Course) que tienen este grupo en su array 'cursos'
+            // MongoDB busca directamente en arrays: { cursos: valor } busca si valor está en el array
+            // Usamos $or para buscar variantes normalizadas
             const courses = await Course.find({ 
-                cursos: grupoId,
-                colegioId: user.colegioId || 'COLEGIO_DEMO_2025'
+                $or: [
+                    { cursos: grupoIdNormalizado },
+                    { cursos: grupoIdNormalizado.toLowerCase() },
+                    { cursos: grupoId as string }
+                ],
+                colegioId: colegioId
             })
-            .populate('profesorIds', 'nombre email')
-            .select('nombre descripcion colorAcento icono profesorIds');
+            .populate('profesorIds', 'nombre apellido email')
+            .select('nombre descripcion colorAcento icono profesorIds cursos')
+            .lean();
+
+            console.log(`[DEBUG /api/users/me/courses] Encontradas ${courses.length} materias`);
+            courses.forEach(course => {
+                console.log(`  - ${course.nombre}: cursos=${JSON.stringify(course.cursos)}`);
+            });
 
             // Formatear respuesta para que coincida con la interfaz Course del frontend
             const formattedCourses = courses.map(course => ({
@@ -90,7 +125,8 @@ router.get('/me/courses', protect, async (req: AuthRequest, res) => {
                 descripcion: course.descripcion,
                 colorAcento: course.colorAcento,
                 icono: course.icono,
-                profesorIds: course.profesorIds,
+                profesorIds: course.profesorIds || [],
+                cursos: course.cursos || [],
             }));
 
             return res.status(200).json(formattedCourses);
@@ -110,7 +146,8 @@ router.get('/me/courses', protect, async (req: AuthRequest, res) => {
 // Este endpoint puede ejecutarse una vez para asignar códigos a usuarios que no los tengan
 router.post('/asignar-codigos', protect, async (req: AuthRequest, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId);
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }

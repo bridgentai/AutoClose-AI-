@@ -1,12 +1,12 @@
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { 
-  GraduationCap, 
-  BookOpen, 
-  MessageSquare, 
-  Users, 
-  BarChart3, 
+import {
+  GraduationCap,
+  BookOpen,
+  MessageSquare,
+  Users,
+  BarChart3,
   Shield,
   Sparkles,
   ArrowRight,
@@ -102,14 +102,14 @@ export default function Home() {
             </div>
             <span className="text-white font-bold text-xl font-['Poppins']">AutoClose AI</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
             {isAuthenticated ? (
               <>
                 <span className="text-white/70 text-sm hidden md:block">
                   Hola, <span className="text-white font-medium">{user?.nombre?.split(' ')[0] || 'Usuario'}</span>
                 </span>
-                <Button 
+                <Button
                   onClick={() => setLocation('/dashboard')}
                   variant="outline"
                   className="border-[#9f25b8]/50 text-white hover:bg-[#9f25b8]/20"
@@ -120,7 +120,7 @@ export default function Home() {
               </>
             ) : (
               <>
-                <Button 
+                <Button
                   onClick={() => setLocation('/login')}
                   variant="ghost"
                   className="text-white hover:bg-white/10"
@@ -128,7 +128,7 @@ export default function Home() {
                 >
                   Iniciar Sesión
                 </Button>
-                <Button 
+                <Button
                   onClick={() => setLocation('/register')}
                   className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
                   data-testid="button-register-nav"
@@ -148,7 +148,7 @@ export default function Home() {
             <Brain className="w-4 h-4 text-[#9f25b8]" />
             <span className="text-white/90 text-sm font-medium">Desarrollado por Bridgent</span>
           </div>
-          
+
           <h1 className="text-5xl md:text-7xl font-bold mb-6 font-['Poppins']">
             <span className="bg-gradient-to-r from-[#9f25b8] to-[#c66bff] bg-clip-text text-transparent">
               La Plataforma Educativa
@@ -156,15 +156,15 @@ export default function Home() {
             <br />
             <span className="text-white">del Futuro</span>
           </h1>
-          
+
           <p className="text-xl text-white/70 max-w-3xl mx-auto mb-10 leading-relaxed">
-            AutoClose AI centraliza todo el ecosistema educativo de tu institución en una sola plataforma 
-            inteligente. Reemplaza herramientas dispersas con un asistente IA personalizado que conoce 
+            AutoClose AI centraliza todo el ecosistema educativo de tu institución en una sola plataforma
+            inteligente. Reemplaza herramientas dispersas con un asistente IA personalizado que conoce
             tu currículo específico.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Button 
+            <Button
               onClick={handleCTA}
               size="lg"
               className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white text-lg px-8 py-6 rounded-xl"
@@ -180,9 +180,9 @@ export default function Home() {
                 </>
               )}
             </Button>
-            
+
             {!isAuthenticated && (
-              <Button 
+              <Button
                 onClick={() => setLocation('/register')}
                 size="lg"
                 variant="outline"
@@ -246,7 +246,7 @@ export default function Home() {
             ].map((feature, idx) => {
               const Icon = feature.icon;
               return (
-                <div 
+                <div
                   key={idx}
                   className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-[#9f25b8]/50 transition-all group"
                 >
@@ -299,7 +299,7 @@ export default function Home() {
             ].map((roleCard, idx) => {
               const Icon = roleCard.icon;
               return (
-                <div 
+                <div
                   key={idx}
                   className="backdrop-blur-xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-2xl p-6"
                 >
@@ -353,12 +353,12 @@ export default function Home() {
             ¿Listo para Transformar tu Experiencia Educativa?
           </h2>
           <p className="text-white/70 text-lg mb-10 max-w-2xl mx-auto">
-            {isAuthenticated 
+            {isAuthenticated
               ? "Comienza a explorar todas las funcionalidades de AutoClose AI"
               : "Únete a AutoClose AI y lleva tu institución educativa al siguiente nivel"
             }
           </p>
-          <Button 
+          <Button
             onClick={handleCTA}
             size="lg"
             className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white text-xl px-12 py-8 rounded-2xl"

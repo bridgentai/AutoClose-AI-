@@ -32,6 +32,7 @@ import {
   CheckSquare,
   Award,
   History,
+  Send,
 } from "lucide-react";
 
 interface CommandPaletteProps {
@@ -55,7 +56,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   // Todas las rutas disponibles organizadas por categoría
   const allCommands: { group: string; items: CommandItem[] }[] = [
     {
-      group: "Navegación",
+      group: "Navegación Principal",
       items: [
         { 
           icon: Home, 
@@ -96,16 +97,30 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         },
         { 
           icon: BookOpen, 
+          label: "Academia", 
+          path: "/profesor/academia",
+          keywords: ["academia", "profesor", "cursos", "grupos", "tareas"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: BookOpen, 
           label: "Cursos", 
-          path: "/courses",
-          keywords: ["cursos", "clases", "grupos", "notas", "calificaciones"],
+          path: "/profesor/academia/cursos",
+          keywords: ["cursos", "clases", "grupos", "estudiantes"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: Mail, 
+          label: "Comunicación Profesor", 
+          path: "/profesor/comunicacion",
+          keywords: ["comunicacion", "mensajes", "profesor", "bandeja"],
           roles: ["profesor"]
         },
         { 
           icon: Users, 
           label: "Profesores", 
           path: "/directivo",
-          keywords: ["profesores", "docentes", "maestros"],
+          keywords: ["profesores", "docentes", "maestros", "directivo"],
           roles: ["directivo"]
         },
         { 
@@ -118,22 +133,135 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       ],
     },
     {
+      group: "Academia - Profesor",
+      items: [
+        { 
+          icon: BookOpen, 
+          label: "Cursos", 
+          path: "/profesor/academia/cursos",
+          keywords: ["cursos", "grupos", "clases", "estudiantes"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: CheckSquare, 
+          label: "Tareas", 
+          path: "/profesor/academia/tareas",
+          keywords: ["tareas", "asignaciones", "ejercicios"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: Sparkles, 
+          label: "Asignar Tarea", 
+          path: "/profesor/academia/tareas/asignar",
+          keywords: ["crear", "asignar", "nueva", "tarea"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: FolderOpen, 
+          label: "Revisar Tareas", 
+          path: "/profesor/academia/tareas/revision",
+          keywords: ["revisar", "corregir", "evaluar", "tareas"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: Calendar, 
+          label: "Calendario General", 
+          path: "/teacher-calendar",
+          keywords: ["calendario", "eventos", "fechas", "agenda", "tareas"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: Clock, 
+          label: "Resumen de Tareas", 
+          path: "/profesor/tareas/resumen",
+          keywords: ["resumen", "tareas", "resumen", "listado"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: FileText, 
+          label: "Materiales", 
+          path: "/profesor/academia/materiales",
+          keywords: ["materiales", "archivos", "documentos", "recursos"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: Globe, 
+          label: "Plataformas", 
+          path: "/profesor/academia/plataformas",
+          keywords: ["plataformas", "herramientas", "recursos", "externos"],
+          roles: ["profesor"]
+        },
+      ],
+    },
+    {
+      group: "Comunicación - Profesor",
+      items: [
+        { 
+          icon: Mail, 
+          label: "Bandeja de Entrada", 
+          path: "/profesor/comunicacion/bandeja",
+          keywords: ["bandeja", "entrada", "mensajes", "recibidos"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: MessageSquare, 
+          label: "Redactar Mensaje", 
+          path: "/profesor/comunicacion/redactar",
+          keywords: ["redactar", "enviar", "nuevo", "mensaje"],
+          roles: ["profesor"]
+        },
+        { 
+          icon: Send, 
+          label: "Mensajes Enviados", 
+          path: "/profesor/comunicacion/enviados",
+          keywords: ["enviados", "mensajes", "historial"],
+          roles: ["profesor"]
+        },
+      ],
+    },
+    {
+      group: "Módulos Directivo",
+      items: [
+        { 
+          icon: Users, 
+          label: "Profesores", 
+          path: "/directivo",
+          keywords: ["profesores", "docentes", "asignacion", "grupos"],
+          roles: ["directivo"]
+        },
+        { 
+          icon: UsersRound, 
+          label: "Comunidad", 
+          path: "/directivo/comunidad",
+          keywords: ["comunidad", "directivo", "eventos"],
+          roles: ["directivo"]
+        },
+        { 
+          icon: BookOpen, 
+          label: "Academia", 
+          path: "/directivo/academia",
+          keywords: ["academia", "directivo", "cursos"],
+          roles: ["directivo"]
+        },
+        { 
+          icon: Mail, 
+          label: "Comunicación", 
+          path: "/directivo/comunicacion",
+          keywords: ["comunicacion", "directivo", "mensajes"],
+          roles: ["directivo"]
+        },
+      ],
+    },
+    {
       group: "Acciones Rápidas",
       items: [
         { 
           icon: Sparkles, 
-          label: "Crear tarea", 
+          label: "Asignar Grupos", 
           path: "/group-assignment", 
           shortcut: "⌘T",
-          keywords: ["crear", "tarea", "asignacion", "nueva"],
+          keywords: ["crear", "tarea", "asignacion", "nueva", "grupos"],
           roles: ["profesor", "directivo"]
-        },
-        { 
-          icon: Calendar, 
-          label: "Calendario", 
-          path: "/teacher-calendar",
-          keywords: ["calendario", "eventos", "fechas", "agenda"],
-          roles: ["profesor"]
         },
         { 
           icon: Calendar, 
@@ -148,13 +276,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           path: "/materials",
           keywords: ["materiales", "archivos", "documentos", "recursos"],
           roles: ["profesor"]
-        },
-        { 
-          icon: Users, 
-          label: "Asignación de grupos", 
-          path: "/group-assignment",
-          keywords: ["grupos", "asignacion", "estudiantes"],
-          roles: ["profesor", "directivo"]
         },
         { 
           icon: Globe, 
@@ -253,6 +374,46 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           path: "/comunidad/noticias",
           keywords: ["noticias", "avisos", "comunidad"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
+        },
+      ],
+    },
+    {
+      group: "Otros Roles",
+      items: [
+        { 
+          icon: Users, 
+          label: "Administrador General", 
+          path: "/administrador-general",
+          keywords: ["administrador", "general"],
+          roles: ["directivo"]
+        },
+        { 
+          icon: Users, 
+          label: "Transporte", 
+          path: "/transporte",
+          keywords: ["transporte"],
+          roles: ["directivo"]
+        },
+        { 
+          icon: Users, 
+          label: "Tesorería", 
+          path: "/tesoreria",
+          keywords: ["tesoreria", "pagos"],
+          roles: ["directivo"]
+        },
+        { 
+          icon: Users, 
+          label: "Nutrición", 
+          path: "/nutricion",
+          keywords: ["nutricion", "alimentacion"],
+          roles: ["directivo"]
+        },
+        { 
+          icon: Users, 
+          label: "Cafetería", 
+          path: "/cafeteria",
+          keywords: ["cafeteria", "comida"],
+          roles: ["directivo"]
         },
       ],
     },

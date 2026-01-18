@@ -16,6 +16,17 @@ async function throwIfResNotOk(res: Response) {
     } catch {
       // Si falla al leer el texto, usar statusText
     }
+    
+    // Si es un error 401 (no autorizado), limpiar el token y redirigir al login
+    if (res.status === 401) {
+      localStorage.removeItem('autoclose_token');
+      localStorage.removeItem('autoclose_user');
+      // Redirigir al login solo si no estamos ya en la página de login
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    
     throw new Error(errorMessage);
   }
 }

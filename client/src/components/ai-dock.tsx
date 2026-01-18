@@ -22,7 +22,6 @@ import {
   Mail,
   UsersRound
 } from "lucide-react";
-import { CalendarioGeneral } from "./calendario-general";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
@@ -46,7 +45,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   const { user, logout } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const { setOpen: setCommandOpen } = useCommandPalette();
   
   // Notificar cambios en el estado del chat
@@ -56,12 +54,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     }
   }, [isChatOpen, isExpanded, onChatStateChange]);
 
-  // Cerrar calendario cuando se cierra el dock
-  useEffect(() => {
-    if (!isExpanded) {
-      setIsCalendarOpen(false);
-    }
-  }, [isExpanded]);
   
   // Use prop if provided, otherwise use hook
   const handleOpenCommandPalette = () => {
@@ -76,7 +68,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
 
   const isChatPage = location === "/chat";
   const isDashboardPage = location === "/dashboard";
@@ -97,7 +88,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       { icon: BookOpen, label: "Academia", path: "/profesor/academia", roles: ["profesor"] },
       { icon: Mail, label: "Comunicación", path: "/profesor/comunicacion", roles: ["profesor"] },
       { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
-      { icon: Calendar, label: "Calendario General", path: "", roles: ["profesor"], action: "calendar" },
       // Otros roles
       { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
       { icon: Users, label: "Asignación de Grupos", path: "/group-assignment", roles: ["directivo"] },
@@ -116,17 +106,11 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       // Only open chat panel if not on chat page and not on dashboard (to avoid duplication)
       if (!isChatPage && !isDashboardPage) {
         setIsChatOpen(true);
-        setIsCalendarOpen(false);
         setIsExpanded(true);
       } else {
         // If already on chat page or dashboard, just expand the dock (but don't open chat)
         setIsExpanded(true);
       }
-    } else if (action === "calendar") {
-      // Open calendar panel
-      setIsCalendarOpen(true);
-      setIsChatOpen(false);
-      setIsExpanded(true);
     } else {
       setLocation(path);
     }
@@ -139,10 +123,16 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
 
   // Chat functions
   const scrollToBottom = () => {
-    const chatContainer = document.getElementById('chat-messages');
-    if (chatContainer) {
-      chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
+    // Usar requestAnimationFrame para asegurar que el DOM se haya actualizado
+    requestAnimationFrame(() => {
+      const chatContainer = document.getElementById('chat-messages');
+      if (chatContainer) {
+        chatContainer.scrollTo({
+          top: chatContainer.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    });
   };
 
   const handleSend = async () => {
@@ -155,41 +145,58 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setLoading(true);
 
     try {
-      let currentSessionId = sessionId;
-      if (!currentSessionId) {
-        const newSession = await apiRequest<{ sessionId: string }>('POST', '/api/chat/new', {
-          titulo: `Chat ${new Date().toLocaleDateString()}`,
-          contextoTipo: `${user?.rol}_general`,
-        });
-        currentSessionId = newSession.sessionId;
-        setSessionId(currentSessionId);
-      }
+      // Construir historial de conversación para el contexto
+      const conversationHistory = messages.map(msg => ({
+        role: msg.emisor === 'user' ? 'user' as const : 'assistant' as const,
+        content: msg.contenido
+      }));
 
-      const response = await apiRequest<{ aiResponse: string }>('POST', `/api/chat/${currentSessionId}/message`, {
-        mensaje: input,
-        emisor: 'user',
+      // Llamar al nuevo endpoint del Chat AI Global
+      const response = await apiRequest<{ success: boolean; response: string; error?: string }>('POST', '/api/ai/chat', {
+        message: currentInput,
+        contexto_extra: {
+          rol: user?.rol,
+          curso: user?.curso,
+        },
+        conversationHistory,
       });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Error al procesar el mensaje');
+      }
 
       const aiMessage: Message = {
         emisor: 'ai',
-        contenido: response.aiResponse,
+        contenido: response.response,
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, aiMessage]);
-      setTimeout(scrollToBottom, 100);
+      // Scroll después de agregar el mensaje de AI
+      setTimeout(() => scrollToBottom(), 150);
     } catch (error: any) {
       console.error('Error en chat:', error);
+      let errorText = 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
+      
+      if (error.message) {
+        errorText = error.message;
+      } else if (error.response) {
+        errorText = error.response.message || error.response.error || errorText;
+      }
+      
       const errorMessage: Message = {
         emisor: 'ai',
-        contenido: error.message || 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.',
+        contenido: errorText,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
+      // Scroll después de agregar el mensaje de error
+      setTimeout(() => scrollToBottom(), 150);
     } finally {
       setLoading(false);
     }
@@ -197,14 +204,13 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
 
   return (
     <TooltipProvider>
-      {/* Overlay con blur - Solo cuando está expandido Y NO es solo el chat o calendario (navegación del dock) */}
-      {isExpanded && !isChatOpen && !isCalendarOpen && (
+      {/* Overlay con blur - Solo cuando está expandido Y NO es solo el chat (navegación del dock) */}
+      {isExpanded && !isChatOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-300"
           onClick={() => {
             setIsExpanded(false);
             setIsChatOpen(false);
-            setIsCalendarOpen(false);
           }}
           aria-hidden="true"
         />
@@ -223,26 +229,12 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           aria-hidden="true"
         />
       )}
-
-      {/* Overlay transparente para cerrar el calendario - Sin blur para poder ver el contenido */}
-      {isCalendarOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-transparent transition-opacity duration-300"
-          onClick={() => {
-            setIsCalendarOpen(false);
-            if (!isExpanded) {
-              setIsExpanded(false);
-            }
-          }}
-          aria-hidden="true"
-        />
-      )}
       
       <div
         className={cn(
           "fixed right-0 top-0 bottom-0 z-30",
-          "transition-all duration-300 ease-in-out",
-          isExpanded ? (isChatOpen ? "w-96" : isCalendarOpen ? "w-[800px]" : "w-80") : "w-16",
+          "transition-all duration-500 ease-in-out",
+          isExpanded ? (isChatOpen ? "w-96" : "w-80") : "w-16",
           "flex flex-col",
         )}
       >
@@ -250,11 +242,12 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
         <div
           className={cn(
             "h-full",
-            "bg-white/5 backdrop-blur-xl",
+            "glass-strong",
             "border-l border-white/10",
-            "transition-all duration-300",
+            "transition-all duration-500",
             "flex flex-col",
-            "shadow-2xl shadow-black/20",
+            "depth-2",
+            "hover-glow",
           )}
           onClick={(e) => {
             // Prevenir que el clic dentro del dock cierre el overlay
@@ -299,29 +292,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           {/* Content */}
           {isExpanded ? (
             <>
-              {isCalendarOpen ? (
-                /* Calendar Panel */
-                <div className="flex-1 flex flex-col overflow-hidden">
-                  <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center">
-                        <Calendar className="w-4 h-4 text-white" />
-                      </div>
-                      <span className="text-sm font-medium text-white">Calendario General</span>
-                    </div>
-                    <button
-                      onClick={() => setIsCalendarOpen(false)}
-                      className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white"
-                      aria-label="Cerrar calendario"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-hidden">
-                    <CalendarioGeneral />
-                  </div>
-                </div>
-              ) : isChatOpen ? (
+              {isChatOpen ? (
                 /* Chat Panel */
                 <div className="flex-1 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-white/10 flex items-center justify-between">
@@ -343,6 +314,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                   <div 
                     id="chat-messages"
                     className="flex-1 overflow-y-auto p-4 space-y-4"
+                    style={{ scrollBehavior: 'smooth', overscrollBehavior: 'contain' }}
                   >
                     {messages.length === 0 ? (
                       <div className="flex items-center justify-center h-full min-h-[200px]">
@@ -426,48 +398,25 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {/* Chat Button - Prominent - Hidden on chat page and dashboard */}
                   {!isChatPage && !isDashboardPage && (
-                    <button
-                      onClick={() => {
-                        setIsChatOpen(true);
-                        setIsCalendarOpen(false);
-                      }}
-                      className={cn(
-                        "w-full p-4 rounded-xl",
-                        "bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]",
-                        "hover:from-[#c66bff] hover:to-[#9f25b8]",
-                        "transition-all duration-200",
-                        "flex items-center gap-3",
-                        "text-white font-medium",
-                        "shadow-lg shadow-[#9f25b8]/30",
-                        "hover:shadow-xl hover:shadow-[#9f25b8]/50",
-                      )}
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                      <span>Abrir Chat AI</span>
-                    </button>
-                  )}
-
-                  {/* Calendario General Button - Solo para profesores */}
-                  {user?.rol === "profesor" && (
-                    <button
-                      onClick={() => {
-                        setIsCalendarOpen(true);
-                        setIsChatOpen(false);
-                      }}
-                      className={cn(
-                        "w-full p-4 rounded-xl",
-                        "bg-gradient-to-br from-[#6a0dad] to-[#9f25b8]",
-                        "hover:from-[#9f25b8] hover:to-[#c66bff]",
-                        "transition-all duration-200",
-                        "flex items-center gap-3",
-                        "text-white font-medium",
-                        "shadow-lg shadow-purple-500/30",
-                        "hover:shadow-xl hover:shadow-purple-500/50",
-                      )}
-                    >
-                      <Calendar className="w-5 h-5" />
-                      <span>Calendario General</span>
-                    </button>
+                  <button
+                    onClick={() => {
+                      setIsChatOpen(true);
+                    }}
+                    className={cn(
+                      "w-full p-4 rounded-xl",
+                      "bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]",
+                      "hover:from-[#c66bff] hover:to-[#9f25b8]",
+                      "transition-all duration-300 transition-bounce",
+                      "flex items-center gap-3",
+                      "text-white font-medium text-expressive-subtitle",
+                      "shadow-lg shadow-[#9f25b8]/30",
+                      "hover:shadow-xl hover:shadow-[#9f25b8]/50",
+                      "hover-lift pulse-purple",
+                    )}
+                  >
+                    <MessageSquare className="w-5 h-5 animate-float" />
+                    <span>Abrir Chat AI</span>
+                  </button>
                   )}
 
                   {/* Acceso Rápido Button */}
@@ -477,13 +426,13 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       "w-full p-3 rounded-lg",
                       "bg-white/5 hover:bg-white/10",
                       "border border-white/10 hover:border-white/20",
-                      "transition-all duration-200",
+                      "transition-all duration-300 transition-bounce",
                       "flex items-center gap-3",
-                      "group",
+                      "group hover-lift",
                     )}
                   >
-                    <Command className="w-4 h-4 text-white/70 group-hover:text-[#9f25b8] transition-colors" />
-                    <span className="text-sm text-white/80 group-hover:text-white">Acceso Rápido</span>
+                    <Command className="w-4 h-4 text-white/70 group-hover:text-[#9f25b8] transition-colors group-hover:scale-110" />
+                    <span className="text-sm text-white/80 group-hover:text-white text-expressive-subtitle">Acceso Rápido</span>
                     <span className="ml-auto text-xs text-white/50">⌘K</span>
                   </button>
 
@@ -493,7 +442,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       Navegación
                     </p>
                     {navigationItems
-                      .filter(item => item.action !== "chat" && item.action !== "calendar")
+                      .filter(item => item.action !== "chat")
                       .map((item) => {
                         const Icon = item.icon;
                         const isActive = location === item.path;
@@ -506,18 +455,18 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                                   "w-full p-3 rounded-lg text-left",
                                   "bg-white/5 hover:bg-white/10",
                                   "border border-white/10 hover:border-white/20",
-                                  "transition-all duration-200",
+                                  "transition-all duration-300 transition-bounce",
                                   "flex items-center gap-3",
-                                  "group",
-                                  isActive && "bg-[#9f25b8]/20 border-[#9f25b8]/30"
+                                  "group hover-lift",
+                                  isActive && "bg-[#9f25b8]/20 border-[#9f25b8]/30 hover-glow"
                                 )}
                               >
                                 <Icon className={cn(
-                                  "w-4 h-4 text-white/70 mt-0.5 transition-colors",
-                                  isActive ? "text-[#9f25b8]" : "group-hover:text-[#9f25b8]"
+                                  "w-4 h-4 text-white/70 mt-0.5 transition-all duration-300",
+                                  isActive ? "text-[#9f25b8] animate-float" : "group-hover:text-[#9f25b8] group-hover:scale-110"
                                 )} />
                                 <span className={cn(
-                                  "text-sm transition-colors",
+                                  "text-sm transition-colors text-expressive-subtitle",
                                   isActive ? "text-white font-medium" : "text-white/80 group-hover:text-white"
                                 )}>
                                   {item.label}

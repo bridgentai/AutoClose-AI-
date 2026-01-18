@@ -267,6 +267,32 @@ router.post('/:groupId/sync-students', protect, async (req: AuthRequest, res) =>
   }
 });
 
+// GET /api/groups/lookup/:objectId - Buscar grupo por ObjectId (utilidad para debugging)
+router.get('/lookup/:objectId', protect, async (req: AuthRequest, res) => {
+  try {
+    const { objectId } = req.params;
+    const group = await Group.findById(objectId);
+    if (!group) {
+      return res.status(404).json({ 
+        message: 'Grupo no encontrado.',
+        objectId,
+        suggestion: 'Este ObjectId no corresponde a ningún grupo en la base de datos.'
+      });
+    }
+    res.json({
+      objectId: group._id.toString(),
+      nombre: group.nombre,
+      descripcion: group.descripcion,
+      colegioId: group.colegioId,
+      createdAt: group.createdAt,
+      message: `Este ObjectId corresponde al grupo: ${group.nombre}`
+    });
+  } catch (error) {
+    console.error('Error al buscar grupo:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 // GET /api/groups/:id - Obtener un grupo por ID (DEBE IR AL FINAL)
 router.get('/:id', protect, async (req: AuthRequest, res) => {
   try {

@@ -1,3 +1,6 @@
+// IMPORTANTE: Cargar .env PRIMERO antes de cualquier otra importación
+import './config/env';
+
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import cors from "cors";
@@ -6,6 +9,7 @@ import { connectDB } from "./config/db";
 // Importar rutas
 import authRoutes from "./routes/auth";
 import chatRoutes from "./routes/chat";
+import aiRoutes from "./routes/ai";
 import coursesRoutes from "./routes/courses";
 import materialsRoutes from "./routes/materials";
 import assignmentsRoutes from "./routes/assignments";
@@ -25,6 +29,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rutas de API
   app.use('/api/auth', authRoutes);
   app.use('/api/chat', chatRoutes);
+  app.use('/api/ai', aiRoutes);
+  console.log('[Routes] Ruta /api/ai registrada correctamente');
   app.use('/api/courses', coursesRoutes);
   app.use('/api/materials', materialsRoutes);
   app.use('/api/assignments', assignmentsRoutes);

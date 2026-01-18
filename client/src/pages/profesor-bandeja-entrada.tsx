@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 interface Mensaje {
   id: number;
@@ -91,7 +92,8 @@ export default function ProfesorBandejaEntrada() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Bandeja de Entrada</h1>
+        <NavBackButton to="/profesor/comunicacion" label="Comunicación" />
+        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Bandeja de Entrada</h1>
         <p className="text-white/60">Comunicaciones con estudiantes y colegas</p>
       </div>
 

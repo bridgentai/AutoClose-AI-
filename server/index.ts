@@ -1,7 +1,27 @@
-import 'dotenv/config';
+// IMPORTANTE: Cargar .env PRIMERO antes de cualquier otra importación
+import './config/env';
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { exec } from "child_process";
+import http from "http";
+
+// Verificación del .env al iniciar
+console.log('\n=== VERIFICACIÓN DE .ENV ===');
+console.log('OPENAI_API_KEY existe?', !!process.env.OPENAI_API_KEY);
+if (process.env.OPENAI_API_KEY) {
+  const key = process.env.OPENAI_API_KEY;
+  console.log('✅ Longitud:', key.length, 'caracteres');
+  console.log('✅ Primeros 20 chars:', key.substring(0, 20));
+  console.log('✅ Últimos 10 chars:', key.substring(key.length - 10));
+  console.log('✅ Tiene asteriscos?', key.includes('*') ? 'SÍ ❌' : 'NO ✅');
+  console.log('✅ Formato válido?', (key.startsWith('sk-') || key.startsWith('skproj')) ? 'SÍ ✅' : 'NO ❌');
+} else {
+  console.error('❌ OPENAI_API_KEY NO está en process.env');
+  console.error('   Verifica que el archivo .env esté en la raíz del proyecto');
+}
+console.log('===========================\n');
 
 const app = express();
 
@@ -54,8 +74,13 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // Si la respuesta ya fue enviada, no intentar enviarla de nuevo
+    if (res.headersSent) {
+      return _next(err);
+    }
+
     res.status(status).json({ message });
-    throw err;
+    // No lanzar el error después de enviar la respuesta
   });
 
   // importantly only setup vite in development and after
@@ -76,11 +101,95 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV === 'production') {
     listenOptions.reusePort = true;
   }
-  server.listen(listenOptions, () => {
+  server.listen(listenOptions, async () => {
     const url = `http://${host}:${port}`;
+    const localUrl = `http://localhost:${port}`;
     log(`serving on port ${port}`);
     console.log(`\n🚀 Servidor iniciado exitosamente!`);
     console.log(`📍 URL de previsualización: ${url}`);
-    console.log(`   También disponible en: http://localhost:${port}\n`);
+    console.log(`   También disponible en: ${localUrl}\n`);
+    
+    // Abrir el navegador automáticamente en modo desarrollo
+    if (app.get("env") === "development") {
+      // Función para abrir el navegador
+      const openBrowser = () => {
+        const platform = process.platform;
+        let command: string;
+        
+        if (platform === "darwin") {
+          // macOS - usar open sin comillas, funciona mejor
+          // Abrir a la página de bienvenida (home)
+          command = `open ${localUrl}`;
+        } else if (platform === "win32") {
+          // Windows
+          command = `start ${localUrl}`;
+        } else {
+          // Linux y otros
+          command = `xdg-open ${localUrl}`;
+        }
+        
+        exec(command, (error) => {
+          if (error) {
+            console.log(`⚠️  No se pudo abrir el navegador automáticamente.`);
+            console.log(`   Por favor, abre manualmente: ${localUrl}`);
+          } else {
+            console.log(`🌐 Navegador abierto automáticamente en: ${localUrl}`);
+          }
+        });
+      };
+
+      // Verificar que el servidor esté listo antes de abrir
+      const checkServer = (retries = 15): Promise<boolean> => {
+        return new Promise((resolve) => {
+          let attempts = 0;
+          const check = () => {
+            attempts++;
+            const req = http.get(localUrl, (res) => {
+              req.destroy();
+              if (res.statusCode === 200 || res.statusCode === 304) {
+                resolve(true);
+              } else if (attempts < retries) {
+                setTimeout(check, 300);
+              } else {
+                resolve(false);
+              }
+            });
+            
+            req.on('error', () => {
+              req.destroy();
+              if (attempts < retries) {
+                setTimeout(check, 300);
+              } else {
+                resolve(false);
+              }
+            });
+            
+            req.setTimeout(1000, () => {
+              req.destroy();
+              if (attempts < retries) {
+                setTimeout(check, 300);
+              } else {
+                resolve(false);
+              }
+            });
+          };
+          // Empezar a verificar después de un pequeño delay
+          setTimeout(check, 500);
+        });
+      };
+
+      // Esperar a que el servidor esté listo y luego abrir
+      checkServer().then((ready) => {
+        if (ready) {
+          openBrowser();
+        } else {
+          // Abrir de todas formas después de un tiempo razonable
+          console.log(`⏳ Esperando a que el servidor esté completamente listo...`);
+          setTimeout(() => {
+            openBrowser();
+          }, 2000);
+        }
+      });
+    }
   });
 })();

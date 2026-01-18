@@ -5,6 +5,7 @@ interface INota {
   estudianteId: Types.ObjectId;
   profesorId: Types.ObjectId;
   nota: number;
+  logro?: string;
   fecha: Date;
 }
 
@@ -13,6 +14,7 @@ const notaSchema = new Schema<INota>({
   estudianteId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
   profesorId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
   nota: { type: Number, required: true },
+  logro: { type: String },
   fecha: { type: Date, default: Date.now },
 });
 
@@ -21,4 +23,6 @@ notaSchema.index({ tareaId: 1, estudianteId: 1 });
 notaSchema.index({ estudianteId: 1, fecha: -1 });
 
 export const Nota = model<INota>('notas', notaSchema);
+
+export type { INota };
 

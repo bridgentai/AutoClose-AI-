@@ -2,8 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Loader2, MessageSquare } from 'lucide-react';
-import { apiRequest } from '@/lib/queryClient';
+import { Send, Loader2, MessageSquare, Plus, History } from 'lucide-react';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { NavBackButton } from '@/components/nav-back-button';
+import { ChatSidebar } from '@/components/chat-sidebar';
 
 interface Message {
   emisor: 'user' | 'ai';
@@ -11,21 +13,98 @@ interface Message {
   timestamp: Date;
 }
 
+const SESSION_STORAGE_KEY = 'chatSessionId';
+
 export default function Chat() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarRefresh, setSidebarRefresh] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Usar requestAnimationFrame para asegurar que el DOM se haya actualizado
+    requestAnimationFrame(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    });
   };
 
+  // Cargar sessionId del localStorage y historial al montar
   useEffect(() => {
-    scrollToBottom();
+    const loadSessionAndHistory = async () => {
+      const savedSessionId = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (savedSessionId) {
+        setSessionId(savedSessionId);
+        setLoadingHistory(true);
+        try {
+          const history = await apiRequest<{ historial: Array<{ emisor: 'user' | 'ai'; contenido: string; timestamp: string }> }>('GET', `/api/chat/${savedSessionId}/history`);
+          
+          if (history.historial && Array.isArray(history.historial)) {
+            const formattedMessages: Message[] = history.historial.map(msg => ({
+              emisor: msg.emisor,
+              contenido: msg.contenido,
+              timestamp: new Date(msg.timestamp)
+            }));
+            setMessages(formattedMessages);
+          }
+        } catch (error: any) {
+          console.error('Error al cargar historial:', error);
+          // Si hay error al cargar historial, limpiar sessionId
+          setSessionId(null);
+          localStorage.removeItem(SESSION_STORAGE_KEY);
+        } finally {
+          setLoadingHistory(false);
+        }
+      }
+    };
+
+    loadSessionAndHistory();
+  }, []);
+
+  useEffect(() => {
+    // Scroll suave cuando se agregan nuevos mensajes
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
   }, [messages]);
+
+  const handleNewChat = () => {
+    setSessionId(null);
+    setMessages([]);
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  };
+
+  const handleSelectSession = async (selectedSessionId: string) => {
+    if (selectedSessionId === sessionId) return;
+    
+    setSessionId(selectedSessionId);
+    localStorage.setItem(SESSION_STORAGE_KEY, selectedSessionId);
+    setLoadingHistory(true);
+    
+    try {
+      const history = await apiRequest<{ historial: Array<{ emisor: 'user' | 'ai'; contenido: string; timestamp: string }> }>('GET', `/api/chat/${selectedSessionId}/history`);
+      
+      if (history.historial && Array.isArray(history.historial)) {
+        const formattedMessages: Message[] = history.historial.map(msg => ({
+          emisor: msg.emisor,
+          contenido: msg.contenido,
+          timestamp: new Date(msg.timestamp)
+        }));
+        setMessages(formattedMessages);
+      }
+    } catch (error: any) {
+      console.error('Error al cargar historial:', error);
+      setMessages([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -37,40 +116,109 @@ export default function Chat() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setLoading(true);
 
     try {
-      let currentSessionId = sessionId;
-      if (!currentSessionId) {
-        const newSession = await apiRequest<{ sessionId: string }>('POST', '/api/chat/new', {
-          titulo: `Chat ${new Date().toLocaleDateString()}`,
-          contextoTipo: `${user?.rol}_general`,
-        });
-        currentSessionId = newSession.sessionId;
-        setSessionId(currentSessionId);
+      // Asegurarse de tener el sessionId más reciente (del estado o localStorage)
+      const currentSessionId = sessionId || localStorage.getItem(SESSION_STORAGE_KEY);
+      
+      console.log('[Chat Frontend] Enviando mensaje con sessionId:', currentSessionId);
+      
+      // Llamar al endpoint del Chat AI Global con sessionId
+      const response = await apiRequest<{ 
+        success: boolean; 
+        response: string; 
+        sessionId?: string;
+        error?: string;
+        executedActions?: string[];
+      }>('POST', '/api/ai/chat', {
+        message: currentInput,
+        sessionId: currentSessionId || undefined,
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Error al procesar el mensaje');
       }
 
-      const response = await apiRequest<{ aiResponse: string }>('POST', `/api/chat/${currentSessionId}/message`, {
-        mensaje: input,
-        emisor: 'user',
-      });
+      // SIEMPRE actualizar sessionId si se recibió uno (nuevo o existente)
+      // Esto es crítico para mantener la sesión entre mensajes
+      if (response.sessionId) {
+        const newSessionId = response.sessionId;
+        // Actualizar siempre, incluso si es el mismo, para asegurar sincronización
+        if (newSessionId !== sessionId) {
+          console.log('[Chat Frontend] Actualizando sessionId:', sessionId, '->', newSessionId);
+          setSessionId(newSessionId);
+        }
+        // Siempre guardar en localStorage para persistencia
+        localStorage.setItem(SESSION_STORAGE_KEY, newSessionId);
+      } else {
+        console.warn('[Chat Frontend] ⚠️ No se recibió sessionId en la respuesta');
+      }
 
       const aiMessage: Message = {
         emisor: 'ai',
-        contenido: response.aiResponse,
+        contenido: response.response,
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, aiMessage]);
+      
+      // Invalidar queries basado en las acciones ejecutadas
+      if (response.executedActions && response.executedActions.length > 0) {
+        console.log('[Chat] Acciones ejecutadas:', response.executedActions);
+        
+        // Si se asignó una tarea, invalidar todas las queries relacionadas
+        if (response.executedActions.includes('asignar_tarea')) {
+          console.log('[Chat] Invalidando queries de assignments después de crear tarea');
+          queryClient.invalidateQueries({ queryKey: ['teacherAssignments'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['studentAssignments'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['assignments'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['/api/assignments'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['/api/assignments/student'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['/api/assignments/profesor'], exact: false });
+        }
+        
+        // Si se calificó una tarea, invalidar queries de notas y assignments
+        if (response.executedActions.includes('calificar_tarea')) {
+          console.log('[Chat] Invalidando queries después de calificar tarea');
+          queryClient.invalidateQueries({ queryKey: ['assignments'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['studentNotes'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['notas'], exact: false });
+        }
+        
+        // Si se subió una nota, invalidar queries de notas
+        if (response.executedActions.includes('subir_nota')) {
+          console.log('[Chat] Invalidando queries después de subir nota');
+          queryClient.invalidateQueries({ queryKey: ['studentNotes'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['notas'], exact: false });
+          queryClient.invalidateQueries({ queryKey: ['notas_curso'], exact: false });
+        }
+      }
+      
+      // Refrescar sidebar para mostrar sesión actualizada
+      setSidebarRefresh(prev => prev + 1);
+      // Scroll después de agregar el mensaje de AI
+      setTimeout(() => scrollToBottom(), 100);
     } catch (error: any) {
       console.error('Error en chat:', error);
+      let errorText = 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
+      
+      if (error.message) {
+        errorText = error.message;
+      } else if (error.response) {
+        errorText = error.response.message || error.response.error || errorText;
+      }
+      
       const errorMessage: Message = {
         emisor: 'ai',
-        contenido: error.message || 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.',
+        contenido: errorText,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
+      // Scroll después de agregar el mensaje de error
+      setTimeout(() => scrollToBottom(), 100);
     } finally {
       setLoading(false);
     }
@@ -80,20 +228,58 @@ export default function Chat() {
   const accentColorDark = '#6a0dad';
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]" data-testid="chat-page">
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-white font-['Poppins']">
-          AutoClose AI
-        </h1>
-        <p className="text-white/60 text-sm mt-1">
-          Por donde empezamos?
-        </p>
-      </div>
+    <div className="flex h-[calc(100vh-8rem)] gap-4 relative" data-testid="chat-page">
+      {/* Contenedor principal del chat */}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        <div className="mb-4 flex items-start justify-between flex-shrink-0">
+          <div className="flex-1">
+            <NavBackButton to="/dashboard" label="Dashboard" />
+            <div className="flex items-center gap-3 mt-4">
+              <div>
+                <h1 className="text-2xl font-bold text-white font-['Poppins']">
+                  AutoClose AI
+                </h1>
+                <p className="text-white/60 text-sm mt-1">
+                  Por donde empezamos?
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              variant="outline"
+              className="border-white/20 text-white/80 hover:text-white hover:bg-white/10"
+              data-testid="button-past-conversations"
+            >
+              <History className="w-4 h-4 mr-2" />
+              Conversaciones Pasadas
+            </Button>
+            {messages.length > 0 && (
+              <Button
+                onClick={handleNewChat}
+                variant="outline"
+                className="border-white/20 text-white/80 hover:text-white hover:bg-white/10"
+                data-testid="button-new-chat"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Nuevo Chat
+              </Button>
+            )}
+          </div>
+        </div>
 
-      <div className="flex-1 overflow-y-auto bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md">
-        <div className="p-6 min-h-full">
-          {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full min-h-[300px]">
+      <div className="flex-1 overflow-y-auto bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md flex flex-col" style={{ scrollBehavior: 'smooth' }}>
+        <div className="p-6 flex-1 overflow-y-auto flex flex-col">
+          {loadingHistory ? (
+            <div className="flex items-center justify-center flex-1">
+              <div className="text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-[#9f25b8] mx-auto mb-4" />
+                <p className="text-white/60">Cargando historial...</p>
+              </div>
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="flex items-center justify-center flex-1">
               <div className="text-center">
                 <div className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
                   <MessageSquare className="w-10 h-10 text-white" />
@@ -107,7 +293,7 @@ export default function Chat() {
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1">
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
@@ -150,7 +336,7 @@ export default function Chat() {
         </div>
       </div>
 
-      <div className="mt-4 flex gap-3 items-center">
+        <div className="mt-4 flex gap-3 items-center flex-shrink-0">
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -175,6 +361,17 @@ export default function Chat() {
           {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
         </Button>
       </div>
+      </div>
+
+      {/* Sidebar de conversaciones */}
+      <ChatSidebar
+        currentSessionId={sessionId}
+        onSelectSession={handleSelectSession}
+        onNewChat={handleNewChat}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        refreshTrigger={sidebarRefresh}
+      />
     </div>
   );
 }

@@ -1,11 +1,23 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar } from 'lucide-react';
+import { Calendar, ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useLocation } from 'wouter';
 
 const CalendarioEventos: React.FC = () => {
+  const [, setLocation] = useLocation();
+  
   return (
     <div className="p-6">
       <div className="mb-8">
+        <Button
+          variant="ghost"
+          onClick={() => setLocation('/comunidad')}
+          className="mb-4 text-white/70 hover:text-white"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Volver a Comunidad
+        </Button>
         <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
           Calendario de Eventos
         </h1>

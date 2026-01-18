@@ -285,4 +285,445 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* Document Editor Styles */
+  .document-content,
+  .document-editor {
+    color: #ffffff;
+  }
+
+  .document-content p,
+  .document-editor p {
+    margin-bottom: 1rem;
+    line-height: 1.8;
+  }
+
+  .document-content h1,
+  .document-editor h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    color: #ffffff;
+  }
+
+  .document-content h2,
+  .document-editor h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: 1.25rem;
+    margin-bottom: 0.75rem;
+    color: #ffffff;
+  }
+
+  .document-content h3,
+  .document-editor h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    color: #ffffff;
+  }
+
+  .document-content ul,
+  .document-editor ul,
+  .document-content ol,
+  .document-editor ol {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .document-content li,
+  .document-editor li {
+    margin-bottom: 0.5rem;
+  }
+
+  .document-content strong,
+  .document-editor strong {
+    font-weight: 600;
+    color: #ffffff;
+  }
+
+  .document-content em,
+  .document-editor em {
+    font-style: italic;
+  }
+
+  .document-content u,
+  .document-editor u {
+    text-decoration: underline;
+  }
+
+  .document-content a,
+  .document-editor a {
+    color: #9f25b8;
+    text-decoration: underline;
+  }
+
+  .document-content a:hover,
+  .document-editor a:hover {
+    color: #c66bff;
+  }
+
+  .document-content blockquote,
+  .document-editor blockquote {
+    border-left: 4px solid #9f25b8;
+    padding-left: 1rem;
+    margin-left: 0;
+    margin-bottom: 1rem;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .document-content code,
+  .document-editor code {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+  }
+
+  .document-content pre,
+  .document-editor pre {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+
+  .document-content pre code,
+  .document-editor pre code {
+    background-color: transparent;
+    padding: 0;
+  }
+
+  /* Placeholder para contentEditable */
+  .document-editor[contenteditable="true"]:empty:before {
+    content: attr(data-placeholder);
+    color: rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .document-editor[contenteditable="true"]:focus:empty:before {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Mejoras visuales del documento */
+  .document-content h1,
+  .document-editor h1 {
+    color: #ffffff;
+    border-bottom: 2px solid rgba(159, 37, 184, 0.3);
+    padding-bottom: 0.5rem;
+  }
+
+  .document-content h2,
+  .document-editor h2 {
+    color: #ffffff;
+    border-bottom: 1px solid rgba(159, 37, 184, 0.2);
+    padding-bottom: 0.25rem;
+  }
+
+  .document-content h3,
+  .document-editor h3 {
+    color: #ffffff;
+  }
+
+  /* Mejorar visibilidad de listas */
+  .document-content ul,
+  .document-editor ul {
+    list-style-type: disc;
+    padding-left: 2rem;
+  }
+
+  .document-content ol,
+  .document-editor ol {
+    list-style-type: decimal;
+    padding-left: 2rem;
+  }
+
+  .document-content li::marker,
+  .document-editor li::marker {
+    color: #9f25b8;
+  }
+
+  /* Scrollbar personalizado para el documento */
+  .document-viewer-container::-webkit-scrollbar,
+  .document-editor-container::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .document-viewer-container::-webkit-scrollbar-track,
+  .document-editor-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+  }
+
+  .document-viewer-container::-webkit-scrollbar-thumb,
+  .document-editor-container::-webkit-scrollbar-thumb {
+    background: rgba(159, 37, 184, 0.5);
+    border-radius: 6px;
+  }
+
+  .document-viewer-container::-webkit-scrollbar-thumb:hover,
+  .document-editor-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(159, 37, 184, 0.7);
+  }
+
+  /* ============================================
+     EXPERIMENTAL DESIGN UTILITIES
+     ============================================ */
+
+  /* Diagonal Layouts */
+  .diagonal-section {
+    transform: rotate(-1deg);
+    transform-origin: center;
+  }
+
+  .diagonal-section-reverse {
+    transform: rotate(1deg);
+    transform-origin: center;
+  }
+
+  .diagonal-strong {
+    transform: rotate(-2.5deg);
+    transform-origin: center;
+  }
+
+  /* Curved/Asymmetric Layouts */
+  .curved-top {
+    border-radius: 50% 50% 0 0 / 20% 20% 0 0;
+  }
+
+  .curved-bottom {
+    border-radius: 0 0 50% 50% / 0 0 20% 20%;
+  }
+
+  .asymmetric-left {
+    clip-path: polygon(0 0, 95% 0, 100% 100%, 0 100%);
+  }
+
+  .asymmetric-right {
+    clip-path: polygon(5% 0, 100% 0, 100% 100%, 0 100%);
+  }
+
+  /* Depth & Glassmorphism Enhancements */
+  .depth-1 {
+    box-shadow: 
+      0 2px 8px rgba(0, 0, 0, 0.2),
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .depth-2 {
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      inset 0 2px 0 rgba(255, 255, 255, 0.15),
+      0 0 40px rgba(159, 37, 184, 0.1);
+  }
+
+  .depth-3 {
+    box-shadow: 
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      inset 0 4px 0 rgba(255, 255, 255, 0.2),
+      0 0 60px rgba(159, 37, 184, 0.15);
+  }
+
+  .glass-enhanced {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-strong {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(30px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  /* Gradient Overlays */
+  .gradient-overlay-purple {
+    position: relative;
+  }
+
+  .gradient-overlay-purple::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(159, 37, 184, 0.1) 0%, rgba(106, 13, 173, 0.05) 100%);
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .gradient-overlay-purple > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Typography Enhancements */
+  .text-expressive {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  .text-expressive-subtitle {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.4;
+  }
+
+  /* Hover Microinteractions */
+  .hover-lift {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 
+      0 12px 40px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      0 0 60px rgba(159, 37, 184, 0.2);
+  }
+
+  .hover-glow {
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+
+  .hover-glow:hover {
+    box-shadow: 
+      0 0 30px rgba(159, 37, 184, 0.4),
+      0 0 60px rgba(159, 37, 184, 0.2);
+    transform: scale(1.01);
+  }
+
+  /* Reveal Animations - Using Tailwind animations */
+  .reveal-fade {
+    animation: fade-in-up 0.6s ease-out forwards;
+  }
+
+  .reveal-slide {
+    animation: slide-in-right 0.5s ease-out forwards;
+  }
+
+  .reveal-scale {
+    animation: scale-in 0.4s ease-out forwards;
+  }
+
+  /* Progress Bars with Animation */
+  .progress-bar {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-bar::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
+    animation: shimmer 2s infinite;
+  }
+
+  /* Badge/Medal Styles for Gamification */
+  .badge-glow {
+    position: relative;
+    box-shadow: 0 0 20px rgba(159, 37, 184, 0.4);
+  }
+
+  .badge-glow::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(135deg, #9f25b8, #c66bff, #9f25b8);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: rotate-diagonal 3s linear infinite;
+    opacity: 0.6;
+  }
+
+  /* Parallax Container */
+  .parallax-container {
+    perspective: 1000px;
+  }
+
+  .parallax-item {
+    transition: transform 0.3s ease-out;
+  }
+
+  /* Storytelling Visual Effects */
+  .story-section {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .story-section::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(
+      circle,
+      rgba(159, 37, 184, 0.1) 0%,
+      transparent 70%
+    );
+    animation: float 6s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  /* Pulse Effect for Calendar/Important Items */
+  .pulse-purple {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* Smooth Transitions */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-bounce {
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  /* Forzar fondo blanco para formularios */
+  .force-white-bg {
+    background-color: #ffffff !important;
+  }
+
+  .force-white-bg form,
+  .force-white-bg form * {
+    color: #1f2937 !important;
+  }
+
+  .force-white-bg input,
+  .force-white-bg textarea,
+  .force-white-bg select,
+  .force-white-bg [contenteditable] {
+    background-color: #ffffff !important;
+    color: #1f2937 !important;
+    border-color: #d1d5db !important;
+  }
+
+  .force-white-bg label {
+    color: #374151 !important;
+  }
 }

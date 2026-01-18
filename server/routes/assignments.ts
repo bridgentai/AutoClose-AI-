@@ -1,8 +1,51 @@
 import express from 'express';
-import { Assignment, User, Course } from '../models';
+import { Assignment, User, Course, Nota } from '../models';
+import type { IAssignment, ISubmission } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
+import { normalizeIdForQuery } from '../utils/idGenerator';
+import { createAssignment as createAssignmentService } from '../services/assignmentService';
 
 const router = express.Router();
+
+// Helper function para calcular el estado de una tarea
+export function calculateAssignmentState(
+  assignment: IAssignment | any,
+  estudianteId?: string
+): 'pendiente' | 'entregada' | 'calificada' {
+  // Si se proporciona estudianteId, calcular desde perspectiva del estudiante
+  if (estudianteId) {
+    const submission = assignment.submissions?.find(
+      (s: ISubmission | any) => s.estudianteId?.toString() === estudianteId
+    );
+
+    if (!submission) {
+      return 'pendiente';
+    }
+
+    if (submission.calificacion !== undefined && submission.calificacion !== null) {
+      return 'calificada';
+    }
+
+    return 'entregada';
+  }
+
+  // Si no hay estudianteId, calcular estado general (para profesor)
+  if (!assignment.submissions || assignment.submissions.length === 0) {
+    return 'pendiente';
+  }
+
+  // Si todas las submissions tienen calificación, está calificada
+  const allGraded = assignment.submissions.every(
+    (s: ISubmission | any) => s.calificacion !== undefined && s.calificacion !== null
+  );
+
+  if (allGraded) {
+    return 'calificada';
+  }
+
+  // Si hay al menos una submission sin calificar, está entregada
+  return 'entregada';
+}
 
 // DEBUG: Ver todas las tareas
 router.get('/debug/all', async (req, res) => {
@@ -32,20 +75,20 @@ router.get('/debug/profesor/:profesorId/:mes/:year', async (req, res) => {
     const { profesorId, mes, year } = req.params;
     const mesNum = parseInt(mes);
     const yearNum = parseInt(year);
-    
+
     const primerDia = new Date(yearNum, mesNum - 1, 1);
     const ultimoDia = new Date(yearNum, mesNum, 0, 23, 59, 59);
-    
+
     console.log(`DEBUG profesor: ${profesorId}, mes=${mes}, year=${year}`);
     console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
-    
+
     const assignments = await Assignment.find({
       profesorId: profesorId,
       fechaEntrega: { $gte: primerDia, $lte: ultimoDia }
     }).lean();
-    
+
     console.log(`Found ${assignments.length} assignments`);
-    
+
     return res.json({
       profesorId,
       mes: mesNum,
@@ -67,14 +110,17 @@ router.get('/debug/profesor/:profesorId/:mes/:year', async (req, res) => {
 // POST /api/assignments - Crear nueva tarea (solo profesores)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, curso, courseId, fechaEntrega, adjuntos } = req.body;
+    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos } = req.body;
 
     if (!titulo || !descripcion || !curso || !fechaEntrega) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
     }
 
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+
     // Verificar que el usuario es profesor
-    const user = await User.findById(req.userId);
+    const user = await User.findById(normalizedUserId);
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
@@ -88,63 +134,43 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'El courseId es obligatorio.' });
     }
 
-    const course = await Course.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: 'Materia no encontrada.' });
-    }
-
-    // Verificar que el profesor es uno de los profesores de la materia
-    const isProfesorOfCourse = course.profesorIds.some(
-      (pId: any) => pId.toString() === user._id.toString()
-    );
-    if (!isProfesorOfCourse) {
-      return res.status(403).json({ 
-        message: 'No puedes asignar tareas para una materia que no dictas.' 
-      });
-    }
-
-    // CRÍTICO: Verificar que el grupo (curso) solicitado pertenece a esta materia
-    if (!course.cursos.includes(curso)) {
-      return res.status(403).json({ 
-        message: `La materia ${course.nombre} no incluye el grupo ${curso}. Grupos válidos: ${course.cursos.join(', ')}.` 
-      });
-    }
-
-    // Obtener materiaId del curso
-    const materiaId = course.materiaId || course._id; // Fallback si no tiene materiaId
-    
-    const newAssignment = new Assignment({
+    // Usar el servicio reutilizable para crear la tarea
+    const result = await createAssignmentService({
       titulo,
       descripcion,
-      cursoId: courseId, // Campo requerido en nueva estructura
-      materiaId: materiaId, // Campo requerido en nueva estructura
-      profesorId: user._id,
-      fechaEntrega: new Date(fechaEntrega),
-      entregas: [],
+      contenidoDocumento,
+      curso,
+      courseId,
+      fechaEntrega,
       adjuntos: adjuntos || [],
+      profesorId: normalizedUserId,
       colegioId: user.colegioId,
-      // Campos adicionales para compatibilidad
-      curso: curso,
-      courseId: courseId,
-      profesorNombre: user.nombre,
     });
 
-    await newAssignment.save();
+    if (!result.success) {
+      const statusCode = result.error?.includes('no encontrado') ? 404 :
+                        result.error?.includes('No puedes asignar') ? 403 :
+                        result.error?.includes('obligatorio') ? 400 : 500;
+      return res.status(statusCode).json({ message: result.error });
+    }
 
-    return res.status(201).json(newAssignment);
+    return res.status(201).json(result.assignment);
   } catch (err: any) {
     console.error('Error al crear tarea:', err.message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
-// GET /api/assignments - Obtener tareas con query params (courseId, groupId, month, year)
+// GET /api/assignments - Obtener tareas con query params (courseId, groupId, month, year, estado)
 router.get('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { courseId, groupId, month, year } = req.query;
-    
+    const { courseId, groupId, month, year, estado } = req.query;
+
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+
     // Obtener el usuario para filtrar por colegio
-    const user = await User.findById(req.userId).select('rol curso colegioId').lean();
+    const user = await User.findById(normalizedUserId).select('rol curso colegioId').lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
@@ -158,7 +184,10 @@ router.get('/', protect, async (req: AuthRequest, res) => {
     if (courseId) {
       query.courseId = courseId;
     } else if (groupId) {
-      query.curso = groupId;
+      // Normalizar groupId a mayúsculas para consistencia
+      const grupoIdNormalizado = (groupId as string).toUpperCase().trim();
+      // Buscar tareas que coincidan con el grupo (case-insensitive usando $in)
+      query.curso = { $in: [grupoIdNormalizado, grupoIdNormalizado.toLowerCase(), groupId as string] };
     }
 
     // Filtrar por mes y año si se proporcionan
@@ -167,22 +196,54 @@ router.get('/', protect, async (req: AuthRequest, res) => {
       const yearNum = parseInt(year as string);
       const primerDia = new Date(yearNum, mesNum - 1, 1);
       const ultimoDia = new Date(yearNum, mesNum, 0, 23, 59, 59);
-      
+
       query.fechaEntrega = {
         $gte: primerDia,
         $lte: ultimoDia,
       };
     }
 
-    // Si es estudiante, también filtrar por su curso
+    // Si es estudiante, también filtrar por su curso (normalizado)
     if (user.rol === 'estudiante' && user.curso) {
-      query.curso = user.curso;
+      const cursoNormalizado = (user.curso as string).toUpperCase().trim();
+      // Si ya hay una condición de curso, combinarla con $and
+      if (query.curso) {
+        const cursoCondition = query.curso;
+        query.$and = [
+          { curso: cursoCondition },
+          { curso: { $in: [cursoNormalizado, cursoNormalizado.toLowerCase(), user.curso as string] } }
+        ];
+        delete query.curso;
+      } else {
+        query.curso = { $in: [cursoNormalizado, cursoNormalizado.toLowerCase(), user.curso as string] };
+      }
     }
 
-    const assignments = await Assignment.find(query)
-      .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
+    // Obtener todas las tareas que coinciden con los filtros
+    let assignments = await Assignment.find(query)
+      .select('titulo descripcion contenidoDocumento curso courseId fechaEntrega profesorNombre profesorId submissions entregas')
       .sort({ fechaEntrega: 1 })
       .lean();
+
+    // Filtrar por estado si se proporciona
+    if (estado && (estado === 'pendiente' || estado === 'entregada' || estado === 'calificada')) {
+      const estudianteIdForState = user.rol === 'estudiante' ? normalizedUserId : undefined;
+      assignments = assignments.filter((assignment: any) => {
+        const state = calculateAssignmentState(assignment, estudianteIdForState);
+        return state === estado;
+      });
+    }
+
+    // Si es estudiante, agregar estado a cada tarea
+    if (user.rol === 'estudiante') {
+      assignments = assignments.map((assignment: any) => {
+        const state = calculateAssignmentState(assignment, normalizedUserId);
+        return {
+          ...assignment,
+          estado: state,
+        };
+      });
+    }
 
     return res.json(assignments);
   } catch (err: any) {
@@ -194,21 +255,25 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 // PUT /api/assignments/:id - Editar tarea (solo el profesor que la creó)
 router.put('/:id', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, fechaEntrega, adjuntos } = req.body;
-    
+    const { titulo, descripcion, contenidoDocumento, fechaEntrega, adjuntos } = req.body;
+
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) {
       return res.status(404).json({ message: 'Tarea no encontrada.' });
     }
 
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+
     // Verificar que el usuario es el profesor que creó la tarea
-    if (assignment.profesorId.toString() !== req.userId) {
+    if (assignment.profesorId.toString() !== normalizedUserId) {
       return res.status(403).json({ message: 'No tienes permiso para editar esta tarea.' });
     }
 
     // Actualizar campos
     if (titulo) assignment.titulo = titulo;
     if (descripcion) assignment.descripcion = descripcion;
+    if (contenidoDocumento !== undefined) assignment.contenidoDocumento = contenidoDocumento;
     if (fechaEntrega) assignment.fechaEntrega = new Date(fechaEntrega);
     if (adjuntos !== undefined) assignment.adjuntos = adjuntos;
 
@@ -225,14 +290,17 @@ router.put('/:id', protect, async (req: AuthRequest, res) => {
 router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
   try {
     const { archivos, comentario } = req.body;
-    
+
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) {
       return res.status(404).json({ message: 'Tarea no encontrada.' });
     }
 
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+
     // Verificar que el usuario es estudiante
-    const user = await User.findById(req.userId);
+    const user = await User.findById(normalizedUserId);
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
@@ -246,17 +314,24 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'No tienes acceso a esta tarea.' });
     }
 
-    // Verificar que el estudiante pertenece al curso de la tarea
-    if (user.curso !== assignment.curso) {
+    // Verificar que el estudiante pertenece al curso de la tarea (case-insensitive)
+    const cursoEstudiante = (user.curso as string)?.toUpperCase().trim();
+    const cursoTarea = (assignment.curso as string)?.toUpperCase().trim();
+    if (cursoEstudiante !== cursoTarea) {
       return res.status(403).json({ message: 'No perteneces al curso de esta tarea.' });
     }
 
-    // Verificar si ya existe una entrega del estudiante
-    const existingSubmissionIndex = assignment.entregas.findIndex(
-      (e: any) => e.estudianteId.toString() === req.userId
+    // Asegurar que submissions existe
+    if (!assignment.submissions) {
+      assignment.submissions = [];
+    }
+
+    // Verificar si ya existe una submission del estudiante
+    const existingSubmissionIndex = assignment.submissions.findIndex(
+      (s: ISubmission | any) => s.estudianteId?.toString() === normalizedUserId
     );
 
-    const submission = {
+    const submission: ISubmission = {
       estudianteId: user._id,
       estudianteNombre: user.nombre,
       archivos: archivos || [],
@@ -265,14 +340,17 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
     };
 
     if (existingSubmissionIndex >= 0) {
-      // Actualizar entrega existente
-      assignment.entregas[existingSubmissionIndex] = {
-        ...assignment.entregas[existingSubmissionIndex],
+      // Actualizar submission existente (mantener calificación y retroalimentación si existen)
+      const existing = assignment.submissions[existingSubmissionIndex];
+      assignment.submissions[existingSubmissionIndex] = {
+        ...existing,
         ...submission,
-      } as any;
+        calificacion: existing.calificacion,
+        retroalimentacion: existing.retroalimentacion,
+      } as ISubmission;
     } else {
-      // Nueva entrega
-      assignment.entregas.push(submission as any);
+      // Nueva submission
+      assignment.submissions.push(submission);
     }
 
     await assignment.save();
@@ -284,10 +362,150 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
   }
 });
 
+// PUT /api/assignments/:id/grade - Calificar tarea (solo profesor creador)
+router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
+  try {
+    const { estudianteId, calificacion, retroalimentacion, logro } = req.body;
+
+    if (!estudianteId || calificacion === undefined) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: estudianteId y calificacion.' });
+    }
+
+    // Validar rango de nota (0-100)
+    if (calificacion < 0 || calificacion > 100) {
+      return res.status(400).json({ message: 'La calificación debe estar entre 0 y 100.' });
+    }
+
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+
+    // Verificar que el usuario es profesor
+    const user = await User.findById(normalizedUserId);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    if (user.rol !== 'profesor') {
+      return res.status(403).json({ message: 'Solo los profesores pueden calificar tareas.' });
+    }
+
+    const assignment = await Assignment.findById(req.params.id);
+    if (!assignment) {
+      return res.status(404).json({ message: 'Tarea no encontrada.' });
+    }
+
+    // Validar que el profesor es el creador de la tarea
+    if (assignment.profesorId.toString() !== normalizedUserId) {
+      return res.status(403).json({ message: 'Solo el profesor que creó la tarea puede calificarla.' });
+    }
+
+    // Validar que el estudiante tiene una submission
+    if (!assignment.submissions || assignment.submissions.length === 0) {
+      return res.status(400).json({ message: 'No hay entregas para esta tarea.' });
+    }
+
+    const normalizedEstudianteId = normalizeIdForQuery(estudianteId);
+    
+    // Buscar la submission del estudiante
+    const submissionIndex = assignment.submissions.findIndex(
+      (s: ISubmission | any) => {
+        const sId = s.estudianteId?.toString();
+        return sId === normalizedEstudianteId || sId === estudianteId;
+      }
+    );
+
+    if (submissionIndex === -1) {
+      console.error('Submission no encontrada. estudianteId recibido:', estudianteId);
+      console.error('normalizedEstudianteId:', normalizedEstudianteId);
+      console.error('Submissions disponibles:', assignment.submissions.map((s: any) => ({
+        estudianteId: s.estudianteId?.toString(),
+        estudianteNombre: s.estudianteNombre
+      })));
+      return res.status(404).json({ message: 'No se encontró una entrega del estudiante para esta tarea.' });
+    }
+
+    // Actualizar la submission usando findByIdAndUpdate para evitar problemas de validación
+    const updateQuery: any = {
+      $set: {
+        [`submissions.${submissionIndex}.calificacion`]: calificacion,
+      }
+    };
+
+    if (retroalimentacion) {
+      updateQuery.$set[`submissions.${submissionIndex}.retroalimentacion`] = retroalimentacion;
+    }
+
+    // Usar findByIdAndUpdate con $set para actualizar solo los campos necesarios
+    // runValidators: false porque estamos actualizando solo campos específicos del subdocumento
+    const updateResult = await Assignment.findByIdAndUpdate(
+      assignment._id,
+      updateQuery,
+      { new: true, runValidators: false }
+    );
+
+    if (!updateResult) {
+      return res.status(404).json({ message: 'Tarea no encontrada después de actualizar.' });
+    }
+
+    // Recargar el assignment para obtener los datos actualizados con todas las relaciones
+    const updatedAssignment = await Assignment.findById(req.params.id)
+      .select('titulo descripcion contenidoDocumento curso courseId materiaId fechaEntrega profesorId profesorNombre adjuntos submissions entregas colegioId createdAt');
+    
+    if (!updatedAssignment) {
+      return res.status(404).json({ message: 'Tarea no encontrada después de actualizar.' });
+    }
+
+    // Crear o actualizar nota automáticamente
+    let nota;
+    const existingNota = await Nota.findOne({
+      tareaId: assignment._id,
+      estudianteId: normalizedEstudianteId,
+    });
+
+    if (existingNota) {
+      // Actualizar nota existente
+      existingNota.nota = calificacion;
+      if (logro) {
+        existingNota.logro = logro;
+      }
+      existingNota.fecha = new Date();
+      await existingNota.save();
+      nota = existingNota;
+    } else {
+      // Crear nueva nota
+      const newNota = new Nota({
+        tareaId: assignment._id,
+        estudianteId: normalizedEstudianteId,
+        profesorId: assignment.profesorId,
+        nota: calificacion,
+        logro: logro || undefined,
+        fecha: new Date(),
+      });
+      await newNota.save();
+      nota = newNota;
+    }
+
+    return res.json({
+      message: 'Tarea calificada exitosamente.',
+      assignment: updatedAssignment,
+      nota
+    });
+  } catch (err: any) {
+    console.error('Error al calificar tarea:', err);
+    console.error('Stack trace:', err.stack);
+    return res.status(500).json({ 
+      message: 'Error interno del servidor.',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  }
+});
+
 // GET /api/assignments/student - Obtener tareas del estudiante autenticado basado en su grupoId
 router.get('/student', protect, async (req: AuthRequest, res) => {
   try {
-    const user = await User.findById(req.userId).select('rol curso colegioId').lean();
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol curso colegioId').lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
@@ -304,28 +522,39 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    
+
     const primerDia = new Date(currentYear, currentMonth, 1);
     const ultimoDia = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
 
-    console.log(`Student assignments query: curso=${user.curso}, colegioId=${user.colegioId}`);
+    const cursoNormalizado = (user.curso as string).toUpperCase().trim();
+    console.log(`Student assignments query: curso=${user.curso} (normalized: ${cursoNormalizado}), colegioId=${user.colegioId}`);
     console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
 
+    // Buscar tareas por curso normalizado (usando $in para buscar variantes)
     const assignments = await Assignment.find({
-      curso: user.curso,
+      curso: { $in: [cursoNormalizado, cursoNormalizado.toLowerCase(), user.curso as string] },
       colegioId: user.colegioId,
       fechaEntrega: {
         $gte: primerDia,
         $lte: ultimoDia,
       },
     })
-    .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
-    .sort({ fechaEntrega: 1 })
-    .lean();
+      .select('titulo descripcion curso courseId materiaId fechaEntrega profesorNombre profesorId submissions')
+      .sort({ fechaEntrega: 1 })
+      .lean();
 
     console.log(`Found ${assignments.length} assignments for student in curso ${user.curso}`);
 
-    return res.json(assignments);
+    // Agregar estado a cada tarea
+    const assignmentsWithState = assignments.map((assignment: any) => {
+      const state = calculateAssignmentState(assignment, normalizedUserId);
+      return {
+        ...assignment,
+        estado: state,
+      };
+    });
+
+    return res.json(assignmentsWithState);
   } catch (err: any) {
     console.error('Error al obtener tareas del estudiante:', err.message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
@@ -336,32 +565,39 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
 router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) => {
   try {
     const { curso, mes, año } = req.params;
-    
+
     // Obtener el usuario para filtrar por colegio - optimizado
     const user = await User.findById(req.userId).select('colegioId').lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
-    
+
     const mesNum = parseInt(mes);
     const añoNum = parseInt(año);
-    
+
     // Obtener primer y último día del mes
     const primerDia = new Date(añoNum, mesNum - 1, 1);
     const ultimoDia = new Date(añoNum, mesNum, 0, 23, 59, 59);
 
+    // Normalizar curso para búsqueda case-insensitive
+    const cursoNormalizado = curso.toUpperCase().trim();
+
     // Filtrar por curso Y colegio para evitar conflictos entre colegios
     const assignments = await Assignment.find({
-      curso,
+      $or: [
+        { curso: cursoNormalizado },
+        { curso: cursoNormalizado.toLowerCase() },
+        { curso: curso }
+      ],
       colegioId: user.colegioId,
       fechaEntrega: {
         $gte: primerDia,
         $lte: ultimoDia,
       },
     })
-    .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
-    .sort({ fechaEntrega: 1 })
-    .lean();
+      .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
+      .sort({ fechaEntrega: 1 })
+      .lean();
 
     return res.json(assignments);
   } catch (err: any) {
@@ -374,27 +610,30 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
 router.get('/profesor/:profesorId/:mes/:year', protect, async (req: AuthRequest, res) => {
   try {
     const { profesorId, mes, year } = req.params;
-    
+
     const mesNum = parseInt(mes);
     const yearNum = parseInt(year);
-    
+
     const primerDia = new Date(yearNum, mesNum - 1, 1);
     const ultimoDia = new Date(yearNum, mesNum, 0, 23, 59, 59);
 
-    console.log(`GET profesor assignments: profesorId=${profesorId}, mes=${mes}, year=${year}`);
+    // Normalizar profesorId (puede ser categorizado o no)
+    const normalizedProfesorId = normalizeIdForQuery(profesorId);
+
+    console.log(`GET profesor assignments: profesorId=${normalizedProfesorId}, mes=${mes}, year=${year}`);
     console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
 
     // Buscar directamente - mongoose hace la conversión automáticamente
     const assignments = await Assignment.find({
-      profesorId: profesorId,
+      profesorId: normalizedProfesorId,
       fechaEntrega: {
         $gte: primerDia,
         $lte: ultimoDia,
       },
     })
-    .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
-    .sort({ fechaEntrega: 1 })
-    .lean();
+      .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
+      .sort({ fechaEntrega: 1 })
+      .lean();
 
     console.log(`Found ${assignments.length} assignments for profesor ${profesorId}`);
 
@@ -408,13 +647,56 @@ router.get('/profesor/:profesorId/:mes/:year', protect, async (req: AuthRequest,
 // GET /api/assignments/:id - Obtener una tarea específica
 router.get('/:id', protect, async (req: AuthRequest, res) => {
   try {
-    const assignment = await Assignment.findById(req.params.id);
-    
+    const assignment = await Assignment.findById(req.params.id)
+      .select('titulo descripcion contenidoDocumento curso courseId materiaId fechaEntrega profesorId profesorNombre adjuntos submissions entregas colegioId createdAt');
+
     if (!assignment) {
       return res.status(404).json({ message: 'Tarea no encontrada.' });
     }
 
-    return res.json(assignment);
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol colegioId curso').lean();
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+
+    // Verificar que el usuario pertenece al mismo colegio
+    if (user.colegioId !== assignment.colegioId) {
+      return res.status(403).json({ message: 'No tienes acceso a esta tarea.' });
+    }
+
+    // Si es estudiante, verificar que pertenece al curso y agregar estado
+    const assignmentObj: any = assignment.toObject();
+    
+    // Convertir adjuntos de String[] a Attachment[] si es necesario
+    if (assignmentObj.adjuntos && Array.isArray(assignmentObj.adjuntos)) {
+      // Si los adjuntos son strings, intentar parsearlos como JSON
+      assignmentObj.adjuntos = assignmentObj.adjuntos.map((adj: any) => {
+        if (typeof adj === 'string') {
+          try {
+            return JSON.parse(adj);
+          } catch {
+            // Si no es JSON válido, crear un objeto básico
+            return { tipo: 'link', nombre: adj, url: adj };
+          }
+        }
+        return adj;
+      });
+    }
+    
+    if (user.rol === 'estudiante') {
+      // Verificar que el estudiante pertenece al curso de la tarea
+      const cursoEstudiante = (user.curso as string)?.toUpperCase().trim();
+      const cursoTarea = (assignment.curso as string)?.toUpperCase().trim();
+      if (cursoEstudiante !== cursoTarea) {
+        return res.status(403).json({ message: 'No perteneces al curso de esta tarea.' });
+      }
+      assignmentObj.estado = calculateAssignmentState(assignment, normalizedUserId);
+    }
+
+    return res.json(assignmentObj);
   } catch (err: any) {
     console.error('Error al obtener tarea:', err.message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
@@ -425,13 +707,16 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
 router.delete('/:id', protect, async (req: AuthRequest, res) => {
   try {
     const assignment = await Assignment.findById(req.params.id);
-    
+
     if (!assignment) {
       return res.status(404).json({ message: 'Tarea no encontrada.' });
     }
 
+    // Normalizar userId
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+
     // Verificar que el usuario es el profesor que creó la tarea
-    if (assignment.profesorId.toString() !== req.userId) {
+    if (assignment.profesorId.toString() !== normalizedUserId) {
       return res.status(403).json({ message: 'No tienes permiso para eliminar esta tarea.' });
     }
 
@@ -443,5 +728,57 @@ router.delete('/:id', protect, async (req: AuthRequest, res) => {
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
+
+// Función helper para migrar entregas antiguas a submissions
+export async function migrateEntregasToSubmissions() {
+  try {
+    const assignments = await Assignment.find({
+      $or: [
+        { entregas: { $exists: true, $ne: [] } },
+        { submissions: { $exists: false } }
+      ]
+    });
+
+    let migrated = 0;
+    for (const assignment of assignments) {
+      // Si tiene entregas pero no submissions, migrar
+      if (assignment.entregas && assignment.entregas.length > 0 && (!assignment.submissions || assignment.submissions.length === 0)) {
+        const submissions: ISubmission[] = [];
+        
+        for (const entrega of assignment.entregas) {
+          // Buscar el estudiante para obtener el nombre
+          const estudiante = await User.findById(entrega.estudianteId);
+          
+          if (estudiante) {
+            submissions.push({
+              estudianteId: entrega.estudianteId,
+              estudianteNombre: estudiante.nombre,
+              archivos: entrega.archivoUrl ? [{
+                tipo: 'link' as const,
+                nombre: 'Archivo entregado',
+                url: entrega.archivoUrl
+              }] : [],
+              comentario: undefined,
+              fechaEntrega: entrega.fechaEntrega,
+              calificacion: entrega.nota,
+              retroalimentacion: undefined,
+            });
+          }
+        }
+        
+        assignment.submissions = submissions;
+        assignment.entregas = []; // Limpiar entregas antiguas
+        await assignment.save();
+        migrated++;
+      }
+    }
+    
+    console.log(`Migración completada: ${migrated} tareas migradas de entregas a submissions`);
+    return { migrated, total: assignments.length };
+  } catch (error: any) {
+    console.error('Error en migración:', error.message);
+    throw error;
+  }
+}
 
 export default router;

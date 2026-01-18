@@ -4,7 +4,6 @@ import { useLocation, useRoute } from 'wouter';
 import { 
   BookOpen, 
   Users, 
-  ArrowLeft,
   Plus,
   User,
   Calendar,
@@ -13,6 +12,7 @@ import {
   TrendingUp,
   BarChart3
 } from 'lucide-react';
+import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -175,10 +175,10 @@ export default function TeacherNotesPage() {
     setShowAddNoteForm(false);
   };
 
-  // Si no hay cursoId, redirigir a cursos
+  // Si no hay cursoId, redirigir a cursos del módulo de academia
   useEffect(() => {
     if (!cursoId) {
-      setLocation('/courses');
+      setLocation('/profesor/academia/cursos');
     }
   }, [cursoId, setLocation]);
 
@@ -189,30 +189,23 @@ export default function TeacherNotesPage() {
   // Vista de notas individual del estudiante
   if (estudianteId && studentDetail) {
     return (
-      <div className="flex-1 overflow-y-auto p-6 md:p-10">
-        <div className="max-w-7xl mx-auto">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
           {/* Header */}
           <div className="mb-8">
-            <Button
-              variant="ghost"
-              onClick={() => setLocation(`/profesor/cursos/${cursoId}/notas`)}
-              className="text-white/70 hover:text-white mb-4"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Volver a Estudiantes
-            </Button>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Avatar className="w-20 h-20">
-                  <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-2xl">
+            <NavBackButton to={`/profesor/cursos/${cursoId}/notas`} label="Estudiantes" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
+                  <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-xl sm:text-2xl">
                     {studentDetail.nombre.split(' ').map(n => n[0]).join('')}
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">
                     {studentDetail.nombre}
                   </h1>
-                  <p className="text-white/60">{studentDetail.email}</p>
+                  <p className="text-white/60 text-sm sm:text-base truncate">{studentDetail.email}</p>
                 </div>
               </div>
               <Dialog open={showAddNoteForm} onOpenChange={setShowAddNoteForm}>
@@ -328,7 +321,7 @@ export default function TeacherNotesPage() {
               <CardTitle className="text-white">{studentDetail.materiaNombre}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-white font-semibold">Promedio Final</span>
@@ -435,24 +428,17 @@ export default function TeacherNotesPage() {
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 md:p-10">
-      <div className="max-w-7xl mx-auto">
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+      <div className="max-w-7xl mx-auto w-full">
         {/* Header */}
         <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => setLocation('/courses')}
-            className="text-white/70 hover:text-white mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver a Cursos
-          </Button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+          <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">
                 Notas del Curso {cursoId}
               </h1>
-              <p className="text-white/60">
+              <p className="text-white/60 text-sm sm:text-base">
                 Gestiona las notas de tus estudiantes en este curso
               </p>
             </div>
@@ -471,28 +457,41 @@ export default function TeacherNotesPage() {
                 Promedio general del curso: <span className="text-white font-semibold">{promedioGeneral.toFixed(2)}</span>
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-[300px]">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="nombre" 
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <YAxis 
-                    domain={[0, 5]}
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar 
-                    dataKey="promedio" 
-                    fill="#9f25b8"
-                    radius={[8, 8, 0, 0]}
-                  />
-                </BarChart>
-              </ChartContainer>
+            <CardContent className="p-4 md:p-6">
+              <div className="w-full overflow-x-auto">
+                <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
+                  <BarChart 
+                    data={chartData}
+                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis 
+                      dataKey="nombre" 
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                      interval={0}
+                    />
+                    <YAxis 
+                      domain={[0, 5]}
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      width={40}
+                    />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      cursor={{ fill: 'rgba(159, 37, 184, 0.1)' }}
+                    />
+                    <Bar 
+                      dataKey="promedio" 
+                      fill="#9f25b8"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
 
@@ -506,28 +505,41 @@ export default function TeacherNotesPage() {
                 Rendimiento general del curso por categoría
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-[300px]">
-                <BarChart data={categoryData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="categoria" 
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <YAxis 
-                    domain={[0, 5]}
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar 
-                    dataKey="promedio" 
-                    fill="#9f25b8"
-                    radius={[8, 8, 0, 0]}
-                  />
-                </BarChart>
-              </ChartContainer>
+            <CardContent className="p-4 md:p-6">
+              <div className="w-full overflow-x-auto">
+                <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
+                  <BarChart 
+                    data={categoryData}
+                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis 
+                      dataKey="categoria" 
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                      interval={0}
+                    />
+                    <YAxis 
+                      domain={[0, 5]}
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      width={40}
+                    />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      cursor={{ fill: 'rgba(159, 37, 184, 0.1)' }}
+                    />
+                    <Bar 
+                      dataKey="promedio" 
+                      fill="#9f25b8"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -541,14 +553,16 @@ export default function TeacherNotesPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+            <div className="overflow-x-auto -mx-4 md:mx-0">
+              <div className="inline-block min-w-full align-middle px-4 md:px-0">
+                <Table>
               <TableHeader>
                 <TableRow className="border-white/10">
-                  <TableHead className="text-white">Estudiante</TableHead>
-                  <TableHead className="text-white">Promedio</TableHead>
-                  <TableHead className="text-white">Última Nota</TableHead>
-                  <TableHead className="text-white">Estado</TableHead>
-                  <TableHead className="text-white">Acciones</TableHead>
+                  <TableHead className="text-white min-w-[200px]">Estudiante</TableHead>
+                  <TableHead className="text-white whitespace-nowrap">Promedio</TableHead>
+                  <TableHead className="text-white whitespace-nowrap">Última Nota</TableHead>
+                  <TableHead className="text-white whitespace-nowrap">Estado</TableHead>
+                  <TableHead className="text-white whitespace-nowrap">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -581,14 +595,15 @@ export default function TeacherNotesPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-white/10 text-white hover:bg-white/10"
+                          className="border-white/10 text-white hover:bg-white/10 text-xs md:text-sm"
                           onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
                         >
-                          Ver Notas
+                          <span className="hidden sm:inline">Ver Notas</span>
+                          <span className="sm:hidden">Ver</span>
                         </Button>
                         <Button
                           variant="outline"
@@ -607,13 +622,15 @@ export default function TeacherNotesPage() {
                 ))}
               </TableBody>
             </Table>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
         {/* Lista de Estudiantes (Cards) */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-white mb-4 font-['Poppins']">Estudiantes del Curso</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 font-['Poppins']">Estudiantes del Curso</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {students.map((student) => (
               <Card
                 key={student._id}

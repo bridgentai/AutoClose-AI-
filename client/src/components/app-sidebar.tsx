@@ -31,7 +31,7 @@ export function AppSidebar() {
     { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
 
     { icon: BookOpen, label: "Cursos", path: "/courses", roles: ["profesor"] },
-    { icon: Users, label: "Asignación de Grupos", path: "/group-assignment", roles: ["profesor", "directivo"] },
+    { icon: Users, label: "Asignación de Grupos", path: "/group-assignment", roles: ["directivo"] },
 
     { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["profesor", "directivo", "padre"] },
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },

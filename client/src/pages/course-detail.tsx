@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, ArrowLeft, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2 } from 'lucide-react';
+import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DocumentEditor } from '@/components/document-editor';
 
 // =========================================================
 // 1. INTERFACES
@@ -30,7 +32,7 @@ interface Assignment {
     titulo: string;
     descripcion: string;
     curso: string; // ID del grupo (ej. '10A')
-    courseId: string; // ID de la materia
+    courseId?: string; // ID de la materia (opcional para compatibilidad)
     fechaEntrega: string;
     profesorNombre: string;
 }
@@ -52,6 +54,7 @@ interface Student {
     _id: string;
     nombre: string;
     estado: 'excelente' | 'bueno' | 'regular' | 'bajo';
+    email?: string;
 }
 
 // =========================================================
@@ -106,6 +109,13 @@ export default function CourseDetailPage() {
     const { user } = useAuth();
     const userRole = user?.rol;
 
+    // Normalizar el cursoId para mostrar el nombre del grupo correctamente
+    // Si es un ObjectId largo (24 caracteres hexadecimales), mantenerlo como está
+    // De lo contrario, normalizar a mayúsculas para mostrar el nombre del grupo
+    const displayGroupId = cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
+        ? cursoId // Si es un ObjectId, mantenerlo (aunque no debería pasar para profesores)
+        : (cursoId || '').toUpperCase().trim(); // Normalizar a mayúsculas para mostrar
+
     // VALIDACIÓN: Solo estudiantes pueden acceder a esta página desde /course-detail
     // Los profesores usan otra ruta (/course/:cursoId para grupos)
     const isStudent = userRole === 'estudiante';
@@ -115,12 +125,12 @@ export default function CourseDetailPage() {
     const [, setLocation] = useLocation();
     const { toast } = useToast();
 
-    // Redirigir si no es estudiante (esta ruta es solo para estudiantes)
+    // Redirigir si no es estudiante ni profesor
     useEffect(() => {
         if (user && !isStudent && !isProfessor) {
             toast({
                 title: 'Acceso denegado',
-                description: 'Solo los estudiantes pueden acceder a esta página.',
+                description: 'Solo los estudiantes y profesores pueden acceder a esta página.',
                 variant: 'destructive'
             });
             setLocation('/courses');
@@ -129,6 +139,8 @@ export default function CourseDetailPage() {
 
     // Estados del Formulario
     const [showAssignmentForm, setShowAssignmentForm] = useState(false);
+    const [assignmentType, setAssignmentType] = useState<'recordatorio' | 'documento' | null>(null);
+    const [documentContent, setDocumentContent] = useState('');
     const [showStudentsDialog, setShowStudentsDialog] = useState(false);
     const [formData, setFormData] = useState({
         titulo: '',
@@ -230,10 +242,12 @@ export default function CourseDetailPage() {
     useEffect(() => {
         if (!showAssignmentForm) {
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
+            setAssignmentType(null);
+            setDocumentContent('');
         }
     }, [showAssignmentForm]);
 
-    // Mutation (Crear Tarea) - Sin cambios
+    // Mutation (Crear Tarea)
     const createAssignmentMutation = useMutation({
         mutationFn: async (data: typeof formData) => {
             if (!data.courseId) {
@@ -243,6 +257,7 @@ export default function CourseDetailPage() {
             return await apiRequest('POST', '/api/assignments', {
                 titulo: data.titulo,
                 descripcion: data.descripcion,
+                contenidoDocumento: assignmentType === 'documento' ? documentContent : undefined,
                 curso: cursoId, 
                 courseId: data.courseId,
                 fechaEntrega: data.fechaEntrega,
@@ -307,10 +322,11 @@ export default function CourseDetailPage() {
         return (
             <>
                 <div className="mb-8">
-                    <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-                        Gestión del Grupo {cursoId}
+                    <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 font-['Poppins'] break-words">
+                        Gestión del Grupo {displayGroupId}
                     </h2>
-                    <p className="text-white/60">
+                    <p className="text-white/60 text-sm sm:text-base">
                         Gestiona estudiantes, notas, tareas y calendario del grupo
                     </p>
                 </div>
@@ -390,7 +406,7 @@ export default function CourseDetailPage() {
                                         Tabla General de Notas
                                     </CardTitle>
                                     <CardDescription className="text-white/60">
-                                        Ingresa las notas directamente en las celdas (Escala: 10-100) - Grupo {cursoId}
+                                        Ingresa las notas directamente en las celdas (Escala: 10-100) - Grupo {displayGroupId}
                                         {subjects.length > 0 && ` - ${subjects[0].nombre}`}
                                     </CardDescription>
                                 </div>
@@ -414,6 +430,15 @@ export default function CourseDetailPage() {
                                     >
                                         <Settings className="w-4 h-4 mr-2" />
                                         Gestionar Notas
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-white/10 text-white hover:bg-white/10"
+                                        onClick={() => setLocation('/materials')}
+                                    >
+                                        <FileText className="w-4 h-4 mr-2" />
+                                        Materiales
                                     </Button>
                                 </div>
                             </div>
@@ -461,8 +486,8 @@ export default function CourseDetailPage() {
                                     <Skeleton className="h-12 w-full bg-white/10" />
                                 </div>
                             ) : students.length > 0 ? (
-                                <div className="overflow-x-auto rounded-xl border-2 border-[#9f25b8]/30 shadow-2xl">
-                                    <div className="inline-block min-w-full align-middle">
+                                <div className="overflow-x-auto -mx-4 md:mx-0 rounded-xl border-2 border-[#9f25b8]/30 shadow-2xl">
+                                    <div className="inline-block min-w-full align-middle px-4 md:px-0">
                                         <table className="min-w-full border-collapse bg-[#1a001c]/80">
                                             <thead>
                                                 <tr className="bg-gradient-to-r from-[#9f25b8]/40 via-[#6a0dad]/35 to-[#9f25b8]/40 border-b-2 border-[#9f25b8]/50">
@@ -622,7 +647,7 @@ export default function CourseDetailPage() {
                 )}
 
                 {/* Calendario */}
-                {renderCalendarAndAssignmentList(assignments, `Grupo ${cursoId}`)}
+                {renderCalendarAndAssignmentList(assignments, `Grupo ${displayGroupId}`)}
 
                 {/* Botones de acción y Formulario para asignar tarea (Movido debajo del calendario) */}
                 <div className="flex gap-4 mb-8 mt-8">
@@ -642,16 +667,62 @@ export default function CourseDetailPage() {
                                 <CardTitle className="text-white">Nueva Tarea</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                {subjects.length === 0 && (
-                                    <Alert className="mb-4 bg-red-500/10 border-red-500/50">
-                                        <AlertCircle className="h-4 w-4 text-red-400" />
-                                        <AlertDescription className="text-red-200">
-                                            No tienes materias asignadas a este curso ({cursoId}). Por favor contacta al administrador.
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
+                                {!assignmentType ? (
+                                    // Selección de tipo de tarea
+                                    <div className="space-y-4">
+                                        <p className="text-white/70 mb-4">Selecciona el tipo de tarea que deseas crear:</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <Button
+                                                type="button"
+                                                onClick={() => setAssignmentType('recordatorio')}
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#9f25b8]/20 to-[#6a0dad]/20 border border-[#9f25b8]/40 hover:from-[#9f25b8]/30 hover:to-[#6a0dad]/30 hover:border-[#9f25b8]/60 transition-all"
+                                            >
+                                                <Bell className="w-8 h-8 text-[#c66bff]" />
+                                                <span className="text-white font-semibold">Recordatorio</span>
+                                                <span className="text-white/60 text-sm">Tarea simple con título y descripción</span>
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                onClick={() => setAssignmentType('documento')}
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#9f25b8]/20 to-[#6a0dad]/20 border border-[#9f25b8]/40 hover:from-[#9f25b8]/30 hover:to-[#6a0dad]/30 hover:border-[#9f25b8]/60 transition-all"
+                                            >
+                                                <FileText className="w-8 h-8 text-[#c66bff]" />
+                                                <span className="text-white font-semibold">Documento</span>
+                                                <span className="text-white/60 text-sm">Tarea con editor de documentos completo</span>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    // Formulario de tarea
+                                    <>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40">
+                                                    {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Documento'}
+                                                </Badge>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setAssignmentType(null)}
+                                                className="text-white/70 hover:text-white"
+                                            >
+                                                <X className="w-4 h-4 mr-1" />
+                                                Cambiar tipo
+                                            </Button>
+                                        </div>
 
-                                <form onSubmit={handleSubmit} className="space-y-4">
+                                        {subjects.length === 0 && (
+                                            <Alert className="mb-4 bg-red-500/10 border-red-500/50">
+                                                <AlertCircle className="h-4 w-4 text-red-400" />
+                                                <AlertDescription className="text-red-200">
+                                                    No tienes materias asignadas a este curso ({displayGroupId}). Por favor contacta al administrador.
+                                                </AlertDescription>
+                                            </Alert>
+                                        )}
+
+                                        <form onSubmit={handleSubmit} className="space-y-4">
                                     {/* Selector de Materia */}
                                     {subjects.length > 1 && (
                                         <div>
@@ -684,15 +755,29 @@ export default function CourseDetailPage() {
                                         </div>
                                     )}
 
-                                    {/* Campos de Título, Descripción y Fecha (Sin cambios) */}
-                                    <div><Label htmlFor="titulo" className="text-white">Título</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Título de la tarea" /></div>
-                                    <div><Label htmlFor="descripcion" className="text-white">Descripción</Label><Textarea id="descripcion" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Descripción de la tarea" rows={4} /></div>
-                                    <div><Label htmlFor="fechaEntrega" className="text-white">Fecha de Entrega</Label><Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="bg-white/5 border-white/10 text-white" /></div>
+                                            {/* Campos de Título, Descripción y Fecha */}
+                                            <div><Label htmlFor="titulo" className="text-white">Título</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Título de la tarea" /></div>
+                                            <div><Label htmlFor="descripcion" className="text-white">Descripción</Label><Textarea id="descripcion" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Descripción de la tarea" rows={4} /></div>
+                                            <div><Label htmlFor="fechaEntrega" className="text-white">Fecha de Entrega</Label><Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="bg-white/5 border-white/10 text-white" /></div>
 
-                                    <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0} className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90">
-                                        {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Tarea'}
-                                    </Button>
-                                </form>
+                                            {/* Editor de documentos solo para tipo "documento" */}
+                                            {assignmentType === 'documento' && (
+                                                <div>
+                                                    <Label className="text-white mb-2 block">Contenido del Documento</Label>
+                                                    <DocumentEditor
+                                                        content={documentContent}
+                                                        onChange={setDocumentContent}
+                                                        readOnly={false}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0} className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90">
+                                                {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Tarea'}
+                                            </Button>
+                                        </form>
+                                    </>
+                                )}
                             </CardContent>
                     </Card>
                 )}
@@ -703,7 +788,7 @@ export default function CourseDetailPage() {
                         <DialogHeader>
                             <DialogTitle className="text-white flex items-center gap-2">
                                 <Users className="w-5 h-5 text-[#9f25b8]" />
-                                Estudiantes del Grupo {cursoId}
+                                Estudiantes del Grupo {displayGroupId}
                             </DialogTitle>
                             <DialogDescription className="text-white/60">
                                 {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} conectados a este grupo
@@ -813,13 +898,7 @@ export default function CourseDetailPage() {
                             {errorMessage}
                         </AlertDescription>
                     </Alert>
-                    <Button
-                        onClick={() => setLocation('/courses')}
-                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Volver a Materias
-                    </Button>
+                    <NavBackButton to="/courses" label="Materias" />
                 </div>
             );
         }
@@ -834,13 +913,7 @@ export default function CourseDetailPage() {
                             El ID de materia proporcionado es inválido o no tienes acceso a esta materia.
                     </AlertDescription>
                 </Alert>
-                    <Button
-                        onClick={() => setLocation('/courses')}
-                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Volver a Materias
-                    </Button>
+                    <NavBackButton to="/courses" label="Materias" />
                 </div>
             );
         }
@@ -902,8 +975,8 @@ export default function CourseDetailPage() {
                 {/* Encabezado Visual Mejorado */}
                 <div className="mb-8 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#9f25b8]/20 via-[#6a0dad]/20 to-[#c66bff]/20 border border-white/10 backdrop-blur-md">
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent"></div>
-                    <div className="relative p-8">
-                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                    <div className="relative p-4 sm:p-6 md:p-8">
+                        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 sm:gap-6">
                             <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-4">
                                     <div
@@ -949,14 +1022,7 @@ export default function CourseDetailPage() {
                             
                             {/* Botones de Acción Rápida */}
                             <div className="flex flex-col gap-3">
-                                <Button
-                                    variant="outline"
-                                    className="bg-white/5 border-white/20 text-white hover:bg-white/10 backdrop-blur-sm"
-                                    onClick={() => setLocation('/courses')}
-                                >
-                                    <ArrowLeft className="w-4 h-4 mr-2" />
-                                    Volver a Materias
-                                </Button>
+                                <NavBackButton to="/courses" label="Materias" />
                                 <Button
                                     className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
                                     onClick={() => setLocation('/mi-aprendizaje/tareas')}
@@ -1333,8 +1399,8 @@ export default function CourseDetailPage() {
     };
 
     return (
-        <div className="flex-1 overflow-auto p-8">
-            <div className="max-w-7xl mx-auto">
+        <div className="flex-1 overflow-auto p-4 sm:p-6 md:p-8">
+            <div className="max-w-7xl mx-auto w-full">
                 {renderContent()}
             </div>
         </div>

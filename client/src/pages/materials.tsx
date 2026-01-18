@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { FileText, Link as LinkIcon, Video, Download, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 export default function Materials() {
   const { user } = useAuth();
@@ -35,7 +36,8 @@ export default function Materials() {
     <div className="flex-1 overflow-auto p-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+            <NavBackButton to={user?.rol === 'profesor' ? '/profesor/academia' : '/dashboard'} label={user?.rol === 'profesor' ? 'Academia' : 'Dashboard'} />
+            <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] mt-4">
               Materiales Educativos
             </h1>
             <p className="text-white/60">

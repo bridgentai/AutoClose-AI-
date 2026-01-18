@@ -18,6 +18,9 @@ import { AuthGuard, GuestGuard } from "@/components/auth-guard";
 import { AppLayout } from "@/components/app-layout";
 
 import Home from "@/pages/home";
+import Entry from "@/pages/entry";
+import LoginStandby from "@/pages/login-standby";
+import RegisterStandby from "@/pages/register-standby";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
@@ -31,6 +34,7 @@ import Setup from "@/pages/setup";
 import NotFound from "@/pages/not-found";
 
 import TeacherCalendarPage from "@/pages/teacher-calendar";
+import TeacherTasksSummaryPage from "@/pages/teacher-tasks-summary";
 import AssignmentDetailPage from "@/pages/assignment-detail";
 import DirectivoPage from "@/pages/directivo";
 import PlataformasPage from "@/pages/plataformas";
@@ -42,6 +46,7 @@ import InformacionPersonal from "@/pages/InformacionPersonal";
 import FichaMedica from "@/pages/FichaMedica";
 
 import ComunicacionHome from "@/pages/ComunicacionHome";
+import ComunicacionAcademico from "@/pages/ComunicacionAcademico";
 
 import ComunidadLayout from "@/pages/ComunidadLayout";
 import CalendarioEventos from "@/pages/CalendarioEventos";
@@ -62,6 +67,11 @@ import ProfesorComunicacionLayout from "@/pages/profesor-comunicacion";
 import ProfesorBandejaEntrada from "@/pages/profesor-bandeja-entrada";
 import ProfesorRedactarMensaje from "@/pages/profesor-redactar-mensaje";
 import ProfesorMensajesEnviados from "@/pages/profesor-mensajes-enviados";
+import ProfesorTareasPage from "@/pages/profesor-tareas";
+import ProfesorAsignarTareaPage from "@/pages/profesor-asignar-tarea";
+import ProfesorRevisionTareasPage from "@/pages/profesor-revision-tareas";
+import ProfesorPanelCalificacionPage from "@/pages/profesor-panel-calificacion";
+import ProfesorEditorDocumentoPage from "@/pages/profesor-editor-documento";
 
 // Nuevos roles
 import AdministradorGeneralPage from "@/pages/administrador-general";
@@ -215,6 +225,12 @@ function AppRouter() {
             <Route path="/comunicacion">
               <AuthGuard><ComunicacionHome /></AuthGuard>
             </Route>
+            <Route path="/comunicacion/academico">
+              <AuthGuard><ComunicacionAcademico /></AuthGuard>
+            </Route>
+            <Route path="/comunicacion/academico/:materiaId">
+              <AuthGuard><ComunicacionAcademico /></AuthGuard>
+            </Route>
 
             <Route path="/comunidad">
               <AuthGuard><ComunidadLayout /></AuthGuard>
@@ -231,6 +247,9 @@ function AppRouter() {
             </Route>
             <Route path="/teacher-calendar">
               <AuthGuard><TeacherCalendarPage /></AuthGuard>
+            </Route>
+            <Route path="/profesor/tareas/resumen">
+              <AuthGuard><TeacherTasksSummaryPage /></AuthGuard>
             </Route>
             <Route path="/profesor/cursos/:cursoId/notas">
               <AuthGuard><TeacherNotesPage /></AuthGuard>
@@ -286,8 +305,20 @@ function AppRouter() {
             <Route path="/profesor/academia/grupos">
               <AuthGuard><GroupAssignmentPage /></AuthGuard>
             </Route>
+            <Route path="/profesor/academia/tareas/asignar">
+              <AuthGuard><ProfesorAsignarTareaPage /></AuthGuard>
+            </Route>
+            <Route path="/profesor/academia/tareas/revision">
+              <AuthGuard><ProfesorRevisionTareasPage /></AuthGuard>
+            </Route>
+            <Route path="/profesor/academia/tareas/calificacion/:cursoId">
+              <AuthGuard><ProfesorPanelCalificacionPage /></AuthGuard>
+            </Route>
+            <Route path="/profesor/academia/tareas/editor/:id">
+              <AuthGuard><ProfesorEditorDocumentoPage /></AuthGuard>
+            </Route>
             <Route path="/profesor/academia/tareas">
-              <AuthGuard><Courses /></AuthGuard>
+              <AuthGuard><ProfesorTareasPage /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/notas">
               <AuthGuard><Courses /></AuthGuard>
@@ -380,6 +411,9 @@ function AppRouter() {
         </AppLayout>
       ) : (
         <Switch>
+          <Route path="/" component={Entry} />
+          
+          {/* Rutas de login y registro activas */}
           <Route path="/login">
             <GuestGuard><Login /></GuestGuard>
           </Route>
@@ -387,8 +421,15 @@ function AppRouter() {
           <Route path="/register">
             <GuestGuard><Register /></GuestGuard>
           </Route>
+          
+          {/* Rutas de standby comentadas */}
+          {/* <Route path="/login">
+            <LoginStandby />
+          </Route>
 
-          <Route component={Login} />
+          <Route path="/register">
+            <RegisterStandby />
+          </Route> */}
         </Switch>
       )}
     </>

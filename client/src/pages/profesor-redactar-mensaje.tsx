@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, ArrowLeft, User, Users } from 'lucide-react';
+import { Send, User, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 export default function ProfesorRedactarMensaje() {
   const [, setLocation] = useLocation();
@@ -30,15 +31,8 @@ export default function ProfesorRedactarMensaje() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => setLocation('/profesor/comunicacion')}
-          className="mb-4 text-white/70 hover:text-white"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Volver a Comunicación
-        </Button>
-        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Redactar Mensaje</h1>
+        <NavBackButton to="/profesor/comunicacion" label="Comunicación" />
+        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Redactar Mensaje</h1>
         <p className="text-white/60">Envía mensajes a estudiantes, profesores o grupos</p>
       </div>
 

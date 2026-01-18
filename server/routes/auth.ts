@@ -1,6 +1,8 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { User, GroupStudent } from '../models';
+import { generateUserId } from '../utils/idGenerator';
+import { mongoConnected, mongoError } from '../config/db';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -9,6 +11,18 @@ const TOKEN_EXPIRES = '30d';
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET no está configurado');
 }
+
+// Middleware para verificar conexión a MongoDB
+const checkMongoConnection = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (!mongoConnected) {
+    console.error('[AUTH] Error: MongoDB no está conectado');
+    return res.status(503).json({ 
+      message: 'Servicio no disponible. La base de datos no está conectada.',
+      error: mongoError || 'MongoDB no conectado'
+    });
+  }
+  next();
+};
 
 const generateToken = (id: string) => jwt.sign({ id }, JWT_SECRET, { expiresIn: TOKEN_EXPIRES });
 
@@ -43,6 +57,7 @@ const CODIGOS_COLEGIO: Record<string, string> = {
 
 // Función helper para sincronizar estudiante con su grupo
 // Esta función guarda o actualiza la relación estudiante-grupo en GroupStudent
+// y también vincula el estudiante a los cursos existentes que tienen ese grupo
 async function syncStudentToGroup(estudianteId: string, grupoId: string | undefined, colegioId: string) {
   if (!grupoId || !estudianteId) {
     console.log(`[SYNC] Saltando sincronización: grupoId=${grupoId}, estudianteId=${estudianteId}`);
@@ -56,6 +71,9 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
 
     // Buscar o crear el grupo en la colección grupos
     const { Group } = await import('../models/Group');
+    const { Course } = await import('../models/Course');
+    const { Types } = await import('mongoose');
+    
     let grupo = await Group.findOne({ nombre: grupoIdNormalizado, colegioId });
     
     if (!grupo) {
@@ -68,7 +86,7 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
       console.log(`[SYNC] Grupo ${grupoIdNormalizado} creado con ID:`, grupo._id);
     }
 
-    // Buscar si ya existe la relación
+    // Buscar si ya existe la relación en GroupStudent
     const existing = await GroupStudent.findOne({
       grupoId: grupo._id,
       estudianteId,
@@ -85,6 +103,30 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
     } else {
       console.log(`[SYNC] ℹ️ Estudiante ${estudianteId} ya está en el grupo ${grupoIdNormalizado}`);
     }
+
+    // CRÍTICO: Actualizar cursos existentes que tienen este grupo asignado
+    // para vincular automáticamente al estudiante
+    const estudianteObjectId = new Types.ObjectId(estudianteId);
+    const cursosActualizados = await Course.updateMany(
+      {
+        cursos: grupoIdNormalizado, // Cursos que tienen este grupo en su array
+        colegioId,
+        estudianteIds: { $ne: estudianteObjectId } // Que no tengan ya este estudiante
+      },
+      {
+        $addToSet: {
+          estudianteIds: estudianteObjectId, // Agregar estudiante si no existe
+          estudiantes: estudianteObjectId // También actualizar el array legacy
+        }
+      }
+    );
+
+    if (cursosActualizados.modifiedCount > 0) {
+      console.log(`[SYNC] ✅ Estudiante ${estudianteId} vinculado a ${cursosActualizados.modifiedCount} curso(s) existente(s) del grupo ${grupoIdNormalizado}`);
+    } else {
+      console.log(`[SYNC] ℹ️ No se encontraron cursos nuevos para vincular al estudiante ${estudianteId}`);
+    }
+
   } catch (error: any) {
     // Si es error de duplicado, ignorar (ya existe)
     if (error.code === 11000) {
@@ -98,7 +140,7 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
 }
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', checkMongoConnection, async (req, res) => {
   try {
     const { nombre, email, password, rol, curso, codigoAcceso, hijoId, materias } = req.body;
 
@@ -271,8 +313,23 @@ router.post('/register', async (req, res) => {
 
     const token = generateToken(savedUser._id.toString());
 
+    // Asegurar que userId categorizado existe
+    let userIdCategorizado = savedUser.userId;
+    if (!userIdCategorizado) {
+      try {
+        const categorizedId = generateUserId(savedUser.rol, savedUser._id);
+        userIdCategorizado = categorizedId.fullId;
+        // Guardar en BD
+        await User.findByIdAndUpdate(savedUser._id, { userId: userIdCategorizado });
+      } catch (error: any) {
+        console.error('Error al generar userId categorizado en registro:', error.message);
+        userIdCategorizado = generateUserId(savedUser.rol, savedUser._id).fullId;
+      }
+    }
+
     const response = {
       id: savedUser._id.toString(),
+      userId: userIdCategorizado, // ID categorizado
       nombre: savedUser.nombre,
       email: savedUser.email,
       rol: savedUser.rol,
@@ -303,17 +360,36 @@ router.post('/register', async (req, res) => {
     return res.status(201).json(response);
   } catch (err: any) {
     console.error('Error en register:', err.message);
+    console.error('Stack:', err.stack);
+    
+    // Si es un error de MongoDB, dar información más específica
+    if (err.name === 'MongoServerError' || err.name === 'MongooseError' || !mongoConnected) {
+      return res.status(503).json({ 
+        message: 'Error de conexión con la base de datos.',
+        error: mongoError || err.message
+      });
+    }
+    
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', checkMongoConnection, async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Faltan credenciales.' });
+    }
+
+    // Verificar nuevamente la conexión antes de hacer la consulta
+    if (!mongoConnected) {
+      console.error('[LOGIN] Error: MongoDB desconectado durante la operación');
+      return res.status(503).json({ 
+        message: 'Servicio no disponible. La base de datos no está conectada.',
+        error: mongoError || 'MongoDB no conectado'
+      });
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
@@ -398,8 +474,23 @@ router.post('/login', async (req, res) => {
 
     const token = generateToken(userWithCode._id.toString());
 
+    // Asegurar que userId categorizado existe
+    let userIdCategorizado = userWithCode.userId;
+    if (!userIdCategorizado) {
+      try {
+        const categorizedId = generateUserId(userWithCode.rol, userWithCode._id);
+        userIdCategorizado = categorizedId.fullId;
+        // Guardar en BD
+        await User.findByIdAndUpdate(userWithCode._id, { userId: userIdCategorizado });
+      } catch (error: any) {
+        console.error('Error al generar userId categorizado en login:', error.message);
+        userIdCategorizado = generateUserId(userWithCode.rol, userWithCode._id).fullId;
+      }
+    }
+
     const response = {
       id: userWithCode._id.toString(),
+      userId: userIdCategorizado, // ID categorizado
       nombre: userWithCode.nombre,
       email: userWithCode.email,
       rol: userWithCode.rol,
@@ -430,6 +521,16 @@ router.post('/login', async (req, res) => {
     res.json(response);
   } catch (err: any) {
     console.error('Error en login:', err.message);
+    console.error('Stack:', err.stack);
+    
+    // Si es un error de MongoDB, dar información más específica
+    if (err.name === 'MongoServerError' || err.name === 'MongooseError' || !mongoConnected) {
+      return res.status(503).json({ 
+        message: 'Error de conexión con la base de datos.',
+        error: mongoError || err.message
+      });
+    }
+    
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });

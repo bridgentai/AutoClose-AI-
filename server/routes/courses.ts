@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { Course, User } from '../models'; // Asegúrate de que los modelos Course y User estén importados aquí
 import { protect, AuthRequest } from '../middleware/auth';
 import { Types } from 'mongoose'; // Necesitamos Types para interactuar con IDs
+import { normalizeIdForQuery } from '../utils/idGenerator';
 
 const router = express.Router();
 
@@ -21,7 +22,8 @@ const checkIsDirectivo = (req: AuthRequest, res: Response, next: NextFunction) =
 // GET /api/courses - Obtener cursos según el rol
 router.get('/', protect, async (req: AuthRequest, res) => {
 try {
-const user = await User.findById(req.userId);
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId);
 if (!user) {
 return res.status(404).json({ message: 'Usuario no encontrado' });
 }
@@ -138,7 +140,8 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
 router.get('/for-group/:grupo', protect, async (req: AuthRequest, res) => {
 try {
 const { grupo } = req.params;
-const user = await User.findById(req.userId);
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId);
 
 if (!user) {
 return res.status(404).json({ message: 'Usuario no encontrado' });
@@ -168,7 +171,8 @@ res.status(500).json({ message: 'Error en el servidor.' });
 router.post('/', protect, async (req: AuthRequest, res) => {
 const { nombre, descripcion, cursos, colorAcento, icono } = req.body;
 
-const user = await User.findById(req.userId);
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId);
 if (!user) {
 return res.status(404).json({ message: 'Usuario no encontrado' });
 }
@@ -341,6 +345,155 @@ router.get('/by-name', protect, async (req: AuthRequest, res) => {
     }
 });
 
+
+// =========================================================================
+// NUEVA RUTA: GET /api/courses/academic-groups - Obtener grupos académicos para comunicación
+// Devuelve materias agrupadas con sus estudiantes y profesores
+// =========================================================================
+router.get('/academic-groups', protect, async (req: AuthRequest, res) => {
+  try {
+    const user = await User.findById(req.userId).select('rol curso colegioId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    let courses: any[] = [];
+
+    // Para estudiantes: obtener materias de su curso
+    if (user.rol === 'estudiante') {
+      if (!user.curso) {
+        return res.status(200).json([]);
+      }
+
+      const grupoIdNormalizado = (user.curso as string).toUpperCase().trim();
+      
+      courses = await Course.find({
+        $or: [
+          { cursos: grupoIdNormalizado },
+          { cursos: { $regex: new RegExp(`^${grupoIdNormalizado}$`, 'i') } }
+        ],
+        colegioId: user.colegioId
+      })
+      .populate('profesorIds', 'nombre email')
+      .populate('profesorId', 'nombre email')
+      .populate('estudianteIds', 'nombre email')
+      .populate('estudiantes', 'nombre email')
+      .populate('materiaId', 'nombre descripcion')
+      .lean();
+    }
+    // Para profesores: obtener materias donde es profesor
+    else if (user.rol === 'profesor') {
+      courses = await Course.find({
+        profesorIds: user._id,
+        colegioId: user.colegioId
+      })
+      .populate('profesorIds', 'nombre email')
+      .populate('profesorId', 'nombre email')
+      .populate('estudianteIds', 'nombre email')
+      .populate('estudiantes', 'nombre email')
+      .populate('materiaId', 'nombre descripcion')
+      .lean();
+    }
+    // Para otros roles: obtener todas las materias del colegio
+    else {
+      courses = await Course.find({
+        colegioId: user.colegioId
+      })
+      .populate('profesorIds', 'nombre email')
+      .populate('profesorId', 'nombre email')
+      .populate('estudianteIds', 'nombre email')
+      .populate('estudiantes', 'nombre email')
+      .populate('materiaId', 'nombre descripcion')
+      .lean();
+    }
+
+    // Agrupar por materiaId y formatear respuesta
+    const groupsMap = new Map();
+
+    courses.forEach((course: any) => {
+      const materiaId = course.materiaId?._id?.toString() || course._id.toString();
+      
+      if (!groupsMap.has(materiaId)) {
+        groupsMap.set(materiaId, {
+          materiaId: materiaId,
+          materiaNombre: course.materiaId?.nombre || course.nombre,
+          materiaDescripcion: course.materiaId?.descripcion || course.descripcion,
+          profesores: [],
+          estudiantes: [],
+          cursos: [],
+          ultimoMensaje: null,
+          mensajesSinLeer: 0
+        });
+      }
+
+      const group = groupsMap.get(materiaId);
+
+      // Agregar profesores únicos (de profesorIds array)
+      if (course.profesorIds && Array.isArray(course.profesorIds)) {
+        course.profesorIds.forEach((prof: any) => {
+          if (prof && !group.profesores.find((p: any) => p._id === prof._id?.toString())) {
+            group.profesores.push({
+              _id: prof._id?.toString(),
+              nombre: prof.nombre,
+              email: prof.email
+            });
+          }
+        });
+      }
+      // También agregar profesorId individual si existe
+      if (course.profesorId && !group.profesores.find((p: any) => p._id === course.profesorId._id?.toString())) {
+        group.profesores.push({
+          _id: course.profesorId._id?.toString(),
+          nombre: course.profesorId.nombre,
+          email: course.profesorId.email
+        });
+      }
+
+      // Agregar estudiantes únicos (de estudianteIds array)
+      if (course.estudianteIds && Array.isArray(course.estudianteIds)) {
+        course.estudianteIds.forEach((est: any) => {
+          if (est && !group.estudiantes.find((e: any) => e._id === est._id?.toString())) {
+            group.estudiantes.push({
+              _id: est._id?.toString(),
+              nombre: est.nombre,
+              email: est.email
+            });
+          }
+        });
+      }
+      // También agregar estudiantes del array estudiantes si existe
+      if (course.estudiantes && Array.isArray(course.estudiantes)) {
+        course.estudiantes.forEach((est: any) => {
+          if (est && !group.estudiantes.find((e: any) => e._id === est._id?.toString())) {
+            group.estudiantes.push({
+              _id: est._id?.toString(),
+              nombre: est.nombre,
+              email: est.email
+            });
+          }
+        });
+      }
+
+      // Agregar cursos únicos
+      if (course.cursos && Array.isArray(course.cursos)) {
+        course.cursos.forEach((curso: string) => {
+          if (curso && !group.cursos.includes(curso)) {
+            group.cursos.push(curso);
+          }
+        });
+      }
+    });
+
+    // Convertir map a array
+    const groups = Array.from(groupsMap.values());
+
+    res.json(groups);
+  } catch (error: any) {
+    console.error('Error al obtener grupos académicos:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al obtener grupos académicos.' });
+  }
+});
 
 // =========================================================================
 // OTRAS RUTAS (Se mantienen, pero se pueden refactorizar)

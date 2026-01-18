@@ -6,7 +6,6 @@ import {
   TrendingUp, 
   TrendingDown, 
   Minus, 
-  ArrowLeft,
   CheckCircle2,
   AlertCircle,
   XCircle,
@@ -17,6 +16,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts';
+import { NavBackButton } from '@/components/nav-back-button';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 
 // =========================================================
 // INTERFACES Y DATOS MOCK
@@ -49,87 +51,29 @@ interface SubjectDetail extends SubjectGrade {
   evolucion: { mes: string; promedio: number }[];
 }
 
-// Datos mock para demostración
-const mockSubjects: SubjectGrade[] = [
-  {
-    _id: '1',
-    nombre: 'Matemáticas',
-    promedio: 4.5,
-    ultimaNota: 4.8,
-    estado: 'excelente',
-    tendencia: 'up',
-    colorAcento: '#9f25b8'
-  },
-  {
-    _id: '2',
-    nombre: 'Español',
-    promedio: 4.2,
-    ultimaNota: 4.0,
-    estado: 'bueno',
-    tendencia: 'stable',
-    colorAcento: '#6a0dad'
-  },
-  {
-    _id: '3',
-    nombre: 'Ciencias Naturales',
-    promedio: 3.8,
-    ultimaNota: 3.5,
-    estado: 'regular',
-    tendencia: 'down',
-    colorAcento: '#c66bff'
-  },
-  {
-    _id: '4',
-    nombre: 'Historia',
-    promedio: 4.6,
-    ultimaNota: 4.7,
-    estado: 'excelente',
-    tendencia: 'up',
-    colorAcento: '#9f25b8'
-  }
-];
+// Interfaces para datos reales
+interface NotaReal {
+  _id: string;
+  tareaId: string;
+  tareaTitulo: string;
+  nota: number; // 0-100
+  logro?: string;
+  fecha: string;
+  profesorNombre: string;
+  comentario?: string;
+}
 
-const mockSubjectDetail: SubjectDetail = {
-  _id: '1',
-  nombre: 'Matemáticas',
-  promedio: 4.5,
-  ultimaNota: 4.8,
-  estado: 'excelente',
-  tendencia: 'up',
-  colorAcento: '#9f25b8',
-  promedioFinal: 4.5,
-  categorias: [
-    {
-      categoria: 'Exámenes',
-      promedio: 4.6,
-      notas: [
-        { actividad: 'Examen Parcial 1', nota: 4.5, fecha: '2024-01-15', comentario: 'Excelente trabajo, sigue así' },
-        { actividad: 'Examen Parcial 2', nota: 4.7, fecha: '2024-02-20', comentario: 'Muy bien, mejoraste' }
-      ]
-    },
-    {
-      categoria: 'Tareas',
-      promedio: 4.4,
-      notas: [
-        { actividad: 'Tarea de Álgebra', nota: 4.3, fecha: '2024-01-10' },
-        { actividad: 'Tarea de Geometría', nota: 4.5, fecha: '2024-02-05' }
-      ]
-    },
-    {
-      categoria: 'Proyectos',
-      promedio: 4.5,
-      notas: [
-        { actividad: 'Proyecto Final', nota: 4.5, fecha: '2024-03-01', comentario: 'Buen proyecto, bien estructurado' }
-      ]
-    }
-  ],
-  evolucion: [
-    { mes: 'Ene', promedio: 4.2 },
-    { mes: 'Feb', promedio: 4.4 },
-    { mes: 'Mar', promedio: 4.5 },
-    { mes: 'Abr', promedio: 4.6 }
-  ]
-};
+interface MateriaConNotas {
+  _id: string;
+  nombre: string;
+  colorAcento?: string;
+  icono?: string;
+  notas: NotaReal[];
+  promedio: number; // 0-5
+  ultimaNota: number; // 0-5
+  estado: 'excelente' | 'bueno' | 'regular' | 'bajo';
+  tendencia: 'up' | 'down' | 'stable';
+}
 
 // =========================================================
 // COMPONENTE PRINCIPAL
@@ -139,11 +83,68 @@ export default function StudentNotesPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
-  const [subjects] = useState<SubjectGrade[]>(mockSubjects);
-  const [subjectDetail] = useState<SubjectDetail | null>(mockSubjectDetail);
+
+  // Obtener notas reales del estudiante
+  const { data: notesData, isLoading } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
+    queryKey: ['studentNotes', user?.id],
+    queryFn: () => apiRequest('GET', '/api/student/notes'),
+    enabled: !!user?.id && user?.rol === 'estudiante',
+    staleTime: 0,
+  });
+
+  const subjects: SubjectGrade[] = notesData?.materias.map(m => ({
+    _id: m._id,
+    nombre: m.nombre,
+    promedio: m.promedio,
+    ultimaNota: m.ultimaNota,
+    estado: m.estado,
+    tendencia: m.tendencia,
+    colorAcento: m.colorAcento || '#9f25b8',
+  })) || [];
+
+  const selectedSubjectData = selectedSubject 
+    ? notesData?.materias.find(m => m._id === selectedSubject)
+    : null;
+
+  // Convertir a SubjectDetail para compatibilidad
+  const subjectDetail: SubjectDetail | null = selectedSubjectData ? {
+    _id: selectedSubjectData._id,
+    nombre: selectedSubjectData.nombre,
+    promedio: selectedSubjectData.promedio,
+    ultimaNota: selectedSubjectData.ultimaNota,
+    estado: selectedSubjectData.estado,
+    tendencia: selectedSubjectData.tendencia,
+    colorAcento: selectedSubjectData.colorAcento || '#9f25b8',
+    promedioFinal: selectedSubjectData.promedio,
+    categorias: [
+      {
+        categoria: 'Tareas',
+        promedio: selectedSubjectData.promedio,
+        notas: selectedSubjectData.notas.map(n => ({
+          actividad: n.tareaTitulo,
+          nota: n.nota / 20, // Convertir de 0-100 a 0-5
+          fecha: n.fecha,
+          comentario: n.comentario || n.logro,
+        })),
+      },
+    ],
+    evolucion: [], // Por ahora vacío, se puede calcular después
+  } : null;
 
   // Calcular promedio general
-  const promedioGeneral = subjects.reduce((acc, s) => acc + s.promedio, 0) / subjects.length;
+  const promedioGeneral = subjects.length > 0
+    ? subjects.reduce((acc, s) => acc + s.promedio, 0) / subjects.length
+    : 0;
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="text-white">Cargando notas...</div>
+        </div>
+      </div>
+    );
+  }
 
   // Función para obtener el color del estado
   const getEstadoColor = (estado: string) => {
@@ -189,33 +190,54 @@ export default function StudentNotesPage() {
 
   // Vista principal (lista de materias)
   if (!selectedSubject) {
-    return (
-      <div className="flex-1 overflow-y-auto p-6 md:p-10">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-4 mb-4">
-              <Button
-                variant="ghost"
-                onClick={() => setLocation('/mi-aprendizaje')}
-                className="text-white/70 hover:text-white"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Volver
-              </Button>
-            </div>
-            <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+    if (subjects.length === 0) {
+      return (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+          <div className="max-w-7xl mx-auto w-full">
+            <div className="mb-8">
+              <NavBackButton />
+              <div className="mt-4">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins']">
                   Mis Notas
                 </h1>
+                <p className="text-white/60 text-sm sm:text-base">
+                  Revisa tu rendimiento académico por materia
+                </p>
+              </div>
+            </div>
+            <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+              <CardContent className="p-12 text-center">
+                <BookOpen className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-white mb-2">
+                  No hay notas registradas
+                </h3>
                 <p className="text-white/60">
+                  Las notas aparecerán aquí cuando tus tareas sean calificadas.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          {/* Header */}
+          <div className="mb-8">
+            <NavBackButton />
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mt-4">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins']">
+                  Mis Notas
+                </h1>
+                <p className="text-white/60 text-sm sm:text-base">
                   Revisa tu rendimiento académico por materia
                 </p>
               </div>
               <Button
                 onClick={() => setLocation('/mi-aprendizaje/notas/historial')}
-                className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 whitespace-nowrap"
               >
                 Historial de notas
               </Button>
@@ -233,33 +255,46 @@ export default function StudentNotesPage() {
                 Promedio general: <span className="text-white font-semibold">{promedioGeneral.toFixed(2)}</span>
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="h-[300px]">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="materia" 
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <YAxis 
-                    domain={[0, 5]}
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar 
-                    dataKey="promedio" 
-                    fill="#9f25b8"
-                    radius={[8, 8, 0, 0]}
-                  />
-                </BarChart>
-              </ChartContainer>
+            <CardContent className="p-4 md:p-6">
+              <div className="w-full overflow-x-auto">
+                <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
+                  <BarChart 
+                    data={chartData}
+                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis 
+                      dataKey="materia" 
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                      interval={0}
+                    />
+                    <YAxis 
+                      domain={[0, 5]}
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      width={40}
+                    />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      cursor={{ fill: 'rgba(159, 37, 184, 0.1)' }}
+                    />
+                    <Bar 
+                      dataKey="promedio" 
+                      fill="#9f25b8"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
 
           {/* Lista de Materias */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {subjects.map((subject) => (
               <Card
                 key={subject._id}
@@ -324,21 +359,14 @@ export default function StudentNotesPage() {
     };
 
     return (
-      <div className="flex-1 overflow-y-auto p-6 md:p-10">
-        <div className="max-w-7xl mx-auto">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
           {/* Header con botón volver */}
           <div className="mb-8">
-            <Button
-              variant="ghost"
-              onClick={() => setSelectedSubject(null)}
-              className="text-white/70 hover:text-white mb-4"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Volver a Notas
-            </Button>
-            <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+            <NavBackButton to="/mi-aprendizaje/notas" label="Notas" />
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">
                   {subjectDetail.nombre}
                 </h1>
                 <div className="flex items-center gap-4">
@@ -373,30 +401,42 @@ export default function StudentNotesPage() {
                 Progreso mensual en {subjectDetail.nombre}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <ChartContainer config={detailChartConfig} className="h-[300px]">
-                <LineChart data={subjectDetail.evolucion}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="mes" 
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <YAxis 
-                    domain={[0, 5]}
-                    stroke="rgba(255,255,255,0.5)"
-                    tick={{ fill: 'rgba(255,255,255,0.7)' }}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="promedio" 
-                    stroke="#9f25b8"
-                    strokeWidth={3}
-                    dot={{ fill: '#9f25b8', r: 6 }}
-                  />
-                </LineChart>
-              </ChartContainer>
+            <CardContent className="p-4 md:p-6">
+              <div className="w-full overflow-x-auto">
+                <ChartContainer config={detailChartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
+                  <LineChart 
+                    data={subjectDetail.evolucion}
+                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                    <XAxis 
+                      dataKey="mes" 
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis 
+                      domain={[0, 5]}
+                      stroke="rgba(255,255,255,0.5)"
+                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                      width={40}
+                    />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      cursor={{ stroke: '#9f25b8', strokeWidth: 1 }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="promedio" 
+                      stroke="#9f25b8"
+                      strokeWidth={3}
+                      dot={{ fill: '#9f25b8', r: 6 }}
+                    />
+                  </LineChart>
+                </ChartContainer>
+              </div>
             </CardContent>
           </Card>
 

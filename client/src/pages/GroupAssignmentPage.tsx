@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { ArrowLeft, BookOpen, Users, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { NavBackButton } from '@/components/nav-back-button';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useLocation } from 'wouter';
@@ -88,10 +89,20 @@ export default function GroupAssignmentPage() {
     const selectedMateriaId = courseData?._id || '';
     const selectedMateriaNombre = materiaPrincipalNombre || 'Materia No Definida';
 
-    // Q2: Todos los Grupos
-    const { data: groups = [], isLoading: isLoadingGroups } = useQuery<Group[]>({
+    // Q2: Todos los Grupos (filtrados para mostrar solo nombres válidos, no ObjectIds)
+    const { data: allGroups = [], isLoading: isLoadingGroups } = useQuery<Group[]>({
         queryKey: ['allGroups'],
         queryFn: fetchAllGroups,
+    });
+
+    // Filtrar grupos para excluir aquellos cuyo nombre es un ObjectId (24 caracteres hexadecimales)
+    const groups = allGroups.filter(group => {
+        const nombre = group.nombre?.trim() || '';
+        // Excluir si el nombre es un ObjectId válido (24 caracteres hexadecimales)
+        const isObjectId = nombre.length === 24 && /^[0-9a-fA-F]{24}$/i.test(nombre);
+        // También excluir nombres vacíos o muy largos (probablemente concatenaciones de ObjectIds)
+        const isValidName = nombre.length > 0 && nombre.length <= 10 && !isObjectId;
+        return isValidName;
     });
 
     // Q3: Asignaciones actuales para la Materia del Profesor
@@ -108,10 +119,20 @@ export default function GroupAssignmentPage() {
     // Efecto para sincronizar los checkboxes SOLO cuando hay datos del servidor
     useEffect(() => {
         // Solo sincronizar si hay un curso existente Y los datos ya cargaron
-        if (selectedMateriaId && !isLoadingCurrentAssignments && currentGroupAssignments.length > 0) {
-            setSelectedGroupIds(currentGroupAssignments);
+        if (selectedMateriaId && !isLoadingCurrentAssignments) {
+            if (currentGroupAssignments.length > 0) {
+                // Normalizar los nombres de grupos a mayúsculas para consistencia
+                const normalizedAssignments = currentGroupAssignments.map(g => 
+                    typeof g === 'string' ? g.toUpperCase().trim() : g
+                );
+                // Eliminar duplicados usando Set
+                const uniqueAssignments = Array.from(new Set(normalizedAssignments));
+                setSelectedGroupIds(uniqueAssignments);
+            } else {
+                // Si no hay asignaciones actuales, limpiar la selección
+                setSelectedGroupIds([]);
+            }
         }
-        // NO resetear a [] cuando no hay materiaId - permite selección local
     }, [currentGroupAssignments, isLoadingCurrentAssignments, selectedMateriaId]);
 
     // ------------------------------------
@@ -129,11 +150,21 @@ export default function GroupAssignmentPage() {
                 description: `La materia ${selectedMateriaNombre} ha sido asignada a los grupos. ${estudiantesVinculados} estudiantes vinculados.`, 
                 className: 'bg-green-500 text-white' 
             });
-            // Invalidar caché de ambas vistas (profesor y estudiante)
+            
+            // Invalidar caché del profesor
             queryClient.invalidateQueries({ queryKey: ['professorGroups'] }); 
-            queryClient.invalidateQueries({ queryKey: ['/api/professor/courses'] }); 
-            queryClient.invalidateQueries({ queryKey: ['/api/student/subjects'] }); 
+            queryClient.invalidateQueries({ queryKey: ['/api/professor/courses'] });
+            queryClient.invalidateQueries({ queryKey: ['professorGroups'], exact: false });
             queryClient.invalidateQueries({ queryKey: ['currentAssignments'] }); 
+            
+            // CRÍTICO: Invalidar caché de estudiantes para que vean la actualización automáticamente
+            queryClient.invalidateQueries({ queryKey: ['/api/student/subjects'] });
+            queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
+            queryClient.invalidateQueries({ 
+                queryKey: ['/api/student/subjects'],
+                exact: false 
+            });
+            
             refetchCurrentAssignments();
         },
         onError: (error: any) => {
@@ -151,9 +182,18 @@ export default function GroupAssignmentPage() {
     // ------------------------------------
 
     const handleGroupToggle = (groupId: string, isChecked: boolean) => {
-        setSelectedGroupIds(prev => 
-            isChecked ? [...prev, groupId] : prev.filter(id => id !== groupId)
-        );
+        setSelectedGroupIds(prev => {
+            if (isChecked) {
+                // Si está marcado, agregarlo solo si no existe (prevenir duplicados)
+                if (prev.includes(groupId)) {
+                    return prev; // Ya existe, no hacer nada
+                }
+                return [...prev, groupId];
+            } else {
+                // Si está desmarcado, eliminarlo
+                return prev.filter(id => id !== groupId);
+            }
+        });
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -163,9 +203,14 @@ export default function GroupAssignmentPage() {
             return;
         }
 
+        // Normalizar los IDs de grupos a mayúsculas antes de enviar
+        const normalizedGroupIds = selectedGroupIds.map(id => 
+            typeof id === 'string' ? id.toUpperCase().trim() : id
+        );
+        
         assignmentMutation.mutate({
             materiaId: selectedMateriaId || 'new', // El backend usará el nombre del profesor si no existe
-            grupoIds: selectedGroupIds,
+            grupoIds: normalizedGroupIds,
             profesorId: professorId,
         });
     };
@@ -209,6 +254,9 @@ export default function GroupAssignmentPage() {
     return (
         <div className="flex-1 overflow-y-auto p-6 md:p-10">
                         <div className="max-w-4xl mx-auto">
+                            <div className="mb-6">
+                                <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+                            </div>
                             <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                                 <CardHeader>
                                     <CardTitle className="text-white flex items-center gap-2">
@@ -240,21 +288,25 @@ export default function GroupAssignmentPage() {
                                                     ) : groups.length === 0 ? (
                                                         <p className="text-white/50 col-span-4">No hay grupos disponibles para asignar.</p>
                                                     ) : (
-                                                        groups.map(group => (
-                                                            <div key={group._id} className="flex items-center space-x-2">
-                                                                <Checkbox
-                                                                    id={`group-${group._id}`}
-                                                                    checked={selectedGroupIds.includes(group._id)}
-                                                                    onCheckedChange={(checked) => handleGroupToggle(group._id, checked === true)}
-                                                                    className="border-white/50 data-[state=checked]:bg-[#9f25b8] data-[state=checked]:border-[#9f25b8]"
-                                                                    data-testid={`checkbox-group-${group._id}`}
-                                                                />
-                                                                <Label htmlFor={`group-${group._id}`} className="text-white flex items-center gap-2 cursor-pointer">
-                                                                    <Users className="w-4 h-4 text-white/70" />
-                                                                    {group.nombre}
-                                                                </Label>
-                                                            </div>
-                                                        ))
+                                                        groups.map(group => {
+                                                            // Usar el nombre del grupo como identificador (normalizado a mayúsculas)
+                                                            const groupIdentifier = group.nombre.toUpperCase().trim();
+                                                            return (
+                                                                <div key={group._id} className="flex items-center space-x-2">
+                                                                    <Checkbox
+                                                                        id={`group-${groupIdentifier}`}
+                                                                        checked={selectedGroupIds.includes(groupIdentifier)}
+                                                                        onCheckedChange={(checked) => handleGroupToggle(groupIdentifier, checked === true)}
+                                                                        className="border-white/50 data-[state=checked]:bg-[#9f25b8] data-[state=checked]:border-[#9f25b8]"
+                                                                        data-testid={`checkbox-group-${groupIdentifier}`}
+                                                                    />
+                                                                    <Label htmlFor={`group-${groupIdentifier}`} className="text-white flex items-center gap-2 cursor-pointer">
+                                                                        <Users className="w-4 h-4 text-white/70" />
+                                                                        {group.nombre}
+                                                                    </Label>
+                                                                </div>
+                                                            );
+                                                        })
                                                     )}
                                                 </CardContent>
                                             </Card>

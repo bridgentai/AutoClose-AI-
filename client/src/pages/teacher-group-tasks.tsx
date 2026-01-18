@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation, useRoute } from 'wouter';
 import { 
-  ArrowLeft,
   ClipboardList,
   Calendar as CalendarIcon,
   Clock,
   User,
-  ChevronRight
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
+import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -55,14 +57,7 @@ export default function TeacherGroupTasksPage() {
           <Card className="bg-white/5 border-white/10 backdrop-blur-md">
             <CardContent className="p-12 text-center">
               <p className="text-white/60">Grupo no especificado</p>
-              <Button
-                variant="outline"
-                className="mt-4 border-white/20 text-white hover:bg-white/10"
-                onClick={() => setLocation('/courses')}
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Volver a Cursos
-              </Button>
+              <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
             </CardContent>
           </Card>
         </div>
@@ -75,14 +70,32 @@ export default function TeacherGroupTasksPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => setLocation(`/course-detail/${cursoId}`)}
-            className="text-white/70 hover:text-white mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver al Grupo
-          </Button>
+          <Breadcrumb className="mb-4">
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink 
+                  onClick={() => setLocation('/teacher-calendar')}
+                  className="text-white/70 hover:text-white cursor-pointer flex items-center gap-1"
+                >
+                  <CalendarIcon className="w-4 h-4" />
+                  Calendario General
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="text-white/40" />
+              <BreadcrumbItem>
+                <BreadcrumbLink 
+                  onClick={() => setLocation(`/course-detail/${cursoId}`)}
+                  className="text-white/70 hover:text-white cursor-pointer"
+                >
+                  Grupo {cursoId}
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator className="text-white/40" />
+              <BreadcrumbItem>
+                <span className="text-white">Tareas</span>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
           <div>
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
               Tareas del Grupo {cursoId}

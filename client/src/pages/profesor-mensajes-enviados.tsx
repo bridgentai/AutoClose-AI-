@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Mail, ArrowLeft, User, Users, CheckCircle2 } from 'lucide-react';
+import { Mail, User, Users, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 interface MensajeEnviado {
   id: number;
@@ -52,15 +53,8 @@ export default function ProfesorMensajesEnviados() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => setLocation('/profesor/comunicacion')}
-          className="mb-4 text-white/70 hover:text-white"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Volver a Comunicación
-        </Button>
-        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins']">Mensajes Enviados</h1>
+        <NavBackButton to="/profesor/comunicacion" label="Comunicación" />
+        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Mensajes Enviados</h1>
         <p className="text-white/60">Historial de mensajes que has enviado</p>
       </div>
 

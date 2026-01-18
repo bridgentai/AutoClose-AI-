@@ -1,21 +1,21 @@
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { 
-  ArrowLeft,
   Calendar as CalendarIcon,
   Clock,
   User,
   CheckCircle2,
   Circle,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Star
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { NavBackButton } from '@/components/nav-back-button';
 
 interface Assignment {
   _id: string;
@@ -24,9 +24,17 @@ interface Assignment {
   curso: string;
   fechaEntrega: string;
   profesorNombre: string;
+  estado?: 'pendiente' | 'entregada' | 'calificada';
+  submissions?: Array<{
+    estudianteId: string;
+    fechaEntrega: string;
+    calificacion?: number;
+    retroalimentacion?: string;
+  }>;
   entregas?: Array<{
     estudianteId: string;
     fechaEntrega: string;
+    calificacion?: number;
   }>;
 }
 
@@ -42,40 +50,51 @@ export default function StudentTasksPage() {
     staleTime: 0,
   });
 
-  // Separar tareas por entregar y completadas
+  // Separar tareas por estado
   const now = new Date();
+  const submissions = (assignment: Assignment) => assignment.submissions || assignment.entregas || [];
+  const mySubmission = (assignment: Assignment) => submissions(assignment).find(
+    (e: any) => e.estudianteId === user?.id
+  );
+  
   const tareasPorEntregar = assignments.filter(assignment => {
+    const estado = assignment.estado || (mySubmission(assignment) 
+      ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
+      : 'pendiente');
     const fechaEntrega = new Date(assignment.fechaEntrega);
-    const tieneEntrega = assignment.entregas?.some(
-      e => e.estudianteId === user?.id
-    );
-    return fechaEntrega >= now && !tieneEntrega;
+    return estado === 'pendiente' && fechaEntrega >= now;
   });
 
   const tareasCompletadas = assignments.filter(assignment => {
-    const tieneEntrega = assignment.entregas?.some(
-      e => e.estudianteId === user?.id
-    );
-    return tieneEntrega;
+    const estado = assignment.estado || (mySubmission(assignment) 
+      ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
+      : 'pendiente');
+    return estado === 'calificada' || estado === 'entregada';
   });
 
   const tareasVencidas = assignments.filter(assignment => {
+    const estado = assignment.estado || (mySubmission(assignment) 
+      ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
+      : 'pendiente');
     const fechaEntrega = new Date(assignment.fechaEntrega);
-    const tieneEntrega = assignment.entregas?.some(
-      e => e.estudianteId === user?.id
-    );
-    return fechaEntrega < now && !tieneEntrega;
+    return estado === 'pendiente' && fechaEntrega < now;
   });
 
   // Función para determinar el estado de una tarea
   const getEstadoTarea = (assignment: Assignment) => {
-    const fechaEntrega = new Date(assignment.fechaEntrega);
-    const tieneEntrega = assignment.entregas?.some(
-      e => e.estudianteId === user?.id
-    );
+    const submissions = assignment.submissions || assignment.entregas || [];
+    const mySub = submissions.find((e: any) => e.estudianteId === user?.id);
+    const estado = assignment.estado || (mySub 
+      ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada')
+      : 'pendiente');
     
-    if (tieneEntrega) {
-      return { texto: 'Completada', color: 'bg-green-500/20 text-green-400 border-green-500/40', icon: CheckCircle2 };
+    const fechaEntrega = new Date(assignment.fechaEntrega);
+    
+    if (estado === 'calificada') {
+      return { texto: 'Calificada', color: 'bg-green-500/20 text-green-400 border-green-500/40', icon: CheckCircle2 };
+    }
+    if (estado === 'entregada') {
+      return { texto: 'Entregada', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40', icon: Clock };
     }
     if (fechaEntrega < now) {
       return { texto: 'Vencida', color: 'bg-red-500/20 text-red-400 border-red-500/40', icon: AlertCircle };
@@ -146,11 +165,29 @@ export default function StudentTasksPage() {
                   })}
                 </span>
               </div>
-              {!assignment.entregas?.some(e => e.estudianteId === user?.id) && (
-                <div className="text-[#9f25b8] font-medium">
-                  {diasRestantes > 0 ? `${diasRestantes} días restantes` : 'Vencida'}
-                </div>
-              )}
+              {(() => {
+                const submissions = assignment.submissions || assignment.entregas || [];
+                const mySub = submissions.find((e: any) => e.estudianteId === user?.id);
+                const estado = assignment.estado || (mySub 
+                  ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada')
+                  : 'pendiente');
+                
+                if (estado === 'pendiente') {
+                  return (
+                    <div className="text-[#9f25b8] font-medium">
+                      {diasRestantes > 0 ? `${diasRestantes} días restantes` : 'Vencida'}
+                    </div>
+                  );
+                }
+                if (estado === 'calificada' && mySub?.calificacion !== undefined) {
+                  return (
+                    <div className="text-green-400 font-semibold">
+                      Calificación: {mySub.calificacion}/100
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           </div>
         </div>
@@ -173,14 +210,7 @@ export default function StudentTasksPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => setLocation('/mi-aprendizaje')}
-            className="text-white/70 hover:text-white mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver
-          </Button>
+          <NavBackButton />
           <div>
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
               Mis Tareas

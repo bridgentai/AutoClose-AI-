@@ -7,7 +7,7 @@ interface IChatMessage {
 }
 
 interface IChat {
-  cursoId: Types.ObjectId;
+  cursoId?: Types.ObjectId; // Opcional para permitir chats globales
   participantes: Types.ObjectId[];
   // Campos adicionales para compatibilidad
   colegioId?: string;
@@ -23,7 +23,7 @@ interface IChat {
 }
 
 const chatSchema = new Schema<IChat>({
-  cursoId: { type: Schema.Types.ObjectId, ref: 'cursos', required: true },
+  cursoId: { type: Schema.Types.ObjectId, ref: 'cursos', required: false }, // Opcional para chats globales
   participantes: [{ type: Schema.Types.ObjectId, ref: 'usuarios', default: [] }],
   // Campos adicionales para compatibilidad
   colegioId: { type: String },

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-// Asumimos que estos componentes están definidos en AppLayout.tsx o importados desde una librería de UI.
-import { AppLayout, PageHeader, Card, PrimaryButton } from '../Layout/AppLayout'; 
-// También agregué PrimaryButton por si lo necesita en esa página
-// Importar iconos necesarios
-import { Inbox, Trash2, MailOpen, User, Send, ChevronDown, Search, Filter } from 'lucide-react';
+import { Inbox, Trash2, MailOpen, User, Send, Search, Filter } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 // --- Datos Ficticios para la Demostración ---
 interface Mensaje {
@@ -93,33 +94,39 @@ const BandejaDeEntrada: React.FC = () => {
     }
   };
 
+  const [, setLocation] = useLocation();
+
   return (
-    <AppLayout>
-      <PageHeader
-        title="Bandeja de Entrada"
-        description="Comunicaciones académicas y notificaciones importantes."
-      />
+    <div className="p-6">
+      <div className="mb-6">
+        <NavBackButton to="/comunicacion" label="Comunicación" />
+        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Bandeja de Entrada</h1>
+        <p className="text-white/60">Comunicaciones académicas y notificaciones importantes</p>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[70vh]">
 
         {/* Columna Izquierda: Lista de Mensajes (2/5 o 1/3) */}
         <div className="lg:col-span-1">
-          <Card className="p-0 overflow-hidden h-full flex flex-col">
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-0 overflow-hidden h-full flex flex-col">
             <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                <PrimaryButton className="flex items-center gap-2">
+                <Button
+                  className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 flex items-center gap-2"
+                  onClick={() => setLocation('/comunicacion/redactar')}
+                >
                     <Send className="w-4 h-4" />
                     Nuevo Mensaje
-                </PrimaryButton>
+                </Button>
             </div>
 
             {/* Barra de Búsqueda y Filtro */}
             <div className="p-4 border-b border-white/10 space-y-2">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/50" />
-                    <input 
+                    <Input 
                         type="text" 
                         placeholder="Buscar en mensajes..." 
-                        className="w-full pl-10 pr-4 py-2 bg-white/10 rounded-lg text-white placeholder-white/50 border border-transparent focus:border-[#9f25b8] focus:outline-none"
+                        className="pl-10 bg-white/10 border-white/10 text-white placeholder:text-white/50"
                     />
                 </div>
                 <div className="flex gap-2">
@@ -150,12 +157,12 @@ const BandejaDeEntrada: React.FC = () => {
 
         {/* Columna Derecha: Contenido del Mensaje (3/5 o 2/3) */}
         <div className="lg:col-span-3">
-          <Card className="p-0 overflow-hidden h-full flex flex-col">
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-0 overflow-hidden h-full flex flex-col">
             {selectedMensaje ? (
               <>
                 {/* Header de la Conversación */}
-                <div className="p-6 border-b border-white/10">
-                  <h2 className="text-2xl font-bold text-white">{selectedMensaje.asunto}</h2>
+                <CardHeader className="p-6 border-b border-white/10">
+                  <CardTitle className="text-2xl font-bold text-white">{selectedMensaje.asunto}</CardTitle>
                   <div className="flex items-center gap-4 mt-2 text-white/70 text-sm">
                     <User className="w-4 h-4 text-[#9f25b8]" />
                     <span>De: {selectedMensaje.remitente}</span>
@@ -163,27 +170,31 @@ const BandejaDeEntrada: React.FC = () => {
                     <span>Materia: {selectedMensaje.materia}</span>
                     <span className="ml-auto text-white/50">{selectedMensaje.fecha}</span>
                   </div>
-                </div>
+                </CardHeader>
 
                 {/* Cuerpo del Mensaje */}
-                <div className="p-6 flex-grow overflow-y-auto text-white/80 leading-relaxed">
+                <CardContent className="p-6 flex-grow overflow-y-auto text-white/80 leading-relaxed">
                   <p>{selectedMensaje.cuerpo}</p>
                   {/* Podrías añadir aquí adjuntos, imágenes, etc. */}
-                </div>
+                </CardContent>
 
                 {/* Footer de Acciones */}
                 <div className="p-4 border-t border-white/10 flex justify-end gap-3">
-                  <button 
+                  <Button 
                     onClick={handleEliminar} 
-                    className="flex items-center gap-2 px-4 py-2 text-red-400 border border-red-400 rounded-lg hover:bg-red-900/50 transition-colors"
+                    variant="outline"
+                    className="text-red-400 border-red-400 hover:bg-red-900/50"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4 mr-2" />
                     Eliminar
-                  </button>
-                  <PrimaryButton onClick={handleResponder} className="flex items-center gap-2">
-                    <Send className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    onClick={handleResponder}
+                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
                     Responder
-                  </PrimaryButton>
+                  </Button>
                 </div>
               </>
             ) : (
@@ -195,7 +206,7 @@ const BandejaDeEntrada: React.FC = () => {
           </Card>
         </div>
       </div>
-    </AppLayout>
+    </div>
   );
 };
 
