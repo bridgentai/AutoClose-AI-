@@ -111,10 +111,10 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
     }
 
     // Construir historial de conversación para el AI ANTES de agregar el nuevo mensaje
-    // Usar el historial de la sesión (últimos 30 mensajes previos para mantener más contexto)
-    // IMPORTANTE: Incluir TODOS los mensajes previos para mantener el contexto completo
+    // IMPORTANTE: Incluir TODOS los mensajes previos (sin límite) para mantener el contexto completo
+    // El historial debe incluir todos los mensajes de la sesión para que el AI tenga memoria completa
     const historyMessages = session.historial && session.historial.length > 0
-      ? session.historial.slice(-30).map(msg => ({
+      ? session.historial.map(msg => ({
           role: msg.emisor === 'user' ? 'user' as const : 'assistant' as const,
           content: msg.contenido
         }))
@@ -122,11 +122,12 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
     
     console.log('[AI Chat] Historial de conversación:', historyMessages.length, 'mensajes previos');
     if (historyMessages.length > 0) {
-      console.log('[AI Chat] Últimos 5 mensajes del historial:');
-      historyMessages.slice(-5).forEach((msg, idx) => {
-        const preview = msg.content.length > 80 ? msg.content.substring(0, 80) + '...' : msg.content;
-        console.log(`  [${historyMessages.length - 5 + idx + 1}] ${msg.role}: ${preview}`);
+      console.log('[AI Chat] Todos los mensajes del historial:');
+      historyMessages.forEach((msg, idx) => {
+        const preview = msg.content.length > 100 ? msg.content.substring(0, 100) + '...' : msg.content;
+        console.log(`  [${idx + 1}] ${msg.role}: ${preview}`);
       });
+      console.log('[AI Chat] ✅ El AI tiene acceso a TODO el historial de la conversación');
     } else {
       console.log('[AI Chat] ⚠️ No hay historial previo - esta es la primera conversación');
     }
@@ -141,6 +142,7 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
     // Generar respuesta con Function Calling
     let aiResponse: string;
     let executedActions: string[] = []; // Track executed actions
+    let actionData: Record<string, any> | undefined = undefined;
     try {
       const result = await generateAIResponseWithFunctions(
         message,
@@ -156,6 +158,7 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
       } else {
         aiResponse = result.response || '';
         executedActions = result.executedActions || [];
+        actionData = result.actionData;
       }
     } catch (error: any) {
       console.error('[AI Chat] Error con Function Calling:', error.message);
@@ -186,6 +189,7 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
       role: rol,
       timestamp: new Date().toISOString(),
       executedActions: executedActions, // Include executed actions
+      actionData: actionData, // Include action data
     });
   } catch (error: any) {
     console.error('Error en /api/ai/chat:', error.message);

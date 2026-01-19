@@ -80,6 +80,9 @@ export async function executeAction(
       case 'crear_boletin':
         return await executeCreateBoletin(parameters, userId, colegioId);
 
+      case 'crear_permiso':
+        return await executeCreatePermiso(parameters, userId, colegioId);
+
       default:
         return {
           success: false,
@@ -869,3 +872,103 @@ async function executeCreateBoletin(
   };
 }
 
+async function executeCreatePermiso(
+  params: any,
+  userId: string,
+  colegioId: string
+): Promise<ActionResult> {
+  const { 
+    tipoPermiso, 
+    nombreEstudiante, 
+    fecha,
+    numeroRutaActual,
+    numeroRutaCambio,
+    placaCarroActual,
+    placaCarroSalida,
+    nombreConductor,
+    cedulaConductor
+  } = params;
+
+  // Validar campos obligatorios
+  if (!tipoPermiso || !nombreEstudiante || !fecha) {
+    return {
+      success: false,
+      error: 'Faltan campos obligatorios: tipoPermiso, nombreEstudiante y fecha son requeridos.'
+    };
+  }
+
+  // Validar campos según el tipo de permiso
+  const tipo = tipoPermiso as string;
+  
+  if (tipo === 'ruta-a-carro' || tipo === 'ruta-a-ruta') {
+    if (!numeroRutaActual) {
+      return {
+        success: false,
+        error: `Para el tipo de permiso "${tipo}", el campo "numeroRutaActual" es requerido.`
+      };
+    }
+  }
+
+  if (tipo === 'carro-a-ruta' || tipo === 'ruta-a-ruta') {
+    if (!numeroRutaCambio) {
+      return {
+        success: false,
+        error: `Para el tipo de permiso "${tipo}", el campo "numeroRutaCambio" es requerido.`
+      };
+    }
+  }
+
+  if (tipo === 'ruta-a-carro' || tipo === 'carro-a-ruta' || tipo === 'carro-a-carro') {
+    if (!placaCarroSalida || !nombreConductor || !cedulaConductor) {
+      return {
+        success: false,
+        error: `Para el tipo de permiso "${tipo}", los campos "placaCarroSalida", "nombreConductor" y "cedulaConductor" son requeridos.`
+      };
+    }
+  }
+
+  if (tipo === 'carro-a-ruta' || tipo === 'carro-a-carro') {
+    if (!placaCarroActual) {
+      return {
+        success: false,
+        error: `Para el tipo de permiso "${tipo}", el campo "placaCarroActual" es requerido.`
+      };
+    }
+  }
+
+  // Construir el objeto del permiso
+  const permiso = {
+    tipoPermiso,
+    nombreEstudiante,
+    fecha,
+    numeroRutaActual: numeroRutaActual || '',
+    numeroRutaCambio: numeroRutaCambio || '',
+    placaCarroActual: placaCarroActual || '',
+    placaCarroSalida: placaCarroSalida || '',
+    nombreConductor: nombreConductor || '',
+    cedulaConductor: cedulaConductor || '',
+    id: Date.now().toString(),
+    fechaCreacion: new Date().toISOString(),
+    padreId: userId,
+    colegioId
+  };
+
+  // Registrar la acción
+  await logAIAction({
+    userId,
+    role: 'padre',
+    action: 'crear_permiso',
+    entityType: 'permiso',
+    entityId: permiso.id,
+    colegioId,
+    result: 'success',
+    requestData: params
+  });
+
+  // Retornar el permiso creado para que el frontend lo guarde
+  return {
+    success: true,
+    data: permiso,
+    message: `Permiso de salida "${tipoPermiso}" creado exitosamente para ${nombreEstudiante} el ${fecha}.`
+  };
+}

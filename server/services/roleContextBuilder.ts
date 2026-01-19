@@ -120,7 +120,7 @@ export async function buildParentContext(
   if (!padre || !padre.hijoId) {
     return {
       role: 'padre',
-      permisos: ['consultar_informacion_hijo', 'consultar_calendario', 'consultar_notificaciones']
+      permisos: ['consultar_informacion_hijo', 'crear_permiso', 'consultar_calendario', 'consultar_notificaciones']
     };
   }
 
@@ -132,6 +132,7 @@ export async function buildParentContext(
     hijos: [hijoInfo.estudiante],
     permisos: [
       'consultar_informacion_hijo',
+      'crear_permiso',
       'consultar_calendario',
       'consultar_notificaciones'
     ]

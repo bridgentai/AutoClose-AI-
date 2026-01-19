@@ -349,6 +349,79 @@ function getAllFunctions(): AIFunction[] {
         required: ['cursoId']
       },
       allowedRoles: ['profesor']
+    },
+    {
+      name: 'crear_permiso',
+      description: `⚠️ FUNCIÓN DISPONIBLE PARA PADRES - Crea un permiso de salida/transporte para un estudiante. Esta función permite autorizar que el estudiante salga del colegio usando un medio de transporte diferente al habitual. DEBES usar esta función cuando el usuario solicite: "permiso de salida", "necesito hacer un permiso", "permiso para mi hijo", "permiso de transporte", o cualquier variación similar.
+
+REGLAS CRÍTICAS DE CAMPOS REQUERIDOS POR TIPO (DEBES seguir estas reglas exactamente, NO pidas información innecesaria):
+
+1. "ruta-a-carro": El estudiante normalmente usa ruta, ese día sale en carro.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, numeroRutaActual, placaCarroSalida, nombreConductor, cedulaConductor
+   NO REQUERIDOS: numeroRutaCambio, placaCarroActual
+
+2. "carro-a-ruta": El estudiante normalmente usa carro, ese día usará ruta.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, numeroRutaCambio, placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor
+   NO REQUERIDOS: numeroRutaActual
+
+3. "ruta-a-ruta": Cambio de ruta escolar.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, numeroRutaActual, numeroRutaCambio
+   NO REQUERIDOS: placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor
+
+4. "carro-a-carro": Cambio de carro particular.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor
+   NO REQUERIDOS: numeroRutaActual, numeroRutaCambio
+
+5. "salida-caminando": Salida a pie, no requiere transporte.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha
+   NO REQUERIDOS: Todos los demás campos (numeroRutaActual, numeroRutaCambio, placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor)
+
+IMPORTANTE: Solo debes pedir los campos REQUERIDOS según el tipo de permiso. NO pidas información innecesaria. Si el usuario no especifica el tipo, primero pregunta qué tipo de permiso necesita, y luego pide SOLO los campos requeridos para ese tipo específico.`,
+      parameters: {
+        type: 'object',
+        properties: {
+          tipoPermiso: {
+            type: 'string',
+            enum: ['ruta-a-carro', 'carro-a-ruta', 'ruta-a-ruta', 'carro-a-carro', 'salida-caminando'],
+            description: 'Tipo de permiso de salida'
+          },
+          nombreEstudiante: {
+            type: 'string',
+            description: 'Nombre completo del estudiante para el cual se crea el permiso'
+          },
+          fecha: {
+            type: 'string',
+            format: 'date',
+            description: 'Fecha del permiso (formato YYYY-MM-DD)'
+          },
+          numeroRutaActual: {
+            type: 'string',
+            description: 'Número de ruta actual (requerido para: ruta-a-carro, ruta-a-ruta)'
+          },
+          numeroRutaCambio: {
+            type: 'string',
+            description: 'Número de ruta a la que cambia (requerido para: carro-a-ruta, ruta-a-ruta)'
+          },
+          placaCarroActual: {
+            type: 'string',
+            description: 'Placa del carro actual (requerido para: carro-a-ruta, carro-a-carro)'
+          },
+          placaCarroSalida: {
+            type: 'string',
+            description: 'Placa del carro en el que sale (requerido para: ruta-a-carro, carro-a-ruta, carro-a-carro)'
+          },
+          nombreConductor: {
+            type: 'string',
+            description: 'Nombre completo de quien maneja el carro (requerido para: ruta-a-carro, carro-a-ruta, carro-a-carro)'
+          },
+          cedulaConductor: {
+            type: 'string',
+            description: 'Cédula de quien maneja el carro (requerido para: ruta-a-carro, carro-a-ruta, carro-a-carro)'
+          }
+        },
+        required: ['tipoPermiso', 'nombreEstudiante', 'fecha']
+      },
+      allowedRoles: ['padre']
     }
   ];
 }

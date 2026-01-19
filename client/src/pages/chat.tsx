@@ -133,6 +133,7 @@ export default function Chat() {
         sessionId?: string;
         error?: string;
         executedActions?: string[];
+        actionData?: Record<string, any>;
       }>('POST', '/api/ai/chat', {
         message: currentInput,
         sessionId: currentSessionId || undefined,
@@ -168,6 +169,64 @@ export default function Chat() {
       // Invalidar queries basado en las acciones ejecutadas
       if (response.executedActions && response.executedActions.length > 0) {
         console.log('[Chat] Acciones ejecutadas:', response.executedActions);
+        
+        // Si se creó un permiso, guardarlo en localStorage
+        if (response.executedActions.includes('crear_permiso') && response.actionData?.crear_permiso) {
+          const permisoBackend = response.actionData.crear_permiso;
+          console.log('[Chat] Permiso recibido del backend:', permisoBackend);
+          
+          // Asegurar que el permiso tenga el formato correcto (igual al del formulario)
+          // Eliminar campos extra que no son necesarios para la interfaz
+          const permiso = {
+            tipoPermiso: permisoBackend.tipoPermiso,
+            nombreEstudiante: permisoBackend.nombreEstudiante,
+            fecha: permisoBackend.fecha,
+            numeroRutaActual: permisoBackend.numeroRutaActual || '',
+            numeroRutaCambio: permisoBackend.numeroRutaCambio || '',
+            placaCarroActual: permisoBackend.placaCarroActual || '',
+            placaCarroSalida: permisoBackend.placaCarroSalida || '',
+            nombreConductor: permisoBackend.nombreConductor || '',
+            cedulaConductor: permisoBackend.cedulaConductor || '',
+            id: permisoBackend.id || Date.now().toString(),
+            fechaCreacion: permisoBackend.fechaCreacion || new Date().toISOString(),
+          };
+          
+          const permisosGuardados = localStorage.getItem(`permisos_${user?.id}`);
+          let permisos: any[] = [];
+          
+          if (permisosGuardados) {
+            try {
+              permisos = JSON.parse(permisosGuardados);
+              console.log('[Chat] Permisos existentes:', permisos.length);
+            } catch (e) {
+              console.error('[Chat] Error al parsear permisos:', e);
+            }
+          }
+          
+          // Verificar que el permiso no esté ya guardado (por si acaso)
+          const permisoExiste = permisos.some((p: any) => p.id === permiso.id);
+          if (!permisoExiste) {
+            permisos.push(permiso);
+            localStorage.setItem(`permisos_${user?.id}`, JSON.stringify(permisos));
+            console.log('[Chat] ✅ Permiso guardado en localStorage. Total de permisos:', permisos.length);
+            console.log('[Chat] Permiso guardado:', JSON.stringify(permiso, null, 2));
+            
+            // Disparar evento personalizado para notificar a otras páginas
+            // Usar CustomEvent para mejor compatibilidad
+            const event = new CustomEvent('permisos-updated', {
+              detail: { permiso, totalPermisos: permisos.length }
+            });
+            window.dispatchEvent(event);
+            console.log('[Chat] ✅ Evento "permisos-updated" disparado');
+            
+            // Forzar recarga después de un pequeño delay para asegurar que se guardó
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('permisos-updated'));
+            }, 200);
+          } else {
+            console.log('[Chat] ⚠️ El permiso ya existe, no se duplicará');
+          }
+        }
         
         // Si se asignó una tarea, invalidar todas las queries relacionadas
         if (response.executedActions.includes('asignar_tarea')) {

@@ -158,7 +158,7 @@ export async function generateAIResponseWithFunctions(
   role: string,
   colegioId: string,
   conversationHistory: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = []
-): Promise<string | { response: string; executedActions: string[] }> {
+): Promise<string | { response: string; executedActions: string[]; actionData?: Record<string, any> }> {
   const openaiClient = getOpenAIClient();
   if (!openaiClient) {
     throw new Error('OPENAI_API_KEY no está configurada. Por favor, configura una clave válida de OpenAI en el archivo .env');
@@ -174,6 +174,23 @@ export async function generateAIResponseWithFunctions(
 
     // Obtener herramientas disponibles según rol
     const tools = getOpenAITools(role);
+    
+    // Log para debugging
+    console.log(`[OpenAI] Rol: ${role}, Herramientas disponibles:`, tools.map(t => t.function?.name || 'unknown'));
+    if (role === 'padre') {
+      console.log('[OpenAI] ========== DEBUG PADRE ==========');
+      console.log('[OpenAI] Total de herramientas para padre:', tools.length);
+      console.log('[OpenAI] Nombres de herramientas:', tools.map(t => t.function?.name).join(', '));
+      const crearPermisoTool = tools.find(t => t.function?.name === 'crear_permiso');
+      if (crearPermisoTool) {
+        console.log('[OpenAI] ✅ crear_permiso está disponible para padre');
+        console.log('[OpenAI] Descripción de crear_permiso:', crearPermisoTool.function?.description?.substring(0, 100));
+      } else {
+        console.log('[OpenAI] ❌ ERROR: crear_permiso NO está disponible para padre');
+        console.log('[OpenAI] Esto es un ERROR CRÍTICO - la función debería estar disponible');
+      }
+      console.log('[OpenAI] =================================');
+    }
 
     // Construir mensajes
     const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
@@ -191,6 +208,16 @@ export async function generateAIResponseWithFunctions(
       console.log('[OpenAI] ⚠️ ADVERTENCIA: No hay historial de conversación. El AI no tendrá contexto de mensajes anteriores.');
     } else if (conversationHistory.length > 0) {
       console.log('[OpenAI] ✅ Historial correcto. El AI tendrá contexto de', conversationHistory.length, 'mensajes anteriores.');
+      console.log('[OpenAI] Resumen del historial:');
+      conversationHistory.forEach((msg, idx) => {
+        const preview = msg.content.length > 60 ? msg.content.substring(0, 60) + '...' : msg.content;
+        console.log(`  [${idx + 1}] ${msg.role}: ${preview}`);
+      });
+    }
+    
+    // Log del system prompt para debugging (solo primeros 500 caracteres)
+    if (role === 'padre') {
+      console.log('[OpenAI] System prompt (primeros 500 chars):', systemPrompt.substring(0, 500));
     }
 
     // Primera llamada a OpenAI
@@ -205,6 +232,7 @@ export async function generateAIResponseWithFunctions(
     let finalResponse = response.choices[0].message.content || '';
     let functionCalls = response.choices[0].message.tool_calls || [];
     const executedActions: string[] = []; // Track executed actions
+    const actionData: Record<string, any> = {}; // Track action data
 
     // Procesar function calls si existen
     while (functionCalls.length > 0) {
@@ -240,6 +268,10 @@ export async function generateAIResponseWithFunctions(
             // Track executed action if successful
             if (result.success) {
               executedActions.push(functionName);
+              // Store action data for frontend
+              if (result.data) {
+                actionData[functionName] = result.data;
+              }
             }
             
             return {
@@ -330,13 +362,22 @@ function buildSystemPrompt(role: string, context: any): string {
 
 IMPORTANTE: Responde SIEMPRE en español de Colombia. Sé claro, conciso y útil.
 
-CONTEXTO Y MEMORIA:
-- Tienes acceso completo al historial de la conversación
-- DEBES recordar y usar TODA la información proporcionada en mensajes anteriores
-- Si el usuario menciona algo en un mensaje, esa información está disponible en mensajes posteriores
-- NO repitas preguntas sobre información que ya fue proporcionada
-- Acumula información parcial hasta tener todo lo necesario para completar una acción
-- Sé proactivo: si tienes suficiente información, procede sin pedir confirmación innecesaria`;
+⚠️⚠️⚠️ CONTEXTO Y MEMORIA DE LA CONVERSACIÓN (CRÍTICO) ⚠️⚠️⚠️:
+- Tienes acceso COMPLETO al historial de la conversación que se muestra arriba
+- El historial incluye TODOS los mensajes previos (usuario y asistente) de esta conversación
+- DEBES LEER y USAR el historial completo antes de responder
+- Si el usuario mencionó algo en un mensaje anterior, esa información está DISPONIBLE y DEBES usarla
+- NO vuelvas a pedir información que ya fue proporcionada en mensajes anteriores - REVISA el historial primero
+- Acumula información de múltiples mensajes: si el usuario dice "permiso" en un mensaje y "para Juan" en otro, usa AMBOS
+- Si falta información, pide SOLO lo que falta, mencionando explícitamente lo que ya tienes del historial
+- Mantén el contexto: si están hablando de crear un permiso, continúa con ese tema sin cambiar de tema
+- Ejemplo: Si en el historial el usuario dijo "quiero crear un permiso" y luego dice "para Juan", ya tienes que es un permiso para Juan. No preguntes "¿qué tipo de permiso?" sin mencionar que ya sabes que es para Juan.
+
+⚠️ IMPORTANTE SOBRE TUS HERRAMIENTAS:
+- Tienes acceso a funciones/tools que puedes usar para realizar acciones
+- Cuando el usuario solicite algo que puedas hacer con una función disponible, DEBES usar esa función
+- NUNCA digas que no puedes hacer algo si tienes una función disponible para hacerlo
+- Revisa siempre tus herramientas disponibles antes de decir que no puedes hacer algo`;
 
   const roleSpecificPrompts: Record<string, string> = {
     estudiante: `
@@ -416,20 +457,101 @@ EJEMPLOS DE USO:
 `,
 
     padre: `
+⚠️⚠️⚠️ ATENCIÓN: ERES UN ASISTENTE PARA PADRES Y TIENES ACCESO COMPLETO A CREAR PERMISOS ⚠️⚠️⚠️
+
 RESTRICCIONES ESTRICTAS:
 - Solo puedes consultar información de TUS HIJOS
 - NO puedes acceder a información de otros estudiantes
 - NO puedes ver información de cursos completos
 - Solo puedes ver información académica (no datos privados)
 
-FUNCIONES DISPONIBLES:
+FUNCIONES DISPONIBLES (TIENES ACCESO COMPLETO A ESTAS FUNCIONES):
 - consultar_informacion_hijo: Ver información académica completa de tu hijo (notas, tareas, materias)
+- crear_permiso: ⚠️⚠️⚠️ FUNCIÓN DISPONIBLE Y ACTIVA ⚠️⚠️⚠️ - Crear un permiso de salida/transporte para tu hijo/a. ESTA FUNCIÓN ESTÁ DISPONIBLE EN TUS HERRAMIENTAS Y DEBES USARLA cuando el usuario solicite crear un permiso.
 - consultar_calendario: Ver eventos del calendario
 - consultar_notificaciones: Ver tus notificaciones
 
-EJEMPLOS DE USO:
-- "¿Cómo van las notas de mi hijo?" → Usa consultar_informacion_hijo
-- "¿Qué tareas tiene pendientes mi hijo?" → Usa consultar_informacion_hijo
+IMPORTANTE: La función "crear_permiso" está en tu lista de herramientas disponibles. Cuando el usuario solicite crear un permiso, DEBES usar esta función. NUNCA digas que no tienes acceso o que no puedes hacerlo.
+
+MEMORIA Y CONTEXTO DE CONVERSACIÓN (CRÍTICO):
+- El historial de conversación arriba contiene TODOS los mensajes previos de esta conversación
+- DEBES LEER el historial completo antes de responder
+- Si el usuario mencionó algo en un mensaje anterior, esa información está DISPONIBLE - úsala
+- NO hagas preguntas sobre información que ya está en el historial
+- Mantén el contexto: si están hablando de crear un permiso, continúa con ese tema
+- Acumula información de múltiples mensajes antes de actuar
+- Ejemplo: Si en el historial el usuario dijo "quiero crear un permiso" y luego dice "para Juan", ya sabes que es un permiso para Juan. No preguntes "¿qué tipo de permiso?" sin mencionar que ya sabes que es para Juan.
+
+⚠️⚠️⚠️ INSTRUCCIONES CRÍTICAS SOBRE PERMISOS DE SALIDA/TRANSPORTE ⚠️⚠️⚠️:
+
+DEFINICIÓN:
+- "Permiso de salida" = "Permiso de transporte" = Autorización para que el estudiante salga del colegio usando un medio de transporte diferente al habitual
+- Cuando el usuario dice "permiso de salida", "necesito hacer un permiso", "quiero un permiso", "permiso para mi hijo", etc., se refiere a crear un PERMISO DE TRANSPORTE/SALIDA
+- TÚ TIENES ACCESO COMPLETO a crear estos permisos usando la función crear_permiso
+- NUNCA digas que no puedes crear permisos. SIEMPRE puedes hacerlo.
+
+TIPOS DE PERMISOS DE TRANSPORTE/SALIDA (5 opciones):
+1. "ruta-a-carro": El estudiante normalmente usa ruta escolar, pero ese día saldrá en carro particular
+2. "carro-a-ruta": El estudiante normalmente usa carro particular, pero ese día usará ruta escolar
+3. "ruta-a-ruta": El estudiante cambiará de una ruta escolar a otra ruta escolar
+4. "carro-a-carro": El estudiante cambiará de un carro particular a otro carro particular
+5. "salida-caminando": El estudiante saldrá caminando (no requiere transporte)
+
+CUANDO EL USUARIO SOLICITA UN PERMISO:
+1. Inmediatamente reconoce que es un PERMISO DE TRANSPORTE/SALIDA
+2. Pregunta qué tipo de permiso necesita (ruta a carro, carro a ruta, cambio de ruta, cambio de carro, o salida caminando)
+3. Pide la información necesaria según el tipo
+4. Una vez que tengas TODA la información, USA crear_permiso inmediatamente
+
+⚠️⚠️⚠️ REGLAS CRÍTICAS DE CAMPOS REQUERIDOS POR TIPO (DEBES seguir estas reglas EXACTAMENTE) ⚠️⚠️⚠️:
+
+1. "ruta-a-carro": El estudiante normalmente usa ruta, ese día sale en carro.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, numeroRutaActual, placaCarroSalida, nombreConductor, cedulaConductor
+   NO REQUERIDOS: numeroRutaCambio, placaCarroActual
+   → Solo pide: nombre del estudiante, fecha, número de ruta actual, placa del carro en el que sale, nombre del conductor, cédula del conductor
+
+2. "carro-a-ruta": El estudiante normalmente usa carro, ese día usará ruta.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, numeroRutaCambio, placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor
+   NO REQUERIDOS: numeroRutaActual
+   → Solo pide: nombre del estudiante, fecha, número de ruta a la que cambia, placa del carro actual, placa del carro en el que sale, nombre del conductor, cédula del conductor
+
+3. "ruta-a-ruta": Cambio de ruta escolar.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, numeroRutaActual, numeroRutaCambio
+   NO REQUERIDOS: placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor
+   → Solo pide: nombre del estudiante, fecha, número de ruta actual, número de ruta a la que cambia
+   → NO pidas información de carro ni conductor (no aplica para este tipo)
+
+4. "carro-a-carro": Cambio de carro particular.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha, placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor
+   NO REQUERIDOS: numeroRutaActual, numeroRutaCambio
+   → Solo pide: nombre del estudiante, fecha, placa del carro actual, placa del carro nuevo, nombre del conductor, cédula del conductor
+   → NO pidas información de rutas (no aplica para este tipo)
+
+5. "salida-caminando": Salida a pie, no requiere transporte.
+   REQUERIDOS: tipoPermiso, nombreEstudiante, fecha
+   NO REQUERIDOS: Todos los demás campos (numeroRutaActual, numeroRutaCambio, placaCarroActual, placaCarroSalida, nombreConductor, cedulaConductor)
+   → Solo pide: nombre del estudiante, fecha
+   → NO pidas información de rutas ni carros (no aplica para este tipo)
+
+EJEMPLOS DE CONVERSACIÓN:
+Usuario: "Necesito hacer un permiso de salida"
+→ TÚ: "¡Por supuesto! Puedo ayudarte a crear un permiso de transporte. ¿Qué tipo de permiso necesitas? Las opciones son: salida en carro (si normalmente usa ruta), cambio a ruta (si normalmente usa carro), cambio de ruta, cambio de carro, o salida caminando."
+
+Usuario: "Mi hijo normalmente va en ruta pero mañana sale en carro"
+→ TÚ: "Perfecto, es un permiso tipo 'ruta-a-carro'. Necesito: nombre completo del estudiante, fecha, número de ruta actual, placa del carro en el que saldrá, nombre del conductor y cédula del conductor."
+
+Usuario: "Quiero un permiso para cambiar de ruta"
+→ TÚ: "Perfecto, es un permiso tipo 'ruta-a-ruta'. Necesito: nombre completo del estudiante, fecha, número de ruta actual y número de ruta a la que cambiará."
+
+Usuario: "Quiero un permiso para que mi hijo salga caminando el viernes"
+→ TÚ: "Perfecto, es un permiso tipo 'salida-caminando'. Necesito: nombre completo del estudiante y la fecha exacta (formato YYYY-MM-DD)."
+
+IMPORTANTE:
+- Acumula información de múltiples mensajes del historial
+- Si falta información, pregunta SOLO los campos requeridos para ese tipo específico
+- NO pidas información que NO es requerida para ese tipo (ej: no pidas datos de carro si es "ruta-a-ruta")
+- Una vez que tengas TODA la información requerida para ese tipo, crea el permiso INMEDIATAMENTE usando crear_permiso
+- NUNCA digas que no puedes hacerlo - SIEMPRE puedes crear permisos
 `,
 
     directivo: `

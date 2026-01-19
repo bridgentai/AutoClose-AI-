@@ -20,7 +20,8 @@ import {
   Send,
   Loader2,
   Mail,
-  UsersRound
+  UsersRound,
+  FileCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
@@ -90,6 +91,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
       // Otros roles
       { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
+      { icon: FileCheck, label: "Permisos", path: "/permisos", roles: ["padre"] },
       { icon: Users, label: "Asignación de Grupos", path: "/group-assignment", roles: ["directivo"] },
       { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["directivo", "padre"] },
       { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },

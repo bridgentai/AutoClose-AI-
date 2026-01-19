@@ -1,20 +1,27 @@
 import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
+import { useLocation } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User, Mail, GraduationCap, Shield, BookOpen, Settings, Moon, Sun, Bell, Type, Globe } from 'lucide-react';
+import { User, Mail, GraduationCap, Shield, BookOpen, Settings, Moon, Sun, Bell, Type, Globe, LogOut } from 'lucide-react';
 
 export default function Account() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
   const [tema, setTema] = useState<string>('oscuro');
   const [notificacionesEmail, setNotificacionesEmail] = useState<boolean>(true);
   const [notificacionesPush, setNotificacionesPush] = useState<boolean>(true);
   const [notificacionesTareas, setNotificacionesTareas] = useState<boolean>(true);
   const [tamanoLetra, setTamanoLetra] = useState<string>('medio');
   const [idioma, setIdioma] = useState<string>('es');
+
+  const handleLogout = () => {
+    logout();
+    setLocation('/login');
+  };
 
   return (
     <div className="flex-1 overflow-auto p-8">
@@ -306,6 +313,16 @@ export default function Account() {
               <button className="w-full p-4 rounded-xl text-left text-white transition-colors bg-white/5 hover:bg-white/10">
                 <div className="font-medium">Cambiar contraseña</div>
                 <div className="text-sm text-white/50 mt-1">Actualiza tu contraseña de acceso</div>
+              </button>
+              <button 
+                onClick={handleLogout}
+                className="w-full p-4 rounded-xl text-left text-red-400 transition-colors bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 flex items-center gap-3"
+              >
+                <LogOut className="w-5 h-5" />
+                <div className="flex-1">
+                  <div className="font-medium">Cerrar sesión</div>
+                  <div className="text-sm text-red-400/70 mt-1">Cierra tu sesión y vuelve a la pantalla de inicio</div>
+                </div>
               </button>
             </CardContent>
           </Card>

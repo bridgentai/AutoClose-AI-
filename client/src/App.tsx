@@ -32,6 +32,7 @@ import Materials from "@/pages/materials";
 import Account from "@/pages/account";
 import Setup from "@/pages/setup";
 import NotFound from "@/pages/not-found";
+import PermisosPage from "@/pages/permisos";
 
 import TeacherCalendarPage from "@/pages/teacher-calendar";
 import TeacherTasksSummaryPage from "@/pages/teacher-tasks-summary";
@@ -290,6 +291,10 @@ function AppRouter() {
 
             <Route path="/plataformas">
               <AuthGuard><PlataformasPage /></AuthGuard>
+            </Route>
+
+            <Route path="/permisos">
+              <AuthGuard><PermisosPage /></AuthGuard>
             </Route>
 
             {/* Módulos del Profesor */}
