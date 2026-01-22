@@ -6,7 +6,7 @@ interface IUser {
   nombre: string;
   correo: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
   colegioId: string;
   estado: string;
   configuraciones: Record<string, any>;
@@ -22,6 +22,7 @@ interface IUser {
   barrio?: string;
   ciudad?: string;
   fechaNacimiento?: Date;
+  seccion?: 'junior-school' | 'middle-school' | 'high-school'; // Para asistentes
   createdAt: Date;
   // NUEVO: ID categorizado por rol
   userId?: string; // ID categorizado (ej: "PROF-507f1f77bcf86cd799439011")
@@ -35,7 +36,7 @@ const userSchema = new Schema<IUser>({
   rol: { 
     type: String, 
     required: true, 
-    enum: ['estudiante', 'profesor', 'directivo', 'padre', 'administrador', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria'] 
+    enum: ['estudiante', 'profesor', 'directivo', 'padre', 'administrador', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'] 
   },
   colegioId: { type: String, required: true, default: 'COLEGIO_DEMO_2025' },
   estado: { type: String, default: 'activo' },
@@ -57,6 +58,11 @@ const userSchema = new Schema<IUser>({
   barrio: { type: String },
   ciudad: { type: String },
   fechaNacimiento: { type: Date },
+  seccion: { 
+    type: String, 
+    enum: ['junior-school', 'middle-school', 'high-school'],
+    required: false 
+  },
   createdAt: { type: Date, default: Date.now },
   // NUEVO: ID categorizado por rol
   userId: { 

@@ -6,12 +6,13 @@ export interface User {
   nombre: string;
   email: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
   curso?: string;
   materias?: string[];
   colegioId: string;
   hijoId?: string; // Para padres - ID del estudiante hijo
   codigoUnico?: string; // Código único de 4 dígitos
+  seccion?: 'junior-school' | 'middle-school' | 'high-school'; // Para asistentes
   createdAt: Date;
 }
 
@@ -19,11 +20,12 @@ export interface InsertUser {
   nombre: string;
   email: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
   curso?: string;
   materias?: string[];
   colegioId: string;
   hijoId?: string;
+  seccion?: 'junior-school' | 'middle-school' | 'high-school';
 }
 
 export interface Course {
@@ -132,11 +134,12 @@ export interface AuthResponse {
   _id?: string; // Alias para compatibilidad
   nombre: string;
   email: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
   curso?: string;
   materias?: string[];
   colegioId: string;
   codigoUnico?: string; // Código único de 4 dígitos
+  seccion?: 'junior-school' | 'middle-school' | 'high-school'; // Para asistentes
   token: string;
 }
 

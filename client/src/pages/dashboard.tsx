@@ -653,6 +653,7 @@ export default function Dashboard() {
         'tesoreria': '/tesoreria',
         'nutricion': '/nutricion',
         'cafeteria': '/cafeteria',
+        'asistente': '/asistente',
       };
 
       if (roleRedirects[user.rol]) {
@@ -677,6 +678,7 @@ export default function Dashboard() {
       case 'tesoreria':
       case 'nutricion':
       case 'cafeteria':
+      case 'asistente':
         // Estos roles se redirigen a sus páginas específicas
         return null;
       default:

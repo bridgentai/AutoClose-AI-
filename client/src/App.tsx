@@ -111,6 +111,9 @@ import CafeteriaComunidadLayout from "@/pages/cafeteria-comunidad";
 import CafeteriaAcademiaLayout from "@/pages/cafeteria-academia";
 import CafeteriaComunicacionLayout from "@/pages/cafeteria-comunicacion";
 
+// Asistente
+import AsistentePage from "@/pages/asistente";
+
 const queryClient = new QueryClient();
 
 function AppRouter() {
@@ -169,6 +172,9 @@ function AppRouter() {
             </Route>
             <Route path="/cafeteria">
               <AuthGuard><CafeteriaPage /></AuthGuard>
+            </Route>
+            <Route path="/asistente">
+              <AuthGuard><AsistentePage /></AuthGuard>
             </Route>
 
             <Route path="/subjects">

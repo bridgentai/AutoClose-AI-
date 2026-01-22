@@ -18,11 +18,12 @@ export default function Register() {
     nombre: '',
     email: '',
     password: '',
-    rol: '' as 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | '',
+    rol: '' as 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | '',
     curso: '',
-    codigoAcceso: '', // Código del colegio para profesor/directivo
+    codigoAcceso: '', // Código del colegio para profesor/directivo/asistente
     colegioId: 'default_colegio',
     hijoId: '',
+    seccion: '' as 'junior-school' | 'middle-school' | 'high-school' | '',
   });
   const [materias, setMaterias] = useState<string[]>([]);
   const [currentMateria, setCurrentMateria] = useState('');
@@ -46,8 +47,14 @@ export default function Register() {
       return;
     }
 
-    if ((formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria') && !formData.codigoAcceso) {
+    if ((formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria' || formData.rol === 'asistente') && !formData.codigoAcceso) {
       setError('Debes ingresar el código del colegio');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.rol === 'asistente' && !formData.seccion) {
+      setError('Debes seleccionar una sección');
       setLoading(false);
       return;
     }
@@ -62,7 +69,8 @@ export default function Register() {
     try {
       const data = await apiRequest<AuthResponse>('POST', '/api/auth/register', {
         ...formData,
-        materias: formData.rol === 'profesor' ? materias : undefined
+        materias: formData.rol === 'profesor' ? materias : undefined,
+        seccion: formData.rol === 'asistente' ? formData.seccion : undefined
       });
       
       // Iniciar sesión automáticamente con la cuenta recién creada
@@ -163,9 +171,32 @@ export default function Register() {
                     <SelectItem value="tesoreria">Tesorería</SelectItem>
                     <SelectItem value="nutricion">Nutrición</SelectItem>
                     <SelectItem value="cafeteria">Cafetería</SelectItem>
+                    <SelectItem value="asistente">Asistente</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {formData.rol === 'asistente' && (
+                <div>
+                  <Label className="text-white/90 mb-2 block">Sección *</Label>
+                  <Select
+                    value={formData.seccion}
+                    onValueChange={(value: any) => setFormData({ ...formData, seccion: value })}
+                  >
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-seccion">
+                      <SelectValue placeholder="Selecciona tu sección" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="junior-school">Junior School</SelectItem>
+                      <SelectItem value="middle-school">Middle School</SelectItem>
+                      <SelectItem value="high-school">High School</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-white/50 text-xs mt-1">
+                    Selecciona la sección donde trabajarás como asistente.
+                  </p>
+                </div>
+              )}
 
               {formData.rol === 'estudiante' && (
                 <div>
@@ -250,7 +281,7 @@ export default function Register() {
                 </div>
               )}
 
-              {(formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria') && (
+              {(formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria' || formData.rol === 'asistente') && (
                 <div>
                   <Label htmlFor="codigoAcceso" className="text-white/90 mb-2 block">Código del Colegio</Label>
                   <Input

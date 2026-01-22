@@ -142,19 +142,19 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
 // POST /api/auth/register
 router.post('/register', checkMongoConnection, async (req, res) => {
   try {
-    const { nombre, email, password, rol, curso, codigoAcceso, hijoId, materias } = req.body;
+    const { nombre, email, password, rol, curso, codigoAcceso, hijoId, materias, seccion } = req.body;
 
     if (!nombre || !email || !password || !rol) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
     }
 
-    if (!['estudiante', 'profesor', 'directivo', 'padre', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria'].includes(rol)) {
+    if (!['estudiante', 'profesor', 'directivo', 'padre', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'].includes(rol)) {
       return res.status(400).json({ message: 'Rol inválido.' });
     }
 
     // Validar código de acceso para roles que lo requieren
     let colegioId = 'COLEGIO_DEMO_2025';
-    const rolesQueRequierenCodigo = ['profesor', 'directivo', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria'];
+    const rolesQueRequierenCodigo = ['profesor', 'directivo', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'];
     if (rolesQueRequierenCodigo.includes(rol)) {
       if (!codigoAcceso) {
         return res.status(400).json({ message: 'El código del colegio es obligatorio para este rol.' });
@@ -170,6 +170,13 @@ router.post('/register', checkMongoConnection, async (req, res) => {
       }
       
       colegioId = colegioIdFromCodigo;
+    }
+
+    // Validar sección para asistentes
+    if (rol === 'asistente') {
+      if (!seccion || !['junior-school', 'middle-school', 'high-school'].includes(seccion)) {
+        return res.status(400).json({ message: 'Debes seleccionar una sección válida (Junior School, Middle School o High School).' });
+      }
     }
 
     // Validar y normalizar materias para profesores
@@ -219,6 +226,7 @@ router.post('/register', checkMongoConnection, async (req, res) => {
       materias: rol === 'profesor' ? materiasArray : undefined,
       colegioId,
       hijoId: rol === 'padre' ? hijoId : undefined,
+      seccion: rol === 'asistente' ? seccion : undefined,
       estado: 'activo',
       configuraciones: {},
     });
@@ -337,6 +345,7 @@ router.post('/register', checkMongoConnection, async (req, res) => {
       materias: savedUser.materias,
       colegioId: savedUser.colegioId,
       codigoUnico: codigoFinal || null,
+      seccion: savedUser.seccion || null,
       token,
     };
 
@@ -498,6 +507,7 @@ router.post('/login', checkMongoConnection, async (req, res) => {
       materias: userWithCode.materias,
       colegioId: userWithCode.colegioId,
       codigoUnico: codigoFinal || null,
+      seccion: userWithCode.seccion || null,
       token,
     };
 
