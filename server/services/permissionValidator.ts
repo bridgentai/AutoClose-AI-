@@ -39,7 +39,9 @@ export async function canQueryOwnNotes(
     };
   }
 
-  if (user.colegioId !== colegioId) {
+  // ⚠️ SEGURIDAD: super_admin tiene acceso global, no está limitado por colegioId
+  // En producción, considerar logging de auditoría para accesos de super_admin
+  if (user.rol !== 'super_admin' && user.colegioId !== colegioId) {
     return {
       allowed: false,
       reason: 'No tienes acceso a información de otro colegio.'
@@ -319,7 +321,9 @@ export async function canSendComment(
     };
   }
 
-  if (user.colegioId !== colegioId) {
+  // ⚠️ SEGURIDAD: super_admin tiene acceso global, no está limitado por colegioId
+  // En producción, considerar logging de auditoría para accesos de super_admin
+  if (user.rol !== 'super_admin' && user.colegioId !== colegioId) {
     return {
       allowed: false,
       reason: 'No tienes acceso a información de otro colegio.'
@@ -374,14 +378,17 @@ export async function canCreateBoletin(
     };
   }
 
-  if (user.rol !== 'profesor' && user.rol !== 'directivo') {
+  // ⚠️ SEGURIDAD: super_admin puede crear boletines para cualquier colegio
+  if (user.rol !== 'profesor' && user.rol !== 'directivo' && user.rol !== 'school_admin' && user.rol !== 'super_admin') {
     return {
       allowed: false,
       reason: 'Solo los profesores y directivos pueden crear boletines.'
     };
   }
 
-  if (user.colegioId !== colegioId) {
+  // ⚠️ SEGURIDAD: super_admin tiene acceso global, no está limitado por colegioId
+  // En producción, considerar logging de auditoría para accesos de super_admin
+  if (user.rol !== 'super_admin' && user.colegioId !== colegioId) {
     return {
       allowed: false,
       reason: 'No tienes acceso a información de otro colegio.'
@@ -419,14 +426,17 @@ export async function canModifyDate(
   const normalizedAssignmentId = normalizeIdForQuery(assignmentId);
 
   const user = await User.findById(normalizedUserId).select('rol colegioId').lean();
-  if (!user || (user.rol !== 'profesor' && user.rol !== 'directivo')) {
+  // ⚠️ SEGURIDAD: super_admin puede modificar fechas de tareas de cualquier colegio
+  if (!user || (user.rol !== 'profesor' && user.rol !== 'directivo' && user.rol !== 'school_admin' && user.rol !== 'super_admin')) {
     return {
       allowed: false,
       reason: 'Solo los profesores y directivos pueden modificar fechas de tareas.'
     };
   }
 
-  if (user.colegioId !== colegioId) {
+  // ⚠️ SEGURIDAD: super_admin tiene acceso global, no está limitado por colegioId
+  // En producción, considerar logging de auditoría para accesos de super_admin
+  if (user.rol !== 'super_admin' && user.colegioId !== colegioId) {
     return {
       allowed: false,
       reason: 'No tienes acceso a información de otro colegio.'

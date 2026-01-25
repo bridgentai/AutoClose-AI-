@@ -3,7 +3,7 @@ import { Schema, model } from 'mongoose';
 interface IInstitutionConfig {
   colegioId: string;
   nombre: string;
-  logoUrl: string;
+  logoUrl?: string;
   parametros: Record<string, any>;
   // Campos adicionales para compatibilidad
   nombreIA?: string;
@@ -18,7 +18,7 @@ interface IInstitutionConfig {
 const institutionConfigSchema = new Schema<IInstitutionConfig>({
   colegioId: { type: String, required: true, unique: true },
   nombre: { type: String, required: true },
-  logoUrl: { type: String, required: true },
+  logoUrl: { type: String, required: false, default: '' },
   parametros: { type: Schema.Types.Mixed, default: {} },
   // Campos adicionales para compatibilidad
   nombreIA: { type: String, default: 'AutoClose AI' },

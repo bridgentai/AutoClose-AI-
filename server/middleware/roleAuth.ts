@@ -69,8 +69,9 @@ export const validateUserAccess = async (
       }
     }
 
-    // Verificar mismo colegio
-    if (targetUser.colegioId !== req.user?.colegioId) {
+    // Verificar mismo colegio (excepto para super_admin que tiene acceso global)
+    // ⚠️ SEGURIDAD: super_admin puede acceder a cualquier colegio
+    if (req.user?.rol !== 'super_admin' && targetUser.colegioId !== req.user?.colegioId) {
       return res.status(403).json({ 
         message: 'No tienes acceso a usuarios de otro colegio.' 
       });

@@ -194,4 +194,206 @@ router.post('/asignar-codigos', protect, async (req: AuthRequest, res) => {
 });
 
 
+// =========================================================================
+// GET /api/users/by-role - Obtener usuarios por rol (para admin-general-colegio)
+// Permite filtrar por rol y colegioId del usuario autenticado
+router.get('/by-role', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol colegioId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Solo admin-general-colegio puede acceder
+    if (user.rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden acceder a esta ruta' });
+    }
+
+    const { rol } = req.query;
+    
+    if (!rol || typeof rol !== 'string') {
+      return res.status(400).json({ message: 'El parámetro "rol" es requerido' });
+    }
+
+    // Validar que el rol sea uno permitido
+    const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo'];
+    if (!rolesPermitidos.includes(rol)) {
+      return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
+    }
+
+    // Obtener usuarios del mismo colegio y rol
+    const usuarios = await User.find({
+      colegioId: user.colegioId,
+      rol: rol
+    })
+    .select('nombre email curso estado createdAt userId codigoUnico telefono celular')
+    .sort({ nombre: 1 })
+    .lean();
+
+    // Incluir userId categorizado
+    const usuariosConId = usuarios.map(usr => ({
+      _id: usr._id,
+      id: usr._id.toString(),
+      userId: usr.userId || generateUserId(usr.rol as string, usr._id).fullId,
+      nombre: usr.nombre,
+      email: usr.email || usr.correo,
+      curso: usr.curso,
+      estado: usr.estado || 'active',
+      codigoUnico: usr.codigoUnico,
+      telefono: usr.telefono,
+      celular: usr.celular,
+      createdAt: usr.createdAt,
+    }));
+
+    res.json(usuariosConId);
+  } catch (error: any) {
+    console.error('Error al obtener usuarios por rol:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al cargar los usuarios.' });
+  }
+});
+
+// =========================================================================
+// GET /api/users/stats - Obtener estadísticas del colegio (KPIs)
+router.get('/stats', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol colegioId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Solo admin-general-colegio puede acceder
+    if (user.rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden acceder a esta ruta' });
+    }
+
+    // Contar usuarios por rol
+    const [estudiantes, profesores, padres, directivos] = await Promise.all([
+      User.countDocuments({ colegioId: user.colegioId, rol: 'estudiante' }),
+      User.countDocuments({ colegioId: user.colegioId, rol: 'profesor' }),
+      User.countDocuments({ colegioId: user.colegioId, rol: 'padre' }),
+      User.countDocuments({ colegioId: user.colegioId, rol: 'directivo' }),
+    ]);
+
+    // Contar cursos/grupos (usando Group model)
+    const { Group } = await import('../models/Group');
+    const cursos = await Group.countDocuments({ colegioId: user.colegioId });
+
+    // Contar materias
+    const materias = await Course.countDocuments({ colegioId: user.colegioId });
+
+    res.json({
+      estudiantes,
+      profesores,
+      padres,
+      directivos,
+      cursos,
+      materias,
+    });
+  } catch (error: any) {
+    console.error('Error al obtener estadísticas:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al cargar las estadísticas.' });
+  }
+});
+
+// =========================================================================
+// POST /api/users/create - Crear usuario (solo para admin-general-colegio)
+// Permite crear usuarios sin código de acceso
+router.post('/create', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol colegioId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Solo admin-general-colegio puede crear usuarios
+    if (user.rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear usuarios' });
+    }
+
+    const { nombre, email, password, rol, curso, telefono, celular } = req.body;
+
+    if (!nombre || !email || !password || !rol) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, email, password, rol' });
+    }
+
+    // Validar rol
+    const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo'];
+    if (!rolesPermitidos.includes(rol)) {
+      return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
+    }
+
+    // Verificar si el correo ya existe
+    const existing = await User.findOne({ 
+      $or: [
+        { email: email.toLowerCase() },
+        { correo: email.toLowerCase() }
+      ]
+    });
+    
+    if (existing) {
+      return res.status(400).json({ message: 'El correo ya está registrado.' });
+    }
+
+    // Generar código único
+    const codigoUnico = await generarCodigoUnico();
+
+    // Crear usuario
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const newUser = new User({
+      nombre,
+      correo: email.toLowerCase(),
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      rol,
+      colegioId: user.colegioId,
+      estado: 'active',
+      curso: rol === 'estudiante' ? curso?.toUpperCase().trim() : undefined,
+      codigoUnico,
+      telefono,
+      celular,
+      configuraciones: {},
+    });
+
+    // Generar userId categorizado
+    const userIdInfo = generateUserId(rol, newUser._id);
+    newUser.userId = userIdInfo.fullId;
+
+    await newUser.save();
+
+    // Si es estudiante y tiene curso, sincronizar con grupo
+    if (rol === 'estudiante' && curso) {
+      try {
+        const { syncEstudianteToGroup } = await import('../services/syncService');
+        await syncEstudianteToGroup(newUser._id.toString(), curso.toUpperCase().trim(), user.colegioId);
+      } catch (syncError: any) {
+        console.error('[USERS] Error al sincronizar estudiante con grupo:', syncError.message);
+        // No fallar la creación del usuario si falla la sincronización
+      }
+    }
+
+    res.status(201).json({
+      message: 'Usuario creado exitosamente',
+      user: {
+        _id: newUser._id,
+        nombre: newUser.nombre,
+        email: newUser.email,
+        rol: newUser.rol,
+        userId: newUser.userId,
+        codigoUnico: newUser.codigoUnico,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error al crear usuario:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al crear el usuario.' });
+  }
+});
+
 export default router;

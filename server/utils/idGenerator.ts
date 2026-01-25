@@ -26,10 +26,14 @@ export function getPrefixForRole(role: string): UserIdPrefix {
       return UserIdPrefix.PARENT;
     case 'directivo':
     case 'administrador-general':
+    case 'admin-general-colegio':
     case 'transporte':
     case 'tesoreria':
     case 'nutricion':
     case 'cafeteria':
+    case 'asistente':
+    case 'school_admin':
+    case 'super_admin':
     case 'administrador':
       return UserIdPrefix.ADMIN;
     default:

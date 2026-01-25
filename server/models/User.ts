@@ -6,9 +6,9 @@ interface IUser {
   nombre: string;
   correo: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
   colegioId: string;
-  estado: string;
+  estado: 'pending' | 'active' | 'suspended'; // Estado del usuario
   configuraciones: Record<string, any>;
   // Campos adicionales para compatibilidad
   email?: string;
@@ -36,10 +36,20 @@ const userSchema = new Schema<IUser>({
   rol: { 
     type: String, 
     required: true, 
-    enum: ['estudiante', 'profesor', 'directivo', 'padre', 'administrador', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'] 
+    enum: ['estudiante', 'profesor', 'directivo', 'padre', 'administrador', 'administrador-general', 'admin-general-colegio', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente', 'school_admin', 'super_admin'] 
   },
-  colegioId: { type: String, required: true, default: 'COLEGIO_DEMO_2025' },
-  estado: { type: String, default: 'activo' },
+  // ⚠️ SEGURIDAD: En producción, considerar hacer colegioId opcional para super_admin
+  // Por ahora, super_admin usa 'GLOBAL_ADMIN' como valor especial
+  colegioId: { 
+    type: String, 
+    required: true, 
+    default: 'COLEGIO_DEMO_2025' 
+  },
+  estado: { 
+    type: String, 
+    enum: ['pending', 'active', 'suspended'],
+    default: 'active' // Por defecto activo para mantener compatibilidad
+  },
   configuraciones: { type: Schema.Types.Mixed, default: {} },
   // Campos adicionales para compatibilidad
   email: { type: String },

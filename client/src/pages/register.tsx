@@ -18,7 +18,7 @@ export default function Register() {
     nombre: '',
     email: '',
     password: '',
-    rol: '' as 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | '',
+    rol: '' as 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'super_admin' | '',
     curso: '',
     codigoAcceso: '', // Código del colegio para profesor/directivo/asistente
     colegioId: 'default_colegio',
@@ -47,8 +47,12 @@ export default function Register() {
       return;
     }
 
-    if ((formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria' || formData.rol === 'asistente') && !formData.codigoAcceso) {
-      setError('Debes ingresar el código del colegio');
+    if ((formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'admin-general-colegio' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria' || formData.rol === 'asistente') && !formData.codigoAcceso) {
+      if (formData.rol === 'admin-general-colegio') {
+        setError('Debes ingresar el código del colegio proporcionado por el super administrador');
+      } else {
+        setError('Debes ingresar el código del colegio');
+      }
       setLoading(false);
       return;
     }
@@ -167,11 +171,14 @@ export default function Register() {
                     <SelectItem value="directivo">Directivo</SelectItem>
                     <SelectItem value="padre">Padre/Madre</SelectItem>
                     <SelectItem value="administrador-general">Administrador General</SelectItem>
+                    <SelectItem value="admin-general-colegio">Administrador General del Colegio</SelectItem>
                     <SelectItem value="transporte">Transporte</SelectItem>
                     <SelectItem value="tesoreria">Tesorería</SelectItem>
                     <SelectItem value="nutricion">Nutrición</SelectItem>
                     <SelectItem value="cafeteria">Cafetería</SelectItem>
                     <SelectItem value="asistente">Asistente</SelectItem>
+                    {/* ⚠️ SEGURIDAD: En producción, remover esta opción del frontend */}
+                    <SelectItem value="super_admin">Super Administrador (Solo pruebas/demos)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -281,18 +288,25 @@ export default function Register() {
                 </div>
               )}
 
-              {(formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria' || formData.rol === 'asistente') && (
+              {(formData.rol === 'profesor' || formData.rol === 'directivo' || formData.rol === 'administrador-general' || formData.rol === 'admin-general-colegio' || formData.rol === 'transporte' || formData.rol === 'tesoreria' || formData.rol === 'nutricion' || formData.rol === 'cafeteria' || formData.rol === 'asistente') && (
                 <div>
-                  <Label htmlFor="codigoAcceso" className="text-white/90 mb-2 block">Código del Colegio</Label>
+                  <Label htmlFor="codigoAcceso" className="text-white/90 mb-2 block">Código del Colegio *</Label>
                   <Input
                     id="codigoAcceso"
                     value={formData.codigoAcceso}
-                    onChange={(e) => setFormData({ ...formData, codigoAcceso: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, codigoAcceso: e.target.value.toUpperCase() })}
                     required
                     className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
-                    placeholder="Código proporcionado por tu institución"
+                    placeholder={formData.rol === 'admin-general-colegio' 
+                      ? 'Ej: COLEGIO_DEMO_2025_1234'
+                      : 'Código proporcionado por tu institución'}
                     data-testid="input-codigo-acceso"
                   />
+                  <p className="text-white/50 text-xs mt-1">
+                    {formData.rol === 'admin-general-colegio' 
+                      ? 'Ingresa el código proporcionado por el super administrador. Este código asignará automáticamente tu rol y colegio.'
+                      : 'Código de acceso proporcionado por el colegio'}
+                  </p>
                 </div>
               )}
 

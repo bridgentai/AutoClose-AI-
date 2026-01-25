@@ -18,6 +18,8 @@ import usersRoutes from "./routes/users";
 import groupsRoutes, { seedGroups } from "./routes/groups";
 import professorRoutes from "./routes/professor";
 import studentRoutes from "./routes/student";
+import superAdminRoutes from "./routes/superAdmin";
+import institutionRoutes from "./routes/institution";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Conectar a MongoDB
@@ -39,6 +41,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/groups', groupsRoutes);
   app.use('/api/professor', professorRoutes);
   app.use('/api/student', studentRoutes);
+  app.use('/api/super-admin', superAdminRoutes);
+  app.use('/api/institution', institutionRoutes);
 
   // Seed grupos fijos al iniciar
   await seedGroups();

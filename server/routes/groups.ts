@@ -4,6 +4,8 @@ import { GroupStudent } from '../models/GroupStudent';
 import { User } from '../models/User';
 import { Assignment } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
+import { Types } from 'mongoose';
+import { normalizeIdForQuery } from '../utils/idGenerator';
 
 const router = express.Router();
 
@@ -47,6 +49,81 @@ export async function seedGroups(colegioId: string = 'COLEGIO_DEMO_2025') {
     console.error('❌ Error al crear grupos fijos:', error);
   }
 }
+
+// =========================================================================
+// POST /api/groups/create - Crear grupo/curso (solo para admin-general-colegio)
+// IMPORTANTE: Esta ruta debe estar ANTES de las rutas con parámetros dinámicos
+router.post('/create', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol colegioId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Solo admin-general-colegio puede crear grupos
+    if (user.rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear grupos' });
+    }
+
+    const { nombre, seccion, directorGrupoId } = req.body;
+
+    if (!nombre || !seccion || !directorGrupoId) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, seccion, directorGrupoId' });
+    }
+
+    // Validar que el director de grupo sea un profesor
+    const directorGrupo = await User.findById(normalizeIdForQuery(directorGrupoId)).select('rol colegioId');
+    if (!directorGrupo) {
+      return res.status(404).json({ message: 'Director de grupo no encontrado' });
+    }
+
+    if (directorGrupo.rol !== 'profesor') {
+      return res.status(400).json({ message: 'El director de grupo debe ser un profesor' });
+    }
+
+    if (directorGrupo.colegioId !== user.colegioId) {
+      return res.status(403).json({ message: 'El director de grupo debe pertenecer al mismo colegio' });
+    }
+
+    // Crear el nombre completo del grupo (ej: "7A", "10B")
+    const nombreCompleto = `${nombre}${seccion}`.toUpperCase().trim();
+
+    // Verificar si el grupo ya existe
+    const grupoExistente = await Group.findOne({ 
+      nombre: nombreCompleto, 
+      colegioId: user.colegioId 
+    });
+
+    if (grupoExistente) {
+      return res.status(400).json({ message: `El grupo ${nombreCompleto} ya existe` });
+    }
+
+    // Crear el grupo
+    const nuevoGrupo = await Group.create({
+      nombre: nombreCompleto,
+      descripcion: `Grupo ${nombreCompleto}`,
+      colegioId: user.colegioId,
+    });
+
+    // TODO: Asignar el director de grupo al grupo (esto podría requerir un campo adicional en el modelo Group)
+    // Por ahora, el grupo se crea y el director se puede asignar después
+
+    res.status(201).json({
+      message: 'Grupo creado exitosamente',
+      grupo: {
+        _id: nuevoGrupo._id,
+        nombre: nuevoGrupo.nombre,
+        descripcion: nuevoGrupo.descripcion,
+        colegioId: nuevoGrupo.colegioId,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error al crear grupo:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al crear el grupo.' });
+  }
+});
 
 // GET /api/groups/all - Obtener todos los grupos
 router.get('/all', protect, async (req: AuthRequest, res) => {
@@ -304,6 +381,80 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Error al obtener grupo:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// =========================================================================
+// POST /api/groups/create - Crear grupo/curso (solo para admin-general-colegio)
+router.post('/create', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = req.userId ? req.userId.toString() : '';
+    const user = await User.findById(normalizedUserId).select('rol colegioId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Solo admin-general-colegio puede crear grupos
+    if (user.rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear grupos' });
+    }
+
+    const { nombre, seccion, directorGrupoId } = req.body;
+
+    if (!nombre || !seccion || !directorGrupoId) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, seccion, directorGrupoId' });
+    }
+
+    // Validar que el director de grupo sea un profesor
+    const directorGrupo = await User.findById(directorGrupoId).select('rol colegioId');
+    if (!directorGrupo) {
+      return res.status(404).json({ message: 'Director de grupo no encontrado' });
+    }
+
+    if (directorGrupo.rol !== 'profesor') {
+      return res.status(400).json({ message: 'El director de grupo debe ser un profesor' });
+    }
+
+    if (directorGrupo.colegioId !== user.colegioId) {
+      return res.status(403).json({ message: 'El director de grupo debe pertenecer al mismo colegio' });
+    }
+
+    // Crear el nombre completo del grupo (ej: "7A", "10B")
+    const nombreCompleto = `${nombre}${seccion}`.toUpperCase().trim();
+
+    // Verificar si el grupo ya existe
+    const grupoExistente = await Group.findOne({ 
+      nombre: nombreCompleto, 
+      colegioId: user.colegioId 
+    });
+
+    if (grupoExistente) {
+      return res.status(400).json({ message: `El grupo ${nombreCompleto} ya existe` });
+    }
+
+    // Crear el grupo
+    const nuevoGrupo = await Group.create({
+      nombre: nombreCompleto,
+      descripcion: `Grupo ${nombreCompleto}`,
+      colegioId: user.colegioId,
+    });
+
+    // TODO: Asignar el director de grupo al grupo (esto podría requerir un campo adicional en el modelo Group)
+    // Por ahora, el grupo se crea y el director se puede asignar después
+
+    res.status(201).json({
+      message: 'Grupo creado exitosamente',
+      grupo: {
+        _id: nuevoGrupo._id,
+        nombre: nuevoGrupo.nombre,
+        descripcion: nuevoGrupo.descripcion,
+        colegioId: nuevoGrupo.colegioId,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error al crear grupo:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al crear el grupo.' });
   }
 });
 

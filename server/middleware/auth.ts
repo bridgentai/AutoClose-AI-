@@ -16,7 +16,7 @@ export interface AuthRequest extends Request {
     id: string; // ID interno
     categorizedId: string; // ID categorizado
     colegioId: string;
-    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
+    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
     curso?: string;
     materias?: string[];
   };
