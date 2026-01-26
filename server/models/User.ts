@@ -8,7 +8,7 @@ interface IUser {
   password: string;
   rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
   colegioId: string;
-  estado: 'pending' | 'active' | 'suspended'; // Estado del usuario
+  estado: 'pending' | 'active' | 'suspended' | 'pendiente_vinculacion' | 'vinculado'; // Estado del usuario
   configuraciones: Record<string, any>;
   // Campos adicionales para compatibilidad
   email?: string;
@@ -47,7 +47,7 @@ const userSchema = new Schema<IUser>({
   },
   estado: { 
     type: String, 
-    enum: ['pending', 'active', 'suspended'],
+    enum: ['pending', 'active', 'suspended', 'pendiente_vinculacion', 'vinculado'],
     default: 'active' // Por defecto activo para mantener compatibilidad
   },
   configuraciones: { type: Schema.Types.Mixed, default: {} },

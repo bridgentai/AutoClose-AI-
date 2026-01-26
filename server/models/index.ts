@@ -17,3 +17,4 @@ export { CodigoInstitucion } from './CodigoInstitucion';
 export { Pago } from './Pago';
 export { Factura } from './Factura';
 export { AIActionLog, type IAIActionLog } from './AIActionLog';
+export { Vinculacion, type IVinculacion } from './Vinculacion';

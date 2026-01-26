@@ -618,14 +618,21 @@ router.post('/login', checkMongoConnection, async (req, res) => {
       return res.status(401).json({ message: 'Usuario no encontrado.' });
     }
 
-    // Verificar que el usuario esté activo (si tiene estado)
-    if (user.estado && user.estado !== 'active' && user.estado !== 'activo') {
+    // Solo usuarios con estado 'active' pueden iniciar sesión
+    if (user.estado !== 'active' && user.estado !== 'activo') {
       if (user.estado === 'suspended') {
         return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' });
+      }
+      if (user.estado === 'pendiente_vinculacion') {
+        return res.status(403).json({ message: 'Tu cuenta está pendiente de vinculación con un padre. El administrador debe completar la vinculación y activar tu cuenta.' });
+      }
+      if (user.estado === 'vinculado') {
+        return res.status(403).json({ message: 'Tu cuenta está vinculada pero aún no activada. El administrador debe activar tu cuenta para que puedas iniciar sesión.' });
       }
       if (user.estado === 'pending') {
         return res.status(403).json({ message: 'Tu cuenta está pendiente de aprobación. Contacta al administrador.' });
       }
+      return res.status(403).json({ message: 'Tu cuenta no está activa. Contacta al administrador del colegio.' });
     }
 
     const isMatch = await user.matchPassword(password);
