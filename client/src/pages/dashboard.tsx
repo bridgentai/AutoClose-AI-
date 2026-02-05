@@ -146,29 +146,34 @@ function AIChatBox({ rol }: AIChatBoxProps) {
               </div>
             </div>
           ) : (
-            <div className="space-y-3 py-2">
+            <div className="space-y-4 py-2">
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
-                  className={`flex ${msg.emisor === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`transition-smooth reveal-scale ${
+                    msg.emisor === 'user' ? 'flex justify-end' : 'w-full'
+                  }`}
+                  style={{ animationDelay: `${idx * 0.1}s` }}
                 >
-                  <div
-                    className={`max-w-[85%] px-3 py-2 rounded-lg text-sm transition-smooth reveal-scale ${msg.emisor === 'user'
-                      ? 'bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white hover-glow'
-                      : 'bg-white/10 text-white border border-white/20 glass-enhanced'
-                      }`}
-                    style={{ animationDelay: `${idx * 0.1}s` }}
-                  >
-                    <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
-                  </div>
+                  {msg.emisor === 'user' ? (
+                    // Mensaje del usuario: burbuja con gradiente púrpura
+                    <div className="max-w-[85%] px-3 py-2 rounded-lg rounded-br-sm text-sm text-white bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover-glow">
+                      <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
+                    </div>
+                  ) : (
+                    // Respuesta de la IA: texto en prosa sin burbuja (estilo ChatGPT)
+                    <div className="w-full">
+                      <div className="text-white/90 text-[14px] leading-relaxed whitespace-pre-wrap">
+                        {msg.contenido}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-white/10 px-3 py-2 rounded-lg flex items-center gap-2 text-white/70">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span className="text-sm italic">Escribiendo...</span>
-                  </div>
+                <div className="flex items-center gap-2 text-white/60">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span className="text-sm italic">Escribiendo...</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -176,7 +181,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
           )}
         </div>
         <div className="border-t border-white/10 pt-3 mt-3 flex-shrink-0">
-          <div className="flex gap-2 items-center">
+          <div className="relative flex items-end gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 backdrop-blur-sm hover:border-white/20 transition-colors">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -187,7 +192,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                 }
               }}
               placeholder="Escribe tu mensaje..."
-              className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-white/40 focus:border-[#9f25b8]/50 focus:ring-1 focus:ring-[#9f25b8]/30"
+              className="flex-1 border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm py-1"
               disabled={loading}
               data-testid="input-dashboard-chat"
             />
@@ -198,10 +203,10 @@ function AIChatBox({ rol }: AIChatBoxProps) {
               }}
               disabled={loading || !input.trim()}
               size="icon"
-              className="w-10 h-10 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               data-testid="button-dashboard-send"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             </Button>
           </div>
         </div>
