@@ -14,6 +14,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/authContext";
 import { AuthGuard, GuestGuard } from "@/components/auth-guard";
+import { useInstitutionColors } from "@/hooks/useInstitutionColors";
 
 import { AppLayout } from "@/components/app-layout";
 
@@ -114,11 +115,17 @@ import CafeteriaComunicacionLayout from "@/pages/cafeteria-comunicacion";
 // Asistente
 import AsistentePage from "@/pages/asistente";
 
+// Super Admin
+import SuperAdminPage from "@/pages/super-admin";
+
 const queryClient = new QueryClient();
 
 function AppRouter() {
   const { user } = useAuth();
   const isLogged = Boolean(user);
+  
+  // Cargar y aplicar colores de la institución (el hook maneja internamente si el usuario está autenticado)
+  useInstitutionColors();
 
   return (
     <>
@@ -175,6 +182,9 @@ function AppRouter() {
             </Route>
             <Route path="/asistente">
               <AuthGuard><AsistentePage /></AuthGuard>
+            </Route>
+            <Route path="/super-admin">
+              <AuthGuard><SuperAdminPage /></AuthGuard>
             </Route>
 
             <Route path="/subjects">

@@ -6,13 +6,14 @@ export interface User {
   nombre: string;
   email: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
   curso?: string;
   materias?: string[];
   colegioId: string;
   hijoId?: string; // Para padres - ID del estudiante hijo
   codigoUnico?: string; // Código único de 4 dígitos
   seccion?: 'junior-school' | 'middle-school' | 'high-school'; // Para asistentes
+  estado?: 'pending' | 'active' | 'suspended'; // Estado del usuario
   createdAt: Date;
 }
 
@@ -20,12 +21,13 @@ export interface InsertUser {
   nombre: string;
   email: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
   curso?: string;
   materias?: string[];
   colegioId: string;
   hijoId?: string;
   seccion?: 'junior-school' | 'middle-school' | 'high-school';
+  estado?: 'pending' | 'active' | 'suspended';
 }
 
 export interface Course {
@@ -134,12 +136,13 @@ export interface AuthResponse {
   _id?: string; // Alias para compatibilidad
   nombre: string;
   email: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
   curso?: string;
   materias?: string[];
   colegioId: string;
   codigoUnico?: string; // Código único de 4 dígitos
   seccion?: 'junior-school' | 'middle-school' | 'high-school'; // Para asistentes
+  estado?: 'pending' | 'active' | 'suspended'; // Estado del usuario
   token: string;
 }
 

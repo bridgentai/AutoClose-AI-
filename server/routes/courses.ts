@@ -8,11 +8,19 @@ const router = express.Router();
 
 // Middleware de autorización para Directivo (Reutilizable)
 const checkIsDirectivo = (req: AuthRequest, res: Response, next: NextFunction) => {
-    // req.user viene del middleware 'protect'
     if (req.user && req.user.rol === 'directivo') {
         next();
     } else {
         res.status(403).json({ message: 'Acceso denegado. Solo Directivos pueden realizar esta acción.' });
+    }
+};
+
+// Directivo o Admin General del Colegio (asignar profesores/estudiantes a cursos)
+const checkIsDirectivoOrAdminColegio = (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (req.user && (req.user.rol === 'directivo' || req.user.rol === 'admin-general-colegio')) {
+        next();
+    } else {
+        res.status(403).json({ message: 'Acceso denegado. Solo Directivos o Administradores del Colegio pueden realizar esta acción.' });
     }
 };
 
@@ -230,7 +238,7 @@ res.status(500).json({ message: 'Error en el servidor al crear el curso.' });
 // =========================================================================
 // RUTA ACTUALIZADA: PUT /api/courses/assign-professor (NUEVA RUTA DE ASIGNACIÓN)
 // Función: Asigna un profesor a un curso y viceversa. Solo para Directivos.
-router.put('/assign-professor', protect, checkIsDirectivo, async (req: AuthRequest, res) => {
+router.put('/assign-professor', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
 try {
 const { courseId, professorId } = req.body;
 
@@ -277,7 +285,7 @@ res.status(500).json({ message: 'Error interno del servidor al procesar la asign
 // =========================================================================
 // RUTA ACTUALIZADA: PUT /api/courses/enroll-students (NUEVA RUTA DE INSCRIPCIÓN)
 // Función: Inscribe una lista de estudiantes a un curso y viceversa. Solo para Directivos.
-router.put('/enroll-students', protect, checkIsDirectivo, async (req: AuthRequest, res) => {
+router.put('/enroll-students', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
 try {
 const { courseId, studentIds } = req.body; // studentIds debe ser un array
 

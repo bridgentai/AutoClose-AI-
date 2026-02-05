@@ -28,7 +28,8 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 });
 
 // POST /api/materials - Crear material (profesor/directivo)
-router.post('/', protect, restrictTo('profesor', 'directivo'), async (req: AuthRequest, res) => {
+// ⚠️ SEGURIDAD: super_admin puede crear materiales para cualquier colegio
+router.post('/', protect, restrictTo('profesor', 'directivo', 'school_admin', 'super_admin'), async (req: AuthRequest, res) => {
   const { cursoId, materiaId, titulo, descripcion, tipo, url, contenido } = req.body;
   const { colegioId, id: uploadedBy } = req.user!;
 
@@ -59,7 +60,8 @@ router.post('/', protect, restrictTo('profesor', 'directivo'), async (req: AuthR
 });
 
 // DELETE /api/materials/:id - Eliminar material
-router.delete('/:id', protect, restrictTo('profesor', 'directivo'), async (req: AuthRequest, res) => {
+// ⚠️ SEGURIDAD: super_admin puede eliminar materiales de cualquier colegio
+router.delete('/:id', protect, restrictTo('profesor', 'directivo', 'school_admin', 'super_admin'), async (req: AuthRequest, res) => {
   const { id } = req.params;
 
   try {

@@ -934,9 +934,7 @@ async function executeCreatePermiso(
         error: `Para el tipo de permiso "${tipo}", el campo "placaCarroActual" es requerido.`
       };
     }
-  }
-
-  // Construir el objeto del permiso
+  }  // Construir el objeto del permiso
   const permiso = {
     tipoPermiso,
     nombreEstudiante,

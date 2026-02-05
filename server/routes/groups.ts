@@ -4,6 +4,8 @@ import { GroupStudent } from '../models/GroupStudent';
 import { User } from '../models/User';
 import { Assignment } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
+import { Types } from 'mongoose';
+import { normalizeIdForQuery } from '../utils/idGenerator';
 
 const router = express.Router();
 
@@ -47,6 +49,160 @@ export async function seedGroups(colegioId: string = 'COLEGIO_DEMO_2025') {
     console.error('❌ Error al crear grupos fijos:', error);
   }
 }
+
+// =========================================================================
+// POST /api/groups/create - Crear grupo/curso (solo para admin-general-colegio)
+// IMPORTANTE: Esta ruta debe estar ANTES de las rutas con parámetros dinámicos
+router.post('/create', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol colegioId');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Solo admin-general-colegio puede crear grupos
+    if (user.rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear grupos' });
+    }
+
+    const { nombre, seccion, directorGrupoId } = req.body;
+
+    if (!nombre || !seccion || !directorGrupoId) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre (curso), seccion, directorGrupoId' });
+    }
+
+    // Validar sección
+    const seccionesValidas = ['junior-school', 'middle-school', 'high-school'];
+    if (!seccionesValidas.includes(seccion)) {
+      return res.status(400).json({ message: 'Sección inválida. Debe ser: Junior School, Middle School o High School.' });
+    }
+
+    // Validar que el director de grupo sea un profesor
+    const directorGrupo = await User.findById(normalizeIdForQuery(directorGrupoId)).select('rol colegioId');
+    if (!directorGrupo) {
+      return res.status(404).json({ message: 'Director de grupo no encontrado' });
+    }
+
+    if (directorGrupo.rol !== 'profesor') {
+      return res.status(400).json({ message: 'El director de grupo debe ser un profesor' });
+    }
+
+    if (directorGrupo.colegioId !== user.colegioId) {
+      return res.status(403).json({ message: 'El director de grupo debe pertenecer al mismo colegio' });
+    }
+
+    // nombre = curso completo (ej: "7A", "8B", "11H")
+    const nombreCompleto = nombre.toString().toUpperCase().trim();
+
+    // Verificar si el grupo ya existe
+    const grupoExistente = await Group.findOne({ 
+      nombre: nombreCompleto, 
+      colegioId: user.colegioId 
+    });
+
+    if (grupoExistente) {
+      return res.status(400).json({ message: `El grupo ${nombreCompleto} ya existe` });
+    }
+
+    // Crear el grupo
+    const nuevoGrupo = await Group.create({
+      nombre: nombreCompleto,
+      descripcion: `Grupo ${nombreCompleto}`,
+      colegioId: user.colegioId,
+      seccion,
+    });
+
+    // TODO: Asignar el director de grupo al grupo (esto podría requerir un campo adicional en el modelo Group)
+    // Por ahora, el grupo se crea y el director se puede asignar después
+
+    res.status(201).json({
+      message: 'Grupo creado exitosamente',
+      grupo: {
+        _id: nuevoGrupo._id,
+        nombre: nuevoGrupo.nombre,
+        descripcion: nuevoGrupo.descripcion,
+        colegioId: nuevoGrupo.colegioId,
+        seccion: nuevoGrupo.seccion,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error al crear grupo:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al crear el grupo.' });
+  }
+});
+
+// =========================================================================
+// POST /api/groups/assign-student - Asignar estudiante a curso/grupo existente (solo admin-general-colegio)
+// =========================================================================
+router.post('/assign-student', protect, async (req: AuthRequest, res) => {
+  try {
+    const uid = normalizeIdForQuery(req.userId || '');
+    const admin = await User.findById(uid).select('rol colegioId').lean();
+    if (!admin || admin.rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden asignar estudiantes a cursos.' });
+    }
+
+    const { grupoId, estudianteId } = req.body;
+    const colegioId = admin.colegioId;
+
+    if (!grupoId || !estudianteId) {
+      return res.status(400).json({ message: 'Faltan grupoId y estudianteId.' });
+    }
+
+    const grupoNombre = String(grupoId).toUpperCase().trim();
+    const grupo = await Group.findOne({ nombre: grupoNombre, colegioId });
+    if (!grupo) {
+      return res.status(404).json({ message: `El curso/grupo ${grupoNombre} no existe. Créalo primero desde Crear Curso.` });
+    }
+
+    const estudiante = await User.findById(normalizeIdForQuery(estudianteId)).select('rol colegioId curso').lean();
+    if (!estudiante || estudiante.rol !== 'estudiante') {
+      return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    }
+    if (estudiante.colegioId !== colegioId) {
+      return res.status(403).json({ message: 'El estudiante debe pertenecer al mismo colegio.' });
+    }
+
+    const existente = await GroupStudent.findOne({
+      grupoId: grupo._id,
+      estudianteId: normalizeIdForQuery(estudianteId),
+    });
+    if (existente) {
+      return res.status(400).json({ message: 'El estudiante ya está asignado a este curso.' });
+    }
+
+    await GroupStudent.create({
+      grupoId: grupo._id,
+      estudianteId: normalizeIdForQuery(estudianteId),
+      colegioId,
+    });
+
+    await User.findByIdAndUpdate(normalizeIdForQuery(estudianteId), {
+      $set: { curso: grupoNombre },
+    });
+
+    const { Course } = await import('../models/Course');
+    const estudianteObjId = new Types.ObjectId(normalizeIdForQuery(estudianteId));
+    await Course.updateMany(
+      { cursos: grupoNombre, colegioId, estudianteIds: { $ne: estudianteObjId } },
+      { $addToSet: { estudianteIds: estudianteObjId, estudiantes: estudianteObjId } }
+    );
+
+    res.status(201).json({
+      message: 'Estudiante asignado al curso correctamente.',
+      grupoId: grupoNombre,
+      estudianteId,
+    });
+  } catch (e: any) {
+    if (e.code === 11000) {
+      return res.status(400).json({ message: 'El estudiante ya está asignado a este curso.' });
+    }
+    console.error('Error al asignar estudiante a curso:', e.message);
+    res.status(500).json({ message: 'Error al asignar estudiante al curso.' });
+  }
+});
 
 // GET /api/groups/all - Obtener todos los grupos
 router.get('/all', protect, async (req: AuthRequest, res) => {

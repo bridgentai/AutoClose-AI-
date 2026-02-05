@@ -1,13 +1,25 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList } from 'lucide-react';
+import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Calendar } from '@/components/Calendar';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useInstitutionColors } from '@/hooks/useInstitutionColors';
+import { AdminGeneralColegioDashboard } from './admin-general-colegio-dashboard';
 
 interface Assignment {
   _id: string;
@@ -37,6 +49,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
   const [, setLocation] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
+  const { colorPrimario, colorSecundario } = useInstitutionColors();
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -134,7 +147,12 @@ function AIChatBox({ rol }: AIChatBoxProps) {
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div className={`w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center bg-gradient-to-br ${GRADIENT_STYLE} badge-glow animate-float`}>
+                <div 
+                  className="w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center badge-glow animate-float"
+                  style={{
+                    background: `linear-gradient(to bottom right, ${colorPrimario}, ${colorSecundario})`
+                  }}
+                >
                   <MessageSquare className="w-7 h-7 text-white" />
                 </div>
                 <h2 className="text-lg font-semibold text-white mb-1.5 text-expressive">
@@ -156,12 +174,15 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                   style={{ animationDelay: `${idx * 0.1}s` }}
                 >
                   {msg.emisor === 'user' ? (
-                    // Mensaje del usuario: burbuja con gradiente púrpura
-                    <div className="max-w-[85%] px-3 py-2 rounded-lg rounded-br-sm text-sm text-white bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover-glow">
+                    <div
+                      className="max-w-[85%] px-3 py-2 rounded-lg rounded-br-sm text-sm text-white hover-glow"
+                      style={{
+                        background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+                      }}
+                    >
                       <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
                     </div>
                   ) : (
-                    // Respuesta de la IA: texto en prosa sin burbuja (estilo ChatGPT)
                     <div className="w-full">
                       <div className="text-white/90 text-[14px] leading-relaxed whitespace-pre-wrap">
                         {msg.contenido}
@@ -497,6 +518,524 @@ function DirectivoDashboard() {
   );
 }
 
+function SuperAdminDashboard() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const [schools, setSchools] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  
+  // Obtener colores de la institución para usar en los botones
+  const { colorPrimario, colorSecundario } = useInstitutionColors();
+
+  // Estados para crear colegio
+  const [createSchoolOpen, setCreateSchoolOpen] = useState(false);
+  const [newSchool, setNewSchool] = useState({
+    nombre: '',
+    colegioId: '',
+    nombreIA: 'AutoClose AI',
+    colorPrimario: '#9f25b8',
+    colorSecundario: '#6a0dad',
+  });
+  const [creatingSchool, setCreatingSchool] = useState(false);
+
+  // Estados para asignar admin
+  const [assignAdminOpen, setAssignAdminOpen] = useState(false);
+  const [selectedSchoolId, setSelectedSchoolId] = useState('');
+  const [newAdmin, setNewAdmin] = useState({
+    nombre: '',
+    email: '',
+    password: '',
+  });
+  const [assigningAdmin, setAssigningAdmin] = useState(false);
+
+  useEffect(() => {
+    loadSchools();
+  }, []);
+
+  const loadSchools = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await apiRequest<any[]>('GET', '/api/super-admin/schools');
+      setSchools(data);
+    } catch (err: any) {
+      setError(err.message || 'Error al cargar los colegios');
+      console.error('Error al cargar colegios:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateSchool = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingSchool(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await apiRequest<{ message: string; school: any; codigoAcceso: string; mensaje: string }>('POST', '/api/super-admin/schools', newSchool);
+      setSuccess(`Colegio creado exitosamente. ${response.mensaje || `Código de acceso: ${response.codigoAcceso}`}`);
+      setCreateSchoolOpen(false);
+      setNewSchool({
+        nombre: '',
+        colegioId: '',
+        nombreIA: 'AutoClose AI',
+        colorPrimario: '#9f25b8',
+        colorSecundario: '#6a0dad',
+      });
+      loadSchools();
+      setTimeout(() => setSuccess(''), 5000); // Mostrar por más tiempo para que se vea el código
+    } catch (err: any) {
+      setError(err.message || 'Error al crear el colegio');
+    } finally {
+      setCreatingSchool(false);
+    }
+  };
+
+  const handleAssignAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAssigningAdmin(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await apiRequest('POST', `/api/super-admin/schools/${selectedSchoolId}/assign-admin`, newAdmin);
+      setSuccess('Super admin del colegio asignado exitosamente');
+      setAssignAdminOpen(false);
+      setNewAdmin({ nombre: '', email: '', password: '' });
+      setSelectedSchoolId('');
+      loadSchools();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Error al asignar super admin');
+    } finally {
+      setAssigningAdmin(false);
+    }
+  };
+
+  const openAssignAdminDialog = (colegioId: string) => {
+    const school = schools.find(s => s.colegioId === colegioId);
+    setSelectedSchoolId(colegioId);
+    setNewAdmin({ 
+      nombre: school?.superAdmin?.nombre || '', 
+      email: school?.superAdmin?.email || '', 
+      password: '' 
+    });
+    setAssignAdminOpen(true);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Mensajes de éxito/error */}
+      {success && (
+        <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+          <div className="flex items-center gap-3 mb-2">
+            <CheckCircle2 className="w-5 h-5 text-green-400" />
+            <p className="text-green-400 font-semibold">¡Éxito!</p>
+          </div>
+          <p className="text-green-300 text-sm mb-2">{success}</p>
+          {success.includes('Código de acceso') && (
+            <div className="mt-3 p-3 bg-white/5 rounded border border-white/10">
+              <p className="text-white/80 text-xs mb-2 font-semibold">⚠️ IMPORTANTE: Código generado (copia este código COMPLETO):</p>
+              <div className="bg-black/30 p-3 rounded border border-green-500/30">
+                <code className="text-green-300 font-mono text-xl font-bold block break-all text-center">
+                  {(() => {
+                    const match = success.match(/Código de acceso generado: ([A-Z0-9_]+)/) || 
+                                 success.match(/Código de acceso: ([A-Z0-9_]+)/);
+                    return match ? match[1] : 'No encontrado';
+                  })()}
+                </code>
+              </div>
+              <p className="text-yellow-300 text-xs mt-2 text-center">
+                ⚠️ Debes copiar TODO el código incluyendo los números al final (ejemplo: BODYTECH_1234)
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
+          <XCircle className="w-5 h-5 text-red-400" />
+          <p className="text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Estadísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className={CARD_STYLE}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">Total Colegios</CardTitle>
+            <Building2 className="w-5 h-5 text-[#9f25b8]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{schools.length}</div>
+            <p className="text-xs text-white/60 mt-1">Instituciones registradas</p>
+          </CardContent>
+        </Card>
+
+        <Card className={CARD_STYLE}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">Total Usuarios</CardTitle>
+            <Users className="w-5 h-5 text-[#9f25b8]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {schools.reduce((sum, school) => sum + (school.userCount || 0), 0)}
+            </div>
+            <p className="text-xs text-white/60 mt-1">Usuarios en el sistema</p>
+          </CardContent>
+        </Card>
+
+        <Card className={CARD_STYLE}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">Super Admins Asignados</CardTitle>
+            <UserPlus className="w-5 h-5 text-[#9f25b8]" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {schools.filter(s => s.superAdmin).length}
+            </div>
+            <p className="text-xs text-white/60 mt-1">Colegios con super administrador</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Acciones principales */}
+      <div className="flex gap-4">
+        <Dialog open={createSchoolOpen} onOpenChange={setCreateSchoolOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              className="hover:opacity-90 text-white"
+              style={{
+                background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Crear Nuevo Colegio
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-[#0b0013] border-white/10 text-white max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Crear Nuevo Colegio</DialogTitle>
+              <DialogDescription className="text-white/60">
+                Ingresa la información del nuevo colegio
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreateSchool} className="space-y-4">
+              <div>
+                <Label htmlFor="nombre" className="text-white/90">Nombre del Colegio *</Label>
+                <Input
+                  id="nombre"
+                  value={newSchool.nombre}
+                  onChange={(e) => setNewSchool({ ...newSchool, nombre: e.target.value })}
+                  className="bg-white/5 border-white/10 text-white mt-1"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="colegioId" className="text-white/90">ID del Colegio *</Label>
+                <Input
+                  id="colegioId"
+                  value={newSchool.colegioId}
+                  onChange={(e) => setNewSchool({ ...newSchool, colegioId: e.target.value.toUpperCase() })}
+                  className="bg-white/5 border-white/10 text-white mt-1"
+                  placeholder="Ej: COLEGIO_NUEVO_2025"
+                  required
+                />
+                <p className="text-xs text-white/50 mt-1">Debe ser único y en mayúsculas</p>
+              </div>
+              <div>
+                <Label htmlFor="logoUrl" className="text-white/90">URL del Logo</Label>
+                <Input
+                  id="logoUrl"
+                  value={newSchool.logoUrl}
+                  onChange={(e) => setNewSchool({ ...newSchool, logoUrl: e.target.value })}
+                  className="bg-white/5 border-white/10 text-white mt-1"
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <Label className="text-white/90 mb-3 block">Paleta de Colores</Label>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="colorPrimario" className="text-white/80 text-sm mb-2 block">Color Primario</Label>
+                    <div className="flex gap-3 items-center">
+                      <Input
+                        id="colorPrimario"
+                        type="color"
+                        value={newSchool.colorPrimario}
+                        onChange={(e) => setNewSchool({ ...newSchool, colorPrimario: e.target.value })}
+                        className="bg-white/5 border-white/10 h-12 w-20 cursor-pointer"
+                      />
+                      <Input
+                        type="text"
+                        value={newSchool.colorPrimario}
+                        onChange={(e) => setNewSchool({ ...newSchool, colorPrimario: e.target.value })}
+                        className="bg-white/5 border-white/10 text-white flex-1 font-mono text-sm"
+                        placeholder="#9f25b8"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="colorSecundario" className="text-white/80 text-sm mb-2 block">Color Secundario</Label>
+                    <div className="flex gap-3 items-center">
+                      <Input
+                        id="colorSecundario"
+                        type="color"
+                        value={newSchool.colorSecundario}
+                        onChange={(e) => setNewSchool({ ...newSchool, colorSecundario: e.target.value })}
+                        className="bg-white/5 border-white/10 h-12 w-20 cursor-pointer"
+                      />
+                      <Input
+                        type="text"
+                        value={newSchool.colorSecundario}
+                        onChange={(e) => setNewSchool({ ...newSchool, colorSecundario: e.target.value })}
+                        className="bg-white/5 border-white/10 text-white flex-1 font-mono text-sm"
+                        placeholder="#6a0dad"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Paleta de colores predefinidos */}
+                  <div>
+                    <Label className="text-white/80 text-sm mb-2 block">Colores Predefinidos (clic para seleccionar)</Label>
+                    <div className="grid grid-cols-8 gap-2">
+                      {[
+                        { name: 'Púrpura', primary: '#9f25b8', secondary: '#6a0dad' },
+                        { name: 'Azul', primary: '#3b82f6', secondary: '#1e40af' },
+                        { name: 'Verde', primary: '#10b981', secondary: '#059669' },
+                        { name: 'Rojo', primary: '#ef4444', secondary: '#dc2626' },
+                        { name: 'Naranja', primary: '#f97316', secondary: '#ea580c' },
+                        { name: 'Amarillo', primary: '#eab308', secondary: '#ca8a04' },
+                        { name: 'Rosa', primary: '#ec4899', secondary: '#db2777' },
+                        { name: 'Cian', primary: '#06b6d4', secondary: '#0891b2' },
+                        { name: 'Índigo', primary: '#6366f1', secondary: '#4f46e5' },
+                        { name: 'Esmeralda', primary: '#14b8a6', secondary: '#0d9488' },
+                        { name: 'Violeta', primary: '#8b5cf6', secondary: '#7c3aed' },
+                        { name: 'Fucsia', primary: '#d946ef', secondary: '#c026d3' },
+                        { name: 'Azul Oscuro', primary: '#1e3a8a', secondary: '#1e40af' },
+                        { name: 'Verde Oscuro', primary: '#065f46', secondary: '#047857' },
+                        { name: 'Rojo Oscuro', primary: '#991b1b', secondary: '#b91c1c' },
+                        { name: 'Gris', primary: '#6b7280', secondary: '#4b5563' },
+                      ].map((color, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setNewSchool({ 
+                            ...newSchool, 
+                            colorPrimario: color.primary, 
+                            colorSecundario: color.secondary 
+                          })}
+                          className="group relative"
+                          title={color.name}
+                        >
+                          <div 
+                            className="w-full h-12 rounded-lg border-2 border-white/20 hover:border-white/40 transition-all"
+                            style={{
+                              background: `linear-gradient(135deg, ${color.primary}, ${color.secondary})`
+                            }}
+                          />
+                          <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-semibold bg-black/30 rounded-lg">
+                            {color.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCreateSchoolOpen(false)}
+                  className="border-white/10 text-white hover:bg-white/10"
+                >
+                  Cancelar
+                </Button>
+                  <Button
+                    type="submit"
+                    disabled={creatingSchool}
+                    className="hover:opacity-90 text-white"
+                    style={{
+                      background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+                    }}
+                  >
+                  {creatingSchool ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creando...
+                    </>
+                  ) : (
+                    'Crear Colegio'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Lista de colegios */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-[#9f25b8]" />
+        </div>
+      ) : schools.length === 0 ? (
+        <Card className={CARD_STYLE}>
+          <CardContent className="py-12 text-center">
+            <Building2 className="w-16 h-16 text-white/30 mx-auto mb-4" />
+            <p className="text-white/60">No hay colegios registrados aún</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {schools.map((school) => (
+            <Card key={school._id} className={CARD_STYLE}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-white text-xl mb-1">{school.nombre}</CardTitle>
+                    <CardDescription className="text-white/60">
+                      ID: {school.colegioId}
+                    </CardDescription>
+                  </div>
+                  <Badge className="bg-[#9f25b8]/20 text-[#9f25b8] border-[#9f25b8]/40">
+                    {school.userCount || 0} usuarios
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-white/60">Super Administrador:</span>
+                    {school.superAdmin ? (
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-green-500/20 text-green-400 border-green-500/40">
+                          {school.superAdmin.nombre}
+                        </Badge>
+                        <span className="text-white/40 text-xs">{school.superAdmin.email}</span>
+                      </div>
+                    ) : (
+                      <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/40">
+                        Sin asignar
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-white/60">Creado:</span>
+                    <span className="text-white/80">
+                      {new Date(school.createdAt).toLocaleDateString('es-CO')}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Dialog open={assignAdminOpen && selectedSchoolId === school.colegioId} onOpenChange={(open) => {
+                    setAssignAdminOpen(open);
+                    if (!open) setSelectedSchoolId('');
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openAssignAdminDialog(school.colegioId)}
+                        className="flex-1 border-white/10 text-white hover:bg-white/10"
+                      >
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        {school.superAdmin ? 'Cambiar Super Admin' : 'Asignar Super Admin'}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-[#0b0013] border-white/10 text-white">
+                      <DialogHeader>
+                        <DialogTitle>
+                          {school.superAdmin ? 'Cambiar Super Admin del Colegio' : 'Asignar Super Admin del Colegio'}
+                        </DialogTitle>
+                        <DialogDescription className="text-white/60">
+                          {school.superAdmin 
+                            ? 'Actualiza la información del super administrador del colegio'
+                            : 'Crea un nuevo super administrador para este colegio'}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleAssignAdmin} className="space-y-4">
+                        <div>
+                          <Label htmlFor="admin-nombre" className="text-white/90">Nombre *</Label>
+                          <Input
+                            id="admin-nombre"
+                            value={newAdmin.nombre}
+                            onChange={(e) => setNewAdmin({ ...newAdmin, nombre: e.target.value })}
+                            className="bg-white/5 border-white/10 text-white mt-1"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="admin-email" className="text-white/90">Email *</Label>
+                          <Input
+                            id="admin-email"
+                            type="email"
+                            value={newAdmin.email}
+                            onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
+                            className="bg-white/5 border-white/10 text-white mt-1"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="admin-password" className="text-white/90">
+                            {school.superAdmin ? 'Nueva Contraseña (opcional)' : 'Contraseña *'}
+                          </Label>
+                          <Input
+                            id="admin-password"
+                            type="password"
+                            value={newAdmin.password}
+                            onChange={(e) => setNewAdmin({ ...newAdmin, password: e.target.value })}
+                            className="bg-white/5 border-white/10 text-white mt-1"
+                            required={!school.superAdmin}
+                          />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setAssignAdminOpen(false);
+                              setSelectedSchoolId('');
+                            }}
+                            className="border-white/10 text-white hover:bg-white/10"
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={assigningAdmin}
+                            className="hover:opacity-90 text-white"
+                            style={{
+                              background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+                            }}
+                          >
+                            {assigningAdmin ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                {school.superAdmin ? 'Actualizando...' : 'Asignando...'}
+                              </>
+                            ) : (
+                              school.superAdmin ? 'Actualizar' : 'Asignar'
+                            )}
+                          </Button>
+                        </div>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PadreDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -605,7 +1144,10 @@ function PadreDashboard() {
                     </div>
                     <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
                       <div 
-                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] h-3 rounded-full transition-all duration-1000 ease-out hover-glow"
+                        className="h-3 rounded-full transition-all duration-1000 ease-out hover-glow"
+                        style={{
+                          background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+                        }}
                         style={{ width: `${widthPercent}%` }}
                       />
                     </div>
@@ -678,14 +1220,20 @@ export default function Dashboard() {
         return <DirectivoDashboard />;
       case 'padre':
         return <PadreDashboard />;
+      case 'admin-general-colegio':
+        return <AdminGeneralColegioDashboard />;
       case 'administrador-general':
       case 'transporte':
       case 'tesoreria':
       case 'nutricion':
       case 'cafeteria':
       case 'asistente':
-        // Estos roles se redirigen a sus páginas específicas
+      case 'school_admin':
+        // Estos roles se redirigen a sus páginas específicas o usan el dashboard
         return null;
+      case 'super_admin':
+        // Super admin general ve su dashboard de gestión
+        return <SuperAdminDashboard />;
       default:
         return null;
     }

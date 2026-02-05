@@ -50,7 +50,8 @@ export async function createAssignment(params: CreateAssignmentParams): Promise<
       };
     }
 
-    if (user.rol !== 'profesor') {
+    // ⚠️ SEGURIDAD: super_admin puede crear tareas para cualquier colegio
+    if (user.rol !== 'profesor' && user.rol !== 'school_admin' && user.rol !== 'super_admin') {
       return {
         success: false,
         error: 'Solo los profesores pueden crear tareas.'

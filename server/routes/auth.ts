@@ -1,6 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { User, GroupStudent } from '../models';
+import { User, GroupStudent, CodigoInstitucion } from '../models';
 import { generateUserId } from '../utils/idGenerator';
 import { mongoConnected, mongoError } from '../config/db';
 
@@ -141,35 +141,163 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
 
 // POST /api/auth/register
 router.post('/register', checkMongoConnection, async (req, res) => {
+  let createdUserId: string | null = null;
   try {
     const { nombre, email, password, rol, curso, codigoAcceso, hijoId, materias, seccion } = req.body;
+
+    console.log('[REGISTER] ========== INICIO REGISTRO ==========');
+    console.log('[REGISTER] Datos recibidos:', {
+      nombre,
+      email,
+      rol,
+      seccion,
+      codigoAcceso,
+      tienePassword: !!password
+    });
 
     if (!nombre || !email || !password || !rol) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
     }
 
-    if (!['estudiante', 'profesor', 'directivo', 'padre', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'].includes(rol)) {
+    // Roles permitidos para registro público
+    // ⚠️ SEGURIDAD: En producción, super_admin NO debería estar aquí
+    // Se permite solo para pruebas, demos y staging
+    const rolesPermitidosPublico = ['estudiante', 'profesor', 'directivo', 'padre', 'administrador-general', 'admin-general-colegio', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente', 'super_admin'];
+    
+    // Bloquear explícitamente school_admin del registro público
+    // school_admin solo puede ser creado por super_admin o durante onboarding del colegio
+    if (rol === 'school_admin') {
+      return res.status(403).json({ 
+        message: 'Este rol no puede ser creado mediante registro público. Contacta al administrador del sistema.' 
+      });
+    }
+    
+    // ⚠️ SEGURIDAD: Validación explícita para super_admin
+    // En producción, esto debería requerir un código especial o estar completamente deshabilitado
+    if (rol === 'super_admin') {
+      console.warn('[REGISTER] ⚠️ ADVERTENCIA: Se está creando un super_admin desde registro público. Esto solo debería ocurrir en desarrollo/staging.');
+      // En producción, descomentar la siguiente línea para bloquear:
+      // return res.status(403).json({ message: 'El rol super_admin no puede ser creado mediante registro público en producción.' });
+    }
+    
+    if (!rolesPermitidosPublico.includes(rol)) {
       return res.status(400).json({ message: 'Rol inválido.' });
     }
 
     // Validar código de acceso para roles que lo requieren
+    // ⚠️ NOTA: super_admin NO requiere código de colegio (tiene acceso global)
     let colegioId = 'COLEGIO_DEMO_2025';
-    const rolesQueRequierenCodigo = ['profesor', 'directivo', 'administrador-general', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'];
-    if (rolesQueRequierenCodigo.includes(rol)) {
-      if (!codigoAcceso) {
-        return res.status(400).json({ message: 'El código del colegio es obligatorio para este rol.' });
-      }
-      
-      // Normalizar el código ingresado (mayúsculas y sin espacios)
+    let rolFinal = rol; // Rol que se asignará (puede cambiar si se usa código)
+    
+    const rolesQueRequierenCodigo = ['profesor', 'directivo', 'administrador-general', 'admin-general-colegio', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'];
+    
+    // super_admin no requiere código de colegio y puede tener colegioId null o un valor por defecto
+    if (rol === 'super_admin') {
+      // super_admin puede tener colegioId null o un valor especial que indique acceso global
+      colegioId = 'GLOBAL_ADMIN'; // Valor especial para identificar super_admin
+      console.log('[REGISTER] Creando super_admin con acceso global (colegioId: GLOBAL_ADMIN)');
+    } else if (codigoAcceso) {
+      // Si se proporciona un código de acceso, validarlo contra la base de datos
       const codigoNormalizado = codigoAcceso.toString().toUpperCase().trim();
-      const colegioIdFromCodigo = CODIGOS_COLEGIO[codigoNormalizado];
-      if (!colegioIdFromCodigo) {
-        return res.status(400).json({ 
-          message: `Código del colegio inválido. Códigos válidos: ${Object.keys(CODIGOS_COLEGIO).join(', ')}` 
+      console.log(`[REGISTER] Validando código de acceso: "${codigoNormalizado}"`);
+      console.log(`[REGISTER] Longitud del código: ${codigoNormalizado.length}`);
+      
+      // Buscar el código en la base de datos (búsqueda exacta)
+      let codigoEnBD = await CodigoInstitucion.findOne({ codigo: codigoNormalizado });
+      
+      // Si no se encuentra con búsqueda exacta, intentar búsqueda más flexible (sin espacios, solo mayúsculas)
+      if (!codigoEnBD) {
+        // Intentar buscar sin guiones bajos o con diferentes formatos
+        const codigoSinEspacios = codigoNormalizado.replace(/\s+/g, '');
+        codigoEnBD = await CodigoInstitucion.findOne({ 
+          $or: [
+            { codigo: codigoSinEspacios },
+            { codigo: codigoNormalizado.replace(/_/g, '') }
+          ]
         });
       }
       
-      colegioId = colegioIdFromCodigo;
+      // Si aún no se encuentra, buscar todos los códigos del colegio para debugging
+      if (!codigoEnBD && rol === 'admin-general-colegio') {
+        // Intentar buscar por colegioId si el código parece ser solo el colegioId (sin el sufijo _XXXX)
+        // Esto es un fallback en caso de que el usuario ingrese solo el colegioId
+        const posibleColegioId = codigoNormalizado;
+        const codigosDelColegio = await CodigoInstitucion.find({ 
+          colegioId: posibleColegioId,
+          rolAsignado: 'admin-general-colegio'
+        }).lean();
+        
+        console.log(`[REGISTER] Búsqueda por colegioId "${posibleColegioId}":`, {
+          encontrados: codigosDelColegio.length,
+          codigos: codigosDelColegio.map(c => c.codigo)
+        });
+        
+        // Si hay exactamente un código para ese colegio con el rol correcto, usarlo
+        if (codigosDelColegio.length === 1) {
+          console.log(`[REGISTER] ⚠️ Código encontrado por colegioId (fallback), usando: ${codigosDelColegio[0].codigo}`);
+          codigoEnBD = codigosDelColegio[0] as any;
+        } else if (codigosDelColegio.length > 1) {
+          console.log(`[REGISTER] ⚠️ Múltiples códigos encontrados para colegioId, usando el más reciente`);
+          // Usar el más reciente (ordenar por _id que incluye timestamp)
+          codigosDelColegio.sort((a, b) => (b._id as any).toString().localeCompare((a._id as any).toString()));
+          codigoEnBD = codigosDelColegio[0] as any;
+          console.log(`[REGISTER] Código seleccionado: ${codigoEnBD.codigo}`);
+        }
+      }
+      
+      console.log(`[REGISTER] Resultado búsqueda código:`, codigoEnBD ? {
+        encontrado: true,
+        codigo: codigoEnBD.codigo,
+        colegioId: codigoEnBD.colegioId,
+        rolAsignado: codigoEnBD.rolAsignado
+      } : { encontrado: false });
+      
+      if (codigoEnBD) {
+        // Código encontrado en BD - asignar automáticamente el rol y colegioId
+        colegioId = codigoEnBD.colegioId;
+        rolFinal = codigoEnBD.rolAsignado; // El rol viene del código
+        console.log(`[REGISTER] ✅ Código válido encontrado: ${codigoEnBD.codigo}`);
+        console.log(`[REGISTER] Asignando automáticamente: rol=${rolFinal}, colegioId=${colegioId}`);
+        
+        // Si el usuario especificó un rol diferente al del código, usar el del código
+        if (rol !== rolFinal) {
+          console.log(`[REGISTER] ⚠️ El código asigna el rol '${rolFinal}', ignorando el rol especificado '${rol}'`);
+        }
+      } else {
+        // Código no encontrado en BD, intentar con el sistema antiguo (compatibilidad)
+        console.log(`[REGISTER] Código no encontrado en BD, buscando en sistema antiguo...`);
+        const colegioIdFromCodigo = CODIGOS_COLEGIO[codigoNormalizado];
+        if (colegioIdFromCodigo) {
+          colegioId = colegioIdFromCodigo;
+          console.log(`[REGISTER] Código encontrado en sistema antiguo: ${codigoNormalizado}`);
+        } else {
+          // Código no encontrado en ningún sistema
+          console.log(`[REGISTER] ❌ Código no válido: ${codigoNormalizado}`);
+          console.log(`[REGISTER] Rol del usuario: ${rol}`);
+          
+          // Si el rol es admin-general-colegio, el código es obligatorio y debe ser válido
+          if (rol === 'admin-general-colegio') {
+            return res.status(400).json({ 
+              message: `El código proporcionado no es válido. Asegúrate de usar el código exacto generado por el super administrador al crear el colegio. El código debe tener el formato: [COLEGIOID]_[4DIGITOS] (ejemplo: BODYTECH_1234).` 
+            });
+          }
+          
+          // Para otros roles que requieren código
+          if (rolesQueRequierenCodigo.includes(rol)) {
+            return res.status(400).json({ 
+              message: `Código del colegio inválido. Verifica que el código sea correcto.` 
+            });
+          }
+        }
+      }
+    } else if (rolesQueRequierenCodigo.includes(rol)) {
+      // Si el rol requiere código pero no se proporcionó
+      if (rol === 'admin-general-colegio') {
+        return res.status(400).json({ 
+          message: 'El código del colegio es obligatorio para registrarse como Administrador General del Colegio. Debes obtener el código del super administrador.' 
+        });
+      }
+      return res.status(400).json({ message: 'El código del colegio es obligatorio para este rol.' });
     }
 
     // Validar sección para asistentes
@@ -203,8 +331,27 @@ router.post('/register', checkMongoConnection, async (req, res) => {
       }
     }
 
+    // Verificar si el correo ya existe
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
+      console.log('[REGISTER] Correo ya existe:', {
+        id: existing._id,
+        rol: existing.rol,
+        nombre: existing.nombre,
+        estado: existing.estado
+      });
+      return res.status(400).json({ message: 'El correo ya está registrado.' });
+    }
+    
+    // También verificar por correo (campo alternativo)
+    const existingByCorreo = await User.findOne({ correo: email.toLowerCase() });
+    if (existingByCorreo) {
+      console.log('[REGISTER] Correo ya existe (por campo correo):', {
+        id: existingByCorreo._id,
+        rol: existingByCorreo.rol,
+        nombre: existingByCorreo.nombre,
+        estado: existingByCorreo.estado
+      });
       return res.status(400).json({ message: 'El correo ya está registrado.' });
     }
 
@@ -221,24 +368,28 @@ router.post('/register', checkMongoConnection, async (req, res) => {
       correo: email.toLowerCase(), // Usar correo como campo principal
       email: email.toLowerCase(), // Mantener para compatibilidad
       password,
-      rol,
+      rol: rolFinal, // Usar el rol final (puede haber cambiado si se usó código)
       curso: cursoNormalizado,
-      materias: rol === 'profesor' ? materiasArray : undefined,
-      colegioId,
-      hijoId: rol === 'padre' ? hijoId : undefined,
-      seccion: rol === 'asistente' ? seccion : undefined,
-      estado: 'activo',
+      materias: rolFinal === 'profesor' ? materiasArray : undefined,
+      // ⚠️ SEGURIDAD: super_admin puede tener colegioId especial o null
+      // En producción, considerar hacer colegioId opcional en el schema para super_admin
+      colegioId: rolFinal === 'super_admin' ? 'GLOBAL_ADMIN' : colegioId,
+      hijoId: rolFinal === 'padre' ? hijoId : undefined,
+      seccion: rolFinal === 'asistente' ? seccion : undefined,
+      estado: 'active', // Usar 'active' en lugar de 'activo' para consistencia con el nuevo sistema de estados
       configuraciones: {},
     });
     
-    console.log(`[REGISTER] Creando usuario: rol=${rol}, curso=${cursoNormalizado}, colegioId=${colegioId}`);
+    console.log(`[REGISTER] Creando usuario: rol=${rolFinal} (original: ${rol}), curso=${cursoNormalizado}, colegioId=${colegioId}`);
     
     // Guardar el usuario primero sin el código
     try {
       await newUser.save();
-      console.log('[REGISTER] Usuario guardado sin código, ID:', newUser._id);
+      createdUserId = newUser._id.toString();
+      console.log('[REGISTER] Usuario guardado sin código, ID:', createdUserId);
     } catch (saveError: any) {
       console.error('[REGISTER] Error al guardar usuario:', saveError.message);
+      console.error('[REGISTER] Stack:', saveError.stack);
       throw saveError;
     }
     
@@ -325,14 +476,36 @@ router.post('/register', checkMongoConnection, async (req, res) => {
     let userIdCategorizado = savedUser.userId;
     if (!userIdCategorizado) {
       try {
+        console.log(`[REGISTER] Generando userId categorizado para rol: ${savedUser.rol}`);
+        console.log(`[REGISTER] ID del usuario: ${savedUser._id}`);
+        
+        // Verificar que el rol sea válido antes de intentar generar el ID
+        if (!savedUser.rol) {
+          throw new Error('El rol del usuario no está definido');
+        }
+        
         const categorizedId = generateUserId(savedUser.rol, savedUser._id);
         userIdCategorizado = categorizedId.fullId;
+        console.log(`[REGISTER] userId categorizado generado: ${userIdCategorizado}`);
+        
         // Guardar en BD
-        await User.findByIdAndUpdate(savedUser._id, { userId: userIdCategorizado });
+        const updateResult = await User.findByIdAndUpdate(savedUser._id, { userId: userIdCategorizado });
+        if (!updateResult) {
+          throw new Error('No se pudo actualizar el userId categorizado en la base de datos');
+        }
+        console.log(`[REGISTER] userId categorizado guardado en BD`);
       } catch (error: any) {
-        console.error('Error al generar userId categorizado en registro:', error.message);
-        userIdCategorizado = generateUserId(savedUser.rol, savedUser._id).fullId;
+        console.error('[REGISTER] ========== ERROR AL GENERAR USERID ==========');
+        console.error('[REGISTER] Error message:', error.message);
+        console.error('[REGISTER] Error name:', error.name);
+        console.error('[REGISTER] Stack del error:', error.stack);
+        console.error('[REGISTER] Rol que causó el error:', savedUser.rol);
+        console.error('[REGISTER] Tipo de rol:', typeof savedUser.rol);
+        // Lanzar el error con información detallada
+        throw new Error(`Error al generar userId categorizado para rol '${savedUser.rol}': ${error.message}`);
       }
+    } else {
+      console.log(`[REGISTER] userId categorizado ya existe: ${userIdCategorizado}`);
     }
 
     const response = {
@@ -346,6 +519,7 @@ router.post('/register', checkMongoConnection, async (req, res) => {
       colegioId: savedUser.colegioId,
       codigoUnico: codigoFinal || null,
       seccion: savedUser.seccion || null,
+      estado: savedUser.estado || 'active', // Incluir estado en la respuesta
       token,
     };
 
@@ -368,8 +542,23 @@ router.post('/register', checkMongoConnection, async (req, res) => {
 
     return res.status(201).json(response);
   } catch (err: any) {
-    console.error('Error en register:', err.message);
-    console.error('Stack:', err.stack);
+    console.error('[REGISTER] ========== ERROR EN REGISTRO ==========');
+    console.error('[REGISTER] Error message:', err.message);
+    console.error('[REGISTER] Error name:', err.name);
+    console.error('[REGISTER] Error code:', err.code);
+    console.error('[REGISTER] Stack:', err.stack);
+    console.error('[REGISTER] Error completo:', JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+    
+    // Si se creó un usuario pero falló después, intentar eliminarlo
+    if (createdUserId) {
+      try {
+        console.log('[REGISTER] Intentando eliminar usuario creado parcialmente:', createdUserId);
+        await User.findByIdAndDelete(createdUserId);
+        console.log('[REGISTER] Usuario eliminado correctamente');
+      } catch (deleteError: any) {
+        console.error('[REGISTER] Error al eliminar usuario parcial:', deleteError.message);
+      }
+    }
     
     // Si es un error de MongoDB, dar información más específica
     if (err.name === 'MongoServerError' || err.name === 'MongooseError' || !mongoConnected) {
@@ -379,7 +568,30 @@ router.post('/register', checkMongoConnection, async (req, res) => {
       });
     }
     
-    return res.status(500).json({ message: 'Error interno del servidor.' });
+    // Si el error tiene un mensaje específico, mostrarlo
+    if (err.message && (err.message.includes('Rol no reconocido') || err.message.includes('userId categorizado'))) {
+      return res.status(400).json({ 
+        message: err.message || 'Error al procesar el rol del usuario.',
+        error: err.message
+      });
+    }
+    
+    // Si es un error de validación de Mongoose
+    if (err.name === 'ValidationError') {
+      const validationErrors = Object.values(err.errors || {}).map((e: any) => e.message).join(', ');
+      return res.status(400).json({ 
+        message: `Error de validación: ${validationErrors || err.message}`,
+        error: validationErrors || err.message
+      });
+    }
+    
+    // Para otros errores, mostrar el mensaje real si está disponible
+    const errorMessage = err.message || 'Error interno del servidor.';
+    console.error('[REGISTER] Enviando error al cliente:', errorMessage);
+    return res.status(500).json({ 
+      message: errorMessage,
+      error: errorMessage
+    });
   }
 });
 
@@ -404,6 +616,23 @@ router.post('/login', checkMongoConnection, async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       return res.status(401).json({ message: 'Usuario no encontrado.' });
+    }
+
+    // Solo usuarios con estado 'active' pueden iniciar sesión
+    if (user.estado !== 'active' && user.estado !== 'activo') {
+      if (user.estado === 'suspended') {
+        return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' });
+      }
+      if (user.estado === 'pendiente_vinculacion') {
+        return res.status(403).json({ message: 'Tu cuenta está pendiente de vinculación con un padre. El administrador debe completar la vinculación y activar tu cuenta.' });
+      }
+      if (user.estado === 'vinculado') {
+        return res.status(403).json({ message: 'Tu cuenta está vinculada pero aún no activada. El administrador debe activar tu cuenta para que puedas iniciar sesión.' });
+      }
+      if (user.estado === 'pending') {
+        return res.status(403).json({ message: 'Tu cuenta está pendiente de aprobación. Contacta al administrador.' });
+      }
+      return res.status(403).json({ message: 'Tu cuenta no está activa. Contacta al administrador del colegio.' });
     }
 
     const isMatch = await user.matchPassword(password);
@@ -508,6 +737,7 @@ router.post('/login', checkMongoConnection, async (req, res) => {
       colegioId: userWithCode.colegioId,
       codigoUnico: codigoFinal || null,
       seccion: userWithCode.seccion || null,
+      estado: userWithCode.estado || 'active', // Incluir estado en la respuesta
       token,
     };
 
