@@ -1,7 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { Course, User } from '../models'; // Asegúrate de que los modelos Course y User estén importados aquí
+import { Course, User } from '../models';
+import { Group } from '../models/Group';
 import { protect, AuthRequest } from '../middleware/auth';
-import { Types } from 'mongoose'; // Necesitamos Types para interactuar con IDs
+import { Types } from 'mongoose';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 
 const router = express.Router();
@@ -15,9 +16,9 @@ const checkIsDirectivo = (req: AuthRequest, res: Response, next: NextFunction) =
     }
 };
 
-// Directivo o Admin General del Colegio (asignar profesores/estudiantes a cursos)
+// Directivo o Admin General del Colegio o school_admin (asignar profesores/estudiantes a cursos)
 const checkIsDirectivoOrAdminColegio = (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user && (req.user.rol === 'directivo' || req.user.rol === 'admin-general-colegio')) {
+    if (req.user && (req.user.rol === 'directivo' || req.user.rol === 'admin-general-colegio' || req.user.rol === 'school_admin')) {
         next();
     } else {
         res.status(403).json({ message: 'Acceso denegado. Solo Directivos o Administradores del Colegio pueden realizar esta acción.' });
@@ -236,8 +237,79 @@ res.status(500).json({ message: 'Error en el servidor al crear el curso.' });
 });
 
 // =========================================================================
+// POST /api/courses/assign-professor-to-groups - Asignar profesor a uno o más grupos (cursos)
+// Flujo admin: la materia viene del profesor; se crea/actualiza Course con nombre = materia del profesor.
+// Body: { professorId: string, groupNames: string[] } (ej. groupNames: ["11A", "11B"])
+// =========================================================================
+router.post('/assign-professor-to-groups', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
+  try {
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) {
+      return res.status(400).json({ message: 'Colegio no definido.' });
+    }
+    const { professorId, groupNames } = req.body as { professorId?: string; groupNames?: string[] };
+    if (!professorId || !Array.isArray(groupNames) || groupNames.length === 0) {
+      return res.status(400).json({ message: 'Se requiere professorId y groupNames (array de nombres de curso/grupo).' });
+    }
+
+    const professor = await User.findById(normalizeIdForQuery(professorId)).select('rol colegioId materias nombre').lean();
+    if (!professor || professor.rol !== 'profesor') {
+      return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
+    }
+    if (professor.colegioId !== colegioId) {
+      return res.status(403).json({ message: 'El profesor debe pertenecer a tu colegio.' });
+    }
+
+    const materiaNombre = Array.isArray(professor.materias) && professor.materias.length > 0
+      ? String(professor.materias[0]).trim()
+      : '';
+    if (!materiaNombre) {
+      return res.status(400).json({ message: 'El profesor debe tener al menos una materia asignada. Edita el profesor y asígnale una materia.' });
+    }
+
+    const normalizedGroups = groupNames.map((g: string) => String(g).toUpperCase().trim()).filter(Boolean);
+    for (const nombreGrupo of normalizedGroups) {
+      const grupo = await Group.findOne({ nombre: nombreGrupo, colegioId }).lean();
+      if (!grupo) {
+        return res.status(400).json({ message: `El curso/grupo "${nombreGrupo}" no existe. Créalo primero en la sección Cursos.` });
+      }
+    }
+
+    const profesorObjId = new Types.ObjectId(normalizeIdForQuery(professorId));
+    let course = await Course.findOne({ nombre: materiaNombre, colegioId }).lean();
+    if (!course) {
+      course = await Course.create({
+        nombre: materiaNombre,
+        colegioId,
+        profesorIds: [profesorObjId],
+        profesorId: profesorObjId,
+        cursos: normalizedGroups,
+        estudiantes: [],
+        estudianteIds: [],
+      }) as any;
+    } else {
+      await Course.findByIdAndUpdate(course._id, {
+        $addToSet: {
+          profesorIds: profesorObjId,
+          cursos: { $each: normalizedGroups },
+        },
+        $set: { profesorId: course.profesorId || profesorObjId },
+      });
+    }
+
+    return res.status(200).json({
+      message: `Profesor asignado a los cursos ${normalizedGroups.join(', ')} para la materia ${materiaNombre}.`,
+      course: await Course.findById(course._id).populate('profesorIds', 'nombre email').lean(),
+    });
+  } catch (error: any) {
+    console.error('Error en assign-professor-to-groups:', error);
+    res.status(500).json({ message: 'Error al asignar profesor a los cursos.' });
+  }
+});
+
+// =========================================================================
 // RUTA ACTUALIZADA: PUT /api/courses/assign-professor (NUEVA RUTA DE ASIGNACIÓN)
-// Función: Asigna un profesor a un curso y viceversa. Solo para Directivos.
+// Función: Asigna un profesor a un curso (materia) existente por ID. Solo para Directivos.
 router.put('/assign-professor', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
 try {
 const { courseId, professorId } = req.body;

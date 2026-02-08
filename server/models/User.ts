@@ -16,6 +16,8 @@ interface IUser {
   materias?: string[];
   hijoId?: string;
   codigoUnico?: string;
+  /** Código interno (matrícula / código profesor) para referencia; no único. */
+  codigoInterno?: string;
   telefono?: string;
   celular?: string;
   direccion?: string;
@@ -31,7 +33,8 @@ interface IUser {
 
 const userSchema = new Schema<IUser>({
   nombre: { type: String, required: true },
-  correo: { type: String, required: true, unique: true, lowercase: true },
+  // Unicidad por (correo, colegioId) para multi-tenant: mismo email permitido en otro colegio
+  correo: { type: String, required: true, lowercase: true },
   password: { type: String, required: true },
   rol: { 
     type: String, 
@@ -62,6 +65,7 @@ const userSchema = new Schema<IUser>({
     sparse: true,
     required: false,
   },
+  codigoInterno: { type: String, required: false },
   telefono: { type: String },
   celular: { type: String },
   direccion: { type: String },
@@ -82,6 +86,9 @@ const userSchema = new Schema<IUser>({
     index: true 
   },
 });
+
+// Unicidad de email por colegio (multi-tenant)
+userSchema.index({ correo: 1, colegioId: 1 }, { unique: true });
 
 userSchema.pre('save', async function(next) {
   // Sincronizar email con correo para compatibilidad
