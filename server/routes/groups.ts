@@ -69,28 +69,28 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
 
     const { nombre, seccion, directorGrupoId } = req.body;
 
-    if (!nombre || !seccion || !directorGrupoId) {
-      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre (curso), seccion, directorGrupoId' });
+    if (!nombre || !seccion) {
+      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre (curso) y seccion' });
     }
 
     // Validar sección
     const seccionesValidas = ['junior-school', 'middle-school', 'high-school'];
     if (!seccionesValidas.includes(seccion)) {
-      return res.status(400).json({ message: 'Sección inválida. Debe ser: Junior School, Middle School o High School.' });
+      return res.status(400).json({ message: 'Sección inválida. Debe ser: junior-school, middle-school o high-school.' });
     }
 
-    // Validar que el director de grupo sea un profesor
-    const directorGrupo = await User.findById(normalizeIdForQuery(directorGrupoId)).select('rol colegioId');
-    if (!directorGrupo) {
-      return res.status(404).json({ message: 'Director de grupo no encontrado' });
-    }
-
-    if (directorGrupo.rol !== 'profesor') {
-      return res.status(400).json({ message: 'El director de grupo debe ser un profesor' });
-    }
-
-    if (directorGrupo.colegioId !== user.colegioId) {
-      return res.status(403).json({ message: 'El director de grupo debe pertenecer al mismo colegio' });
+    // Director de grupo opcional: los cursos pueden crearse primero y asignar director después
+    if (directorGrupoId) {
+      const directorGrupo = await User.findById(normalizeIdForQuery(directorGrupoId)).select('rol colegioId');
+      if (!directorGrupo) {
+        return res.status(404).json({ message: 'Director de grupo no encontrado' });
+      }
+      if (directorGrupo.rol !== 'profesor') {
+        return res.status(400).json({ message: 'El director de grupo debe ser un profesor' });
+      }
+      if (directorGrupo.colegioId !== user.colegioId) {
+        return res.status(403).json({ message: 'El director de grupo debe pertenecer al mismo colegio' });
+      }
     }
 
     // nombre = curso completo (ej: "7A", "8B", "11H")

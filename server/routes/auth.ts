@@ -695,21 +695,19 @@ router.post('/login', checkMongoConnection, async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const emailNorm = email.toLowerCase().trim();
+    const user = await User.findOne({
+      $or: [{ email: emailNorm }, { correo: emailNorm }],
+    });
     if (!user) {
-      return res.status(401).json({ message: 'Usuario no encontrado.' });
+      return res.status(401).json({ message: 'Usuario no encontrado. Revisa tu correo (usuario).' });
     }
 
-    // Solo usuarios con estado 'active' pueden iniciar sesión
-    if (user.estado !== 'active' && user.estado !== 'activo') {
+    // Cuentas creadas por el admin son funcionales: permitir login con active, vinculado o pendiente_vinculacion
+    const estadosPermitidos = ['active', 'activo', 'vinculado', 'pendiente_vinculacion'];
+    if (!user.estado || !estadosPermitidos.includes(user.estado)) {
       if (user.estado === 'suspended') {
         return res.status(403).json({ message: 'Tu cuenta ha sido suspendida. Contacta al administrador.' });
-      }
-      if (user.estado === 'pendiente_vinculacion') {
-        return res.status(403).json({ message: 'Tu cuenta está pendiente de vinculación con un padre. El administrador debe completar la vinculación y activar tu cuenta.' });
-      }
-      if (user.estado === 'vinculado') {
-        return res.status(403).json({ message: 'Tu cuenta está vinculada pero aún no activada. El administrador debe activar tu cuenta para que puedas iniciar sesión.' });
       }
       if (user.estado === 'pending') {
         return res.status(403).json({ message: 'Tu cuenta está pendiente de aprobación. Contacta al administrador.' });
@@ -810,16 +808,16 @@ router.post('/login', checkMongoConnection, async (req, res) => {
 
     const response = {
       id: userWithCode._id.toString(),
-      userId: userIdCategorizado, // ID categorizado
+      userId: userIdCategorizado,
       nombre: userWithCode.nombre,
-      email: userWithCode.email,
+      email: userWithCode.email || userWithCode.correo,
       rol: userWithCode.rol,
       curso: userWithCode.curso,
       materias: userWithCode.materias,
       colegioId: userWithCode.colegioId,
       codigoUnico: codigoFinal || null,
       seccion: userWithCode.seccion || null,
-      estado: userWithCode.estado || 'active', // Incluir estado en la respuesta
+      estado: userWithCode.estado || 'active',
       token,
     };
 

@@ -2,9 +2,10 @@ import { Schema, model, Types } from 'mongoose';
 
 interface ICourse {
   nombre: string;
-  materiaId: Types.ObjectId;
+  /** Opcional cuando la materia viene del profesor (flujo admin: asignar profesor a grupos). */
+  materiaId?: Types.ObjectId;
   estudiantes: Types.ObjectId[];
-  profesorId: Types.ObjectId;
+  profesorId?: Types.ObjectId;
   // Campos adicionales para compatibilidad
   colegioId?: string;
   descripcion?: string;
@@ -18,9 +19,9 @@ interface ICourse {
 
 const courseSchema = new Schema<ICourse>({
   nombre: { type: String, required: true },
-  materiaId: { type: Schema.Types.ObjectId, ref: 'materias', required: true },
+  materiaId: { type: Schema.Types.ObjectId, ref: 'materias', required: false },
   estudiantes: [{ type: Schema.Types.ObjectId, ref: 'usuarios', default: [] }],
-  profesorId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
+  profesorId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: false },
   // Campos adicionales para compatibilidad
   colegioId: { type: String },
   descripcion: { type: String },

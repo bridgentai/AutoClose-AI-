@@ -3,6 +3,7 @@ import { User, Vinculacion } from '../models';
 import { Course } from '../models/Course';
 import { protect, AuthRequest } from '../middleware/auth';
 import { normalizeIdForQuery, generateUserId } from '../utils/idGenerator';
+import { createBulkUsers, type BulkRowInput } from '../services/bulkUserService';
 
 const router = express.Router();
 
@@ -277,31 +278,34 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    const { rol } = req.query;
+    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin') {
+      return res.status(403).json({ message: 'Solo administradores del colegio pueden acceder a esta ruta' });
+    }
+
+    let { rol } = req.query;
     if (!rol || typeof rol !== 'string') {
       return res.status(400).json({ message: 'El parámetro "rol" es requerido' });
     }
+    rol = rol.trim().toLowerCase();
+    // Aceptar plural o singular: estudiantes→estudiante, profesores→profesor, padres→padre, directivos→directivo
+    const rolMap: Record<string, string> = {
+      estudiantes: 'estudiante',
+      profesores: 'profesor',
+      padres: 'padre',
+      directivos: 'directivo',
+    };
+    const rolNormalizado = rolMap[rol] || rol;
 
     const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo'];
-    if (!rolesPermitidos.includes(rol)) {
+    if (!rolesPermitidos.includes(rolNormalizado)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
     }
 
-    // admin-general-colegio puede listar cualquier rol; profesor, directivo y tesoreria pueden listar 'padre'
-    if (user.rol === 'admin-general-colegio') {
-      // OK cualquier rol
-    } else if ((user.rol === 'profesor' || user.rol === 'directivo' || user.rol === 'tesoreria') && rol === 'padre') {
-      // OK para listar padres
-    } else {
-      return res.status(403).json({ message: 'No tienes permiso para listar este rol' });
-    }
-
-    // Obtener usuarios del mismo colegio y rol
     const usuarios = await User.find({
       colegioId: user.colegioId,
-      rol: rol
+      rol: rolNormalizado
     })
-    .select('nombre email curso estado createdAt userId codigoUnico telefono celular')
+    .select(rolNormalizado === 'profesor' ? 'nombre email curso estado createdAt userId codigoUnico telefono celular materias' : 'nombre email curso estado createdAt userId codigoUnico telefono celular')
     .sort({ nombre: 1 })
     .lean();
 
@@ -317,6 +321,7 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
       codigoUnico: usr.codigoUnico,
       telefono: usr.telefono,
       celular: usr.celular,
+      materias: (usr as any).materias,
       createdAt: usr.createdAt,
     }));
 
@@ -339,8 +344,8 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    if (user.rol !== 'admin-general-colegio' && user.rol !== 'directivo') {
-      return res.status(403).json({ message: 'Solo administradores generales o directivos pueden acceder a esta ruta' });
+    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin' && user.rol !== 'directivo') {
+      return res.status(403).json({ message: 'Solo administradores del colegio o directivos pueden acceder a esta ruta' });
     }
 
     const colegioId = user.colegioId;
@@ -410,12 +415,15 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    // Solo admin-general-colegio puede crear usuarios
-    if (user.rol !== 'admin-general-colegio') {
-      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear usuarios' });
+    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin') {
+      return res.status(403).json({ message: 'Solo administradores del colegio pueden crear usuarios.' });
     }
 
-    const { nombre, email, rol, curso, telefono, celular, materias, cursos } = req.body;
+    const { nombre, email, rol, curso, telefono, celular, materias: materiasBody, materia, cursos } = req.body;
+    // Profesor: aceptar "materia" (string) o "materias" (array); la materia es un campo del profesor, no entidad independiente
+    const materias = rol === 'profesor' && (materia != null || materiasBody != null)
+      ? (Array.isArray(materiasBody) ? materiasBody : (materia != null ? [materia] : materiasBody ? [materiasBody] : []))
+      : undefined;
 
     // TODOS los roles: solo nombre y email. Contraseña auto-generada. Estado según rol.
     if (!nombre || !email || !rol) {
@@ -465,25 +473,24 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
 
     await newUser.save();
 
-    // Si es profesor y tiene materias asignadas, asignarlas
+    // Si es profesor con materias (nombres de materia, ej. "Matemáticas"): solo se guardan en User.materias.
+    // La asignación a grupos se hace después con POST /api/courses/assign-professor-to-groups.
+    // Si materias fueran IDs de Course existentes, se podría enlazar aquí; por defecto son nombres.
     if (rol === 'profesor' && materias && Array.isArray(materias) && materias.length > 0) {
-      try {
-        const { Course } = await import('../models/Course');
-        const profesorObjId = newUser._id;
-        // materias contiene IDs de Course (materias)
-        await Course.updateMany(
-          { _id: { $in: materias }, colegioId: user.colegioId },
-          { $addToSet: { profesorIds: profesorObjId } }
-        );
-      } catch (error: any) {
-        console.error('[USERS] Error al asignar materias al profesor:', error.message);
-        // No fallar la creación si falla la asignación de materias
+      const areIds = materias.every((m: any) => typeof m === 'string' && m.length === 24 && /^[a-f0-9]+$/i.test(m));
+      if (areIds) {
+        try {
+          const { Course } = await import('../models/Course');
+          const profesorObjId = newUser._id;
+          await Course.updateMany(
+            { _id: { $in: materias }, colegioId: user.colegioId },
+            { $addToSet: { profesorIds: profesorObjId } }
+          );
+        } catch (error: any) {
+          console.error('[USERS] Error al asignar materias al profesor:', error.message);
+        }
       }
     }
-    
-    // Si es profesor y tiene cursos/grupos asignados, actualizar User.materias con los nombres de las materias
-    // Nota: cursos aquí son nombres de grupos (ej: "7A"), no IDs de Course
-    // Esto se maneja mejor en la asignación posterior de profesores a cursos
 
     // TODOS devuelven passwordTemporal
     res.status(201).json({
@@ -504,6 +511,80 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error('Error al crear usuario:', error.message);
     res.status(500).json({ message: 'Error en el servidor al crear el usuario.' });
+  }
+});
+
+// =========================================================================
+// POST /api/users/bulk - Creación masiva de usuarios (admin-general-colegio)
+// Body: { rows: BulkRowInput[] } con nombre, apellido?, email, rol, codigo_interno?, curso_grupo?
+// Rol: student | teacher | parent (o estudiante | profesor | padre)
+// =========================================================================
+router.post('/bulk', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const admin = await User.findById(normalizedUserId).select('rol colegioId').lean();
+    if (!admin || (admin.rol !== 'admin-general-colegio' && admin.rol !== 'school_admin')) {
+      return res.status(403).json({
+        message: 'Solo administradores del colegio pueden realizar carga masiva de usuarios.',
+      });
+    }
+    const colegioId = admin.colegioId;
+    if (!colegioId) {
+      return res.status(400).json({ message: 'Colegio no definido para el administrador.' });
+    }
+
+    const { rows } = req.body as { rows?: BulkRowInput[] };
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({
+        message: 'Se requiere un array "rows" con al menos una fila. Cada fila: nombre, apellido?, email, rol, codigo_interno?, curso_grupo?',
+      });
+    }
+
+    const result = await createBulkUsers(rows, colegioId);
+    res.status(200).json(result);
+  } catch (error: any) {
+    console.error('Error en carga masiva de usuarios:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al procesar la carga masiva.' });
+  }
+});
+
+// =========================================================================
+// POST /api/users/reset-password - Restablecer contraseña de un usuario (admin del colegio)
+// Body: { userId: string }. Genera contraseña aleatoria y la devuelve (solo en la respuesta).
+// =========================================================================
+router.post('/reset-password', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedAdminId = normalizeIdForQuery(req.userId || '');
+    const admin = await User.findById(normalizedAdminId).select('rol colegioId').lean();
+    if (!admin || (admin.rol !== 'admin-general-colegio' && admin.rol !== 'school_admin')) {
+      return res.status(403).json({ message: 'Solo administradores del colegio pueden restablecer contraseñas.' });
+    }
+    const { userId } = req.body as { userId?: string };
+    if (!userId) {
+      return res.status(400).json({ message: 'Falta userId.' });
+    }
+    const targetId = normalizeIdForQuery(userId);
+    const target = await User.findById(targetId).select('colegioId nombre email').lean();
+    if (!target) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    if (target.colegioId !== admin.colegioId) {
+      return res.status(403).json({ message: 'No puedes restablecer la contraseña de un usuario de otro colegio.' });
+    }
+    const newPassword = generarPasswordAleatorio();
+    const targetUser = await User.findById(targetId);
+    if (!targetUser) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    targetUser.password = newPassword;
+    await targetUser.save(); // pre('save') hashea la contraseña
+    res.status(200).json({
+      message: 'Contraseña restablecida. Comparte la nueva contraseña con el usuario.',
+      passwordTemporal: newPassword,
+    });
+  } catch (error: any) {
+    console.error('Error al restablecer contraseña:', error.message);
+    res.status(500).json({ message: 'Error en el servidor al restablecer la contraseña.' });
   }
 });
 

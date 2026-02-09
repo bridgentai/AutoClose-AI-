@@ -6,8 +6,9 @@ import { useInstitutionColors } from '@/hooks/useInstitutionColors';
 import { 
   Users, GraduationCap, BookOpen, UserPlus, Plus, Edit, Trash2, 
   X, Check, Settings, Bot, Link as LinkIcon, Eye, EyeOff,
-  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search
+  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search, Upload, KeyRound, Copy
 } from 'lucide-react';
+import { BulkUsersUpload } from '@/components/admin/BulkUsersUpload';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -76,6 +77,7 @@ interface User {
   codigoUnico?: string;
   telefono?: string;
   celular?: string;
+  materias?: string[];
   createdAt: string;
 }
 
@@ -96,7 +98,7 @@ export function AdminGeneralColegioDashboard() {
   const queryClient = useQueryClient();
   const { colorPrimario, colorSecundario } = useInstitutionColors();
   
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'usuarios' | 'cursos' | 'materias' | 'asignaciones' | 'ia' | 'config'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'usuarios' | 'cursos' | 'materias' | 'asignaciones' | 'carga-masiva' | 'ia' | 'config'>('dashboard');
   const [activeTab, setActiveTab] = useState<'estudiantes' | 'profesores' | 'padres' | 'directivos'>('estudiantes');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -118,19 +120,44 @@ export function AdminGeneralColegioDashboard() {
   const [assignEstudianteId, setAssignEstudianteId] = useState('');
   const [assignCourseId, setAssignCourseId] = useState('');
   const [assignProfessorId, setAssignProfessorId] = useState('');
+  // Asignar profesor a grupos (flujo: profesor → cursos existentes)
+  const [assignProfToGroupsProfessorId, setAssignProfToGroupsProfessorId] = useState('');
+  const [assignProfToGroupsGroupNames, setAssignProfToGroupsGroupNames] = useState<string[]>([]);
+  // Caja con datos de la cuenta recién creada (en lugar del mensaje gris externo)
+  const [createdUserInfo, setCreatedUserInfo] = useState<{
+    nombre: string;
+    email: string;
+    rol: string;
+    passwordTemporal: string;
+    _id: string;
+  } | null>(null);
+  // Caja con la nueva contraseña tras restablecer (en el diálogo de información de cuenta)
+  const [resetPasswordBox, setResetPasswordBox] = useState<{ passwordTemporal: string } | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  const isAdminColegio = user?.rol === 'admin-general-colegio' || user?.rol === 'school_admin';
 
   // Obtener estadísticas
   const { data: stats, isLoading: statsLoading } = useQuery<Stats>({
     queryKey: ['adminStats', user?.colegioId],
     queryFn: () => apiRequest<Stats>('GET', '/api/users/stats'),
-    enabled: !!user?.colegioId && (user?.rol === 'admin-general-colegio' || user?.rol === 'directivo'),
+    enabled: !!user?.colegioId && (isAdminColegio || user?.rol === 'directivo'),
   });
+
+  // Mapear tab (plural) a rol del API (singular)
+  const tabToRol: Record<string, string> = {
+    estudiantes: 'estudiante',
+    profesores: 'profesor',
+    padres: 'padre',
+    directivos: 'directivo',
+  };
+  const rolForApi = tabToRol[activeTab] || activeTab;
 
   // Obtener usuarios por rol
   const { data: usuarios = [], isLoading: usuariosLoading } = useQuery<User[]>({
-    queryKey: ['usuariosByRole', activeTab, user?.colegioId],
-    queryFn: () => apiRequest<User[]>('GET', `/api/users/by-role?rol=${activeTab}`),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio',
+    queryKey: ['usuariosByRole', rolForApi, user?.colegioId],
+    queryFn: () => apiRequest<User[]>('GET', `/api/users/by-role?rol=${rolForApi}`),
+    enabled: !!user?.colegioId && isAdminColegio && !!rolForApi,
   });
 
   // Filtrar usuarios según el término de búsqueda
@@ -157,6 +184,7 @@ export function AdminGeneralColegioDashboard() {
     email: '',
     telefono: '',
     celular: '',
+    materiaNombre: '', // Materia que dicta el profesor (string)
     materias: [] as string[],
     cursos: [] as string[],
   });
@@ -173,19 +201,19 @@ export function AdminGeneralColegioDashboard() {
   const { data: profesores = [] } = useQuery<User[]>({
     queryKey: ['profesoresForCourse', user?.colegioId],
     queryFn: () => apiRequest<User[]>('GET', `/api/users/by-role?rol=profesor`),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio' && createUserType === 'curso',
+    enabled: !!user?.colegioId && isAdminColegio && createUserType === 'curso',
   });
 
   // Estudiantes y padres para vinculación (sección Asignaciones)
   const { data: estudiantesVinculo = [] } = useQuery<User[]>({
     queryKey: ['estudiantesForVinculo', user?.colegioId],
     queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=estudiante'),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio' && activeSection === 'asignaciones',
+    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'asignaciones',
   });
   const { data: padresVinculo = [] } = useQuery<User[]>({
     queryKey: ['padresForVinculo', user?.colegioId],
     queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=padre'),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio' && activeSection === 'asignaciones',
+    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'asignaciones',
   });
 
   interface VinculacionItem {
@@ -233,22 +261,22 @@ export function AdminGeneralColegioDashboard() {
   const { data: gruposList = [] } = useQuery<GroupItem[]>({
     queryKey: ['groupsAll', user?.colegioId],
     queryFn: () => apiRequest<GroupItem[]>('GET', '/api/groups/all'),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio' && (activeSection === 'cursos' || createUserOpen),
+    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'cursos' || createUserOpen),
   });
   const { data: coursesList = [] } = useQuery<CourseItem[]>({
     queryKey: ['coursesAdmin', user?.colegioId],
     queryFn: () => apiRequest<CourseItem[]>('GET', '/api/courses'),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio' && (activeSection === 'cursos' || createUserOpen),
+    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'cursos' || createUserOpen),
   });
   const { data: estudiantesForAssign = [] } = useQuery<User[]>({
     queryKey: ['estudiantesForAssign', user?.colegioId],
     queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=estudiante'),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio' && activeSection === 'cursos',
+    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'cursos',
   });
   const { data: profesoresForAssign = [] } = useQuery<User[]>({
     queryKey: ['profesoresForAssign', user?.colegioId],
     queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=profesor'),
-    enabled: !!user?.colegioId && user?.rol === 'admin-general-colegio' && activeSection === 'cursos',
+    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'cursos',
   });
   const assignStudentMutation = useMutation({
     mutationFn: (payload: { grupoId: string; estudianteId: string }) =>
@@ -271,50 +299,77 @@ export function AdminGeneralColegioDashboard() {
 
   const createUserMutation = useMutation({
     mutationFn: async (userData: any) => {
-      return apiRequest<{ user?: any; passwordTemporal?: string; message?: string }>('POST', '/api/users/create', userData);
+      return apiRequest<{ user?: { _id: string; nombre?: string; email?: string; rol?: string; passwordTemporal?: string }; message?: string }>('POST', '/api/users/create', userData);
     },
     onSuccess: (data, variables: any) => {
       queryClient.invalidateQueries({ queryKey: ['usuariosByRole'] });
       queryClient.invalidateQueries({ queryKey: ['adminStats'] });
-      if (data?.user?._id && data?.passwordTemporal) {
-        setUserPasswordTemporal(prev => ({ ...prev, [data.user._id]: data.passwordTemporal }));
-        if (variables?.rol === 'estudiante') {
-          alert(`Estudiante creado.\n\nContraseña temporal (guárdala para compartir con la familia):\n${data.passwordTemporal}\n\nEl estudiante no puede iniciar sesión hasta vincularse con al menos un padre y activar la cuenta.`);
-        } else {
-          alert(`Usuario creado.\n\nContraseña temporal (guárdala para compartir):\n${data.passwordTemporal}`);
-        }
+      const passwordTemporal = data?.user?.passwordTemporal ?? (data as any)?.passwordTemporal;
+      if (data?.user?._id && passwordTemporal) {
+        setUserPasswordTemporal(prev => ({ ...prev, [data.user!._id]: passwordTemporal }));
+        setCreatedUserInfo({
+          _id: data.user._id,
+          nombre: data.user.nombre ?? '',
+          email: data.user.email ?? '',
+          rol: data.user.rol ?? variables?.rol ?? '',
+          passwordTemporal,
+        });
       }
       setCreateUserOpen(false);
-      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materias: [], cursos: [] });
+      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [] });
     },
   });
 
   const createCourseMutation = useMutation({
     mutationFn: async (courseData: any) => {
-      return apiRequest('POST', '/api/groups/create', courseData);
+      const body: any = { nombre: courseData.nombre, seccion: courseData.seccion };
+      if (courseData.directorGrupoId) body.directorGrupoId = courseData.directorGrupoId;
+      return apiRequest('POST', '/api/groups/create', body);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats', 'groupsAll'] });
       setCreateUserOpen(false);
       setNewCourse({ curso: '', seccion: '', directorGrupo: '' });
     },
   });
 
+  const assignProfessorToGroupsMutation = useMutation({
+    mutationFn: (payload: { professorId: string; groupNames: string[] }) =>
+      apiRequest('POST', '/api/courses/assign-professor-to-groups', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['coursesAdmin'] });
+      setAssignProfToGroupsProfessorId('');
+      setAssignProfToGroupsGroupNames([]);
+    },
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: (userId: string) =>
+      apiRequest<{ passwordTemporal: string }>('POST', '/api/users/reset-password', { userId }),
+    onSuccess: (data, userId) => {
+      setResetPasswordBox({ passwordTemporal: data.passwordTemporal });
+      setUserPasswordTemporal((prev) => ({ ...prev, [userId]: data.passwordTemporal }));
+    },
+  });
+
   const handleCreateUser = () => {
     if (createUserType === 'curso') {
-      // Validar campos del curso
-      if (!newCourse.curso || !newCourse.seccion || !newCourse.directorGrupo) {
-        alert('Por favor completa todos los campos: Curso, Sección y Director de grupo');
+      if (!newCourse.curso || !newCourse.seccion) {
+        alert('Por favor completa Curso y Sección. El director de grupo es opcional.');
         return;
       }
       createCourseMutation.mutate({
         nombre: newCourse.curso.toUpperCase().trim(),
         seccion: newCourse.seccion,
-        directorGrupoId: newCourse.directorGrupo,
+        directorGrupoId: newCourse.directorGrupo && newCourse.directorGrupo !== '__none__' ? newCourse.directorGrupo : undefined,
       });
     } else {
       if (!newUser.nombre || !newUser.email) {
         alert('Nombre y email son obligatorios.');
+        return;
+      }
+      if (createUserType === 'profesor' && !newUser.materiaNombre.trim()) {
+        alert('Indica la materia que dicta el profesor (ej. Matemáticas).');
         return;
       }
       const payload: Record<string, unknown> = {
@@ -325,6 +380,7 @@ export function AdminGeneralColegioDashboard() {
         celular: newUser.celular || undefined,
       };
       if (createUserType === 'profesor') {
+        if (newUser.materiaNombre) payload.materia = newUser.materiaNombre;
         if (newUser.materias.length > 0) payload.materias = newUser.materias;
         if (newUser.cursos.length > 0) payload.cursos = newUser.cursos;
       }
@@ -345,6 +401,8 @@ export function AdminGeneralColegioDashboard() {
         return renderMaterias();
       case 'asignaciones':
         return renderAsignaciones();
+      case 'carga-masiva':
+        return <BulkUsersUpload />;
       case 'ia':
         return renderIA();
       case 'config':
@@ -563,7 +621,9 @@ export function AdminGeneralColegioDashboard() {
       <Card className={CARD_STYLE}>
         <CardHeader>
           <CardTitle className="text-white">Gestión de Usuarios</CardTitle>
-          <CardDescription className="text-white/60">Administra estudiantes, profesores, padres y directivas</CardDescription>
+          <CardDescription className="text-white/60">
+            Todas las cuentas por categoría. Usuario de login = email. La contraseña se muestra solo tras crear la cuenta (guárdala). Haz clic en una fila o en Ver para ver el detalle.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
@@ -584,7 +644,6 @@ export function AdminGeneralColegioDashboard() {
 
             <TabsContent value={activeTab} className="mt-6">
               <div className="space-y-4">
-                {/* Barra de búsqueda */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/40" />
                   <Input
@@ -614,36 +673,43 @@ export function AdminGeneralColegioDashboard() {
                         <thead>
                           <tr className="border-b border-white/10">
                             <th className="text-left p-2 text-white/80">Nombre</th>
-                            <th className="text-left p-2 text-white/80">Email</th>
+                            <th className="text-left p-2 text-white/80">Usuario (email)</th>
                             {activeTab === 'estudiantes' && <th className="text-left p-2 text-white/80">Curso</th>}
                             {(activeTab === 'estudiantes' || activeTab === 'padres') && (
                               <th className="text-left p-2 text-white/80">Relaciones</th>
                             )}
-                            <th className="text-left p-2 text-white/80">Contraseña</th>
+                            <th className="text-left p-2 text-white/80">Contraseña generada</th>
                             <th className="text-left p-2 text-white/80">Estado</th>
                             <th className="text-left p-2 text-white/80">Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
                           {usuariosFiltrados.map((usuario) => (
-                            <tr key={usuario._id} className="border-b border-white/5">
+                            <tr
+                              key={usuario._id}
+                              className="border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors"
+                              onClick={() => {
+                                setSelectedUser(usuario);
+                                setEditUserOpen(true);
+                              }}
+                            >
                               <td className="p-2 text-white">{usuario.nombre}</td>
-                              <td className="p-2 text-white/70">{usuario.email}</td>
+                              <td className="p-2 text-white/70 font-mono text-sm">{usuario.email}</td>
                               {activeTab === 'estudiantes' && (
                                 <td className="p-2 text-white/70">{usuario.curso || '-'}</td>
                               )}
                               {(activeTab === 'estudiantes' || activeTab === 'padres') && (
-                                <td className="p-2">
+                                <td className="p-2" onClick={(e) => e.stopPropagation()}>
                                   <UserRelations userId={usuario._id} activeTab={activeTab} />
                                 </td>
                               )}
-                              <td className="p-2">
+                              <td className="p-2" onClick={(e) => e.stopPropagation()}>
                                 {userPasswordTemporal[usuario._id] ? (
-                                  <span className="text-xs text-white/70 font-mono bg-white/5 px-2 py-1 rounded">
+                                  <span className="text-xs text-amber-300 font-mono bg-white/5 px-2 py-1 rounded border border-amber-500/30">
                                     {userPasswordTemporal[usuario._id]}
                                   </span>
                                 ) : (
-                                  <span className="text-white/50 text-sm">-</span>
+                                  <span className="text-white/50 text-sm">—</span>
                                 )}
                               </td>
                               <td className="p-2">
@@ -663,7 +729,7 @@ export function AdminGeneralColegioDashboard() {
                                   {usuario.estado === 'active' ? 'Activo' : usuario.estado === 'suspended' ? 'Suspendido' : usuario.estado === 'vinculado' ? 'Vinculado' : usuario.estado === 'pendiente_vinculacion' ? 'Pend. vinculación' : 'Pendiente'}
                                 </Badge>
                               </td>
-                              <td className="p-2">
+                              <td className="p-2" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex gap-2">
                                   <Button
                                     size="sm"
@@ -672,8 +738,9 @@ export function AdminGeneralColegioDashboard() {
                                       setSelectedUser(usuario);
                                       setEditUserOpen(true);
                                     }}
+                                    title="Ver información de la cuenta"
                                   >
-                                    <Edit className="w-4 h-4" />
+                                    <Eye className="w-4 h-4" />
                                   </Button>
                                   <Button
                                     size="sm"
@@ -701,9 +768,80 @@ export function AdminGeneralColegioDashboard() {
     </div>
   );
 
-  // 4️⃣ Cursos y Estructura Académica
+  // 4️⃣ Cursos y Estructura Académica (flujo: 1.Cursos 2.Profesores 3.Asignaciones 4.Estudiantes)
   const renderCursos = () => (
     <div className="space-y-6">
+      <Card className={CARD_STYLE}>
+        <CardHeader>
+          <CardTitle className="text-white">Crear curso / grupo</CardTitle>
+          <CardDescription className="text-white/60">Los cursos son la base: créalos primero (ej. 11A, 11B). El director de grupo es opcional.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-white/70 text-sm">Desde el botón &quot;Crear Curso&quot; en Acciones Rápidas puedes crear nuevos grupos. Luego asigna profesores y estudiantes.</p>
+        </CardContent>
+      </Card>
+      <Card className={CARD_STYLE}>
+        <CardHeader>
+          <CardTitle className="text-white">Asignar profesor a cursos</CardTitle>
+          <CardDescription className="text-white/60">Elige un profesor (con materia asignada) y los cursos/grupos donde dicta. La materia se toma del profesor.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-white/90 mb-2 block">Profesor</Label>
+              <Select value={assignProfToGroupsProfessorId} onValueChange={setAssignProfToGroupsProfessorId}>
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                  <SelectValue placeholder="Elige profesor" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0b0013] border-white/10">
+                  {profesoresForAssign.map((p) => (
+                    <SelectItem key={p._id} value={p._id} className="text-white focus:bg-white/10">
+                      {p.nombre} {p.email ? `(${p.email})` : ''} {Array.isArray((p as any).materias) && (p as any).materias?.length ? `— ${(p as any).materias[0]}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-white/90 mb-2 block">Cursos / Grupos</Label>
+              <Select
+                value=""
+                onValueChange={(g) => {
+                  if (g && !assignProfToGroupsGroupNames.includes(g)) {
+                    setAssignProfToGroupsGroupNames([...assignProfToGroupsGroupNames, g]);
+                  }
+                }}
+              >
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                  <SelectValue placeholder="Añadir curso" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0b0013] border-white/10">
+                  {gruposList.map((gr) => (
+                    <SelectItem key={gr._id} value={gr.nombre} className="text-white focus:bg-white/10">{gr.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {assignProfToGroupsGroupNames.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {assignProfToGroupsGroupNames.map((g) => (
+                    <Badge key={g} className="bg-white/10 text-white border-white/20">
+                      {g}
+                      <button type="button" onClick={() => setAssignProfToGroupsGroupNames(assignProfToGroupsGroupNames.filter((x) => x !== g))} className="ml-2 hover:text-red-400">×</button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <Button
+            disabled={!assignProfToGroupsProfessorId || assignProfToGroupsGroupNames.length === 0 || assignProfessorToGroupsMutation.isPending}
+            style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+            onClick={() => assignProfessorToGroupsMutation.mutate({ professorId: assignProfToGroupsProfessorId, groupNames: assignProfToGroupsGroupNames })}
+          >
+            {assignProfessorToGroupsMutation.isPending ? 'Asignando...' : 'Asignar profesor a cursos'}
+          </Button>
+        </CardContent>
+      </Card>
       <Card className={CARD_STYLE}>
         <CardHeader>
           <CardTitle className="text-white">Asignar estudiante a curso</CardTitle>
@@ -1016,6 +1154,14 @@ export function AdminGeneralColegioDashboard() {
               Asignaciones
             </Button>
             <Button
+              variant={activeSection === 'carga-masiva' ? 'default' : 'ghost'}
+              onClick={() => setActiveSection('carga-masiva')}
+              className={activeSection === 'carga-masiva' ? '' : 'text-white/70'}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Carga masiva
+            </Button>
+            <Button
               variant={activeSection === 'ia' ? 'default' : 'ghost'}
               onClick={() => setActiveSection('ia')}
               className={activeSection === 'ia' ? '' : 'text-white/70'}
@@ -1096,15 +1242,18 @@ export function AdminGeneralColegioDashboard() {
                   <p className="text-xs text-white/50 mt-1">Selecciona la sección del colegio</p>
                 </div>
                 <div>
-                  <Label htmlFor="directorGrupo" className="text-white/90">Director de Grupo *</Label>
+                  <Label htmlFor="directorGrupo" className="text-white/90">Director de Grupo (opcional)</Label>
                   <Select
-                    value={newCourse.directorGrupo}
+                    value={newCourse.directorGrupo || '__none__'}
                     onValueChange={(value) => setNewCourse({ ...newCourse, directorGrupo: value })}
                   >
                     <SelectTrigger className="bg-white/5 border-white/10 text-white mt-1">
-                      <SelectValue placeholder="Selecciona un profesor" />
+                      <SelectValue placeholder="Sin director por ahora" />
                     </SelectTrigger>
                     <SelectContent className="bg-[#0b0013] border-white/10">
+                      <SelectItem value="__none__" className="text-white/70 focus:bg-white/10">
+                        Sin director (asignar después)
+                      </SelectItem>
                       {profesores.map((profesor) => (
                         <SelectItem 
                           key={profesor._id} 
@@ -1116,7 +1265,7 @@ export function AdminGeneralColegioDashboard() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-white/50 mt-1">Selecciona el profesor que será director de este grupo</p>
+                  <p className="text-xs text-white/50 mt-1">Los cursos pueden crearse primero; el director se puede asignar después</p>
                 </div>
                 <div className="flex gap-2">
                   <Button
@@ -1172,7 +1321,17 @@ export function AdminGeneralColegioDashboard() {
                 {createUserType === 'profesor' && (
                   <>
                     <div>
-                      <Label className="text-white/90 mb-2 block">Materias que dicta (opcional)</Label>
+                      <Label className="text-white/90 mb-2 block">Materia que dicta *</Label>
+                      <Input
+                        value={newUser.materiaNombre}
+                        onChange={(e) => setNewUser({ ...newUser, materiaNombre: e.target.value.trim() })}
+                        className="bg-white/5 border-white/10 text-white"
+                        placeholder="Ej: Matemáticas, Ciencias, Español"
+                      />
+                      <p className="text-xs text-white/50 mt-1">La materia es un campo del profesor. Luego podrás asignarlo a cursos/grupos.</p>
+                    </div>
+                    <div>
+                      <Label className="text-white/90 mb-2 block">Vincular a materias existentes (opcional)</Label>
                       <Select
                         value=""
                         onValueChange={(materiaId) => {
@@ -1253,7 +1412,10 @@ export function AdminGeneralColegioDashboard() {
                 <div className="flex gap-2">
                   <Button
                     onClick={handleCreateUser}
-                    disabled={createUserMutation.isPending}
+                    disabled={
+                      createUserMutation.isPending ||
+                      (createUserType === 'profesor' && !newUser.materiaNombre.trim())
+                    }
                     style={{
                       background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
                     }}
@@ -1264,7 +1426,7 @@ export function AdminGeneralColegioDashboard() {
                     variant="outline"
                     onClick={() => {
                       setCreateUserOpen(false);
-                      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materias: [], cursos: [] });
+                      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [] });
                     }}
                     className="border-white/10 text-white"
                   >
@@ -1274,6 +1436,197 @@ export function AdminGeneralColegioDashboard() {
               </>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Caja con información de la cuenta recién creada */}
+      <Dialog open={!!createdUserInfo} onOpenChange={(open) => !open && setCreatedUserInfo(null)}>
+        <DialogContent className="bg-[#0b0013] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Check className="w-5 h-5 text-green-400" />
+              Cuenta creada
+            </DialogTitle>
+            <DialogDescription className="text-white/60">
+              Guarda esta información; la contraseña no se volverá a mostrar.
+            </DialogDescription>
+          </DialogHeader>
+          {createdUserInfo && (
+            <div className="space-y-4 pt-2">
+              <div className="rounded-lg border border-white/20 bg-white/5 p-4 space-y-3">
+                <div>
+                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nombre</p>
+                  <p className="text-white font-medium">{createdUserInfo.nombre}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Usuario (email para iniciar sesión)</p>
+                  <p className="text-white font-mono text-sm break-all">{createdUserInfo.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Contraseña generada</p>
+                  <p className="text-amber-300 font-mono text-sm bg-amber-500/10 px-3 py-2 rounded border border-amber-500/30 break-all select-all">
+                    {createdUserInfo.passwordTemporal}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Rol</p>
+                  <p className="text-white capitalize">{createdUserInfo.rol}</p>
+                </div>
+              </div>
+              <p className="text-white/60 text-sm">
+                Esta cuenta ya puede iniciar sesión con el usuario y la contraseña de arriba.
+              </p>
+              <Button
+                className="w-full"
+                style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+                onClick={() => setCreatedUserInfo(null)}
+              >
+                Entendido
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo: Información de la cuenta (al hacer clic en un usuario) */}
+      <Dialog
+        open={editUserOpen}
+        onOpenChange={(open) => {
+          if (!open) setResetPasswordBox(null);
+          setEditUserOpen(open);
+        }}
+      >
+        <DialogContent className="bg-[#0b0013] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Información de la cuenta</DialogTitle>
+            <DialogDescription className="text-white/60">
+              Datos de la cuenta. Usuario de login = email.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-4 pt-2">
+              {/* Caja tras restablecer contraseña: nueva contraseña + info + copiar */}
+              {resetPasswordBox && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-amber-300 font-medium">
+                    <KeyRound className="w-4 h-4" />
+                    Contraseña restablecida
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nombre</p>
+                    <p className="text-white font-medium">{selectedUser.nombre}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Usuario (email)</p>
+                    <p className="text-white font-mono text-sm break-all">{selectedUser.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nueva contraseña</p>
+                    <p className="text-amber-300 font-mono text-sm bg-black/20 px-3 py-2 rounded border border-amber-500/30 break-all select-all">
+                      {resetPasswordBox.passwordTemporal}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full border-amber-500/40 text-amber-300 hover:bg-amber-500/20"
+                    onClick={() => {
+                      navigator.clipboard.writeText(resetPasswordBox.passwordTemporal);
+                      setCopyFeedback(true);
+                      setTimeout(() => setCopyFeedback(false), 2000);
+                    }}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    {copyFeedback ? 'Copiado' : 'Copiar contraseña'}
+                  </Button>
+                </div>
+              )}
+              <div className="grid gap-2">
+                <p className="text-sm text-white/60">Nombre</p>
+                <p className="text-white font-medium">{selectedUser.nombre}</p>
+              </div>
+              <div className="grid gap-2">
+                <p className="text-sm text-white/60">Usuario (email para iniciar sesión)</p>
+                <p className="text-white font-mono text-sm break-all">{selectedUser.email}</p>
+              </div>
+              <div className="grid gap-2">
+                <p className="text-sm text-white/60">Contraseña</p>
+                {userPasswordTemporal[selectedUser._id] ? (
+                  <p className="text-amber-300 font-mono text-sm bg-white/5 px-3 py-2 rounded border border-amber-500/30 break-all select-all">
+                    {userPasswordTemporal[selectedUser._id]}
+                  </p>
+                ) : (
+                  <p className="text-white/50 text-sm">Solo visible al crear o al restablecer. Usa el botón de abajo para generar una nueva.</p>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-white/20 text-white hover:bg-white/10 w-fit"
+                  disabled={resetPasswordMutation.isPending}
+                  onClick={() => resetPasswordMutation.mutate(selectedUser._id)}
+                >
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  {resetPasswordMutation.isPending ? 'Generando...' : 'Restablecer contraseña'}
+                </Button>
+              </div>
+              <div className="grid gap-2">
+                <p className="text-sm text-white/60">Rol</p>
+                <p className="text-white capitalize">{selectedUser.rol || activeTab}</p>
+              </div>
+              <div className="grid gap-2">
+                <p className="text-sm text-white/60">Estado</p>
+                <Badge
+                  className={
+                    selectedUser.estado === 'active'
+                      ? 'bg-green-500/20 text-green-400'
+                      : selectedUser.estado === 'vinculado'
+                      ? 'bg-blue-500/20 text-blue-400'
+                      : selectedUser.estado === 'pendiente_vinculacion'
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : 'bg-white/10 text-white'
+                  }
+                >
+                  {selectedUser.estado === 'active' ? 'Activo' : selectedUser.estado === 'vinculado' ? 'Vinculado' : selectedUser.estado === 'pendiente_vinculacion' ? 'Pend. vinculación' : selectedUser.estado || '—'}
+                </Badge>
+              </div>
+              {selectedUser.curso && (
+                <div className="grid gap-2">
+                  <p className="text-sm text-white/60">Curso / Grupo</p>
+                  <p className="text-white">{selectedUser.curso}</p>
+                </div>
+              )}
+              {(selectedUser.telefono || selectedUser.celular) && (
+                <div className="grid gap-2">
+                  <p className="text-sm text-white/60">Contacto</p>
+                  <p className="text-white/80 text-sm">
+                    {selectedUser.telefono && `Tel: ${selectedUser.telefono}`}
+                    {selectedUser.telefono && selectedUser.celular && ' · '}
+                    {selectedUser.celular && `Cel: ${selectedUser.celular}`}
+                  </p>
+                </div>
+              )}
+              {selectedUser.codigoUnico && (
+                <div className="grid gap-2">
+                  <p className="text-sm text-white/60">Código único</p>
+                  <p className="text-white font-mono">{selectedUser.codigoUnico}</p>
+                </div>
+              )}
+              {Array.isArray(selectedUser.materias) && selectedUser.materias.length > 0 && (
+                <div className="grid gap-2">
+                  <p className="text-sm text-white/60">Materia(s)</p>
+                  <p className="text-white/80 text-sm">{selectedUser.materias.join(', ')}</p>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                className="mt-2 border-white/10 text-white"
+                onClick={() => setEditUserOpen(false)}
+              >
+                Cerrar
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

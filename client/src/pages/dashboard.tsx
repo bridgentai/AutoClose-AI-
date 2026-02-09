@@ -1244,6 +1244,7 @@ export default function Dashboard() {
       case 'padre':
         return <PadreDashboard />;
       case 'admin-general-colegio':
+      case 'school_admin':
         return <AdminGeneralColegioDashboard />;
       case 'administrador-general':
       case 'transporte':
@@ -1251,8 +1252,7 @@ export default function Dashboard() {
       case 'nutricion':
       case 'cafeteria':
       case 'asistente':
-      case 'school_admin':
-        // Estos roles se redirigen a sus páginas específicas o usan el dashboard
+        // Estos roles se redirigen a sus páginas específicas
         return null;
       case 'super_admin':
         // Super admin general ve su dashboard de gestión
