@@ -255,6 +255,85 @@ router.get('/:estudianteId/personal-info', protect, async (req: AuthRequest, res
 });
 
 // =========================================================================
+// GET /api/student/hijo/:estudianteId/notes - Notas de un hijo (padre o directivo)
+// =========================================================================
+router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) => {
+  try {
+    const { estudianteId: paramId } = req.params;
+    const userId = req.user?.id;
+    const rol = req.user?.rol;
+    const normalizedEstudianteId = normalizeIdForQuery(paramId);
+    const normalizedUserId = normalizeIdForQuery(userId || '');
+
+    const estudiante = await User.findById(normalizedEstudianteId).select('rol colegioId').lean();
+    if (!estudiante || estudiante.rol !== 'estudiante') {
+      return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    }
+
+    let allowed = rol === 'directivo' || rol === 'admin-general-colegio';
+    if (!allowed && rol === 'padre') {
+      const { Vinculacion } = await import('../models');
+      const v = await Vinculacion.findOne({
+        padreId: normalizedUserId,
+        estudianteId: normalizedEstudianteId,
+      }).lean();
+      allowed = !!v;
+    }
+    if (!allowed) {
+      return res.status(403).json({ message: 'No autorizado a ver las notas de este estudiante.' });
+    }
+
+    const notas = await Nota.find({ estudianteId: normalizedEstudianteId })
+      .populate('tareaId', 'titulo descripcion courseId materiaId fechaEntrega submissions')
+      .populate('profesorId', 'nombre')
+      .sort({ fecha: -1 })
+      .lean();
+
+    const notasPorMateria: Record<string, any> = {};
+    for (const nota of notas) {
+      const tarea = nota.tareaId as any;
+      if (!tarea) continue;
+      const materiaId = tarea.materiaId || tarea.courseId;
+      if (!materiaId) continue;
+      const materiaIdStr = materiaId.toString();
+      if (!notasPorMateria[materiaIdStr]) {
+        const materia = await Course.findById(materiaId).select('nombre colorAcento icono').lean();
+        notasPorMateria[materiaIdStr] = {
+          _id: materiaIdStr,
+          nombre: materia?.nombre || 'Materia',
+          colorAcento: materia?.colorAcento || '#9f25b8',
+          notas: [],
+          promedio: 0,
+        };
+      }
+      const sub = tarea.submissions?.find((s: any) => s.estudianteId?.toString() === normalizedEstudianteId);
+      notasPorMateria[materiaIdStr].notas.push({
+        _id: nota._id,
+        tareaTitulo: tarea.titulo,
+        nota: nota.nota,
+        logro: nota.logro,
+        fecha: nota.fecha,
+        profesorNombre: (nota.profesorId as any)?.nombre,
+        comentario: sub?.retroalimentacion || nota.logro,
+      });
+    }
+    const materias = Object.values(notasPorMateria).map((materia: any) => {
+      const promedio = materia.notas.length ? materia.notas.reduce((s: number, n: any) => s + n.nota, 0) / materia.notas.length : 0;
+      return {
+        ...materia,
+        promedio: promedio / 20,
+        ultimaNota: materia.notas[0] ? materia.notas[0].nota / 20 : 0,
+        estado: promedio >= 90 ? 'excelente' : promedio >= 70 ? 'bueno' : promedio >= 50 ? 'regular' : 'bajo',
+      };
+    });
+    return res.json({ materias, total: materias.length });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al obtener notas.' });
+  }
+});
+
+// =========================================================================
 // GET /api/student/notes
 // Obtener todas las notas del estudiante autenticado
 // =========================================================================

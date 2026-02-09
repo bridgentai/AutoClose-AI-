@@ -68,6 +68,7 @@ export async function syncAssignmentChange(
           tipo: 'curso',
           cursoId: assignment.cursoId,
           titulo: assignment.titulo,
+          colegioId,
         },
         {
           titulo: assignment.titulo,
@@ -75,6 +76,7 @@ export async function syncAssignmentChange(
           fecha: assignment.fechaEntrega,
           tipo: 'curso',
           cursoId: assignment.cursoId,
+          colegioId,
         },
         {
           upsert: true,
@@ -86,6 +88,7 @@ export async function syncAssignmentChange(
         tipo: 'curso',
         cursoId: assignment.cursoId,
         titulo: assignment.titulo,
+        colegioId,
       });
     }
   } catch (error: any) {
@@ -297,9 +300,10 @@ export async function syncAssignmentDateChanged(
         tipo: 'curso',
         cursoId: assignment.cursoId,
         titulo: assignment.titulo,
+        colegioId,
       },
       {
-        fecha: nuevaFecha,
+        $set: { fecha: nuevaFecha },
       }
     );
   } catch (error: any) {

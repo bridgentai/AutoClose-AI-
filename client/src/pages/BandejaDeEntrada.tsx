@@ -1,206 +1,174 @@
 import React, { useState } from 'react';
-import { Inbox, Trash2, MailOpen, User, Send, Search, Filter } from 'lucide-react';
+import { Inbox, Trash2, MailOpen, User, Send, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useLocation } from 'wouter';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
+import { useAuth } from '@/lib/authContext';
 
-// --- Datos Ficticios para la Demostración ---
-interface Mensaje {
-  id: number;
-  remitente: string;
+const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md';
+
+interface ConversacionItem {
+  _id: string;
   asunto: string;
-  extracto: string;
-  fecha: string;
-  leido: boolean;
-  materia: string;
-  cuerpo: string;
+  participanteIds: { _id: string; nombre: string; correo: string; rol: string }[];
+  ultimoMensaje: { texto: string; fecha: string; remitente: string } | null;
+  createdAt: string;
 }
 
-const mensajesFicticios: Mensaje[] = [
-  {
-    id: 1,
-    remitente: "Prof. María López",
-    asunto: "Revisión de la Tarea de Sistemas No Lineales",
-    extracto: "He revisado tu entrega. Necesito que clarifiques el punto 3...",
-    fecha: "Hoy, 10:30 AM",
-    leido: false,
-    materia: "Matemáticas Avanzadas",
-    cuerpo: "Estimado/a, he notado que la interpretación del Teorema de Poincaré en el punto 3 no es del todo correcta. Por favor, reenvíame una corrección antes de mañana. Saludos.",
-  },
-  {
-    id: 2,
-    remitente: "Administración Central",
-    asunto: "Anuncio: Actualización de Horarios de Exámenes",
-    extracto: "Por favor, revisen el documento adjunto con las nuevas fechas...",
-    fecha: "Ayer, 4:00 PM",
-    leido: true,
-    materia: "General",
-    cuerpo: "A todos los estudiantes y profesores, se han ajustado los horarios finales del semestre. El examen de Física se movió al día 15. Ver anexo.",
-  },
-  {
-    id: 3,
-    remitente: "Prof. Andrés Gaviria",
-    asunto: "Material Adicional para la Clase de Historia",
-    extracto: "Subí un nuevo PDF sobre la Guerra Fría. Es lectura obligatoria...",
-    fecha: "Dic 09, 9:00 AM",
-    leido: true,
-    materia: "Historia Universal",
-    cuerpo: "Adjunto encontrarán un resumen muy útil para la próxima sesión. No olviden preparar sus preguntas.",
-  },
-  // ... más mensajes
-];
+interface MensajeItem {
+  _id: string;
+  texto: string;
+  fecha: string;
+  remitenteId: { _id: string; nombre: string };
+  leido: boolean;
+}
 
-
-// --- Componente Fila de Mensaje ---
-const MensajeFila: React.FC<{ mensaje: Mensaje; isSelected: boolean; onClick: () => void }> = ({ mensaje, isSelected, onClick }) => (
-  <div
-    className={`p-3 border-b border-white/10 cursor-pointer transition-colors ${
-      isSelected ? 'bg-white/10 border-l-4 border-[#9f25b8]' : 'hover:bg-white/5'
-    } ${!mensaje.leido ? 'font-semibold text-white' : 'text-white/70'}`}
-    onClick={onClick}
-  >
-    <div className="flex justify-between items-center text-sm">
-      <span className="truncate">{mensaje.remitente} ({mensaje.materia})</span>
-      <span className="text-xs text-white/50 flex-shrink-0">{mensaje.fecha}</span>
-    </div>
-    <p className={`text-sm mt-1 truncate ${!mensaje.leido ? 'text-white' : 'text-white/70'}`}>{mensaje.asunto}</p>
-    <p className="text-xs text-white/50 mt-1 truncate">{mensaje.extracto}</p>
-  </div>
-);
-
-// --- Componente Bandeja de Entrada Principal ---
-const BandejaDeEntrada: React.FC = () => {
-  const [mensajes, setMensajes] = useState(mensajesFicticios);
-  const [selectedMensaje, setSelectedMensaje] = useState<Mensaje | null>(mensajesFicticios[0]);
-
-  const handleSelectMensaje = (mensaje: Mensaje) => {
-    setSelectedMensaje(mensaje);
-    // Marcar como leído
-    setMensajes(prev => 
-      prev.map(m => m.id === mensaje.id ? { ...m, leido: true } : m)
-    );
-  };
-
-  const handleResponder = () => {
-    alert(`Preparando respuesta para: ${selectedMensaje?.remitente}`);
-  };
-
-  const handleEliminar = () => {
-    if (selectedMensaje) {
-      setMensajes(prev => prev.filter(m => m.id !== selectedMensaje.id));
-      setSelectedMensaje(mensajes.length > 1 ? mensajes[0] : null);
-    }
-  };
-
+export default function BandejaDeEntrada() {
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+
+  const { data: conversations = [] } = useQuery({
+    queryKey: ['/api/messages/conversations'],
+    queryFn: () => apiRequest<ConversacionItem[]>('GET', '/api/messages/conversations'),
+  });
+
+  const { data: convDetail } = useQuery({
+    queryKey: ['/api/messages/conversations', selectedId],
+    queryFn: () => apiRequest<{ conversacion: ConversacionItem; mensajes: MensajeItem[] }>('GET', `/api/messages/conversations/${selectedId}`),
+    enabled: !!selectedId,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (conversationId: string) => apiRequest('PATCH', `/api/messages/read/${conversationId}`),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations', id] });
+    },
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: (texto: string) => apiRequest('POST', `/api/messages/conversations/${selectedId}`, { texto }),
+    onSuccess: () => {
+      setReplyText('');
+      queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations', selectedId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+    },
+  });
+
+  const selected = conversations.find((c) => c._id === selectedId);
+  const mensajes = convDetail?.mensajes || [];
+  const otherParticipant = selected?.participanteIds?.find((p: { _id: string }) => p._id !== convDetail?.conversacion?.creadoPor);
+
+  React.useEffect(() => {
+    if (selectedId) markReadMutation.mutate(selectedId);
+  }, [selectedId]);
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <NavBackButton to="/comunicacion" label="Comunicación" />
-        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Bandeja de Entrada</h1>
-        <p className="text-white/60">Comunicaciones académicas y notificaciones importantes</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Bandeja de Entrada</h1>
+        <p className="text-white/60 text-sm sm:text-base">Comunicaciones con el colegio y profesores</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[70vh]">
-
-        {/* Columna Izquierda: Lista de Mensajes (2/5 o 1/3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6 min-h-[70vh]">
         <div className="lg:col-span-1">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-0 overflow-hidden h-full flex flex-col">
-            <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                <Button
-                  className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 flex items-center gap-2"
-                  onClick={() => setLocation('/comunicacion/redactar')}
-                >
-                    <Send className="w-4 h-4" />
-                    Nuevo Mensaje
-                </Button>
+          <Card className={`${CARD_STYLE} p-0 overflow-hidden h-full flex flex-col`}>
+            <div className="p-4 border-b border-white/10">
+              <Button
+                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 min-h-[44px]"
+                onClick={() => setLocation('/comunicacion/redactar')}
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Nuevo Mensaje
+              </Button>
             </div>
-
-            {/* Barra de Búsqueda y Filtro */}
-            <div className="p-4 border-b border-white/10 space-y-2">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/50" />
-                    <Input 
-                        type="text" 
-                        placeholder="Buscar en mensajes..." 
-                        className="pl-10 bg-white/10 border-white/10 text-white placeholder:text-white/50"
-                    />
-                </div>
-                <div className="flex gap-2">
-                    <button className="flex items-center gap-1 text-sm text-white/70 hover:text-white transition-colors">
-                        <Filter className="w-4 h-4 text-[#9f25b8]" /> Filtros
-                    </button>
-                    <span className="text-sm text-white/50">|</span>
-                    <span className="text-sm text-white/70">No Leídos: {mensajes.filter(m => !m.leido).length}</span>
-                </div>
+            <div className="p-4 border-b border-white/10">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
+                <Input placeholder="Buscar..." className="pl-10 bg-white/10 border-white/10 text-white placeholder:text-white/50 min-h-[44px]" />
+              </div>
             </div>
-
-            {/* Lista de Items de Mensaje */}
             <div className="flex-grow overflow-y-auto">
-              {mensajes.map((msg) => (
-                <MensajeFila
-                  key={msg.id}
-                  mensaje={msg}
-                  isSelected={selectedMensaje?.id === msg.id}
-                  onClick={() => handleSelectMensaje(msg)}
-                />
+              {conversations.map((c) => (
+                <div
+                  key={c._id}
+                  onClick={() => setSelectedId(c._id)}
+                  className={`p-3 border-b border-white/10 cursor-pointer transition-colors min-h-[52px] flex flex-col justify-center ${
+                    selectedId === c._id ? 'bg-white/10 border-l-4 border-[#9f25b8]' : 'hover:bg-white/5'
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(c._id); } }}
+                >
+                  <p className="text-white font-medium truncate">{c.asunto}</p>
+                  <p className="text-white/50 text-xs truncate">
+                    {c.ultimoMensaje?.texto || 'Sin mensajes'}
+                  </p>
+                  <p className="text-white/40 text-xs mt-1">
+                    {new Date(c.createdAt).toLocaleDateString('es-CO')}
+                  </p>
+                </div>
               ))}
-              {mensajes.length === 0 && (
-                <p className="p-4 text-white/50 text-center">Bandeja vacía.</p>
+              {conversations.length === 0 && (
+                <p className="p-4 text-white/50 text-center">No hay conversaciones.</p>
               )}
             </div>
           </Card>
         </div>
 
-        {/* Columna Derecha: Contenido del Mensaje (3/5 o 2/3) */}
         <div className="lg:col-span-3">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-0 overflow-hidden h-full flex flex-col">
-            {selectedMensaje ? (
+          <Card className={`${CARD_STYLE} p-0 overflow-hidden h-full flex flex-col`}>
+            {selected ? (
               <>
-                {/* Header de la Conversación */}
                 <CardHeader className="p-6 border-b border-white/10">
-                  <CardTitle className="text-2xl font-bold text-white">{selectedMensaje.asunto}</CardTitle>
-                  <div className="flex items-center gap-4 mt-2 text-white/70 text-sm">
-                    <User className="w-4 h-4 text-[#9f25b8]" />
-                    <span>De: {selectedMensaje.remitente}</span>
-                    <MailOpen className="w-4 h-4 text-[#9f25b8]" />
-                    <span>Materia: {selectedMensaje.materia}</span>
-                    <span className="ml-auto text-white/50">{selectedMensaje.fecha}</span>
-                  </div>
+                  <CardTitle className="text-xl text-white">{selected.asunto}</CardTitle>
+                  <p className="text-white/60 text-sm mt-1">
+                    Con: {otherParticipant ? (otherParticipant as { nombre?: string }).nombre : '—'}
+                  </p>
                 </CardHeader>
-
-                {/* Cuerpo del Mensaje */}
-                <CardContent className="p-6 flex-grow overflow-y-auto text-white/80 leading-relaxed">
-                  <p>{selectedMensaje.cuerpo}</p>
-                  {/* Podrías añadir aquí adjuntos, imágenes, etc. */}
+                <CardContent className="p-6 flex-grow overflow-y-auto space-y-4">
+                  {mensajes.map((m) => {
+                    const isMine = (m.remitenteId as { _id?: string })?._id === user?.id;
+                    return (
+                    <div
+                      key={m._id}
+                      className={`p-3 rounded-lg ${isMine ? 'bg-[#9f25b8]/20 ml-8 mr-0' : 'bg-white/5 ml-0 mr-8'}`}
+                    >
+                      <p className="text-white/80 text-sm">{(m.remitenteId as { nombre?: string })?.nombre}</p>
+                      <p className="text-white mt-1">{m.texto}</p>
+                      <p className="text-white/50 text-xs mt-1">{new Date(m.fecha).toLocaleString('es-CO')}</p>
+                    </div>
+                  );})}
                 </CardContent>
-
-                {/* Footer de Acciones */}
-                <div className="p-4 border-t border-white/10 flex justify-end gap-3">
-                  <Button 
-                    onClick={handleEliminar} 
-                    variant="outline"
-                    className="text-red-400 border-red-400 hover:bg-red-900/50"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Eliminar
-                  </Button>
+                <div className="p-4 border-t border-white/10 flex gap-2">
+                  <Textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Escribe tu respuesta..."
+                    className="flex-grow bg-white/10 border-white/10 text-white placeholder:text-white/50 min-h-[80px]"
+                  />
                   <Button
-                    onClick={handleResponder}
-                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                    onClick={() => sendMutation.mutate(replyText)}
+                    disabled={!replyText.trim() || sendMutation.isPending}
+                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] self-end"
                   >
-                    <Send className="w-4 h-4 mr-2" />
-                    Responder
+                    <Send className="w-4 h-4" />
                   </Button>
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-center h-full text-white/50 text-xl">
-                <Inbox className="w-8 h-8 mr-2 text-[#9f25b8]" />
-                Selecciona un mensaje para leer su contenido.
+              <div className="flex flex-col items-center justify-center h-full text-white/50 py-16">
+                <Inbox className="w-12 h-12 text-[#9f25b8] mb-4" />
+                <p className="text-lg">Selecciona una conversación para leer y responder.</p>
               </div>
             )}
           </Card>
@@ -208,6 +176,4 @@ const BandejaDeEntrada: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default BandejaDeEntrada;
+}

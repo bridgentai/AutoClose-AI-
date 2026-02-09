@@ -561,6 +561,60 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/assignments/hijo/:estudianteId - Obtener tareas de un hijo (padre/directivo/admin-general-colegio)
+router.get('/hijo/:estudianteId', protect, async (req: AuthRequest, res) => {
+  try {
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('rol colegioId').lean();
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
+
+    const allowed = user.rol === 'directivo' || user.rol === 'admin-general-colegio';
+    if (!allowed && user.rol === 'padre') {
+      const { Vinculacion } = await import('../models');
+      const v = await Vinculacion.findOne({
+        padreId: normalizedUserId,
+        estudianteId: normalizeIdForQuery(req.params.estudianteId),
+        estado: 'vinculado',
+      }).lean();
+      if (!v) return res.status(403).json({ message: 'No autorizado a ver las tareas de este estudiante.' });
+    } else if (!allowed) {
+      return res.status(403).json({ message: 'Solo padre, directivo o administrador pueden acceder.' });
+    }
+
+    const estudiante = await User.findById(normalizeIdForQuery(req.params.estudianteId)).select('rol curso colegioId').lean();
+    if (!estudiante || estudiante.rol !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    if (estudiante.colegioId !== user.colegioId) return res.status(403).json({ message: 'No autorizado.' });
+
+    const curso = estudiante.curso as string | undefined;
+    if (!curso) return res.json([]);
+
+    const now = new Date();
+    const primerDia = new Date(now.getFullYear(), now.getMonth(), 1);
+    const ultimoDia = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const cursoNormalizado = curso.toUpperCase().trim();
+
+    const assignments = await Assignment.find({
+      curso: { $in: [cursoNormalizado, cursoNormalizado.toLowerCase(), curso] },
+      colegioId: estudiante.colegioId,
+      fechaEntrega: { $gte: primerDia, $lte: ultimoDia },
+    })
+      .select('titulo descripcion curso courseId materiaId fechaEntrega profesorNombre profesorId submissions')
+      .sort({ fechaEntrega: 1 })
+      .lean();
+
+    const normalizedEstudianteId = (estudiante._id ?? req.params.estudianteId).toString();
+    const assignmentsWithState = assignments.map((assignment: any) => {
+      const state = calculateAssignmentState(assignment, normalizedEstudianteId);
+      return { ...assignment, estado: state };
+    });
+
+    return res.json(assignmentsWithState);
+  } catch (err: any) {
+    console.error('Error al obtener tareas del hijo:', err.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 // GET /api/assignments/curso/:curso/:mes/:año - Obtener tareas de un curso en un mes específico
 router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) => {
   try {

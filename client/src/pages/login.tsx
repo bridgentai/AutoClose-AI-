@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,12 @@ import { apiRequest } from '@/lib/queryClient';
 import { getRoleHomePath } from '@/lib/roleRedirect';
 import type { AuthResponse } from '@shared/schema';
 
+function getGoogleAuthUrl(): string {
+  const base = (import.meta.env.VITE_API_URL as string) || '';
+  if (base) return `${base.replace(/\/$/, '')}/api/auth/google`;
+  return `${window.location.origin}/api/auth/google`;
+}
+
 export default function Login() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
@@ -15,6 +21,24 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlError = params.get('error');
+    if (urlError) {
+      const messages: Record<string, string> = {
+        google_sso_not_configured: 'Inicio con Google no está configurado.',
+        missing_code: 'No se pudo completar la autorización.',
+        token_exchange_failed: 'Error al verificar con Google. Intenta de nuevo.',
+        profile_failed: 'No se pudo obtener tu perfil.',
+        no_email: 'Tu cuenta de Google no tiene correo.',
+        no_account: 'No hay una cuenta con ese correo. Regístrate primero.',
+        account_not_active: 'Tu cuenta no está activa. Contacta al administrador.',
+        server_error: 'Error en el servidor. Intenta de nuevo.',
+      };
+      setError(messages[urlError] || decodeURIComponent(urlError));
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,6 +120,19 @@ export default function Login() {
               data-testid="button-login"
             >
               {loading ? 'Iniciando sesión...' : 'Ingresar'}
+            </Button>
+
+            <div className="relative my-6">
+              <span className="block text-center text-white/50 text-sm">o</span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-white/20 text-white hover:bg-white/10"
+              onClick={() => { window.location.href = getGoogleAuthUrl(); }}
+              data-testid="button-google"
+            >
+              Continuar con Google
             </Button>
           </form>
 

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { User, GroupStudent, CodigoInstitucion } from '../models';
 import { generateUserId } from '../utils/idGenerator';
 import { mongoConnected, mongoError } from '../config/db';
+import { ENV } from '../config/env';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -138,6 +139,87 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
     }
   }
 }
+
+// GET /api/auth/google - Iniciar flujo SSO con Google (opcional)
+router.get('/google', checkMongoConnection, (req, res) => {
+  const { GOOGLE_CLIENT_ID, FRONTEND_URL } = ENV;
+  if (!GOOGLE_CLIENT_ID) {
+    return res.redirect(`${FRONTEND_URL}/login?error=google_sso_not_configured`);
+  }
+  const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+  const scope = encodeURIComponent('email profile');
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent`;
+  res.redirect(url);
+});
+
+// GET /api/auth/google/callback - Callback de Google OAuth
+router.get('/google/callback', checkMongoConnection, async (req, res) => {
+  const { code } = req.query;
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, FRONTEND_URL } = ENV;
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.redirect(`${FRONTEND_URL}/login?error=google_sso_not_configured`);
+  }
+  if (!code || typeof code !== 'string') {
+    return res.redirect(`${FRONTEND_URL}/login?error=missing_code`);
+  }
+  const redirectUri = `${req.protocol}://${req.get('host')}/api/auth/google/callback`;
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+    if (!tokenRes.ok) {
+      const err = await tokenRes.text();
+      console.error('[AUTH Google] Token error:', err);
+      return res.redirect(`${FRONTEND_URL}/login?error=token_exchange_failed`);
+    }
+    const tokenData = await tokenRes.json() as { access_token: string };
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    if (!profileRes.ok) {
+      return res.redirect(`${FRONTEND_URL}/login?error=profile_failed`);
+    }
+    const profile = await profileRes.json() as { id: string; email: string; name: string };
+    const email = (profile.email || '').toLowerCase();
+    if (!email) {
+      return res.redirect(`${FRONTEND_URL}/login?error=no_email`);
+    }
+    const user = await User.findOne({ $or: [{ email }, { correo: email }] });
+    if (!user) {
+      return res.redirect(`${FRONTEND_URL}/login?error=no_account&hint=register_first`);
+    }
+    if (user.estado !== 'active' && user.estado !== 'activo') {
+      return res.redirect(`${FRONTEND_URL}/login?error=account_not_active`);
+    }
+    if (!user.codigoUnico) {
+      const nuevoCodigo = await generarCodigoUnico();
+      await User.findByIdAndUpdate(user._id, { codigoUnico: nuevoCodigo });
+    }
+    const token = generateToken(user._id.toString());
+    const params = new URLSearchParams({
+      token,
+      rol: user.rol,
+      id: user._id.toString(),
+      nombre: user.nombre || '',
+      email: (user.email || user.correo || '').toString(),
+      colegioId: (user.colegioId || '').toString(),
+    });
+    if (user.codigoUnico) params.set('codigoUnico', user.codigoUnico);
+    if (user.userId) params.set('userId', user.userId);
+    res.redirect(`${FRONTEND_URL}/auth/callback?${params.toString()}`);
+  } catch (e: any) {
+    console.error('[AUTH Google]', e);
+    res.redirect(`${FRONTEND_URL}/login?error=server_error`);
+  }
+});
 
 // POST /api/auth/register
 router.post('/register', checkMongoConnection, async (req, res) => {

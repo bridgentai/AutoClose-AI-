@@ -277,21 +277,23 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    // Solo admin-general-colegio puede acceder
-    if (user.rol !== 'admin-general-colegio') {
-      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden acceder a esta ruta' });
-    }
-
     const { rol } = req.query;
-    
     if (!rol || typeof rol !== 'string') {
       return res.status(400).json({ message: 'El parámetro "rol" es requerido' });
     }
 
-    // Validar que el rol sea uno permitido
     const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo'];
     if (!rolesPermitidos.includes(rol)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
+    }
+
+    // admin-general-colegio puede listar cualquier rol; profesor, directivo y tesoreria pueden listar 'padre'
+    if (user.rol === 'admin-general-colegio') {
+      // OK cualquier rol
+    } else if ((user.rol === 'profesor' || user.rol === 'directivo' || user.rol === 'tesoreria') && rol === 'padre') {
+      // OK para listar padres
+    } else {
+      return res.status(403).json({ message: 'No tienes permiso para listar este rol' });
     }
 
     // Obtener usuarios del mismo colegio y rol
@@ -327,6 +329,7 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
 
 // =========================================================================
 // GET /api/users/stats - Obtener estadísticas del colegio (KPIs)
+// Accesible por admin-general-colegio y directivo
 router.get('/stats', protect, async (req: AuthRequest, res) => {
   try {
     const normalizedUserId = normalizeIdForQuery(req.userId || '');
@@ -336,25 +339,48 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    // Solo admin-general-colegio puede acceder
-    if (user.rol !== 'admin-general-colegio') {
-      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden acceder a esta ruta' });
+    if (user.rol !== 'admin-general-colegio' && user.rol !== 'directivo') {
+      return res.status(403).json({ message: 'Solo administradores generales o directivos pueden acceder a esta ruta' });
     }
+
+    const colegioId = user.colegioId;
 
     // Contar usuarios por rol
     const [estudiantes, profesores, padres, directivos] = await Promise.all([
-      User.countDocuments({ colegioId: user.colegioId, rol: 'estudiante' }),
-      User.countDocuments({ colegioId: user.colegioId, rol: 'profesor' }),
-      User.countDocuments({ colegioId: user.colegioId, rol: 'padre' }),
-      User.countDocuments({ colegioId: user.colegioId, rol: 'directivo' }),
+      User.countDocuments({ colegioId, rol: 'estudiante' }),
+      User.countDocuments({ colegioId, rol: 'profesor' }),
+      User.countDocuments({ colegioId, rol: 'padre' }),
+      User.countDocuments({ colegioId, rol: 'directivo' }),
     ]);
 
-    // Contar cursos/grupos (usando Group model)
     const { Group } = await import('../models/Group');
-    const cursos = await Group.countDocuments({ colegioId: user.colegioId });
+    const cursos = await Group.countDocuments({ colegioId });
+    const materias = await Course.countDocuments({ colegioId });
 
-    // Contar materias
-    const materias = await Course.countDocuments({ colegioId: user.colegioId });
+    // Resumen de asistencia del mes actual
+    const { Asistencia } = await import('../models/Asistencia');
+    const startMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const endMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
+    const asistenciasMes = await Asistencia.find({
+      colegioId,
+      fecha: { $gte: startMonth, $lte: endMonth },
+    }).lean();
+    const presentesMes = asistenciasMes.filter((a) => a.estado === 'presente').length;
+    const asistenciaResumen = {
+      totalRegistros: asistenciasMes.length,
+      presentes: presentesMes,
+      porcentajePromedio: asistenciasMes.length > 0 ? Math.round((presentesMes / asistenciasMes.length) * 100) : 0,
+    };
+
+    // KPIs de tesorería (mismo colegio)
+    const { Factura, Pago } = await import('../models');
+    const [facturasPendientes, ingresosMes] = await Promise.all([
+      Factura.countDocuments({ colegioId, estado: 'pendiente' }),
+      Pago.aggregate([
+        { $match: { colegioId, estado: 'completado', fecha: { $gte: startMonth, $lte: endMonth } } },
+        { $group: { _id: null, total: { $sum: '$monto' } } },
+      ]).then((r) => (r[0]?.total ?? 0) as number),
+    ]);
 
     res.json({
       estudiantes,
@@ -363,6 +389,8 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
       directivos,
       cursos,
       materias,
+      asistenciaResumen,
+      treasuryResumen: { facturasPendientes, ingresosMes },
     });
   } catch (error: any) {
     console.error('Error al obtener estadísticas:', error.message);
@@ -490,6 +518,37 @@ const ensureAdminColegio = async (req: AuthRequest) => {
   }
   return { ok: true, user: u };
 };
+
+// =========================================================================
+// GET /api/users/me/hijos - Para rol padre: listar hijos vinculados
+// =========================================================================
+router.get('/me/hijos', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(userId).select('rol colegioId').lean();
+    if (!user || user.rol !== 'padre') {
+      return res.status(403).json({ message: 'Solo padres pueden acceder a esta ruta.' });
+    }
+    const list = await Vinculacion.find({
+      padreId: userId,
+      colegioId: user.colegioId,
+    })
+      .populate('estudianteId', 'nombre correo email curso')
+      .lean();
+    const hijos = list
+      .filter((v: any) => v.estudianteId)
+      .map((v: any) => ({
+        _id: v.estudianteId._id,
+        nombre: v.estudianteId.nombre,
+        correo: v.estudianteId.correo || v.estudianteId.email,
+        curso: v.estudianteId.curso,
+      }));
+    return res.json(hijos);
+  } catch (e: any) {
+    console.error('Error en GET /me/hijos:', e.message);
+    res.status(500).json({ message: 'Error al listar hijos.' });
+  }
+});
 
 // =========================================================================
 // GET /api/users/vinculaciones - Listar vinculaciones (por estudiante o por padre)

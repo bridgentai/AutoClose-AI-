@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { Assignment, Nota, Notificacion, User, Course } from '../models';
+import { Assignment, Nota, Notificacion, User, Course, Boletin, Group, GroupStudent } from '../models';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import * as permissionValidator from './permissionValidator';
 import * as dataQuery from './dataQuery';
@@ -834,7 +834,8 @@ async function executeCreateBoletin(
   colegioId: string
 ): Promise<ActionResult> {
   const { cursoId, periodo } = params;
-  
+  const normalizedCursoId = normalizeIdForQuery(cursoId);
+
   const permission = await permissionValidator.canCreateBoletin(userId, cursoId, colegioId);
   if (!permission.allowed) {
     await logAIAction({
@@ -851,24 +852,95 @@ async function executeCreateBoletin(
     return { success: false, error: permission.reason };
   }
 
-  // TODO: Implementar creación real de boletín
-  // Por ahora solo registramos la acción
+  const course = await Course.findById(normalizedCursoId).select('nombre cursos estudianteIds').lean();
+  if (!course) {
+    await logAIAction({
+      userId,
+      role: 'profesor',
+      action: 'crear_boletin',
+      entityType: 'boletin',
+      cursoId,
+      colegioId,
+      result: 'denied',
+      error: 'Curso no encontrado',
+      requestData: params
+    });
+    return { success: false, error: 'Curso no encontrado.' };
+  }
+
+  let studentIds: Types.ObjectId[] = Array.isArray(course.estudianteIds) ? course.estudianteIds as Types.ObjectId[] : [];
+  if (studentIds.length === 0 && course.cursos?.length) {
+    const grupo = await Group.findOne({ nombre: (course.cursos[0] as string).toUpperCase().trim(), colegioId });
+    if (grupo) {
+      const gs = await GroupStudent.find({ grupoId: grupo._id, colegioId }).select('estudianteId').lean();
+      studentIds = gs.map((g) => g.estudianteId as Types.ObjectId).filter(Boolean);
+    }
+  }
+
+  const assignments = await Assignment.find({ cursoId: normalizedCursoId, colegioId }).select('_id').lean();
+  const assignmentIds = assignments.map((a) => a._id);
+
+  const notas = assignmentIds.length > 0 && studentIds.length > 0
+    ? await Nota.find({
+        tareaId: { $in: assignmentIds },
+        estudianteId: { $in: studentIds },
+      }).lean()
+    : [];
+
+  const byStudent: Record<string, { sum: number; count: number }> = {};
+  for (const n of notas) {
+    const sid = (n.estudianteId as Types.ObjectId).toString();
+    if (!byStudent[sid]) byStudent[sid] = { sum: 0, count: 0 };
+    byStudent[sid].sum += n.nota;
+    byStudent[sid].count += 1;
+  }
+
+  const students = await User.find({ _id: { $in: studentIds }, rol: 'estudiante' }).select('_id nombre').lean();
+  const resumen = students.map((s) => {
+    const sid = s._id.toString();
+    const data = byStudent[sid];
+    const promedioMateria = data && data.count > 0 ? data.sum / data.count : 0;
+    const promedioGeneral = data && data.count > 0 ? (data.sum / data.count) / 20 : 0;
+    return {
+      estudianteId: s._id,
+      nombre: s.nombre,
+      promedioGeneral: Math.round(promedioGeneral * 100) / 100,
+      materias: [{
+        materiaId: normalizedCursoId,
+        nombre: course.nombre,
+        promedio: Math.round((promedioMateria / 20) * 100) / 100,
+        cantidadNotas: data?.count ?? 0,
+      }],
+    };
+  });
+
+  const boletin = await Boletin.create({
+    colegioId,
+    cursoId: normalizedCursoId,
+    periodo: periodo || 'Periodo académico',
+    grupoNombre: course.cursos?.[0] as string,
+    generadoPor: new Types.ObjectId(userId),
+    resumen,
+  });
+
   await logAIAction({
     userId,
     role: 'profesor',
     action: 'crear_boletin',
     entityType: 'boletin',
+    entityId: boletin._id.toString(),
     cursoId,
     colegioId,
     result: 'success',
     requestData: params
   });
 
-  await syncService.syncBoletinCreated('boletin-id', cursoId, colegioId);
+  await syncService.syncBoletinCreated(boletin._id.toString(), cursoId, colegioId);
 
   return {
     success: true,
-    message: `Boletín del ${periodo} creado exitosamente para el curso`
+    data: { boletinId: boletin._id.toString(), estudiantes: resumen.length },
+    message: `Boletín del ${periodo} creado exitosamente para el curso (${resumen.length} estudiantes).`
   };
 }
 

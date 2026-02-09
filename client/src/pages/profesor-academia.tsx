@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, Users, CheckSquare, Globe } from "lucide-react";
+import { BookOpen, Users, CheckSquare, Globe, ClipboardList } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
@@ -16,6 +16,11 @@ const navigationItems = [
     title: "Tareas",
     path: "/profesor/academia/tareas",
     icon: CheckSquare,
+  },
+  {
+    title: "Asistencia",
+    path: "/profesor/academia/asistencia",
+    icon: ClipboardList,
   },
   {
     title: "Plataformas",

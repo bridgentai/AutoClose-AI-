@@ -11,6 +11,8 @@ export { Nota } from './Nota';
 export { Examen } from './Examen';
 export { Asistencia } from './Asistencia';
 export { Mensaje } from './Mensaje';
+export { Conversacion } from './Conversacion';
+export { Boletin } from './Boletin';
 export { Notificacion } from './Notificacion';
 export { Evento } from './Evento';
 export { CodigoInstitucion } from './CodigoInstitucion';

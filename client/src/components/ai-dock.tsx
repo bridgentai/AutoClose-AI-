@@ -21,7 +21,8 @@ import {
   Loader2,
   Mail,
   UsersRound,
-  FileCheck
+  FileCheck,
+  Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
@@ -96,6 +97,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["directivo", "padre"] },
       { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
       { icon: User, label: "Mi Perfil", path: "/mi-perfil", roles: ["estudiante", "profesor", "directivo", "padre"] },
+      { icon: Bell, label: "Notificaciones", path: "/notificaciones", roles: ["estudiante", "profesor", "directivo", "padre"] },
     ];
 
     return baseItems.filter(item => item.roles.includes(user?.rol || ""));

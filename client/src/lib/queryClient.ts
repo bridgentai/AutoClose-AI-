@@ -1,5 +1,34 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Función helper para obtener la URL base de la API
+// En desarrollo, usa URL relativa (mismo servidor)
+// En producción o si está configurada, usa VITE_API_URL
+function getApiBaseUrl(): string {
+  // Si hay una variable de entorno configurada, usarla
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // Por defecto, usar URL relativa (funciona cuando frontend y backend están en el mismo servidor)
+  return '';
+}
+
+// Función helper para construir la URL completa
+function buildApiUrl(url: string): string {
+  // Si la URL ya es absoluta (empieza con http:// o https://), usarla tal cual
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // Si la URL empieza con /, es relativa al dominio
+  const baseUrl = getApiBaseUrl();
+  if (baseUrl) {
+    // Asegurar que no haya doble slash
+    const cleanBase = baseUrl.replace(/\/$/, '');
+    const cleanUrl = url.startsWith('/') ? url : `/${url}`;
+    return `${cleanBase}${cleanUrl}`;
+  }
+  return url;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     let errorMessage = res.statusText;
@@ -43,15 +72,25 @@ export async function apiRequest<T = any>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  const fullUrl = buildApiUrl(url);
 
-  await throwIfResNotOk(res);
-  return await res.json();
+  try {
+    const res = await fetch(fullUrl, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+
+    await throwIfResNotOk(res);
+    return await res.json();
+  } catch (error: any) {
+    // Mejorar el manejo de errores de red
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      throw new Error('No se pudo conectar con el servidor. Verifica que el servidor esté corriendo.');
+    }
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -67,17 +106,28 @@ export const getQueryFn: <T>(options: {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(queryKey.join("/") as string, {
-      credentials: "include",
-      headers,
-    });
+    const url = queryKey.join("/") as string;
+    const fullUrl = buildApiUrl(url);
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    try {
+      const res = await fetch(fullUrl, {
+        credentials: "include",
+        headers,
+      });
+
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        return null;
+      }
+
+      await throwIfResNotOk(res);
+      return await res.json();
+    } catch (error: any) {
+      // Mejorar el manejo de errores de red
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error('No se pudo conectar con el servidor. Verifica que el servidor esté corriendo.');
+      }
+      throw error;
     }
-
-    await throwIfResNotOk(res);
-    return await res.json();
   };
 
 export const queryClient = new QueryClient({

@@ -1039,19 +1039,38 @@ function SuperAdminDashboard() {
 function PadreDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const { colorPrimario, colorSecundario } = useInstitutionColors();
 
-  // Para padres, intentamos obtener las tareas del hijo si tienen hijoId
-  // Si no, mostramos un mensaje o datos mock
-  const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
-    queryKey: ['parentAssignments', user?.hijoId],
-    queryFn: async () => {
-      // Si el padre tiene un hijoId, podríamos obtener las tareas del hijo
-      // Por ahora, retornamos array vacío ya que no hay endpoint específico
-      return [];
-    },
-    enabled: !!user?.hijoId,
+  const { data: hijos = [] } = useQuery({
+    queryKey: ['/api/users/me/hijos'],
+    queryFn: () => apiRequest<{ _id: string; nombre: string; curso: string }[]>('GET', '/api/users/me/hijos'),
+  });
+  const primerHijoId = hijos[0]?._id;
+
+  const { data: attendanceResumen } = useQuery({
+    queryKey: ['/api/attendance/resumen/estudiante', primerHijoId],
+    queryFn: () => apiRequest<{ porcentaje: number; total: number; presentes: number }>('GET', `/api/attendance/resumen/estudiante/${primerHijoId}`),
+    enabled: !!primerHijoId,
+  });
+
+  const { data: notasData } = useQuery({
+    queryKey: ['/api/student/hijo', primerHijoId, 'notes'],
+    queryFn: () => apiRequest<{ materias: { nombre: string; promedio: number; ultimaNota: number }[]; total: number }>('GET', `/api/student/hijo/${primerHijoId}/notes`),
+    enabled: !!primerHijoId,
+  });
+
+  const { data: assignments = [] } = useQuery<Assignment[]>({
+    queryKey: ['parentAssignments', primerHijoId],
+    queryFn: () => apiRequest<Assignment[]>('GET', `/api/assignments/hijo/${primerHijoId}`),
+    enabled: !!primerHijoId,
     staleTime: 0,
   });
+
+  const materias = notasData?.materias ?? [];
+  const promedioGeneral = materias.length
+    ? materias.reduce((s, m) => s + (m.promedio ?? 0), 0) / materias.length
+    : 0;
+  const promedioDisplay = promedioGeneral.toFixed(1);
 
   const handleDayClick = (assignment: Assignment) => {
     setLocation(`/assignment/${assignment._id}`);
@@ -1063,22 +1082,22 @@ function PadreDashboard() {
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
           style={{ animationDelay: '0.1s' }}
-          onClick={() => setLocation('/parent')}
+          onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Progreso Académico</CardTitle>
             <TrendingUp className="w-5 h-5 text-[#9f25b8] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">4.3</div>
-            <p className="text-xs text-white/60 mt-1">Promedio general</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{promedioDisplay}</div>
+            <p className="text-xs text-white/60 mt-1">Promedio general {hijos[0] ? `(${hijos[0].nombre})` : ''}</p>
           </CardContent>
         </Card>
 
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
           style={{ animationDelay: '0.2s' }}
-          onClick={() => setLocation('/parent')}
+          onClick={() => setLocation('/calendar')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Tareas del Hijo</CardTitle>
@@ -1100,7 +1119,7 @@ function PadreDashboard() {
             <BookOpen className="w-5 h-5 text-[#9f25b8] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">5</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{notasData?.total ?? 0}</div>
             <p className="text-xs text-white/60 mt-1">Materias activas</p>
           </CardContent>
         </Card>
@@ -1115,7 +1134,7 @@ function PadreDashboard() {
             <Trophy className="w-5 h-5 text-[#facc15] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">95%</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{attendanceResumen?.porcentaje ?? '—'}%</div>
             <p className="text-xs text-white/60 mt-1">Este mes</p>
           </CardContent>
         </Card>
@@ -1129,31 +1148,35 @@ function PadreDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {['Matematicas', 'Ciencias', 'Historia'].map((materia, index) => {
-                const score = [4.5, 4.2, 4.7][index];
-                const widthPercent = (score / 5.0) * 100;
-                return (
-                  <div 
-                    key={materia} 
-                    className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-purple"
-                    style={{ animationDelay: `${0.7 + index * 0.1}s` }}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-white font-medium text-expressive-subtitle">{materia}</span>
-                      <span className="text-[#9f25b8] font-bold font-['Poppins']">{score}/5.0</span>
+              {materias.length === 0 ? (
+                <p className="text-white/60 py-4">No hay notas cargadas aún. {!primerHijoId && 'Vincula un estudiante en tu perfil.'}</p>
+              ) : (
+                materias.map((materia, index) => {
+                  const score = materia.ultimaNota ?? materia.promedio / 20;
+                  const widthPercent = Math.min(100, (score / 5.0) * 100);
+                  return (
+                    <div
+                      key={materia.nombre}
+                      className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-purple"
+                      style={{ animationDelay: `${0.7 + index * 0.1}s` }}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-white font-medium text-expressive-subtitle">{materia.nombre}</span>
+                        <span className="text-[#9f25b8] font-bold font-['Poppins']">{(score || 0).toFixed(1)}/5.0</span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
+                        <div
+                          className="h-3 rounded-full transition-all duration-1000 ease-out hover-glow"
+                          style={{
+                            background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`,
+                            width: `${widthPercent}%`
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
-                      <div 
-                        className="h-3 rounded-full transition-all duration-1000 ease-out hover-glow"
-                        style={{
-                          background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
-                        }}
-                        style={{ width: `${widthPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </CardContent>
         </Card>

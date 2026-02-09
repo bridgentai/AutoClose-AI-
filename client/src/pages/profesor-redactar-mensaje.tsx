@@ -1,92 +1,93 @@
 import React, { useState } from 'react';
-import { Send, User, Users } from 'lucide-react';
+import { Send, User } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLocation } from 'wouter';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
 
+const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md';
+
+interface ParentUser {
+  _id: string;
+  nombre: string;
+  email?: string;
+  correo?: string;
+}
+
 export default function ProfesorRedactarMensaje() {
-  const [, setLocation] = useLocation();
-  const [destinatario, setDestinatario] = useState('');
-  const [tipoDestinatario, setTipoDestinatario] = useState<'estudiante' | 'profesor' | 'grupo'>('estudiante');
+  const [location, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const fromComunicacion = location.startsWith('/comunicacion');
+  const [destinatarioId, setDestinatarioId] = useState('');
   const [asunto, setAsunto] = useState('');
   const [mensaje, setMensaje] = useState('');
 
+  const { data: padres = [] } = useQuery({
+    queryKey: ['/api/users/by-role', 'padre'],
+    queryFn: () => apiRequest<ParentUser[]>('GET', '/api/users/by-role?rol=padre'),
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: (payload: { destinatarioId: string; asunto: string; texto: string }) =>
+      apiRequest('POST', '/api/messages/conversations', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+      setDestinatarioId('');
+      setAsunto('');
+      setMensaje('');
+      setLocation(fromComunicacion ? '/comunicacion' : '/profesor/comunicacion/bandeja');
+    },
+  });
+
   const handleEnviar = () => {
-    if (!destinatario || !asunto || !mensaje) {
-      alert('Por favor completa todos los campos');
+    if (!destinatarioId || !asunto.trim() || !mensaje.trim()) {
+      alert('Completa destinatario, asunto y mensaje');
       return;
     }
-    alert(`Mensaje enviado a ${destinatario}`);
-    // Reset form
-    setDestinatario('');
-    setAsunto('');
-    setMensaje('');
+    sendMutation.mutate({ destinatarioId, asunto: asunto.trim(), texto: mensaje.trim() });
   };
 
   return (
     <div className="p-6">
       <div className="mb-6">
-        <NavBackButton to="/profesor/comunicacion" label="Comunicación" />
-        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Redactar Mensaje</h1>
-        <p className="text-white/60">Envía mensajes a estudiantes, profesores o grupos</p>
+        <NavBackButton to={fromComunicacion ? '/comunicacion' : '/profesor/comunicacion'} label="Comunicación" />
+        <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4 flex items-center gap-2">
+          <Send className="w-8 h-8 text-[#9f25b8]" />
+          Redactar Mensaje
+        </h1>
+        <p className="text-white/60">Envía un mensaje a un padre o acudiente</p>
       </div>
 
-      <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+      <Card className={CARD_STYLE}>
         <CardHeader>
           <CardTitle className="text-white font-['Poppins']">Nuevo Mensaje</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="tipo" className="text-white">Tipo de Destinatario</Label>
-            <Select value={tipoDestinatario} onValueChange={(value: 'estudiante' | 'profesor' | 'grupo') => setTipoDestinatario(value)}>
-              <SelectTrigger className="bg-white/10 border-white/10 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="estudiante">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    Estudiante
-                  </div>
-                </SelectItem>
-                <SelectItem value="profesor">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    Profesor
-                  </div>
-                </SelectItem>
-                <SelectItem value="grupo">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    Grupo
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="destinatario" className="text-white">
-              {tipoDestinatario === 'estudiante' ? 'Estudiante' : tipoDestinatario === 'profesor' ? 'Profesor' : 'Grupo'}
+            <Label className="text-white flex items-center gap-2">
+              <User className="w-4 h-4 text-[#9f25b8]" />
+              Destinatario (padre/acudiente)
             </Label>
-            <Input
-              id="destinatario"
-              value={destinatario}
-              onChange={(e) => setDestinatario(e.target.value)}
-              placeholder={`Selecciona ${tipoDestinatario === 'estudiante' ? 'un estudiante' : tipoDestinatario === 'profesor' ? 'un profesor' : 'un grupo'}`}
-              className="bg-white/10 border-white/10 text-white placeholder:text-white/50"
-            />
+            <select
+              value={destinatarioId}
+              onChange={(e) => setDestinatarioId(e.target.value)}
+              className="w-full rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#9f25b8]"
+            >
+              <option value="">Seleccionar padre o acudiente</option>
+              {padres.map((p) => (
+                <option key={p._id} value={p._id}>{p.nombre} — {p.email || p.correo || ''}</option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="asunto" className="text-white">Asunto</Label>
+            <Label className="text-white">Asunto</Label>
             <Input
-              id="asunto"
               value={asunto}
               onChange={(e) => setAsunto(e.target.value)}
               placeholder="Asunto del mensaje"
@@ -95,9 +96,8 @@ export default function ProfesorRedactarMensaje() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="mensaje" className="text-white">Mensaje</Label>
+            <Label className="text-white">Mensaje</Label>
             <Textarea
-              id="mensaje"
               value={mensaje}
               onChange={(e) => setMensaje(e.target.value)}
               placeholder="Escribe tu mensaje aquí..."
@@ -109,17 +109,18 @@ export default function ProfesorRedactarMensaje() {
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
-              onClick={() => setLocation('/profesor/comunicacion')}
+              onClick={() => setLocation(fromComunicacion ? '/comunicacion' : '/profesor/comunicacion')}
               className="border-white/10 text-white hover:bg-white/10"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleEnviar}
+              disabled={sendMutation.isPending || !destinatarioId || !asunto.trim() || !mensaje.trim()}
               className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
             >
               <Send className="w-4 h-4 mr-2" />
-              Enviar Mensaje
+              {sendMutation.isPending ? 'Enviando...' : 'Enviar Mensaje'}
             </Button>
           </div>
         </CardContent>
@@ -127,4 +128,3 @@ export default function ProfesorRedactarMensaje() {
     </div>
   );
 }
-

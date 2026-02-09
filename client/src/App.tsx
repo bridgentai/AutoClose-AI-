@@ -23,6 +23,7 @@ import Entry from "@/pages/entry";
 import LoginStandby from "@/pages/login-standby";
 import RegisterStandby from "@/pages/register-standby";
 import Login from "@/pages/login";
+import AuthCallback from "@/pages/auth-callback";
 import Register from "@/pages/register";
 import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
@@ -34,6 +35,8 @@ import Account from "@/pages/account";
 import Setup from "@/pages/setup";
 import NotFound from "@/pages/not-found";
 import PermisosPage from "@/pages/permisos";
+import NotificacionesPage from "@/pages/notificaciones";
+import BoletinPage from "@/pages/boletin";
 
 import TeacherCalendarPage from "@/pages/teacher-calendar";
 import TeacherTasksSummaryPage from "@/pages/teacher-tasks-summary";
@@ -49,6 +52,7 @@ import FichaMedica from "@/pages/FichaMedica";
 
 import ComunicacionHome from "@/pages/ComunicacionHome";
 import ComunicacionAcademico from "@/pages/ComunicacionAcademico";
+import BandejaDeEntrada from "@/pages/BandejaDeEntrada";
 
 import ComunidadLayout from "@/pages/ComunidadLayout";
 import CalendarioEventos from "@/pages/CalendarioEventos";
@@ -74,6 +78,7 @@ import ProfesorAsignarTareaPage from "@/pages/profesor-asignar-tarea";
 import ProfesorRevisionTareasPage from "@/pages/profesor-revision-tareas";
 import ProfesorPanelCalificacionPage from "@/pages/profesor-panel-calificacion";
 import ProfesorEditorDocumentoPage from "@/pages/profesor-editor-documento";
+import AsistenciaProfesor from "@/pages/asistencia-profesor";
 
 // Nuevos roles
 import AdministradorGeneralPage from "@/pages/administrador-general";
@@ -242,11 +247,17 @@ function AppRouter() {
             <Route path="/comunicacion">
               <AuthGuard><ComunicacionHome /></AuthGuard>
             </Route>
+            <Route path="/comunicacion/bandeja">
+              <AuthGuard><BandejaDeEntrada /></AuthGuard>
+            </Route>
             <Route path="/comunicacion/academico">
               <AuthGuard><ComunicacionAcademico /></AuthGuard>
             </Route>
             <Route path="/comunicacion/academico/:materiaId">
               <AuthGuard><ComunicacionAcademico /></AuthGuard>
+            </Route>
+            <Route path="/comunicacion/redactar">
+              <AuthGuard><ProfesorRedactarMensaje /></AuthGuard>
             </Route>
 
             <Route path="/comunidad">
@@ -312,6 +323,12 @@ function AppRouter() {
             <Route path="/permisos">
               <AuthGuard><PermisosPage /></AuthGuard>
             </Route>
+            <Route path="/notificaciones">
+              <AuthGuard><NotificacionesPage /></AuthGuard>
+            </Route>
+            <Route path="/boletin">
+              <AuthGuard><BoletinPage /></AuthGuard>
+            </Route>
 
             {/* Módulos del Profesor */}
             <Route path="/profesor/academia">
@@ -346,6 +363,9 @@ function AppRouter() {
             </Route>
             <Route path="/profesor/academia/plataformas">
               <AuthGuard><PlataformasPage /></AuthGuard>
+            </Route>
+            <Route path="/profesor/academia/asistencia">
+              <AuthGuard><AsistenciaProfesor /></AuthGuard>
             </Route>
 
             <Route path="/profesor/comunicacion">
@@ -437,6 +457,10 @@ function AppRouter() {
           {/* Rutas de login y registro activas */}
           <Route path="/login">
             <GuestGuard><Login /></GuestGuard>
+          </Route>
+
+          <Route path="/auth/callback">
+            <AuthCallback />
           </Route>
 
           <Route path="/register">

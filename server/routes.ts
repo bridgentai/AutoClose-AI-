@@ -20,13 +20,24 @@ import professorRoutes from "./routes/professor";
 import studentRoutes from "./routes/student";
 import superAdminRoutes from "./routes/superAdmin";
 import institutionRoutes from "./routes/institution";
+import attendanceRoutes from "./routes/attendance";
+import eventsRoutes from "./routes/events";
+import notificationsRoutes from "./routes/notifications";
+import treasuryRoutes from "./routes/treasury";
+import messagesRoutes from "./routes/messages";
+import boletinRoutes from "./routes/boletin";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Conectar a MongoDB
   await connectDB();
 
-  // CORS
-  app.use(cors());
+  // CORS - Configuración explícita para permitir todas las solicitudes
+  app.use(cors({
+    origin: true, // Permitir cualquier origen
+    credentials: true, // Permitir credenciales (cookies, headers de autorización)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
 
   // Rutas de API
   app.use('/api/auth', authRoutes);
@@ -43,6 +54,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/student', studentRoutes);
   app.use('/api/super-admin', superAdminRoutes);
   app.use('/api/institution', institutionRoutes);
+  app.use('/api/attendance', attendanceRoutes);
+  app.use('/api/events', eventsRoutes);
+  app.use('/api/notifications', notificationsRoutes);
+  app.use('/api/treasury', treasuryRoutes);
+  app.use('/api/messages', messagesRoutes);
+  app.use('/api/boletin', boletinRoutes);
 
   // Seed grupos fijos al iniciar
   await seedGroups();
