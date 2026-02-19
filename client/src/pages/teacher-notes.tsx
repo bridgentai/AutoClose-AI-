@@ -10,7 +10,8 @@ import {
   FileText,
   MessageSquare,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Sparkles
 } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -208,14 +209,23 @@ export default function TeacherNotesPage() {
                   <p className="text-white/60 text-sm sm:text-base truncate">{studentDetail.email}</p>
                 </div>
               </div>
-              <Dialog open={showAddNoteForm} onOpenChange={setShowAddNoteForm}>
-                <Button 
-                  className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
-                  onClick={() => setShowAddNoteForm(true)}
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  className="border-[#7C3AED]/50 text-[#A855F7] hover:bg-[#7C3AED]/10"
+                  onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${estudianteId}/boletin-inteligente`)}
                 >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Agregar Nota
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Boletín Inteligente
                 </Button>
+                <Dialog open={showAddNoteForm} onOpenChange={setShowAddNoteForm}>
+                  <Button 
+                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                    onClick={() => setShowAddNoteForm(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Agregar Nota
+                  </Button>
                 <DialogContent className="bg-[#1a001c] border-white/10 text-white max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>Agregar Nueva Nota</DialogTitle>
@@ -312,6 +322,7 @@ export default function TeacherNotesPage() {
                   </form>
                 </DialogContent>
               </Dialog>
+              </div>
             </div>
           </div>
 

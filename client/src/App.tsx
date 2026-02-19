@@ -66,6 +66,7 @@ import StudentTasksPage from "@/pages/student-tasks";
 import TeacherNotesPage from "@/pages/teacher-notes";
 import TeacherGroupTasksPage from "@/pages/teacher-group-tasks";
 import StudentProfilePage from "@/pages/student-profile";
+import BoletinInteligentePage from "@/pages/boletin-inteligente";
 
 // Módulos del profesor
 import ProfesorAcademiaLayout from "@/pages/profesor-academia";
@@ -290,6 +291,9 @@ function AppRouter() {
             </Route>
             <Route path="/profesor/cursos/:cursoId/estudiantes/:estudianteId">
               <AuthGuard><StudentProfilePage /></AuthGuard>
+            </Route>
+            <Route path="/profesor/cursos/:cursoId/estudiantes/:estudianteId/boletin-inteligente">
+              <AuthGuard><BoletinInteligentePage /></AuthGuard>
             </Route>
 
             <Route path="/group-assignment">
