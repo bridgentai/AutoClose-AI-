@@ -28,6 +28,7 @@ import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
 import Courses from "@/pages/courses";
 import CourseDetail from "@/pages/course-detail";
+import CourseGradesTable from "@/pages/course-grades-table";
 import CalendarPage from "@/pages/calendar";
 import Materials from "@/pages/materials";
 import Account from "@/pages/account";
@@ -210,6 +211,9 @@ function AppRouter() {
             </Route>
             <Route path="/course-detail/:cursoId">
               <AuthGuard><CourseDetail /></AuthGuard>
+            </Route>
+            <Route path="/course/:cursoId/grades">
+              <AuthGuard><CourseGradesTable /></AuthGuard>
             </Route>
 
             <Route path="/mi-aprendizaje/cursos">

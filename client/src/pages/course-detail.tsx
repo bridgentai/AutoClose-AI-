@@ -408,10 +408,10 @@ export default function CourseDetailPage() {
                                         variant="outline"
                                         size="sm"
                                         className="border-white/40 text-white hover:bg-white/20 hover:border-white/60"
-                                        onClick={() => setLocation(`/profesor/cursos/${cursoId}/notas`)}
+                                        onClick={() => setLocation(`/course/${cursoId}/grades`)}
                                     >
-                                        <Settings className="w-4 h-4 mr-2" />
-                                        Gestionar Notas
+                                        <Maximize2 className="w-4 h-4 mr-2" />
+                                        Ver Tabla Completa
                                     </Button>
                                     <Button
                                         variant="outline"
