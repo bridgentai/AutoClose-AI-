@@ -28,12 +28,18 @@ export default function NotificacionesPage() {
 
   const markOneMutation = useMutation({
     mutationFn: (id: string) => apiRequest('PATCH', `/api/notifications/${id}/read`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/notifications'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+    },
   });
 
   const markAllMutation = useMutation({
     mutationFn: () => apiRequest('POST', '/api/notifications/mark-all-read'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/notifications'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+    },
   });
 
   const list = data?.list ?? [];
@@ -44,7 +50,7 @@ export default function NotificacionesPage() {
       <div className="mb-6">
         <NavBackButton to="/dashboard" label="Dashboard" />
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4 flex items-center gap-2">
-          <Bell className="w-8 h-8 text-[#9f25b8] shrink-0" />
+          <Bell className="w-8 h-8 text-[#1e3cff] shrink-0" />
           Notificaciones
         </h1>
         <p className="text-white/60 text-sm sm:text-base">Mensajes y avisos del colegio</p>
@@ -80,7 +86,7 @@ export default function NotificacionesPage() {
                 <li
                   key={n._id}
                   className={`flex items-start justify-between gap-3 sm:gap-4 p-4 rounded-xl border transition-colors ${
-                    n.leido ? 'bg-white/5 border-white/10' : 'bg-[#9f25b8]/10 border-[#9f25b8]/30'
+                    n.leido ? 'bg-white/5 border-white/10' : 'bg-[#1e3cff]/10 border-[#1e3cff]/30'
                   }`}
                 >
                   <div className="min-w-0 flex-1">

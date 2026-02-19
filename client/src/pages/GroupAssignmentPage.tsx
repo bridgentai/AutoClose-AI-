@@ -260,14 +260,14 @@ export default function GroupAssignmentPage() {
                             <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                                 <CardHeader>
                                     <CardTitle className="text-white flex items-center gap-2">
-                                        <BookOpen className="w-6 h-6 text-[#9f25b8]" />
+                                        <BookOpen className="w-6 h-6 text-[#1e3cff]" />
                                         Asignación de Cursos: {selectedMateriaNombre}
                                     </CardTitle>
                                     <p className="text-white/60">
                                         Marca los grupos (IDs) a los que se les mostrará el contenido de tu materia: <strong>{selectedMateriaNombre}</strong>.
                                     </p>
                                     <div className="mt-2">
-                                        <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40">
+                                        <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40">
                                             Materia Principal: {selectedMateriaNombre}
                                         </Badge>
                                     </div>
@@ -297,7 +297,7 @@ export default function GroupAssignmentPage() {
                                                                         id={`group-${groupIdentifier}`}
                                                                         checked={selectedGroupIds.includes(groupIdentifier)}
                                                                         onCheckedChange={(checked) => handleGroupToggle(groupIdentifier, checked === true)}
-                                                                        className="border-white/50 data-[state=checked]:bg-[#9f25b8] data-[state=checked]:border-[#9f25b8]"
+                                                                        className="border-white/50 data-[state=checked]:bg-[#1e3cff] data-[state=checked]:border-[#1e3cff]"
                                                                         data-testid={`checkbox-group-${groupIdentifier}`}
                                                                     />
                                                                     <Label htmlFor={`group-${groupIdentifier}`} className="text-white flex items-center gap-2 cursor-pointer">
@@ -318,7 +318,7 @@ export default function GroupAssignmentPage() {
                                             <div className="flex flex-wrap gap-2 mt-2">
                                                 {selectedGroupIds.length > 0 ? (
                                                     selectedGroupIds.map(id => (
-                                                        <Badge key={id} className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40">
+                                                        <Badge key={id} className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40">
                                                             {id}
                                                         </Badge>
                                                     ))
@@ -333,7 +333,7 @@ export default function GroupAssignmentPage() {
                                         <Button 
                                             type="submit" 
                                             disabled={!materiaPrincipalNombre || isSaving || selectedGroupIds.length === 0}
-                                            className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 mt-6"
+                                            className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 mt-6"
                                             data-testid="button-submit"
                                         >
                                             {isSaving ? (

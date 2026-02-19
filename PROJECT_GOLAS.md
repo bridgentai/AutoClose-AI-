@@ -105,7 +105,7 @@ user‑friendly
 
 glassmorphism
 
-paleta púrpura (#9f25b8)
+paleta azul (#0a0a2a, #002366, #1e3cff, #00c8ff, #ffd700)
 
 diseño que supera las plataformas tradicionales
 

@@ -51,7 +51,7 @@ export function AppSidebar() {
 
       {/* Logo + info */}
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavClick("/dashboard")}>
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center">
           <span className="text-white font-bold text-lg">AC</span>
         </div>
         <div>
@@ -73,7 +73,7 @@ export function AppSidebar() {
               className={`
                 flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-all
                 ${isActive 
-                  ? "bg-[#6a0dad] text-white" 
+                  ? "bg-[#002366] text-white" 
                   : "text-white/70 hover:text-white hover:bg-white/5"
                 }
               `}

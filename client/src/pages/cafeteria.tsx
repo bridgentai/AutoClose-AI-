@@ -23,7 +23,7 @@ export default function CafeteriaPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <ShoppingBag className="w-5 h-5 text-[#9f25b8]" />
+              <ShoppingBag className="w-5 h-5 text-[#1e3cff]" />
               Productos Activos
             </CardTitle>
           </CardHeader>
@@ -36,7 +36,7 @@ export default function CafeteriaPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <Package className="w-5 h-5 text-[#9f25b8]" />
+              <Package className="w-5 h-5 text-[#1e3cff]" />
               Inventario
             </CardTitle>
           </CardHeader>
@@ -49,7 +49,7 @@ export default function CafeteriaPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+              <TrendingUp className="w-5 h-5 text-[#1e3cff]" />
               Ventas del Día
             </CardTitle>
           </CardHeader>
@@ -62,7 +62,7 @@ export default function CafeteriaPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <Users className="w-5 h-5 text-[#9f25b8]" />
+              <Users className="w-5 h-5 text-[#1e3cff]" />
               Compras Registradas
             </CardTitle>
           </CardHeader>
@@ -82,7 +82,7 @@ export default function CafeteriaPage() {
           <CardContent className="space-y-3">
             <Button
               onClick={() => setLocation('/chat')}
-              className="w-full justify-start bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+              className="w-full justify-start bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
             >
               <MessageSquare className="w-4 h-4 mr-2" />
               Abrir Chat AI

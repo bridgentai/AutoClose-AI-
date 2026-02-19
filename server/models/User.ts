@@ -28,6 +28,12 @@ interface IUser {
   createdAt: Date;
   // NUEVO: ID categorizado por rol
   userId?: string; // ID categorizado (ej: "PROF-507f1f77bcf86cd799439011")
+  /** Consentimiento de términos y condiciones (obligatorio para nuevos usuarios) */
+  consentimientoTerminos?: boolean;
+  /** Consentimiento de política de privacidad */
+  consentimientoPrivacidad?: boolean;
+  /** Fecha en que se dio el consentimiento */
+  consentimientoFecha?: Date;
   matchPassword(enteredPassword: string): Promise<boolean>;
 }
 
@@ -85,6 +91,9 @@ const userSchema = new Schema<IUser>({
     sparse: true,
     index: true 
   },
+  consentimientoTerminos: { type: Boolean, default: false },
+  consentimientoPrivacidad: { type: Boolean, default: false },
+  consentimientoFecha: { type: Date },
 });
 
 // Unicidad de email por colegio (multi-tenant)

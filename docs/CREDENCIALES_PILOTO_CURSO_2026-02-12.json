@@ -1,0 +1,14 @@
+{
+  "fechaEjecucion": "2026-02-12T00:44:37.532Z",
+  "admin": {
+    "email": "",
+    "password": ""
+  },
+  "profesores": [],
+  "estudiantes": [],
+  "padres": [],
+  "grupo": "NOVENO A",
+  "tareas": [],
+  "entregas": 0,
+  "calificaciones": 0
+}

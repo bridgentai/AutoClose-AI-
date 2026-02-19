@@ -180,17 +180,16 @@ router.get('/', protect, async (req: AuthRequest, res) => {
       colegioId: user.colegioId,
     };
 
-    // Filtrar por courseId o groupId
+    // Filtrar por courseId y/o groupId (pueden usarse juntos para tabla de notas)
     if (courseId) {
       query.courseId = courseId;
-    } else if (groupId) {
-      // Normalizar groupId a mayúsculas para consistencia
+    }
+    if (groupId) {
       const grupoIdNormalizado = (groupId as string).toUpperCase().trim();
-      // Buscar tareas que coincidan con el grupo (case-insensitive usando $in)
       query.curso = { $in: [grupoIdNormalizado, grupoIdNormalizado.toLowerCase(), groupId as string] };
     }
 
-    // Filtrar por mes y año si se proporcionan
+    // Filtrar por mes y año si se proporcionan (opcional - sin ellos se traen todas las tareas)
     if (month && year) {
       const mesNum = parseInt(month as string);
       const yearNum = parseInt(year as string);
@@ -656,6 +655,39 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
     return res.json(assignments);
   } catch (err: any) {
     console.error('Error al obtener tareas:', err.message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// GET /api/assignments/profesor/:profesorId/pending-review - Tareas por calificar (estado entregada)
+// Debe ir ANTES de la ruta /:mes/:year para evitar conflicto de rutas
+router.get('/profesor/:profesorId/pending-review', protect, async (req: AuthRequest, res) => {
+  try {
+    const { profesorId } = req.params;
+    const normalizedProfesorId = normalizeIdForQuery(profesorId);
+
+    // Verificar que el usuario autenticado es el profesor solicitado
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    if (normalizedUserId !== normalizedProfesorId) {
+      return res.status(403).json({ message: 'No tienes permiso para consultar estas tareas.' });
+    }
+
+    const assignments = await Assignment.find({
+      profesorId: normalizedProfesorId,
+    })
+      .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId submissions entregas')
+      .sort({ fechaEntrega: 1 })
+      .lean();
+
+    // Filtrar solo las que tienen estado "entregada" (por calificar)
+    const pendientes = assignments.filter((a: any) => {
+      const state = calculateAssignmentState(a);
+      return state === 'entregada';
+    });
+
+    return res.json(pendientes);
+  } catch (err: any) {
+    console.error('Error al obtener tareas pendientes de revisión:', err.message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });

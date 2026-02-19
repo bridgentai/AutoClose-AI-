@@ -73,7 +73,7 @@ export default function ProfesorMensajesEnviados() {
                 <div
                   key={msg.id}
                   className={`p-3 border-b border-white/10 cursor-pointer transition-colors ${
-                    selectedMensaje?.id === msg.id ? 'bg-white/10 border-l-4 border-[#9f25b8]' : 'hover:bg-white/5'
+                    selectedMensaje?.id === msg.id ? 'bg-white/10 border-l-4 border-[#1e3cff]' : 'hover:bg-white/5'
                   }`}
                   onClick={() => setSelectedMensaje(msg)}
                 >
@@ -102,9 +102,9 @@ export default function ProfesorMensajesEnviados() {
                 <div className="p-6 border-b border-white/10">
                   <h2 className="text-2xl font-bold text-white font-['Poppins']">{selectedMensaje.asunto}</h2>
                   <div className="flex items-center gap-4 mt-2 text-white/70 text-sm">
-                    {selectedMensaje.tipo === 'estudiante' && <User className="w-4 h-4 text-[#9f25b8]" />}
-                    {selectedMensaje.tipo === 'grupo' && <Users className="w-4 h-4 text-[#9f25b8]" />}
-                    {selectedMensaje.tipo === 'profesor' && <User className="w-4 h-4 text-[#9f25b8]" />}
+                    {selectedMensaje.tipo === 'estudiante' && <User className="w-4 h-4 text-[#1e3cff]" />}
+                    {selectedMensaje.tipo === 'grupo' && <Users className="w-4 h-4 text-[#1e3cff]" />}
+                    {selectedMensaje.tipo === 'profesor' && <User className="w-4 h-4 text-[#1e3cff]" />}
                     <span>Para: {selectedMensaje.destinatario}</span>
                     <span className="ml-auto text-white/50">{selectedMensaje.fecha}</span>
                   </div>
@@ -116,7 +116,7 @@ export default function ProfesorMensajesEnviados() {
               </>
             ) : (
               <div className="flex items-center justify-center h-full text-white/50 text-xl">
-                <Mail className="w-8 h-8 mr-2 text-[#9f25b8]" />
+                <Mail className="w-8 h-8 mr-2 text-[#1e3cff]" />
                 Selecciona un mensaje para ver su contenido.
               </div>
             )}

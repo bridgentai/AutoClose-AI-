@@ -100,7 +100,7 @@ export default function ProfesorEditorDocumentoPage() {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <CardTitle className="text-white text-2xl mb-2 flex items-center gap-2">
-                  <FileText className="w-6 h-6 text-[#9f25b8]" />
+                  <FileText className="w-6 h-6 text-[#1e3cff]" />
                   Editor de Documento
                 </CardTitle>
                 <p className="text-white/60">
@@ -122,7 +122,7 @@ export default function ProfesorEditorDocumentoPage() {
                 <Button
                   onClick={handleSave}
                   disabled={updateDocumentMutation.isPending}
-                  className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                  className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                 >
                   <Save className="w-4 h-4 mr-2" />
                   {updateDocumentMutation.isPending ? 'Guardando...' : 'Guardar Documento'}

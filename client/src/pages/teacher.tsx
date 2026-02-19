@@ -47,7 +47,7 @@ export default function TeacherPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <BookOpen className="w-5 h-5 text-[#9f25b8]" />
+              <BookOpen className="w-5 h-5 text-[#1e3cff]" />
               Mis Cursos
             </CardTitle>
           </CardHeader>
@@ -60,7 +60,7 @@ export default function TeacherPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <GraduationCap className="w-5 h-5 text-[#9f25b8]" />
+              <GraduationCap className="w-5 h-5 text-[#1e3cff]" />
               Estudiantes
             </CardTitle>
           </CardHeader>
@@ -73,7 +73,7 @@ export default function TeacherPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <MessageSquare className="w-5 h-5 text-[#9f25b8]" />
+              <MessageSquare className="w-5 h-5 text-[#1e3cff]" />
               Materiales
             </CardTitle>
           </CardHeader>
@@ -86,7 +86,7 @@ export default function TeacherPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+              <TrendingUp className="w-5 h-5 text-[#1e3cff]" />
               Engagement
             </CardTitle>
           </CardHeader>
@@ -106,7 +106,7 @@ export default function TeacherPage() {
           <CardContent className="space-y-3">
             <Button
               onClick={() => setLocation('/chat')}
-              className="w-full justify-start bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+              className="w-full justify-start bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
               data-testid="button-chat"
             >
               <MessageSquare className="w-4 h-4 mr-2" />

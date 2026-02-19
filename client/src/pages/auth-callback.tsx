@@ -68,7 +68,7 @@ export default function AuthCallback() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-6"
-      style={{ background: 'radial-gradient(circle at 20% 20%, #25003d, #0b0013 80%)' }}
+      style={{ background: 'linear-gradient(135deg, #0a0a2a 0%, #002366 45%, #1e3cff 100%)' }}
     >
       <div className="text-white/80">Completando inicio de sesión...</div>
     </div>

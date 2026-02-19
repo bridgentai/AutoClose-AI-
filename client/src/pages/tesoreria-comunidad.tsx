@@ -53,7 +53,7 @@ export default function TesoreriaComunidadLayout() {
           <Link key={item.path} href={item.path}>
             <Card className="hover-elevate cursor-pointer bg-white/5 border-white/10 backdrop-blur-md">
               <CardContent className="flex flex-col items-center justify-center p-8">
-                <item.icon className="w-12 h-12 mb-4 text-[#9f25b8]" />
+                <item.icon className="w-12 h-12 mb-4 text-[#1e3cff]" />
                 <span className="text-lg font-medium text-white">{item.title}</span>
               </CardContent>
             </Card>

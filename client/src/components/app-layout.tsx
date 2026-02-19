@@ -4,7 +4,6 @@ import { ReactNode, useState } from "react";
 import { CommandPalette, useCommandPalette } from "./command-palette";
 import { AIDock } from "./ai-dock";
 import { cn } from "@/lib/utils";
-import { useInstitutionColors } from "@/hooks/useInstitutionColors";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -14,41 +13,39 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { open: commandOpen, setOpen: setCommandOpen } = useCommandPalette();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isDockExpanded, setIsDockExpanded] = useState(false);
-  
-  // Cargar y aplicar colores de la institución
-  const { colorPrimario, colorSecundario } = useInstitutionColors();
 
   return (
     <div className="min-h-screen w-full relative overflow-hidden">
-      {/* Background Gradient with Animation */}
+      {/* Caobos en esquina */}
+      <div className="fixed top-4 left-4 z-20 pointer-events-none">
+        <span className="text-xl font-bold text-white/90 font-['Poppins'] tracking-tight drop-shadow-sm">
+          Caobos
+        </span>
+      </div>
+
+      {/* Gradiente animado - azul rey institucional con movimiento fluido */}
       <div 
-        className="fixed inset-0 -z-10"
+        className="fixed inset-0 -z-10 animate-gradient-flow"
         style={{
-          background: "linear-gradient(135deg, #0a0a0c 0%, #1a001c 50%, #3d0045 100%)",
+          background: "linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)",
+          backgroundSize: "400% 400%",
+          backgroundPosition: "0% 50%",
         }}
       />
       
-      {/* Animated Background Orbs - usando colores dinámicos */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
+      {/* Orbes animados - contrastes sutiles de azul (no monocromático) */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
         <div 
-          className="absolute top-20 left-10 w-96 h-96 rounded-full blur-3xl animate-float" 
-          style={{ 
-            backgroundColor: `${colorPrimario}10` // 10% de opacidad
-          }} 
+          className="absolute top-20 left-10 w-[28rem] h-[28rem] rounded-full blur-3xl opacity-30 animate-float-slow" 
+          style={{ backgroundColor: "#002366" }} 
         />
         <div 
-          className="absolute bottom-20 right-20 w-80 h-80 rounded-full blur-3xl animate-float" 
-          style={{ 
-            animationDelay: '1s',
-            backgroundColor: `${colorSecundario}10` // 10% de opacidad
-          }} 
+          className="absolute bottom-20 right-20 w-80 h-80 rounded-full blur-3xl opacity-25 animate-float-slow" 
+          style={{ backgroundColor: "#003d7a", animationDelay: "2s" }} 
         />
         <div 
-          className="absolute top-1/2 left-1/2 w-72 h-72 rounded-full blur-3xl animate-pulse-glow" 
-          style={{ 
-            animationDelay: '2s',
-            backgroundColor: `${colorPrimario}05` // 5% de opacidad
-          }} 
+          className="absolute top-1/2 left-1/2 w-96 h-96 rounded-full blur-3xl opacity-20 animate-float-slow" 
+          style={{ backgroundColor: "#1e3cff", animationDelay: "4s" }} 
         />
       </div>
 

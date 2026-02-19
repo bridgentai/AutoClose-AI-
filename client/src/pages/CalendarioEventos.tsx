@@ -60,7 +60,7 @@ export default function CalendarioEventos() {
           Volver a Comunidad
         </Button>
         <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-2">
-          <Calendar className="w-8 h-8 sm:w-10 sm:h-10 text-[#9f25b8] shrink-0" />
+          <Calendar className="w-8 h-8 sm:w-10 sm:h-10 text-[#00c8ff] shrink-0" />
           Calendario de Eventos
         </h1>
         <p className="text-white/60 text-sm sm:text-base">Eventos institucionales y fechas importantes</p>
@@ -70,7 +70,7 @@ export default function CalendarioEventos() {
         {canCreate && (
           <Button
             onClick={() => setModalOpen(true)}
-            className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+            className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
           >
             <Plus className="w-4 h-4 mr-2" />
             Nuevo evento
@@ -166,7 +166,7 @@ export default function CalendarioEventos() {
                 </select>
               </div>
               <Button
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff]"
                 onClick={() => createMutation.mutate({
                   titulo: form.titulo,
                   descripcion: form.descripcion,

@@ -57,7 +57,7 @@ export default function ProfesorRedactarMensaje() {
       <div className="mb-6">
         <NavBackButton to={fromComunicacion ? '/comunicacion' : '/profesor/comunicacion'} label="Comunicación" />
         <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4 flex items-center gap-2">
-          <Send className="w-8 h-8 text-[#9f25b8]" />
+          <Send className="w-8 h-8 text-[#00c8ff]" />
           Redactar Mensaje
         </h1>
         <p className="text-white/60">Envía un mensaje a un padre o acudiente</p>
@@ -70,13 +70,13 @@ export default function ProfesorRedactarMensaje() {
         <CardContent className="space-y-6">
           <div className="space-y-2">
             <Label className="text-white flex items-center gap-2">
-              <User className="w-4 h-4 text-[#9f25b8]" />
+              <User className="w-4 h-4 text-[#00c8ff]" />
               Destinatario (padre/acudiente)
             </Label>
             <select
               value={destinatarioId}
               onChange={(e) => setDestinatarioId(e.target.value)}
-              className="w-full rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#9f25b8]"
+              className="w-full rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#00c8ff]"
             >
               <option value="">Seleccionar padre o acudiente</option>
               {padres.map((p) => (
@@ -117,7 +117,7 @@ export default function ProfesorRedactarMensaje() {
             <Button
               onClick={handleEnviar}
               disabled={sendMutation.isPending || !destinatarioId || !asunto.trim() || !mensaje.trim()}
-              className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+              className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
             >
               <Send className="w-4 h-4 mr-2" />
               {sendMutation.isPending ? 'Enviando...' : 'Enviar Mensaje'}

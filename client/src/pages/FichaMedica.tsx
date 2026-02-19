@@ -15,7 +15,7 @@ const FichaMedica: React.FC = () => {
       <Card className="backdrop-blur-md bg-white/5 border-white/10">
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
-            <Heart className="w-5 h-5 text-[#9f25b8]" />
+            <Heart className="w-5 h-5 text-[#1e3cff]" />
             En Construcción
           </CardTitle>
           <CardDescription className="text-white/60">

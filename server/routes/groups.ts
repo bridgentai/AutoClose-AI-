@@ -6,6 +6,7 @@ import { Assignment } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
 import { Types } from 'mongoose';
 import { normalizeIdForQuery } from '../utils/idGenerator';
+import { logAdminAction } from '../services/auditLogger';
 
 const router = express.Router();
 
@@ -62,8 +63,8 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    // Solo admin-general-colegio puede crear grupos
-    if (user.rol !== 'admin-general-colegio') {
+    // Solo admin-general-colegio o school_admin puede crear grupos (directivo no puede)
+    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin') {
       return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear grupos' });
     }
 
@@ -114,8 +115,15 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       seccion,
     });
 
-    // TODO: Asignar el director de grupo al grupo (esto podría requerir un campo adicional en el modelo Group)
-    // Por ahora, el grupo se crea y el director se puede asignar después
+    await logAdminAction({
+      userId: normalizedUserId,
+      role: user.rol,
+      action: 'create_group',
+      entityType: 'group',
+      entityId: nuevoGrupo._id,
+      colegioId: user.colegioId,
+      requestData: { nombre: nombreCompleto, seccion },
+    });
 
     res.status(201).json({
       message: 'Grupo creado exitosamente',
@@ -140,7 +148,7 @@ router.post('/assign-student', protect, async (req: AuthRequest, res) => {
   try {
     const uid = normalizeIdForQuery(req.userId || '');
     const admin = await User.findById(uid).select('rol colegioId').lean();
-    if (!admin || admin.rol !== 'admin-general-colegio') {
+    if (!admin || (admin.rol !== 'admin-general-colegio' && admin.rol !== 'school_admin')) {
       return res.status(403).json({ message: 'Solo administradores generales del colegio pueden asignar estudiantes a cursos.' });
     }
 
@@ -189,6 +197,16 @@ router.post('/assign-student', protect, async (req: AuthRequest, res) => {
       { cursos: grupoNombre, colegioId, estudianteIds: { $ne: estudianteObjId } },
       { $addToSet: { estudianteIds: estudianteObjId, estudiantes: estudianteObjId } }
     );
+
+    await logAdminAction({
+      userId: uid,
+      role: admin.rol,
+      action: 'assign_student',
+      entityType: 'group',
+      entityId: grupo._id,
+      colegioId,
+      requestData: { grupoId: grupoNombre, estudianteId },
+    });
 
     res.status(201).json({
       message: 'Estudiante asignado al curso correctamente.',

@@ -30,16 +30,20 @@ interface Assignment {
   profesorNombre: string;
 }
 
+interface ProfessorGroupAssignment {
+  groupId: string;
+  subjects?: unknown[];
+  totalStudents?: number;
+}
+
 interface Message {
   emisor: 'user' | 'ai';
   contenido: string;
   timestamp: Date;
 }
 
-const PURPLE_ACCENT = '#9f25b8';
-const ACCENT_DARK = '#6a0dad';
 const CARD_STYLE = `bg-white/5 border-white/10 backdrop-blur-md hover-elevate`;
-const GRADIENT_STYLE = `from-[${PURPLE_ACCENT}] to-[${ACCENT_DARK}]`;
+const GRADIENT_STYLE = 'from-[#002366] to-[#1e3cff]';
 
 interface AIChatBoxProps {
   rol: string;
@@ -129,12 +133,12 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 
   return (
     <Card
-      className={`${CARD_STYLE} cursor-pointer flex flex-col h-full gradient-overlay-purple hover-glow`}
+      className={`${CARD_STYLE} cursor-pointer flex flex-col h-full gradient-overlay-blue hover-glow`}
       onClick={() => setLocation('/chat')}
     >
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-white flex items-center gap-2 text-lg text-expressive">
-          <Bot className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
+          <Bot className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
           Asistente AutoClose IA ({rol.toUpperCase()})
         </CardTitle>
         <CardDescription className="text-white/60 text-sm text-expressive-subtitle">
@@ -224,7 +228,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
               }}
               disabled={loading || !input.trim()}
               size="icon"
-              className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               data-testid="button-dashboard-send"
             >
               {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
@@ -258,13 +262,13 @@ function EstudianteDashboard() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/mi-aprendizaje/cursos')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Mis Materias</CardTitle>
-            <BookOpen className="w-5 h-5 text-[#9f25b8] animate-float" style={{ animationDelay: '0.5s' }} />
+            <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">4</div>
@@ -273,13 +277,13 @@ function EstudianteDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/mi-aprendizaje/tareas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white">Tareas Pendientes</CardTitle>
-            <GraduationCap className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
+            <GraduationCap className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
@@ -288,7 +292,7 @@ function EstudianteDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
@@ -303,7 +307,7 @@ function EstudianteDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple badge-glow`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue badge-glow`}
           style={{ animationDelay: '0.4s' }}
           onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
@@ -320,7 +324,7 @@ function EstudianteDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue`}
           style={{ animationDelay: '0.5s' }}
           onClick={() => setLocation('/mi-aprendizaje/calendario')}
         >
@@ -339,7 +343,7 @@ function EstudianteDashboard() {
                 <p className="text-white/60">Cargando calendario...</p>
               </div>
             ) : (
-              <div onClick={(e) => e.stopPropagation()} className="pulse-purple">
+              <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
                 <Calendar assignments={assignments} onDayClick={handleDayClick} />
               </div>
             )}
@@ -361,11 +365,29 @@ function ProfesorDashboard() {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // Query para obtener tareas del profesor
+  // Query para grupos asignados (misma fuente que "Mis Grupos Asignados")
+  const { data: professorGroups = [], isLoading: isLoadingCourses } = useQuery<ProfessorGroupAssignment[]>({
+    queryKey: ['professorGroups'],
+    queryFn: () => apiRequest('GET', '/api/professor/my-groups'),
+    enabled: !!user?.id && user?.rol === 'profesor',
+    staleTime: 0,
+  });
+
+  // Query para obtener tareas del profesor (calendario)
   const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
     queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
     queryFn: async () => {
       return apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
+    },
+    enabled: !!user?.id,
+    staleTime: 0,
+  });
+
+  // Query para tareas por revisar (estado entregada / por calificar)
+  const { data: pendingReview = [], isLoading: isLoadingPending } = useQuery<Assignment[]>({
+    queryKey: ['teacherPendingReview', user?.id],
+    queryFn: async () => {
+      return apiRequest('GET', `/api/assignments/profesor/${user?.id}/pending-review`);
     },
     enabled: !!user?.id,
     staleTime: 0,
@@ -382,35 +404,43 @@ function ProfesorDashboard() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/courses')}
         >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white text-expressive">
-              <BookOpen className="w-5 h-5 text-[#9f25b8] animate-float" />
+              <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" />
               Mis Cursos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">5</div>
+            {isLoadingCourses ? (
+              <div className="text-3xl font-bold text-white font-['Poppins'] animate-pulse">...</div>
+            ) : (
+              <div className="text-3xl font-bold text-white font-['Poppins']">{professorGroups.length}</div>
+            )}
             <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Cursos a cargo</p>
           </CardContent>
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/profesor/academia/tareas')}
         >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white text-expressive">
-              <ClipboardList className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
+              <ClipboardList className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
               Tareas por revisar
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
+            {isLoadingPending ? (
+              <div className="text-3xl font-bold text-white font-['Poppins'] animate-pulse">...</div>
+            ) : (
+              <div className="text-3xl font-bold text-white font-['Poppins']">{pendingReview.length}</div>
+            )}
             <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Pendientes de revisión</p>
           </CardContent>
         </Card>
@@ -418,7 +448,7 @@ function ProfesorDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue`}
           style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/teacher-calendar')}
         >
@@ -437,7 +467,7 @@ function ProfesorDashboard() {
                 <p className="text-white/60">Cargando calendario...</p>
               </div>
             ) : (
-              <div onClick={(e) => e.stopPropagation()} className="pulse-purple">
+              <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
                 <Calendar assignments={assignments} onDayClick={handleDayClick} />
               </div>
             )}
@@ -459,7 +489,7 @@ function DirectivoDashboard() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/directivo')}
         >
@@ -472,7 +502,7 @@ function DirectivoDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/directivo')}
         >
@@ -485,7 +515,7 @@ function DirectivoDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/courses')}
         >
@@ -498,7 +528,7 @@ function DirectivoDashboard() {
         </Card>
 
         <Card 
-          className={`${CARD_STYLE} reveal-scale gradient-overlay-purple hover-glow`}
+          className={`${CARD_STYLE} reveal-scale gradient-overlay-blue hover-glow`}
           style={{ animationDelay: '0.4s' }}
         >
           <CardHeader>
@@ -535,8 +565,8 @@ function SuperAdminDashboard() {
     nombre: '',
     colegioId: '',
     nombreIA: 'AutoClose AI',
-    colorPrimario: '#9f25b8',
-    colorSecundario: '#6a0dad',
+    colorPrimario: '#002366',
+    colorSecundario: '#1e3cff',
   });
   const [creatingSchool, setCreatingSchool] = useState(false);
 
@@ -582,8 +612,8 @@ function SuperAdminDashboard() {
         nombre: '',
         colegioId: '',
         nombreIA: 'AutoClose AI',
-        colorPrimario: '#9f25b8',
-        colorSecundario: '#6a0dad',
+        colorPrimario: '#002366',
+        colorSecundario: '#1e3cff',
       });
       loadSchools();
       setTimeout(() => setSuccess(''), 5000); // Mostrar por más tiempo para que se vea el código
@@ -667,7 +697,7 @@ function SuperAdminDashboard() {
         <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Total Colegios</CardTitle>
-            <Building2 className="w-5 h-5 text-[#9f25b8]" />
+            <Building2 className="w-5 h-5 text-[#ffd700]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{schools.length}</div>
@@ -678,7 +708,7 @@ function SuperAdminDashboard() {
         <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Total Usuarios</CardTitle>
-            <Users className="w-5 h-5 text-[#9f25b8]" />
+            <Users className="w-5 h-5 text-[#ffd700]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
@@ -691,7 +721,7 @@ function SuperAdminDashboard() {
         <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Super Admins Asignados</CardTitle>
-            <UserPlus className="w-5 h-5 text-[#9f25b8]" />
+            <UserPlus className="w-5 h-5 text-[#ffd700]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
@@ -716,7 +746,7 @@ function SuperAdminDashboard() {
               Crear Nuevo Colegio
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-[#0b0013] border-white/10 text-white max-w-2xl">
+          <DialogContent className="bg-[#0a0a2a]/95 border-white/10 text-white max-w-2xl">
             <DialogHeader>
               <DialogTitle>Crear Nuevo Colegio</DialogTitle>
               <DialogDescription className="text-white/60">
@@ -774,7 +804,7 @@ function SuperAdminDashboard() {
                         value={newSchool.colorPrimario}
                         onChange={(e) => setNewSchool({ ...newSchool, colorPrimario: e.target.value })}
                         className="bg-white/5 border-white/10 text-white flex-1 font-mono text-sm"
-                        placeholder="#9f25b8"
+                        placeholder="#002366"
                       />
                     </div>
                   </div>
@@ -793,7 +823,7 @@ function SuperAdminDashboard() {
                         value={newSchool.colorSecundario}
                         onChange={(e) => setNewSchool({ ...newSchool, colorSecundario: e.target.value })}
                         className="bg-white/5 border-white/10 text-white flex-1 font-mono text-sm"
-                        placeholder="#6a0dad"
+                        placeholder="#1e3cff"
                       />
                     </div>
                   </div>
@@ -803,7 +833,7 @@ function SuperAdminDashboard() {
                     <Label className="text-white/80 text-sm mb-2 block">Colores Predefinidos (clic para seleccionar)</Label>
                     <div className="grid grid-cols-8 gap-2">
                       {[
-                        { name: 'Púrpura', primary: '#9f25b8', secondary: '#6a0dad' },
+                        { name: 'Azul Rey', primary: '#002366', secondary: '#1e3cff' },
                         { name: 'Azul', primary: '#3b82f6', secondary: '#1e40af' },
                         { name: 'Verde', primary: '#10b981', secondary: '#059669' },
                         { name: 'Rojo', primary: '#ef4444', secondary: '#dc2626' },
@@ -881,7 +911,7 @@ function SuperAdminDashboard() {
       {/* Lista de colegios */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-[#9f25b8]" />
+          <Loader2 className="w-8 h-8 animate-spin text-[#ffd700]" />
         </div>
       ) : schools.length === 0 ? (
         <Card className={CARD_STYLE}>
@@ -902,7 +932,7 @@ function SuperAdminDashboard() {
                       ID: {school.colegioId}
                     </CardDescription>
                   </div>
-                  <Badge className="bg-[#9f25b8]/20 text-[#9f25b8] border-[#9f25b8]/40">
+                  <Badge className="bg-[#002366]/30 text-[#ffd700] border-[#002366]/40">
                     {school.userCount || 0} usuarios
                   </Badge>
                 </div>
@@ -947,7 +977,7 @@ function SuperAdminDashboard() {
                         {school.superAdmin ? 'Cambiar Super Admin' : 'Asignar Super Admin'}
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-[#0b0013] border-white/10 text-white">
+                    <DialogContent className="bg-[#0a0a2a]/95 border-white/10 text-white">
                       <DialogHeader>
                         <DialogTitle>
                           {school.superAdmin ? 'Cambiar Super Admin del Colegio' : 'Asignar Super Admin del Colegio'}
@@ -1071,6 +1101,7 @@ function PadreDashboard() {
     ? materias.reduce((s, m) => s + (m.promedio ?? 0), 0) / materias.length
     : 0;
   const promedioDisplay = promedioGeneral.toFixed(1);
+  const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
 
   const handleDayClick = (assignment: Assignment) => {
     setLocation(`/assignment/${assignment._id}`);
@@ -1080,28 +1111,28 @@ function PadreDashboard() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Progreso Académico</CardTitle>
-            <TrendingUp className="w-5 h-5 text-[#9f25b8] animate-float" />
+            <TrendingUp className="w-5 h-5 text-[#ffd700] animate-float" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{promedioDisplay}</div>
-            <p className="text-xs text-white/60 mt-1">Promedio general {hijos[0] ? `(${hijos[0].nombre})` : ''}</p>
+            <p className="text-xs text-white/60 mt-1">Promedio general ({nombreHijo})</p>
           </CardContent>
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/calendar')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Tareas del Hijo</CardTitle>
-            <GraduationCap className="w-5 h-5 text-[#9f25b8] animate-pulse-glow" />
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Tareas de {nombreHijo}</CardTitle>
+            <GraduationCap className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
@@ -1110,13 +1141,13 @@ function PadreDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/parent')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias</CardTitle>
-            <BookOpen className="w-5 h-5 text-[#9f25b8] animate-float" style={{ animationDelay: '0.5s' }} />
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias de {nombreHijo}</CardTitle>
+            <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{notasData?.total ?? 0}</div>
@@ -1125,12 +1156,12 @@ function PadreDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-purple badge-glow`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue badge-glow`}
           style={{ animationDelay: '0.4s' }}
           onClick={() => setLocation('/parent')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Asistencia</CardTitle>
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Asistencia de {nombreHijo}</CardTitle>
             <Trophy className="w-5 h-5 text-[#facc15] animate-float" />
           </CardHeader>
           <CardContent>
@@ -1143,8 +1174,8 @@ function PadreDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className={CARD_STYLE}>
           <CardHeader>
-            <CardTitle className="text-white">Seguimiento del Estudiante</CardTitle>
-            <CardDescription className="text-white/60">Progreso academico de su hijo/a</CardDescription>
+            <CardTitle className="text-white">Seguimiento de {nombreHijo}</CardTitle>
+            <CardDescription className="text-white/60">Progreso académico (solo visualización)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -1157,12 +1188,12 @@ function PadreDashboard() {
                   return (
                     <div
                       key={materia.nombre}
-                      className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-purple"
+                      className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue"
                       style={{ animationDelay: `${0.7 + index * 0.1}s` }}
                     >
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-white font-medium text-expressive-subtitle">{materia.nombre}</span>
-                        <span className="text-[#9f25b8] font-bold font-['Poppins']">{(score || 0).toFixed(1)}/5.0</span>
+                        <span className="text-[#ffd700] font-bold font-['Poppins']">{(score || 0).toFixed(1)}/5.0</span>
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
                         <div
@@ -1187,9 +1218,9 @@ function PadreDashboard() {
             onClick={() => setLocation('/calendar')}
           >
             <CardHeader>
-              <CardTitle className="text-white">Calendario de Tareas</CardTitle>
+              <CardTitle className="text-white">Tareas de {nombreHijo}</CardTitle>
               <CardDescription className="text-white/60">
-                Tareas de tu hijo/a este mes
+                Calendario del mes (solo visualización)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1199,13 +1230,15 @@ function PadreDashboard() {
             </CardContent>
           </Card>
         ) : (
-          <AIChatBox rol="padre" />
+          <Card className={CARD_STYLE}>
+            <CardContent className="py-12 text-center">
+              <p className="text-white/60">No hay tareas este mes para {nombreHijo}.</p>
+            </CardContent>
+          </Card>
         )}
       </div>
 
-      {assignments.length === 0 && (
-        <AIChatBox rol="padre" />
-      )}
+      <AIChatBox rol="padre" />
     </div>
   );
 }

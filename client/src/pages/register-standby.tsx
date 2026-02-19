@@ -9,18 +9,18 @@ export default function RegisterStandby() {
     <div 
       className="min-h-screen flex items-center justify-center p-6"
       style={{
-        background: 'radial-gradient(circle at 20% 20%, #25003d, #0b0013 80%)'
+        background: 'radial-gradient(circle at 20% 20%, #0a0a2a, #0a0a2a 80%)'
       }}
     >
       <div className="w-full max-w-md">
         <div className="backdrop-blur-xl bg-black/40 border border-white/10 rounded-3xl p-10 shadow-2xl text-center"
              style={{ boxShadow: '0 0 35px rgba(159, 37, 184, 0.25)' }}>
           
-          <div className="w-20 h-20 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="w-20 h-20 bg-gradient-to-br from-[#002366] to-[#1e3cff] rounded-full flex items-center justify-center mx-auto mb-6">
             <Clock className="w-10 h-10 text-white" />
           </div>
 
-          <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-[#9f25b8] to-[#c66bff] bg-clip-text text-transparent font-['Poppins']">
+          <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-[#1e3cff] to-[#00c8ff] bg-clip-text text-transparent font-['Poppins']">
             En Stand By
           </h2>
           
@@ -32,7 +32,7 @@ export default function RegisterStandby() {
 
           <Button
             onClick={() => setLocation('/')}
-            className="w-full bg-gradient-to-r from-[#9f25b8] to-[#c66bff] hover:opacity-90 text-white font-semibold"
+            className="w-full bg-gradient-to-r from-[#1e3cff] to-[#00c8ff] hover:opacity-90 text-white font-semibold"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Volver a la Página Principal

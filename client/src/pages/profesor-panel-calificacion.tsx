@@ -113,6 +113,8 @@ export default function ProfesorPanelCalificacionPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['courseAssignments', cursoId] });
       queryClient.invalidateQueries({ queryKey: ['/api/assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['assignments'] });
       queryClient.invalidateQueries({ queryKey: ['studentNotes'] });
       refetch();
       // Limpiar datos del formulario para esta submission específica
@@ -221,16 +223,16 @@ export default function ProfesorPanelCalificacionPage() {
             Panel de Calificación
           </h1>
           <p className="text-white/60">
-            Curso: <span className="text-[#9f25b8] font-semibold">{cursoId.toUpperCase()}</span>
+            Curso: <span className="text-[#00c8ff] font-semibold">{cursoId.toUpperCase()}</span>
           </p>
         </div>
 
         <Tabs defaultValue="entregadas" className="w-full">
           <TabsList className="bg-white/5 border border-white/10 mb-6">
-            <TabsTrigger value="entregadas" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="entregadas" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
               Por Calificar ({entregadasAssignments.length})
             </TabsTrigger>
-            <TabsTrigger value="calificadas" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="calificadas" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
               Calificadas ({calificadasAssignments.length})
             </TabsTrigger>
           </TabsList>
@@ -239,7 +241,7 @@ export default function ProfesorPanelCalificacionPage() {
             {entregadasAssignments.length === 0 ? (
               <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                 <CardContent className="p-12 text-center">
-                  <CheckCircle2 className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                  <CheckCircle2 className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                   <h3 className="text-xl font-semibold text-white mb-2">
                     No hay tareas pendientes de calificación
                   </h3>
@@ -286,7 +288,7 @@ export default function ProfesorPanelCalificacionPage() {
                               <div className="flex items-start justify-between mb-4">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <User className="w-4 h-4 text-[#9f25b8]" />
+                                    <User className="w-4 h-4 text-[#00c8ff]" />
                                     <h4 className="font-semibold text-white">{submission.estudianteNombre}</h4>
                                   </div>
                                   <div className="flex items-center gap-4 text-sm text-white/60 mb-3">
@@ -296,9 +298,9 @@ export default function ProfesorPanelCalificacionPage() {
                                     </span>
                                   </div>
                                   {submission.comentario && (
-                                    <div className="mb-3 p-3 bg-white/5 rounded border-l-4 border-[#9f25b8]/50">
+                                    <div className="mb-3 p-3 bg-white/5 rounded border-l-4 border-[#00c8ff]/50">
                                       <div className="flex items-center gap-2 mb-1">
-                                        <MessageSquare className="w-4 h-4 text-[#9f25b8]" />
+                                        <MessageSquare className="w-4 h-4 text-[#00c8ff]" />
                                         <span className="text-sm font-semibold text-white/80">Comentario del estudiante:</span>
                                       </div>
                                       <p className="text-sm text-white/70">{submission.comentario}</p>
@@ -316,7 +318,7 @@ export default function ProfesorPanelCalificacionPage() {
                                             rel="noopener noreferrer"
                                             className="flex items-center gap-2 p-2 bg-white/5 rounded hover:bg-white/10 transition-colors"
                                           >
-                                            <FileText className="w-4 h-4 text-[#9f25b8]" />
+                                            <FileText className="w-4 h-4 text-[#00c8ff]" />
                                             <span className="text-sm text-white">{archivo.nombre}</span>
                                           </a>
                                         ))}
@@ -359,7 +361,7 @@ export default function ProfesorPanelCalificacionPage() {
                                   <Button
                                     onClick={() => handleGrade(assignment._id, submission.estudianteId, submissionKey)}
                                     disabled={gradeMutation.isPending || !currentData.calificacion}
-                                    className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                                    className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                                   >
                                     <GraduationCap className="w-4 h-4 mr-2" />
                                     {gradeMutation.isPending ? 'Calificando...' : 'Calificar y Devolver'}
@@ -392,7 +394,7 @@ export default function ProfesorPanelCalificacionPage() {
             {calificadasAssignments.length === 0 ? (
               <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                 <CardContent className="p-12 text-center">
-                  <Star className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                  <Star className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                   <h3 className="text-xl font-semibold text-white mb-2">
                     No hay tareas calificadas
                   </h3>
@@ -423,7 +425,7 @@ export default function ProfesorPanelCalificacionPage() {
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <User className="w-4 h-4 text-[#9f25b8]" />
+                                    <User className="w-4 h-4 text-[#00c8ff]" />
                                     <h4 className="font-semibold text-white">{submission.estudianteNombre}</h4>
                                   </div>
                                   <div className="flex items-center gap-4 mb-3">
@@ -436,7 +438,7 @@ export default function ProfesorPanelCalificacionPage() {
                                     </span>
                                   </div>
                                   {submission.retroalimentacion && (
-                                    <div className="p-3 bg-white/5 rounded border-l-4 border-[#9f25b8]/50">
+                                    <div className="p-3 bg-white/5 rounded border-l-4 border-[#00c8ff]/50">
                                       <p className="text-sm text-white/70">{submission.retroalimentacion}</p>
                                     </div>
                                   )}

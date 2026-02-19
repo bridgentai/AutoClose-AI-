@@ -4,3 +4,10 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+.env
+Client/.env
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

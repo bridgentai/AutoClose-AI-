@@ -23,7 +23,7 @@ export default function AdministradorGeneralPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <Users className="w-5 h-5 text-[#9f25b8]" />
+              <Users className="w-5 h-5 text-[#1e3cff]" />
               Usuarios Totales
             </CardTitle>
           </CardHeader>
@@ -36,7 +36,7 @@ export default function AdministradorGeneralPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <Database className="w-5 h-5 text-[#9f25b8]" />
+              <Database className="w-5 h-5 text-[#1e3cff]" />
               Cursos Activos
             </CardTitle>
           </CardHeader>
@@ -49,7 +49,7 @@ export default function AdministradorGeneralPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <Shield className="w-5 h-5 text-[#9f25b8]" />
+              <Shield className="w-5 h-5 text-[#1e3cff]" />
               Auditoría
             </CardTitle>
           </CardHeader>
@@ -62,7 +62,7 @@ export default function AdministradorGeneralPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <BarChart3 className="w-5 h-5 text-[#9f25b8]" />
+              <BarChart3 className="w-5 h-5 text-[#1e3cff]" />
               Accesos
             </CardTitle>
           </CardHeader>
@@ -82,7 +82,7 @@ export default function AdministradorGeneralPage() {
           <CardContent className="space-y-3">
             <Button
               onClick={() => setLocation('/chat')}
-              className="w-full justify-start bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+              className="w-full justify-start bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
             >
               <MessageSquare className="w-4 h-4 mr-2" />
               Abrir Chat AI

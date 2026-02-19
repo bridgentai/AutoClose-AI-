@@ -215,7 +215,7 @@ export default function ProfesorAsignarTareaPage() {
                     value={formData.titulo}
                     onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
                     placeholder="Ej: Taller de Álgebra"
-                    className="border-gray-300 focus:border-[#9f25b8] focus:ring-[#9f25b8] text-gray-900"
+                    className="border-gray-300 focus:border-[#1e3cff] focus:ring-[#1e3cff] text-gray-900"
                     required
                   />
                   <p className="text-xs text-gray-500 mt-1">*Obligatorio</p>
@@ -289,7 +289,7 @@ export default function ProfesorAsignarTareaPage() {
                         setFormData({ ...formData, descripcion: instruccionesRef.current.innerText });
                       }
                     }}
-                    className="border-x border-b border-gray-300 rounded-b-lg p-4 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-[#9f25b8] focus:border-[#9f25b8] text-gray-900"
+                    className="border-x border-b border-gray-300 rounded-b-lg p-4 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-[#1e3cff] focus:border-[#1e3cff] text-gray-900"
                     style={{ whiteSpace: 'pre-wrap' }}
                     data-placeholder="Escribe las instrucciones aquí..."
                     suppressContentEditableWarning
@@ -527,7 +527,7 @@ export default function ProfesorAsignarTareaPage() {
                 <div className="mb-6">
                   <button
                     type="button"
-                    className="text-sm text-[#9f25b8] hover:text-[#6a0dad] font-medium"
+                    className="text-sm text-[#1e3cff] hover:text-[#002366] font-medium"
                   >
                     Rúbrica
                   </button>
@@ -549,7 +549,7 @@ export default function ProfesorAsignarTareaPage() {
                   <Button
                     type="submit"
                     disabled={createAssignmentMutation.isPending}
-                    className="flex-1 bg-[#9f25b8] hover:bg-[#6a0dad] text-white"
+                    className="flex-1 bg-[#1e3cff] hover:bg-[#002366] text-white"
                   >
                     {createAssignmentMutation.isPending ? 'Creando...' : 'Asignar'}
                   </Button>

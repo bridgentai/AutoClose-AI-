@@ -24,7 +24,7 @@ interface CalendarProps {
 
 // Función para generar un color único basado en un curso/grupo
 const generateColorFromId = (id: string): string => {
-  if (!id) return '#9f25b8'; // Color por defecto si no hay ID
+  if (!id) return '#1e3cff'; // Color por defecto si no hay ID
   
   // Hash simple basado en el string
   let hash = 0;
@@ -34,9 +34,9 @@ const generateColorFromId = (id: string): string => {
   
   // Paleta de colores vibrantes (incluyendo púrpuras y otros colores)
   const colors = [
-    '#9f25b8', // Purple Core
-    '#6a0dad', // Purple Deep
-    '#c66bff', // Purple Light
+    '#1e3cff', // Purple Core
+    '#002366', // Purple Deep
+    '#00c8ff', // Purple Light
     '#3b82f6', // Blue
     '#10b981', // Green
     '#f59e0b', // Amber
@@ -151,12 +151,12 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
       // Si solo hay un curso, usar el color del curso
       const isMultipleCourses = coursesCount > 1;
       const singleCourseColor = coursesCount === 1 
-        ? (courseColorsMap.get(Array.from(assignmentsByCourse.keys())[0]) || '#9f25b8')
+        ? (courseColorsMap.get(Array.from(assignmentsByCourse.keys())[0]) || '#1e3cff')
         : null;
 
       const backgroundColor = isMultipleCourses 
         ? '#6b7280' // Gris neutro para múltiples cursos
-        : (singleCourseColor || '#9f25b8');
+        : (singleCourseColor || '#1e3cff');
 
       calendarDays.push(
         <HoverCard key={day} openDelay={200}>
@@ -184,7 +184,7 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
             </button>
           </HoverCardTrigger>
           <HoverCardContent 
-            className="w-80 bg-black/95 border-[#9f25b8]/30 backdrop-blur-lg max-h-96 overflow-y-auto"
+            className="w-80 bg-black/95 border-[#1e3cff]/30 backdrop-blur-lg max-h-96 overflow-y-auto"
             data-testid={`hover-card-day-${day}`}
           >
             <div className="space-y-3">
@@ -309,7 +309,7 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
           </p>
           <div className="flex flex-wrap gap-3">
             {uniqueCourses.map((course) => {
-              const color = courseColorsMap.get(course) || '#9f25b8';
+              const color = courseColorsMap.get(course) || '#1e3cff';
               return (
                 <div key={course} className="flex items-center gap-2">
                   <div 
@@ -350,7 +350,7 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
       {/* Leyenda básica */}
       <div className="mt-6 flex items-center gap-4 text-sm">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-[#9f25b8] border-2 border-[#9f25b8]/30" />
+          <div className="w-6 h-6 rounded-full bg-[#1e3cff] border-2 border-[#1e3cff]/30" />
           <span className="text-white/70">Con tareas (un curso)</span>
         </div>
         {uniqueCourses.length > 1 && (

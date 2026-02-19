@@ -1,7 +1,6 @@
 import { useAuth } from '@/lib/authContext';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery } from '@tanstack/react-query';
@@ -19,29 +18,52 @@ interface Assignment {
 export default function CalendarPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const isPadre = user?.rol === 'padre';
 
-  // Query para obtener tareas del estudiante basado en su grupo
-  const { data: assignments = [] } = useQuery<Assignment[]>({
+  const { data: hijos = [] } = useQuery<{ _id: string; nombre: string; curso: string }[]>({
+    queryKey: ['/api/users/me/hijos'],
+    queryFn: () => apiRequest('GET', '/api/users/me/hijos'),
+    enabled: !!user?.id && isPadre,
+  });
+  const primerHijoId = hijos[0]?._id;
+  const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
+
+  const { data: assignmentsStudent = [] } = useQuery<Assignment[]>({
     queryKey: ['studentAssignments', user?.curso],
     queryFn: () => apiRequest('GET', '/api/assignments/student'),
-    enabled: !!user?.id && !!user?.curso,
+    enabled: !!user?.id && !!user?.curso && !isPadre,
     staleTime: 0,
   });
 
+  const { data: assignmentsHijo = [] } = useQuery<Assignment[]>({
+    queryKey: ['parentAssignments', primerHijoId],
+    queryFn: () => apiRequest('GET', `/api/assignments/hijo/${primerHijoId}`),
+    enabled: !!user?.id && isPadre && !!primerHijoId,
+    staleTime: 0,
+  });
+
+  const assignments = isPadre ? assignmentsHijo : assignmentsStudent;
+
   const handleDayClick = (assignment: Assignment) => {
-    // Navegar a la página de detalle de la tarea
     setLocation(`/assignment/${assignment._id}`);
   };
+
+  const pageTitle = isPadre
+    ? `Tareas de ${nombreHijo}`
+    : `Mis Tareas - Curso ${user?.curso || 'No asignado'}`;
+  const pageSubtitle = isPadre
+    ? 'Visualiza las tareas de tu hijo/a (solo visualización)'
+    : 'Visualiza todas las tareas asignadas a tu curso';
 
   return (
     <div className="flex-1 overflow-auto p-8">
             <div className="max-w-5xl mx-auto">
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-                  Mis Tareas - Curso {user?.curso || 'No asignado'}
+                  {pageTitle}
                 </h2>
                 <p className="text-white/60">
-                  Visualiza todas las tareas asignadas a tu curso
+                  {pageSubtitle}
                 </p>
               </div>
 
@@ -49,7 +71,7 @@ export default function CalendarPage() {
               <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-white">
-                    <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                    <CalendarIcon className="w-5 h-5 text-[#00c8ff]" />
                     Calendario del Mes
                   </CardTitle>
                   <CardDescription className="text-white/60">
@@ -90,7 +112,7 @@ export default function CalendarPage() {
                                 </p>
                               </div>
                               <div className="text-right ml-4">
-                                <p className="text-sm font-semibold text-[#9f25b8]">
+                                <p className="text-sm font-semibold text-[#00c8ff]">
                                   {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO', { 
                                     day: 'numeric',
                                     month: 'short'
@@ -114,12 +136,14 @@ export default function CalendarPage() {
               {assignments.length === 0 && (
                 <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
                   <CardContent className="py-12 text-center">
-                    <CalendarIcon className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                    <CalendarIcon className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-white mb-2">
                       No hay tareas este mes
                     </h3>
                     <p className="text-white/60">
-                      Tu curso {user?.curso} no tiene tareas asignadas para este mes.
+                      {isPadre
+                        ? `${nombreHijo} no tiene tareas asignadas para este mes.`
+                        : `Tu curso ${user?.curso} no tiene tareas asignadas para este mes.`}
                     </p>
                   </CardContent>
                 </Card>

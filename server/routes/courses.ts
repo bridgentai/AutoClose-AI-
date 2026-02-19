@@ -1,9 +1,10 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { Course, User } from '../models';
 import { Group } from '../models/Group';
-import { protect, AuthRequest } from '../middleware/auth';
+import { protect, AuthRequest, checkAdminColegioOnly } from '../middleware/auth';
 import { Types } from 'mongoose';
 import { normalizeIdForQuery } from '../utils/idGenerator';
+import { logAdminAction } from '../services/auditLogger';
 
 const router = express.Router();
 
@@ -73,21 +74,12 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    // VALIDACIÓN ESTRICTA: Solo estudiantes pueden acceder a esta ruta
-    if (user.rol !== 'estudiante') {
+    if (user.rol !== 'estudiante' && user.rol !== 'padre') {
       return res.status(403).json({ 
-        message: 'Solo los estudiantes pueden acceder a los detalles de materias desde esta ruta' 
+        message: 'Solo estudiantes y padres pueden acceder a los detalles de materias desde esta ruta' 
       });
     }
 
-    // VALIDACIÓN: El estudiante debe tener un curso asignado
-    if (!user.curso) {
-      return res.status(403).json({ 
-        message: 'No tienes un curso asignado. Contacta al administrador.' 
-      });
-    }
-
-    // Buscar la materia - optimizado con .lean() y campos específicos
     const course = await Course.findById(id)
       .populate('profesorIds', 'nombre email')
       .select('nombre descripcion colorAcento icono cursos profesorIds colegioId')
@@ -97,27 +89,46 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Materia no encontrada' });
     }
 
-    // Verificar que pertenezca al mismo colegio
     if (course.colegioId !== user.colegioId) {
       return res.status(403).json({ 
         message: 'No tienes acceso a esta materia. La materia pertenece a otro colegio.' 
       });
     }
 
-    // VALIDACIÓN CRÍTICA: Verificar que la materia se imparta en el curso del estudiante
     if (!course.cursos || !Array.isArray(course.cursos) || course.cursos.length === 0) {
       return res.status(403).json({ 
         message: 'Esta materia no está asignada a ningún curso.' 
       });
     }
 
-    if (!course.cursos.includes(user.curso)) {
+    let cursoPermitido = false;
+    if (user.rol === 'estudiante') {
+      if (!user.curso) {
+        return res.status(403).json({ message: 'No tienes un curso asignado. Contacta al administrador.' });
+      }
+      cursoPermitido = course.cursos.includes(user.curso);
+    } else if (user.rol === 'padre') {
+      const { Vinculacion } = await import('../models');
+      const vinculaciones = await Vinculacion.find({
+        padreId: req.userId,
+        colegioId: user.colegioId,
+      }).populate('estudianteId', 'curso').lean();
+      const cursosHijos = (vinculaciones as any[])
+        .map((v) => v.estudianteId?.curso)
+        .filter(Boolean)
+        .map((c: string) => (c || '').toUpperCase().trim());
+      cursoPermitido = course.cursos.some((c: string) => cursosHijos.includes((c || '').toUpperCase().trim()));
+    }
+    if (!cursoPermitido) {
       return res.status(403).json({ 
-        message: `No tienes acceso a esta materia. Esta materia se imparte en: ${course.cursos.join(', ')}. Tu curso es: ${user.curso}.` 
+        message: 'No tienes acceso a esta materia.' 
       });
     }
 
-    // Formatear respuesta
+    const cursoAsignado = user.rol === 'estudiante'
+      ? user.curso
+      : (user.rol === 'padre' && course.cursos && course.cursos.length > 0 ? course.cursos[0] : undefined);
+
     const response = {
       _id: course._id,
       nombre: course.nombre,
@@ -125,7 +136,7 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
       colorAcento: course.colorAcento,
       icono: course.icono,
       cursos: course.cursos,
-      cursoAsignado: user.curso,
+      cursoAsignado,
       profesor: course.profesorIds && course.profesorIds.length > 0 
         ? {
             _id: (course.profesorIds[0] as any)._id,
@@ -241,7 +252,7 @@ res.status(500).json({ message: 'Error en el servidor al crear el curso.' });
 // Flujo admin: la materia viene del profesor; se crea/actualiza Course con nombre = materia del profesor.
 // Body: { professorId: string, groupNames: string[] } (ej. groupNames: ["11A", "11B"])
 // =========================================================================
-router.post('/assign-professor-to-groups', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
+router.post('/assign-professor-to-groups', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
   try {
     const colegioId = req.user?.colegioId;
     if (!colegioId) {
@@ -297,6 +308,16 @@ router.post('/assign-professor-to-groups', protect, checkIsDirectivoOrAdminColeg
       });
     }
 
+    await logAdminAction({
+      userId: normalizeIdForQuery(req.userId || ''),
+      role: req.user?.rol || 'admin-general-colegio',
+      action: 'assign_professor_to_groups',
+      entityType: 'course',
+      entityId: course._id,
+      colegioId,
+      requestData: { professorId, groupNames: normalizedGroups, materiaNombre },
+    });
+
     return res.status(200).json({
       message: `Profesor asignado a los cursos ${normalizedGroups.join(', ')} para la materia ${materiaNombre}.`,
       course: await Course.findById(course._id).populate('profesorIds', 'nombre email').lean(),
@@ -310,7 +331,7 @@ router.post('/assign-professor-to-groups', protect, checkIsDirectivoOrAdminColeg
 // =========================================================================
 // RUTA ACTUALIZADA: PUT /api/courses/assign-professor (NUEVA RUTA DE ASIGNACIÓN)
 // Función: Asigna un profesor a un curso (materia) existente por ID. Solo para Directivos.
-router.put('/assign-professor', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
+router.put('/assign-professor', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
 try {
 const { courseId, professorId } = req.body;
 
@@ -342,7 +363,17 @@ await Course.findByIdAndUpdate(courseId, { $pull: { profesorIds: professorId } }
 return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
 }
 
-res.status(200).json({ 
+await logAdminAction({
+  userId: normalizeIdForQuery(req.userId || ''),
+  role: req.user?.rol || 'admin-general-colegio',
+  action: 'assign_professor',
+  entityType: 'course',
+  entityId: course._id,
+  colegioId: req.user?.colegioId || course.colegioId,
+  requestData: { courseId, professorId, courseName: course.nombre },
+});
+
+res.status(200).json({ 
 message: `Profesor ${professor.nombre} asignado correctamente al curso ${course.nombre}.`,
 course,
 professor
@@ -357,7 +388,7 @@ res.status(500).json({ message: 'Error interno del servidor al procesar la asign
 // =========================================================================
 // RUTA ACTUALIZADA: PUT /api/courses/enroll-students (NUEVA RUTA DE INSCRIPCIÓN)
 // Función: Inscribe una lista de estudiantes a un curso y viceversa. Solo para Directivos.
-router.put('/enroll-students', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
+router.put('/enroll-students', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
 try {
 const { courseId, studentIds } = req.body; // studentIds debe ser un array
 
@@ -383,7 +414,17 @@ await User.updateMany(
 { $addToSet: { materias: course.nombre } } // Se añade el NOMBRE del curso
 );
 
-res.status(200).json({ 
+await logAdminAction({
+  userId: normalizeIdForQuery(req.userId || ''),
+  role: req.user?.rol || 'admin-general-colegio',
+  action: 'enroll_students',
+  entityType: 'course',
+  entityId: course._id,
+  colegioId: req.user?.colegioId || course.colegioId,
+  requestData: { courseId, studentIds, courseName: course.nombre },
+});
+
+res.status(200).json({ 
 message: `Se inscribieron ${studentIds.length} estudiantes al curso ${course.nombre}.`,
 course
 });

@@ -1,0 +1,287 @@
+{
+  "tipo": "RESUMEN_PRUEBA_PILOTO_CURSO_OPERATIVO",
+  "fechaInicio": "2026-02-13T04:11:01.593Z",
+  "tests": [
+    {
+      "test": "Crear admin y grupo Noveno A",
+      "numero": 1,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "Registro de admin en API",
+          "estado": "ok",
+          "detalle": "POST /api/auth/register",
+          "timestamp": "2026-02-13T04:11:01.627Z"
+        },
+        {
+          "paso": "Admin creado",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-admin@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:11:03.520Z"
+        },
+        {
+          "paso": "Login admin vía API",
+          "estado": "ok",
+          "detalle": "Obteniendo token",
+          "timestamp": "2026-02-13T04:11:03.520Z"
+        },
+        {
+          "paso": "Listar grupos existentes",
+          "estado": "ok",
+          "detalle": "GET /api/groups/all",
+          "timestamp": "2026-02-13T04:11:04.104Z"
+        },
+        {
+          "paso": "Grupo Noveno A ya existía",
+          "estado": "ok",
+          "detalle": "ID: 698d1d76b6196dcf681a081a",
+          "timestamp": "2026-02-13T04:11:04.462Z"
+        }
+      ],
+      "duracionMs": 2836
+    },
+    {
+      "test": "Crear 5 profesores y asignar al grupo",
+      "numero": 2,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "Crear profesor Matemáticas",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof0@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:11:04.484Z"
+        },
+        {
+          "paso": "Crear profesor Español",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof1@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:11:05.593Z"
+        },
+        {
+          "paso": "Crear profesor Ciencias",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof2@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:11:06.713Z"
+        },
+        {
+          "paso": "Crear profesor Sociales",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof3@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:11:07.823Z"
+        },
+        {
+          "paso": "Crear profesor Inglés",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof4@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:11:08.949Z"
+        },
+        {
+          "paso": "5 profesores creados",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof0@colegio-piloto.local, piloto-curso-1770955861593-prof1@colegio-piloto.local, piloto-curso-1770955861593-prof2@colegio-piloto.local, piloto-curso-1770955861593-prof3@colegio-piloto.local, piloto-curso-1770955861593-prof4@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:11:10.443Z"
+        },
+        {
+          "paso": "Asignar Matemáticas al grupo",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:11:10.444Z"
+        },
+        {
+          "paso": "Asignar Español al grupo",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:11:13.103Z"
+        },
+        {
+          "paso": "Asignar Ciencias al grupo",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:11:14.501Z"
+        },
+        {
+          "paso": "Asignar Sociales al grupo",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:11:15.955Z"
+        },
+        {
+          "paso": "Asignar Inglés al grupo",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:11:17.359Z"
+        },
+        {
+          "paso": "Profesores asignados al grupo",
+          "estado": "ok",
+          "detalle": "5 cursos",
+          "timestamp": "2026-02-13T04:11:18.806Z"
+        }
+      ],
+      "duracionMs": 14322
+    },
+    {
+      "test": "Crear 25 estudiantes y asignar al grupo",
+      "numero": 3,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "Estudiantes 0-5/25 creados y asignados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:11:32.321Z"
+        },
+        {
+          "paso": "Estudiantes 5-10/25 creados y asignados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:11:46.075Z"
+        },
+        {
+          "paso": "Estudiantes 10-15/25 creados y asignados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:12:00.260Z"
+        },
+        {
+          "paso": "Estudiantes 15-20/25 creados y asignados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:12:14.471Z"
+        },
+        {
+          "paso": "Estudiantes 20-25/25 creados y asignados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:12:31.616Z"
+        },
+        {
+          "paso": "25 estudiantes creados y asignados al grupo Noveno A",
+          "estado": "ok",
+          "detalle": "25 registrados",
+          "timestamp": "2026-02-13T04:12:31.616Z"
+        }
+      ],
+      "duracionMs": 72798
+    },
+    {
+      "test": "Crear padres, vincular, confirmar y activar",
+      "numero": 4,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "Creando 50 padres (2 por estudiante) y vinculando",
+          "estado": "ok",
+          "detalle": "~150 llamadas API",
+          "timestamp": "2026-02-13T04:12:31.642Z"
+        },
+        {
+          "paso": "50 padres creados y vinculados",
+          "estado": "ok",
+          "detalle": "50 padres",
+          "timestamp": "2026-02-13T04:15:21.196Z"
+        },
+        {
+          "paso": "Confirmar vinculaciones por estudiante",
+          "estado": "ok",
+          "detalle": "25 estudiantes",
+          "timestamp": "2026-02-13T04:15:21.196Z"
+        },
+        {
+          "paso": "Activar cuentas de estudiantes y padres",
+          "estado": "ok",
+          "detalle": "25 estudiantes",
+          "timestamp": "2026-02-13T04:16:13.108Z"
+        },
+        {
+          "paso": "50 padres vinculados y cuentas activadas",
+          "estado": "ok",
+          "detalle": "Proceso completo",
+          "timestamp": "2026-02-13T04:17:06.401Z"
+        }
+      ],
+      "duracionMs": 274760
+    },
+    {
+      "test": "Crear 6 tareas",
+      "numero": 5,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "Verificar profesores y cursos",
+          "estado": "ok",
+          "detalle": "5 profesores",
+          "timestamp": "2026-02-13T04:17:06.422Z"
+        },
+        {
+          "paso": "Login como profesor",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof0@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:17:06.422Z"
+        },
+        {
+          "paso": "Crear tarea 1/6",
+          "estado": "ok",
+          "detalle": "POST /api/assignments",
+          "timestamp": "2026-02-13T04:17:07.018Z"
+        },
+        {
+          "paso": "Crear tarea 2/6",
+          "estado": "ok",
+          "detalle": "POST /api/assignments",
+          "timestamp": "2026-02-13T04:17:10.475Z"
+        },
+        {
+          "paso": "Crear tarea 3/6",
+          "estado": "ok",
+          "detalle": "POST /api/assignments",
+          "timestamp": "2026-02-13T04:17:13.232Z"
+        },
+        {
+          "paso": "Crear tarea 4/6",
+          "estado": "ok",
+          "detalle": "POST /api/assignments",
+          "timestamp": "2026-02-13T04:17:16.197Z"
+        },
+        {
+          "paso": "Crear tarea 5/6",
+          "estado": "ok",
+          "detalle": "POST /api/assignments",
+          "timestamp": "2026-02-13T04:17:18.343Z"
+        },
+        {
+          "paso": "Crear tarea 6/6",
+          "estado": "ok",
+          "detalle": "POST /api/assignments",
+          "timestamp": "2026-02-13T04:17:20.586Z"
+        },
+        {
+          "paso": "6 tareas creadas",
+          "estado": "ok",
+          "detalle": "Tarea 1 - Matemáticas; Tarea 2 - Matemáticas; Tarea 3 - Matemáticas; Tarea 4 - Matemáticas; Tarea 5 - Matemáticas; Tarea 6 - Matemáticas",
+          "timestamp": "2026-02-13T04:17:22.713Z"
+        }
+      ],
+      "duracionMs": 16292
+    },
+    {
+      "test": "Validación UI: tareas visibles en profesor, estudiante, padre",
+      "numero": 6,
+      "estado": "fail",
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoContainText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: locator('body')\nTimeout: 15000ms\nExpected pattern: \u001b[32m/Calendario del Mes|Calendario General|tarea|calendario/i\u001b[39m\nReceived string:  \u001b[31m\"\u001b[39m\n\u001b[31m    Aceptación de términos y privacidadPara continuar usando la plataforma debe aceptar los términos y condiciones y la política de privacidad.He leído y acepto los  Términos y CondicionesHe leído y acepto la  Política de PrivacidadAceptar y continuar········\u001b[39m\n\u001b[31m\"\u001b[39m\n\nCall log:\n\u001b[2m  - Expect \"toContainText\" with timeout 15000ms\u001b[22m\n\u001b[2m  - waiting for locator('body')\u001b[22m\n\u001b[2m    19 × locator resolved to <body>…</body>\u001b[22m\n\u001b[2m       - unexpected value \"\u001b[22m\n\u001b[2m    Aceptación de términos y privacidadPara continuar usando la plataforma debe aceptar los términos y condiciones y la política de privacidad.He leído y acepto los  Términos y CondicionesHe leído y acepto la  Política de PrivacidadAceptar y continuar\u001b[22m\n\u001b[2m    \u001b[22m\n\u001b[2m  \u001b[22m\n\u001b[2m\"\u001b[22m\n",
+      "pasos": [
+        {
+          "paso": "Login profesor vía UI",
+          "estado": "ok",
+          "detalle": "piloto-curso-1770955861593-prof0@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:17:23.254Z"
+        },
+        {
+          "paso": "Navegar a /teacher-calendar",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:17:24.257Z"
+        },
+        {
+          "paso": "Esperar contenido de página",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:17:25.327Z"
+        }
+      ],
+      "duracionMs": 17079
+    }
+  ],
+  "erroresEncontrados": [],
+  "fechaFin": "2026-02-13T04:17:40.498Z",
+  "duracionTotalSeg": 399,
+  "resumenArchivo": "/Users/alejosua/Documents/AutoClose-AI-06/docs/prueba-curso-completo-2/RESUMEN_PRUEBA_PILOTO_2026-02-13.md"
+}

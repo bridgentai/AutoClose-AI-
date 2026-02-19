@@ -72,7 +72,7 @@ export default function AsistenciaProfesor() {
       <div className="mb-6">
         <NavBackButton to="/profesor/academia" label="Academia" />
         <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4 flex items-center gap-2">
-          <ClipboardList className="w-8 h-8 text-[#9f25b8]" />
+          <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
           Registrar Asistencia
         </h1>
         <p className="text-white/60">Marca la asistencia por curso y fecha</p>
@@ -81,7 +81,7 @@ export default function AsistenciaProfesor() {
       <Card className={`${CARD_STYLE} mb-6`}>
         <CardHeader>
           <CardTitle className="text-white font-['Poppins'] flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-[#9f25b8]" />
+            <BookOpen className="w-5 h-5 text-[#00c8ff]" />
             Curso y fecha
           </CardTitle>
           <CardDescription className="text-white/60">Selecciona la materia y el día a registrar</CardDescription>
@@ -92,7 +92,7 @@ export default function AsistenciaProfesor() {
             <select
               value={cursoId}
               onChange={(e) => setCursoId(e.target.value)}
-              className="w-full rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#9f25b8]"
+              className="w-full rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#00c8ff]"
             >
               <option value="">Seleccionar materia</option>
               {cursos.map((c) => (
@@ -109,7 +109,7 @@ export default function AsistenciaProfesor() {
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#9f25b8]"
+              className="rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#00c8ff]"
             />
           </div>
         </CardContent>
@@ -162,7 +162,7 @@ export default function AsistenciaProfesor() {
                 <Button
                   onClick={handleGuardar}
                   disabled={bulkMutation.isPending}
-                  className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                  className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                 >
                   {bulkMutation.isPending ? 'Guardando...' : 'Guardar asistencia'}
                 </Button>

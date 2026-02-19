@@ -84,7 +84,7 @@ export default function BandejaDeEntrada() {
           <Card className={`${CARD_STYLE} p-0 overflow-hidden h-full flex flex-col`}>
             <div className="p-4 border-b border-white/10">
               <Button
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 min-h-[44px]"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 min-h-[44px]"
                 onClick={() => setLocation('/comunicacion/redactar')}
               >
                 <Send className="w-4 h-4 mr-2" />
@@ -103,7 +103,7 @@ export default function BandejaDeEntrada() {
                   key={c._id}
                   onClick={() => setSelectedId(c._id)}
                   className={`p-3 border-b border-white/10 cursor-pointer transition-colors min-h-[52px] flex flex-col justify-center ${
-                    selectedId === c._id ? 'bg-white/10 border-l-4 border-[#9f25b8]' : 'hover:bg-white/5'
+                    selectedId === c._id ? 'bg-white/10 border-l-4 border-[#1e3cff]' : 'hover:bg-white/5'
                   }`}
                   role="button"
                   tabIndex={0}
@@ -141,7 +141,7 @@ export default function BandejaDeEntrada() {
                     return (
                     <div
                       key={m._id}
-                      className={`p-3 rounded-lg ${isMine ? 'bg-[#9f25b8]/20 ml-8 mr-0' : 'bg-white/5 ml-0 mr-8'}`}
+                      className={`p-3 rounded-lg ${isMine ? 'bg-[#1e3cff]/20 ml-8 mr-0' : 'bg-white/5 ml-0 mr-8'}`}
                     >
                       <p className="text-white/80 text-sm">{(m.remitenteId as { nombre?: string })?.nombre}</p>
                       <p className="text-white mt-1">{m.texto}</p>
@@ -159,7 +159,7 @@ export default function BandejaDeEntrada() {
                   <Button
                     onClick={() => sendMutation.mutate(replyText)}
                     disabled={!replyText.trim() || sendMutation.isPending}
-                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] self-end"
+                    className="bg-gradient-to-r from-[#002366] to-[#1e3cff] self-end"
                   >
                     <Send className="w-4 h-4" />
                   </Button>
@@ -167,7 +167,7 @@ export default function BandejaDeEntrada() {
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-white/50 py-16">
-                <Inbox className="w-12 h-12 text-[#9f25b8] mb-4" />
+                <Inbox className="w-12 h-12 text-[#1e3cff] mb-4" />
                 <p className="text-lg">Selecciona una conversación para leer y responder.</p>
               </div>
             )}

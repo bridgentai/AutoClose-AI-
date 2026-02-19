@@ -69,6 +69,7 @@ export default function AssignmentDetailPage() {
   const [gradeData, setGradeData] = useState({ calificacion: '', retroalimentacion: '', logro: '' });
 
   const isProfesor = user?.rol === 'profesor';
+  const isPadre = user?.rol === 'padre';
 
   const { data: assignment, isLoading, error, refetch } = useQuery<Assignment>({
     queryKey: ['/api/assignments', params.id],
@@ -187,9 +188,20 @@ export default function AssignmentDetailPage() {
     });
   };
 
+  const { data: hijos = [] } = useQuery<{ _id: string; nombre: string }[]>({
+    queryKey: ['/api/users/me/hijos'],
+    queryFn: () => apiRequest('GET', '/api/users/me/hijos'),
+    enabled: !!user?.id && isPadre,
+  });
+  const primerHijoId = hijos[0]?._id;
+  const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
+
   // Usar submissions si existe, sino usar entregas (legacy)
   const submissions = assignment?.submissions || assignment?.entregas || [];
   const mySubmission = submissions.find((e: Submission) => e.estudianteId === user?.id);
+  const hijoSubmission = isPadre && primerHijoId
+    ? submissions.find((e: Submission) => e.estudianteId === primerHijoId)
+    : null;
   const isPastDue = assignment ? new Date(assignment.fechaEntrega) < new Date() : false;
   const estado = assignment?.estado || (mySubmission 
     ? (mySubmission.calificacion !== undefined ? 'calificada' : 'entregada')
@@ -256,8 +268,11 @@ export default function AssignmentDetailPage() {
   return (
     <div className="flex-1 overflow-auto p-8">
       <div className="max-w-4xl mx-auto">
-        {!isProfesor && (
+        {!isProfesor && !isPadre && (
           <NavBackButton to="/mi-aprendizaje/tareas" label="Tareas" />
+        )}
+        {isPadre && (
+          <NavBackButton to="/calendar" label="Calendario" />
         )}
         {isProfesor && (
           <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
@@ -265,8 +280,8 @@ export default function AssignmentDetailPage() {
               {isProfesor ? (
                 <Tabs defaultValue="info" className="w-full">
                   <TabsList className="bg-white/5 border border-white/10 mb-6">
-                    <TabsTrigger value="info" className="data-[state=active]:bg-[#9f25b8]">Información</TabsTrigger>
-                    <TabsTrigger value="entregas" className="data-[state=active]:bg-[#9f25b8]">
+                    <TabsTrigger value="info" className="data-[state=active]:bg-[#1e3cff]">Información</TabsTrigger>
+                    <TabsTrigger value="entregas" className="data-[state=active]:bg-[#1e3cff]">
                       Entregas ({submissions.length})
                     </TabsTrigger>
                   </TabsList>
@@ -287,7 +302,7 @@ export default function AssignmentDetailPage() {
                               <CardTitle className="text-2xl font-bold text-white mb-2">{assignment.titulo}</CardTitle>
                             )}
                             <div className="flex items-center gap-4 text-white/60">
-                              <Badge className="bg-[#9f25b8]">{assignment.curso}</Badge>
+                              <Badge className="bg-[#1e3cff]">{assignment.curso}</Badge>
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
                                 {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO')}
@@ -303,7 +318,7 @@ export default function AssignmentDetailPage() {
                               <Button
                                 variant="outline"
                                 onClick={() => setLocation(`/profesor/academia/tareas/editor/${assignment._id}`)}
-                                className="border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                                className="border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
                               >
                                 <Maximize2 className="w-4 h-4 mr-2" />
                                 {assignment.contenidoDocumento ? 'Editar Documento' : 'Extender Documento'}
@@ -330,7 +345,7 @@ export default function AssignmentDetailPage() {
                               <Button
                                 onClick={handleSaveEdit}
                                 disabled={updateAssignmentMutation.isPending}
-                                className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]"
+                                className="bg-gradient-to-r from-[#002366] to-[#1e3cff]"
                                 data-testid="button-save"
                               >
                                 <Check className="w-4 h-4 mr-2" />
@@ -398,7 +413,7 @@ export default function AssignmentDetailPage() {
                             <div className="space-y-3">
                               {editAdjuntos.map((adj, index) => (
                                 <div key={index} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-                                  {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#9f25b8]" /> : <FileText className="w-4 h-4 text-[#9f25b8]" />}
+                                  {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#1e3cff]" /> : <FileText className="w-4 h-4 text-[#1e3cff]" />}
                                   <span className="flex-1 text-sm text-white truncate">{adj.nombre}</span>
                                   <Button
                                     type="button"
@@ -419,7 +434,7 @@ export default function AssignmentDetailPage() {
                                   <SelectTrigger className="w-28 bg-white/5 border-white/10 text-white">
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent className="bg-[#1a001c] border-white/10">
+                                  <SelectContent className="bg-[#0a0a2a] border-white/10">
                                     <SelectItem value="link" className="text-white">Link</SelectItem>
                                     <SelectItem value="pdf" className="text-white">PDF</SelectItem>
                                     <SelectItem value="documento" className="text-white">Doc</SelectItem>
@@ -459,7 +474,7 @@ export default function AssignmentDetailPage() {
                                     className="flex items-center gap-2 p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
                                     data-testid={`adjunto-${index}`}
                                   >
-                                    {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#9f25b8]" /> : <FileText className="w-4 h-4 text-[#9f25b8]" />}
+                                    {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#1e3cff]" /> : <FileText className="w-4 h-4 text-[#1e3cff]" />}
                                     <span className="text-white">{adj.nombre}</span>
                                   </a>
                                 ))}
@@ -477,7 +492,7 @@ export default function AssignmentDetailPage() {
                     <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                       <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-white">
-                          <Users className="w-5 h-5 text-[#9f25b8]" />
+                          <Users className="w-5 h-5 text-[#1e3cff]" />
                           Entregas de Estudiantes
                         </CardTitle>
                         <CardDescription className="text-white/60">
@@ -504,7 +519,7 @@ export default function AssignmentDetailPage() {
                                       <Button
                                         size="sm"
                                         onClick={() => handleGrade(submission.estudianteId)}
-                                        className="bg-[#9f25b8] hover:bg-[#6a0dad]"
+                                        className="bg-[#1e3cff] hover:bg-[#002366]"
                                       >
                                         Calificar
                                       </Button>
@@ -524,7 +539,7 @@ export default function AssignmentDetailPage() {
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-2 p-2 bg-white/5 rounded hover:bg-white/10 transition-colors"
                                       >
-                                        <FileText className="w-4 h-4 text-[#9f25b8]" />
+                                        <FileText className="w-4 h-4 text-[#1e3cff]" />
                                         <span className="text-sm text-white">{archivo.nombre}</span>
                                       </a>
                                     ))}
@@ -537,7 +552,7 @@ export default function AssignmentDetailPage() {
                                   </div>
                                 )}
                                 {gradingStudent === submission.estudianteId && (
-                                  <form onSubmit={handleSubmitGrade} className="mt-4 p-4 bg-white/5 rounded-lg border border-[#9f25b8]/30">
+                                  <form onSubmit={handleSubmitGrade} className="mt-4 p-4 bg-white/5 rounded-lg border border-[#1e3cff]/30">
                                     <div className="space-y-3">
                                       <div>
                                         <Label className="text-white/60 mb-1 block">Calificación (0-100) *</Label>
@@ -573,7 +588,7 @@ export default function AssignmentDetailPage() {
                                         <Button
                                           type="submit"
                                           disabled={gradeAssignmentMutation.isPending}
-                                          className="bg-[#9f25b8] hover:bg-[#6a0dad]"
+                                          className="bg-[#1e3cff] hover:bg-[#002366]"
                                         >
                                           {gradeAssignmentMutation.isPending ? 'Calificando...' : 'Calificar y Devolver'}
                                         </Button>
@@ -609,7 +624,7 @@ export default function AssignmentDetailPage() {
                     <CardHeader>
                       <CardTitle className="text-2xl font-bold text-white mb-2">{assignment.titulo}</CardTitle>
                       <div className="flex flex-wrap items-center gap-4 text-white/60">
-                        <Badge className="bg-[#9f25b8]">{assignment.curso}</Badge>
+                        <Badge className="bg-[#1e3cff]">{assignment.curso}</Badge>
                         <span className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
                           {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO')}
@@ -638,7 +653,7 @@ export default function AssignmentDetailPage() {
                     <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                       <CardHeader>
                         <CardTitle className="text-white flex items-center gap-2">
-                          <FileText className="w-5 h-5 text-[#9f25b8]" />
+                          <FileText className="w-5 h-5 text-[#1e3cff]" />
                           Instrucciones y Contenido
                         </CardTitle>
                       </CardHeader>
@@ -674,7 +689,7 @@ export default function AssignmentDetailPage() {
                                 className="flex items-center gap-2 p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
                                 data-testid={`adjunto-${index}`}
                               >
-                                {adjunto.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#9f25b8]" /> : <FileText className="w-4 h-4 text-[#9f25b8]" />}
+                                {adjunto.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#1e3cff]" /> : <FileText className="w-4 h-4 text-[#1e3cff]" />}
                                 <span className="text-white">{adjunto.nombre}</span>
                               </a>
                             );
@@ -687,17 +702,65 @@ export default function AssignmentDetailPage() {
                   <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                     <CardHeader>
                       <CardTitle className="text-white">
-                        {mySubmission ? 'Tu Entrega' : 'Enviar Entrega'}
+                        {isPadre
+                          ? `Entrega de ${nombreHijo} (solo visualización)`
+                          : mySubmission ? 'Tu Entrega' : 'Enviar Entrega'}
                       </CardTitle>
                       <CardDescription className="text-white/60">
-                        {mySubmission 
-                          ? `Entregaste el ${new Date(mySubmission.fechaEntrega).toLocaleString('es-CO')}`
-                          : 'Adjunta tus archivos y envía tu trabajo'
-                        }
+                        {isPadre
+                          ? hijoSubmission
+                            ? `Entregó el ${new Date(hijoSubmission.fechaEntrega).toLocaleString('es-CO')}`
+                            : 'Tu hijo/a aún no ha entregado esta tarea.'
+                          : mySubmission
+                            ? `Entregaste el ${new Date(mySubmission.fechaEntrega).toLocaleString('es-CO')}`
+                            : 'Adjunta tus archivos y envía tu trabajo'}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {mySubmission ? (
+                      {isPadre ? (
+                        hijoSubmission ? (
+                          <div className="space-y-4">
+                            {hijoSubmission.comentario && (
+                              <div>
+                                <Label className="text-white/60 mb-1 block">Comentario:</Label>
+                                <p className="text-white">{hijoSubmission.comentario}</p>
+                              </div>
+                            )}
+                            {hijoSubmission.archivos && hijoSubmission.archivos.length > 0 && (
+                              <div>
+                                <Label className="text-white/60 mb-2 block">Archivos entregados:</Label>
+                                <div className="space-y-2">
+                                  {hijoSubmission.archivos.map((archivo, idx) => (
+                                    <a
+                                      key={idx}
+                                      href={archivo.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 p-2 bg-white/5 rounded hover:bg-white/10 transition-colors"
+                                    >
+                                      <FileText className="w-4 h-4 text-[#1e3cff]" />
+                                      <span className="text-sm text-white">{archivo.nombre}</span>
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {hijoSubmission.calificacion !== undefined && (
+                              <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-2">
+                                <p className="text-green-400 font-semibold text-lg">Calificación: {hijoSubmission.calificacion}/100</p>
+                                {hijoSubmission.retroalimentacion && (
+                                  <div className="mt-2">
+                                    <p className="text-sm font-semibold text-white/80 mb-1">Retroalimentación:</p>
+                                    <p className="text-sm text-white/70">{hijoSubmission.retroalimentacion}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-white/50 text-center py-6">Sin entrega aún.</p>
+                        )
+                      ) : mySubmission ? (
                         <div className="space-y-4">
                           {mySubmission.comentario && (
                             <div>
@@ -717,7 +780,7 @@ export default function AssignmentDetailPage() {
                                     rel="noopener noreferrer"
                                     className="flex items-center gap-2 p-2 bg-white/5 rounded hover:bg-white/10 transition-colors"
                                   >
-                                    <FileText className="w-4 h-4 text-[#9f25b8]" />
+                                    <FileText className="w-4 h-4 text-[#1e3cff]" />
                                     <span className="text-sm text-white">{archivo.nombre}</span>
                                   </a>
                                 ))}
@@ -765,7 +828,7 @@ export default function AssignmentDetailPage() {
                               <div className="space-y-2 mb-3">
                                 {submitArchivos.map((archivo, index) => (
                                   <div key={index} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-                                    <FileText className="w-4 h-4 text-[#9f25b8]" />
+                                    <FileText className="w-4 h-4 text-[#1e3cff]" />
                                     <span className="flex-1 text-sm text-white truncate">{archivo.nombre}</span>
                                     <Button
                                       type="button"
@@ -788,7 +851,7 @@ export default function AssignmentDetailPage() {
                                 <SelectTrigger className="w-28 bg-white/5 border-white/10 text-white">
                                   <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent className="bg-[#1a001c] border-white/10">
+                                <SelectContent className="bg-[#0a0a2a] border-white/10">
                                   <SelectItem value="link" className="text-white">Link</SelectItem>
                                   <SelectItem value="pdf" className="text-white">PDF</SelectItem>
                                   <SelectItem value="documento" className="text-white">Doc</SelectItem>
@@ -820,7 +883,7 @@ export default function AssignmentDetailPage() {
                           <Button
                             type="submit"
                             disabled={submitAssignmentMutation.isPending}
-                            className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                            className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                             data-testid="button-submit-entrega"
                           >
                             <Send className="w-4 h-4 mr-2" />

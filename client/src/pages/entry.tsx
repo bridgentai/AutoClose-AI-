@@ -35,7 +35,7 @@ const rolesInfo: Record<RoleType, RoleInfo> = {
   profesor: {
     label: 'Profesor',
     icon: BookOpen,
-    color: 'from-purple-500 to-pink-500'
+    color: 'from-[#002366] to-[#003d7a]'
   },
   directivo: {
     label: 'Directivo',
@@ -50,7 +50,7 @@ const rolesInfo: Record<RoleType, RoleInfo> = {
   'administrador-general': {
     label: 'Administrador General',
     icon: Settings,
-    color: 'from-indigo-500 to-purple-500'
+    color: 'from-[#003d7a] to-[#1e3cff]'
   },
   transporte: {
     label: 'Transporte',
@@ -65,7 +65,7 @@ const rolesInfo: Record<RoleType, RoleInfo> = {
   nutricion: {
     label: 'Nutrición',
     icon: Apple,
-    color: 'from-red-500 to-pink-500'
+    color: 'from-[#002366] to-[#003d7a]'
   },
   cafeteria: {
     label: 'Cafetería',
@@ -266,18 +266,19 @@ export default function Entry() {
 
   return (
     <div 
-      className="min-h-screen flex items-center justify-center p-6"
+      className="min-h-screen flex items-center justify-center p-6 relative"
       style={{
-        background: 'radial-gradient(circle at 20% 20%, #25003d, #0b0013 80%)'
+        background: 'linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)'
       }}
     >
-      <div className="w-full max-w-6xl">
+      {/* Caobos en esquina */}
+      <div className="absolute top-6 left-6 z-20">
+        <span className="text-2xl font-bold text-white font-['Poppins'] tracking-tight">Caobos</span>
+      </div>
+      <div className="w-full max-w-6xl relative z-10">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-3 mb-6">
-            <div className="w-16 h-16 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-2xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">AC</span>
-            </div>
+          <div className="inline-flex flex-col items-center gap-4 mb-6">
             <span className="text-white font-bold text-3xl font-['Poppins']">AutoClose AI</span>
           </div>
           <p className="text-white/70 text-lg">Plataforma Educativa Inteligente</p>
@@ -286,9 +287,9 @@ export default function Entry() {
         {/* Three Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Card 1: Inicio de Sesión */}
-          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 hover:border-[#9f25b8]/50 transition-all group">
+          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 hover:border-[#1e3cff]/50 transition-all group">
             <div className="flex flex-col items-center text-center h-full">
-              <div className="w-16 h-16 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 bg-gradient-to-br from-[#002366] to-[#1e3cff] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <LogIn className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-white mb-4 font-['Poppins']">
@@ -299,7 +300,7 @@ export default function Entry() {
               </p>
               <Button
                 onClick={() => setLocation('/login')}
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#c66bff] hover:opacity-90 text-white font-semibold"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white font-semibold"
               >
                 Iniciar Sesión
               </Button>
@@ -307,9 +308,9 @@ export default function Entry() {
           </div>
 
           {/* Card 2: Registro */}
-          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 hover:border-[#9f25b8]/50 transition-all group">
+          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 hover:border-[#1e3cff]/50 transition-all group">
             <div className="flex flex-col items-center text-center h-full">
-              <div className="w-16 h-16 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 bg-gradient-to-br from-[#002366] to-[#1e3cff] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <UserPlus className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-white mb-4 font-['Poppins']">
@@ -320,7 +321,7 @@ export default function Entry() {
               </p>
               <Button
                 onClick={() => setLocation('/register')}
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#c66bff] hover:opacity-90 text-white font-semibold"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white font-semibold"
               >
                 Registrarse
               </Button>
@@ -328,9 +329,9 @@ export default function Entry() {
           </div>
 
           {/* Card 3: Roles (Desarrollo) */}
-          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 hover:border-[#9f25b8]/50 transition-all group">
+          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8 hover:border-[#1e3cff]/50 transition-all group">
             <div className="flex flex-col items-center text-center h-full">
-              <div className="w-16 h-16 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 bg-gradient-to-br from-[#002366] to-[#1e3cff] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <Users className="w-8 h-8 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-white mb-4 font-['Poppins']">
@@ -348,7 +349,7 @@ export default function Entry() {
                       key={rol}
                       onClick={() => handleQuickLogin(rol)}
                       variant="outline"
-                      className="w-full border-white/20 text-white hover:bg-white/10 hover:border-[#9f25b8]/50 justify-start gap-3"
+                      className="w-full border-white/20 text-white hover:bg-white/10 hover:border-[#1e3cff]/50 justify-start gap-3"
                     >
                       <Icon className="w-4 h-4" />
                       <span>{roleInfo.label}</span>

@@ -34,7 +34,7 @@ interface ResumenCardProps {
 const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onClick }) => {
   const isAcademico = type === 'academico';
   const IconWithStyle = () => {
-    const iconClass = `w-10 h-10 ${isAcademico ? 'text-[#9f25b8]' : 'text-teal-400'}`;
+    const iconClass = `w-10 h-10 ${isAcademico ? 'text-[#1e3cff]' : 'text-teal-400'}`;
     return <span className={iconClass}>{icon}</span>;
   };
 
@@ -42,7 +42,7 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onCl
     <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 flex flex-col justify-between h-full hover:shadow-xl transition-shadow duration-300">
       <CardContent className="p-0">
         <div className="flex items-center gap-4 mb-6">
-          <div className={`w-10 h-10 ${isAcademico ? 'text-[#9f25b8]' : 'text-teal-400'}`}>
+          <div className={`w-10 h-10 ${isAcademico ? 'text-[#1e3cff]' : 'text-teal-400'}`}>
             {isAcademico ? <Briefcase className="w-10 h-10" /> : <Users className="w-10 h-10" />}
           </div>
           <h2 className="text-3xl font-extrabold text-white">{title}</h2>
@@ -73,7 +73,7 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onCl
       </CardContent>
 
       <Button 
-        className="w-full mt-8 flex items-center justify-center gap-2 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+        className="w-full mt-8 flex items-center justify-center gap-2 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
         data-testid={`button-bandeja-${type}`}
         onClick={onClick}
       >

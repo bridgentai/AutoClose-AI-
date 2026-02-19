@@ -41,7 +41,7 @@ export default function Account() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#00c8ff] to-[#1e3cff]">
                   <User className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
@@ -51,7 +51,7 @@ export default function Account() {
               </div>
 
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#00c8ff] to-[#1e3cff]">
                   <Mail className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
@@ -61,7 +61,7 @@ export default function Account() {
               </div>
 
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#00c8ff] to-[#1e3cff]">
                   <Shield className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
@@ -72,7 +72,7 @@ export default function Account() {
 
               {user?.curso && (
                 <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#00c8ff] to-[#1e3cff]">
                     <GraduationCap className="w-6 h-6 text-white" />
                   </div>
                   <div className="flex-1">
@@ -84,7 +84,7 @@ export default function Account() {
 
               {user?.materias && user.materias.length > 0 && (
                 <div className="flex items-start gap-4 p-4 rounded-xl bg-white/5">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#00c8ff] to-[#1e3cff]">
                     <BookOpen className="w-6 h-6 text-white" />
                   </div>
                   <div className="flex-1">
@@ -93,7 +93,7 @@ export default function Account() {
                       {user.materias.map((materia) => (
                         <Badge
                           key={materia}
-                          className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40"
+                          className="bg-[#00c8ff]/20 text-white border border-[#00c8ff]/40"
                           data-testid={`badge-materia-${materia.toLowerCase().replace(/\s+/g, '-')}`}
                         >
                           {materia}
@@ -109,7 +109,7 @@ export default function Account() {
           <Card className="backdrop-blur-md bg-white/5 border-white/10">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <Settings className="w-5 h-5 text-[#9f25b8]" />
+                <Settings className="w-5 h-5 text-[#00c8ff]" />
                 Configuración de Cuenta
               </CardTitle>
               <CardDescription className="text-white/60">
@@ -122,9 +122,9 @@ export default function Account() {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/5">
                     {tema === 'oscuro' ? (
-                      <Moon className="w-5 h-5 text-[#9f25b8]" />
+                      <Moon className="w-5 h-5 text-[#00c8ff]" />
                     ) : (
-                      <Sun className="w-5 h-5 text-[#9f25b8]" />
+                      <Sun className="w-5 h-5 text-[#00c8ff]" />
                     )}
                   </div>
                   <div className="flex-1">
@@ -139,18 +139,18 @@ export default function Account() {
                 <Select value={tema} onValueChange={setTema}>
                   <SelectTrigger
                     id="tema"
-                    className="bg-white/5 border-white/10 text-white focus:ring-[#9f25b8]"
+                    className="bg-white/5 border-white/10 text-white focus:ring-[#00c8ff]"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#1a001c] border-white/10">
-                    <SelectItem value="oscuro" className="text-white focus:bg-[#9f25b8]/20">
+                  <SelectContent className="bg-[#0a0a2a] border-white/10">
+                    <SelectItem value="oscuro" className="text-white focus:bg-[#00c8ff]/20">
                       <div className="flex items-center gap-2">
                         <Moon className="w-4 h-4" />
                         Oscuro
                       </div>
                     </SelectItem>
-                    <SelectItem value="claro" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="claro" className="text-white focus:bg-[#00c8ff]/20">
                       <div className="flex items-center gap-2">
                         <Sun className="w-4 h-4" />
                         Claro
@@ -164,7 +164,7 @@ export default function Account() {
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/5">
-                    <Bell className="w-5 h-5 text-[#9f25b8]" />
+                    <Bell className="w-5 h-5 text-[#00c8ff]" />
                   </div>
                   <div className="flex-1">
                     <Label className="text-white font-medium">Notificaciones</Label>
@@ -188,7 +188,7 @@ export default function Account() {
                       id="notif-email"
                       checked={notificacionesEmail}
                       onCheckedChange={setNotificacionesEmail}
-                      className="data-[state=checked]:bg-[#9f25b8]"
+                      className="data-[state=checked]:bg-[#00c8ff]"
                     />
                   </div>
 
@@ -205,7 +205,7 @@ export default function Account() {
                       id="notif-push"
                       checked={notificacionesPush}
                       onCheckedChange={setNotificacionesPush}
-                      className="data-[state=checked]:bg-[#9f25b8]"
+                      className="data-[state=checked]:bg-[#00c8ff]"
                     />
                   </div>
 
@@ -222,7 +222,7 @@ export default function Account() {
                       id="notif-tareas"
                       checked={notificacionesTareas}
                       onCheckedChange={setNotificacionesTareas}
-                      className="data-[state=checked]:bg-[#9f25b8]"
+                      className="data-[state=checked]:bg-[#00c8ff]"
                     />
                   </div>
                 </div>
@@ -232,7 +232,7 @@ export default function Account() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/5">
-                    <Type className="w-5 h-5 text-[#9f25b8]" />
+                    <Type className="w-5 h-5 text-[#00c8ff]" />
                   </div>
                   <div className="flex-1">
                     <Label htmlFor="tamano-letra" className="text-white font-medium">
@@ -246,21 +246,21 @@ export default function Account() {
                 <Select value={tamanoLetra} onValueChange={setTamanoLetra}>
                   <SelectTrigger
                     id="tamano-letra"
-                    className="bg-white/5 border-white/10 text-white focus:ring-[#9f25b8]"
+                    className="bg-white/5 border-white/10 text-white focus:ring-[#00c8ff]"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#1a001c] border-white/10">
-                    <SelectItem value="pequeno" className="text-white focus:bg-[#9f25b8]/20">
+                  <SelectContent className="bg-[#0a0a2a] border-white/10">
+                    <SelectItem value="pequeno" className="text-white focus:bg-[#00c8ff]/20">
                       Pequeño
                     </SelectItem>
-                    <SelectItem value="medio" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="medio" className="text-white focus:bg-[#00c8ff]/20">
                       Medio
                     </SelectItem>
-                    <SelectItem value="grande" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="grande" className="text-white focus:bg-[#00c8ff]/20">
                       Grande
                     </SelectItem>
-                    <SelectItem value="muy-grande" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="muy-grande" className="text-white focus:bg-[#00c8ff]/20">
                       Muy Grande
                     </SelectItem>
                   </SelectContent>
@@ -271,7 +271,7 @@ export default function Account() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-white/5">
-                    <Globe className="w-5 h-5 text-[#9f25b8]" />
+                    <Globe className="w-5 h-5 text-[#00c8ff]" />
                   </div>
                   <div className="flex-1">
                     <Label htmlFor="idioma" className="text-white font-medium">
@@ -285,18 +285,18 @@ export default function Account() {
                 <Select value={idioma} onValueChange={setIdioma}>
                   <SelectTrigger
                     id="idioma"
-                    className="bg-white/5 border-white/10 text-white focus:ring-[#9f25b8]"
+                    className="bg-white/5 border-white/10 text-white focus:ring-[#00c8ff]"
                   >
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#1a001c] border-white/10">
-                    <SelectItem value="es" className="text-white focus:bg-[#9f25b8]/20">
+                  <SelectContent className="bg-[#0a0a2a] border-white/10">
+                    <SelectItem value="es" className="text-white focus:bg-[#00c8ff]/20">
                       Español
                     </SelectItem>
-                    <SelectItem value="en" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="en" className="text-white focus:bg-[#00c8ff]/20">
                       English
                     </SelectItem>
-                    <SelectItem value="pt" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="pt" className="text-white focus:bg-[#00c8ff]/20">
                       Português
                     </SelectItem>
                   </SelectContent>

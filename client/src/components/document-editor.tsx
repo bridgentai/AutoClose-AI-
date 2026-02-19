@@ -99,7 +99,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
     return (
       <div className={cn("document-viewer-container", className)}>
         <div 
-          className="document-viewer bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045] border border-white/10 rounded-lg overflow-hidden"
+          className="document-viewer document-editor-dark bg-[#1f1f1f] border border-white/10 rounded-lg overflow-hidden"
           style={{
             fontFamily: 'Inter, sans-serif',
           }}
@@ -112,8 +112,8 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
                 maxWidth: '8.5in',
                 minHeight: '11in',
                 padding: '1in',
-                backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                boxShadow: '0 0 30px rgba(159, 37, 184, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.1)',
+                backgroundColor: '#2d2d2d',
+                boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
                 borderRadius: '2px',
               }}
             >
@@ -137,8 +137,8 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
 
   return (
     <div className={cn("flex flex-col document-editor-container", className)}>
-      {/* Toolbar estilo Word */}
-      <div className="bg-gradient-to-r from-[#1a001c] to-[#3d0045] border border-white/10 rounded-t-lg p-2 flex items-center gap-1 flex-wrap shadow-lg">
+      {/* Toolbar estilo Google Docs modo oscuro */}
+      <div className="document-editor-dark bg-[#323232] border-b border-white/10 rounded-t-lg p-2 flex items-center gap-1 flex-wrap">
         {/* Formato de texto */}
         <div className="flex items-center gap-1 border-r border-white/20 pr-2 mr-1">
           <Button
@@ -146,7 +146,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('formatBlock', 'h1')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Título 1"
           >
             <Heading1 className="w-4 h-4" />
@@ -156,7 +156,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('formatBlock', 'h2')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Título 2"
           >
             <Heading2 className="w-4 h-4" />
@@ -166,7 +166,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('formatBlock', 'h3')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Título 3"
           >
             <Heading3 className="w-4 h-4" />
@@ -182,7 +182,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('bold')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Negrita (Ctrl+B)"
           >
             <Bold className="w-4 h-4" />
@@ -192,7 +192,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('italic')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Cursiva (Ctrl+I)"
           >
             <Italic className="w-4 h-4" />
@@ -202,7 +202,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('underline')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Subrayado (Ctrl+U)"
           >
             <Underline className="w-4 h-4" />
@@ -218,7 +218,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('insertUnorderedList')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Lista con viñetas"
           >
             <List className="w-4 h-4" />
@@ -228,7 +228,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('insertOrderedList')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Lista numerada"
           >
             <ListOrdered className="w-4 h-4" />
@@ -244,7 +244,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('justifyLeft')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Alinear izquierda"
           >
             <AlignLeft className="w-4 h-4" />
@@ -254,7 +254,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('justifyCenter')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Centrar"
           >
             <AlignCenter className="w-4 h-4" />
@@ -264,7 +264,7 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             size="sm"
             variant="ghost"
             onClick={() => executeCommand('justifyRight')}
-            className="h-8 w-8 p-0 text-white hover:bg-[#9f25b8]/20 hover:text-[#c66bff] transition-colors"
+            className="h-8 w-8 p-0 text-[#e8eaed] hover:bg-white/10 transition-colors"
             title="Alinear derecha"
           >
             <AlignRight className="w-4 h-4" />
@@ -272,11 +272,11 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
         </div>
       </div>
 
-      {/* Editor con diseño tipo Word */}
+      {/* Editor con diseño tipo Google Docs modo oscuro */}
       <div 
         className={cn(
-          "bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045] border-x border-b border-white/10 rounded-b-lg overflow-y-auto transition-all",
-          isFocused && "ring-2 ring-[#9f25b8]/50"
+          "document-editor-dark bg-[#1f1f1f] border-x border-b border-white/10 rounded-b-lg overflow-y-auto transition-all",
+          isFocused && "ring-2 ring-white/20"
         )}
         style={{ minHeight: '500px', maxHeight: '70vh' }}
       >
@@ -289,18 +289,18 @@ export function DocumentEditor({ content, onChange, readOnly = false, className 
             onPaste={handlePaste}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            className="document-editor focus:outline-none"
+            className="document-editor document-editor-dark focus:outline-none"
             style={{
               fontFamily: 'Inter, sans-serif',
               lineHeight: '1.8',
               fontSize: '16px',
-              color: '#ffffff',
+              color: '#e8eaed',
               maxWidth: '8.5in',
               margin: '0 auto',
               padding: '1in',
-              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              backgroundColor: '#2d2d2d',
               minHeight: '11in',
-              boxShadow: '0 0 30px rgba(159, 37, 184, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.1)',
+              boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
               borderRadius: '2px',
             }}
             data-placeholder="Comienza a escribir tu documento aquí..."

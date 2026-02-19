@@ -255,6 +255,60 @@ router.get('/:estudianteId/personal-info', protect, async (req: AuthRequest, res
 });
 
 // =========================================================================
+// GET /api/student/hijo/:estudianteId/profile - Perfil del hijo (padre/directivo, solo lectura)
+// =========================================================================
+router.get('/hijo/:estudianteId/profile', protect, async (req: AuthRequest, res) => {
+  try {
+    const { estudianteId: paramId } = req.params;
+    const userId = req.user?.id;
+    const rol = req.user?.rol;
+    const normalizedEstudianteId = normalizeIdForQuery(paramId);
+    const normalizedUserId = normalizeIdForQuery(userId || '');
+
+    const estudiante = await User.findById(normalizedEstudianteId)
+      .select('nombre email curso rol colegioId telefono celular direccion barrio ciudad fechaNacimiento userId codigoUnico')
+      .lean();
+    if (!estudiante || estudiante.rol !== 'estudiante') {
+      return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    }
+
+    let allowed = rol === 'directivo' || rol === 'admin-general-colegio';
+    if (!allowed && rol === 'padre') {
+      const { Vinculacion } = await import('../models');
+      const v = await Vinculacion.findOne({
+        padreId: normalizedUserId,
+        estudianteId: normalizedEstudianteId,
+      }).lean();
+      allowed = !!v;
+    }
+    if (!allowed) {
+      return res.status(403).json({ message: 'No autorizado a ver el perfil de este estudiante.' });
+    }
+
+    res.json({
+      _id: estudiante._id,
+      nombre: estudiante.nombre,
+      email: estudiante.email,
+      grupoId: estudiante.curso,
+      curso: estudiante.curso,
+      rol: estudiante.rol,
+      colegioId: estudiante.colegioId,
+      telefono: estudiante.telefono,
+      celular: estudiante.celular,
+      direccion: estudiante.direccion,
+      barrio: estudiante.barrio,
+      ciudad: estudiante.ciudad,
+      fechaNacimiento: estudiante.fechaNacimiento,
+      userId: estudiante.userId,
+      codigoUnico: estudiante.codigoUnico,
+    });
+  } catch (error) {
+    console.error('Error al obtener perfil del hijo:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// =========================================================================
 // GET /api/student/hijo/:estudianteId/notes - Notas de un hijo (padre o directivo)
 // =========================================================================
 router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) => {
@@ -360,7 +414,7 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
     }
 
     // Obtener todas las notas del estudiante con información de la tarea
-    const notas = await Nota.find({
+    let notas = await Nota.find({
       estudianteId: normalizedEstudianteId,
     })
     .populate('tareaId', 'titulo descripcion curso courseId materiaId fechaEntrega submissions')
@@ -368,53 +422,89 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
     .sort({ fecha: -1 })
     .lean();
 
-    // Agrupar notas por materia (courseId/materiaId)
+    // Fallback: si no hay documentos en Nota, derivar desde Assignment.submissions calificadas
     const notasPorMateria: Record<string, any> = {};
-
-    for (const nota of notas) {
-      const tarea = nota.tareaId as any;
-      if (!tarea) continue;
-
-      const materiaId = tarea.materiaId || tarea.courseId;
-      if (!materiaId) continue;
-
-      const materiaIdStr = materiaId.toString();
-
-      if (!notasPorMateria[materiaIdStr]) {
-        // Obtener información de la materia
-        const materia = await Course.findById(materiaId).select('nombre colorAcento icono').lean();
-        
-        notasPorMateria[materiaIdStr] = {
-          _id: materiaIdStr,
-          nombre: materia?.nombre || 'Materia desconocida',
-          colorAcento: materia?.colorAcento || '#9f25b8',
-          icono: materia?.icono,
-          notas: [],
-          promedio: 0,
-        };
-      }
-
-      // Buscar retroalimentación en la submission de la tarea
-      let retroalimentacion = null;
-      if (tarea.submissions && Array.isArray(tarea.submissions)) {
-        const submission = tarea.submissions.find((s: any) => 
-          s.estudianteId?.toString() === normalizedEstudianteId
-        );
-        if (submission && submission.retroalimentacion) {
-          retroalimentacion = submission.retroalimentacion;
+    const colegioId = (estudiante as any).colegioId;
+    if (notas.length === 0) {
+      const assignmentQuery: Record<string, unknown> = {
+        'submissions.estudianteId': normalizedEstudianteId,
+        'submissions.calificacion': { $exists: true, $ne: null },
+      };
+      if (colegioId) assignmentQuery.colegioId = colegioId;
+      const assignments = await Assignment.find(assignmentQuery)
+        .select('titulo curso courseId materiaId profesorId submissions')
+        .populate('profesorId', 'nombre')
+        .sort({ fechaEntrega: -1 })
+        .lean();
+      for (const tarea of assignments as any[]) {
+        const sub = tarea.submissions?.find((s: any) => s.estudianteId?.toString() === normalizedEstudianteId);
+        if (!sub || sub.calificacion == null) continue;
+        const courseId = tarea.courseId || tarea.materiaId;
+        if (!courseId) continue;
+        const materiaIdStr = courseId.toString();
+        if (!notasPorMateria[materiaIdStr]) {
+          const materia = await Course.findById(materiaIdStr).select('nombre colorAcento icono').lean();
+          notasPorMateria[materiaIdStr] = {
+            _id: materiaIdStr,
+            nombre: materia?.nombre || 'Materia',
+            colorAcento: materia?.colorAcento || '#9f25b8',
+            icono: materia?.icono,
+            notas: [],
+            promedio: 0,
+          };
         }
+        notasPorMateria[materiaIdStr].notas.push({
+          _id: tarea._id.toString() + '-' + normalizedEstudianteId,
+          tareaId: tarea._id,
+          tareaTitulo: tarea.titulo,
+          nota: sub.calificacion,
+          logro: sub.logro,
+          fecha: sub.fechaEntrega || new Date(),
+          profesorNombre: tarea.profesorId?.nombre || 'Profesor',
+          comentario: sub.retroalimentacion || sub.logro || null,
+        });
       }
+    } else {
+      for (const nota of notas) {
+        const tarea = nota.tareaId as any;
+        if (!tarea) continue;
 
-      notasPorMateria[materiaIdStr].notas.push({
-        _id: nota._id,
-        tareaId: tarea._id,
-        tareaTitulo: tarea.titulo,
-        nota: nota.nota,
-        logro: nota.logro,
-        fecha: nota.fecha,
-        profesorNombre: (nota.profesorId as any)?.nombre || 'Profesor',
-        comentario: retroalimentacion || nota.logro || null,
-      });
+        const materiaId = tarea.materiaId || tarea.courseId;
+        if (!materiaId) continue;
+
+        const materiaIdStr = materiaId.toString();
+
+        if (!notasPorMateria[materiaIdStr]) {
+          const materia = await Course.findById(materiaId).select('nombre colorAcento icono').lean();
+          notasPorMateria[materiaIdStr] = {
+            _id: materiaIdStr,
+            nombre: materia?.nombre || 'Materia desconocida',
+            colorAcento: materia?.colorAcento || '#9f25b8',
+            icono: materia?.icono,
+            notas: [],
+            promedio: 0,
+          };
+        }
+
+        let retroalimentacion = null;
+        if (tarea.submissions && Array.isArray(tarea.submissions)) {
+          const submission = tarea.submissions.find((s: any) =>
+            s.estudianteId?.toString() === normalizedEstudianteId
+          );
+          if (submission?.retroalimentacion) retroalimentacion = submission.retroalimentacion;
+        }
+
+        notasPorMateria[materiaIdStr].notas.push({
+          _id: nota._id,
+          tareaId: tarea._id,
+          tareaTitulo: tarea.titulo,
+          nota: nota.nota,
+          logro: nota.logro,
+          fecha: nota.fecha,
+          profesorNombre: (nota.profesorId as any)?.nombre || 'Profesor',
+          comentario: retroalimentacion || nota.logro || null,
+        });
+      }
     }
 
     // Calcular promedios por materia
@@ -422,15 +512,13 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
       const promedio = materia.notas.length > 0
         ? materia.notas.reduce((sum: number, n: any) => sum + n.nota, 0) / materia.notas.length
         : 0;
-      
+
       return {
         ...materia,
-        promedio: promedio / 20, // Convertir de 0-100 a 0-5
-        ultimaNota: materia.notas.length > 0 
-          ? materia.notas[0].nota / 20 
-          : 0,
+        promedio: promedio / 20,
+        ultimaNota: materia.notas.length > 0 ? materia.notas[0].nota / 20 : 0,
         estado: promedio >= 90 ? 'excelente' : promedio >= 70 ? 'bueno' : promedio >= 50 ? 'regular' : 'bajo',
-        tendencia: 'stable', // Por ahora estable, se puede calcular después
+        tendencia: 'stable',
       };
     });
 

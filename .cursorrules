@@ -22,7 +22,7 @@
 **SIEMPRE** lee y consulta `design_guidelines.md` antes de realizar cualquier cambio visual, de UI o de diseño. Este archivo contiene:
 
 - Filosofía de diseño y principios centrales
-- Sistema de colores (paleta púrpura institucional #9f25b8)
+- Sistema de colores (#0a0a2a, #002366, #1e3cff, #ffffff, #00c8ff, #ffd700)
 - Tipografía (Inter, Poppins, JetBrains Mono)
 - Sistema de navegación next-gen (Command Palette, Quick Actions, AI Dock)
 - Componentes core, cards, formularios y microinteracciones
@@ -57,7 +57,7 @@
 
 ## Principios de Diseño (de design_guidelines.md)
 
-- Paleta púrpura institucional: #9f25b8 (core), #6a0dad (deep), #c66bff (light)
+- Paleta: #0a0a2a, #002366, #1e3cff, #ffffff, #00c8ff, #ffd700
 - Glassmorphism: `bg-white/5 border-white/10 backdrop-blur-md`
 - Tipografías: Inter (UI/cuerpo), Poppins (títulos/branding)
 - Diseño moderno, limpio y minimalista

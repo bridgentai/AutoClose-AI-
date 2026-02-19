@@ -110,7 +110,7 @@ const RedactarMensaje: React.FC = () => {
             </Button>
             <Button
               onClick={handleEnviar}
-              className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+              className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
             >
               <Send className="w-4 h-4 mr-2" />
               Enviar Mensaje
