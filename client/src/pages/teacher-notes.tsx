@@ -10,8 +10,7 @@ import {
   FileText,
   MessageSquare,
   TrendingUp,
-  BarChart3,
-  Sparkles
+  BarChart3
 } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -198,7 +197,7 @@ export default function TeacherNotesPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
                 <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
-                  <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-xl sm:text-2xl">
+                  <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-xl sm:text-2xl">
                     {studentDetail.nombre.split(' ').map(n => n[0]).join('')}
                   </AvatarFallback>
                 </Avatar>
@@ -209,24 +208,15 @@ export default function TeacherNotesPage() {
                   <p className="text-white/60 text-sm sm:text-base truncate">{studentDetail.email}</p>
                 </div>
               </div>
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  className="border-[#7C3AED]/50 text-[#A855F7] hover:bg-[#7C3AED]/10"
-                  onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${estudianteId}/boletin-inteligente`)}
+              <Dialog open={showAddNoteForm} onOpenChange={setShowAddNoteForm}>
+                <Button 
+                  className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
+                  onClick={() => setShowAddNoteForm(true)}
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Boletín Inteligente
+                  <Plus className="w-4 h-4 mr-2" />
+                  Agregar Nota
                 </Button>
-                <Dialog open={showAddNoteForm} onOpenChange={setShowAddNoteForm}>
-                  <Button 
-                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
-                    onClick={() => setShowAddNoteForm(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Agregar Nota
-                  </Button>
-                <DialogContent className="bg-[#1a001c] border-white/10 text-white max-w-2xl">
+                <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>Agregar Nueva Nota</DialogTitle>
                     <DialogDescription className="text-white/60">
@@ -314,7 +304,7 @@ export default function TeacherNotesPage() {
                       </Button>
                       <Button
                         type="submit"
-                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                       >
                         Guardar Nota
                       </Button>
@@ -322,7 +312,6 @@ export default function TeacherNotesPage() {
                   </form>
                 </DialogContent>
               </Dialog>
-              </div>
             </div>
           </div>
 
@@ -397,7 +386,7 @@ export default function TeacherNotesPage() {
                         {nota.comentario && (
                           <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
                             <div className="flex items-start gap-2">
-                              <MessageSquare className="w-4 h-4 text-[#9f25b8] mt-0.5 flex-shrink-0" />
+                              <MessageSquare className="w-4 h-4 text-[#1e3cff] mt-0.5 flex-shrink-0" />
                               <p className="text-sm text-white/80">{nota.comentario}</p>
                             </div>
                           </div>
@@ -426,7 +415,7 @@ export default function TeacherNotesPage() {
   const chartConfig = {
     promedio: {
       label: 'Promedio',
-      color: '#9f25b8'
+      color: '#1e3cff'
     }
   };
 
@@ -461,7 +450,7 @@ export default function TeacherNotesPage() {
           <Card className="bg-white/5 border-white/10 backdrop-blur-md">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-[#9f25b8]" />
+                <BarChart3 className="w-5 h-5 text-[#1e3cff]" />
                 Promedios por Estudiante
               </CardTitle>
               <CardDescription className="text-white/60">
@@ -497,7 +486,7 @@ export default function TeacherNotesPage() {
                     />
                     <Bar 
                       dataKey="promedio" 
-                      fill="#9f25b8"
+                      fill="#1e3cff"
                       radius={[8, 8, 0, 0]}
                     />
                   </BarChart>
@@ -509,7 +498,7 @@ export default function TeacherNotesPage() {
           <Card className="bg-white/5 border-white/10 backdrop-blur-md">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+                <TrendingUp className="w-5 h-5 text-[#1e3cff]" />
                 Promedios por Categoría
               </CardTitle>
               <CardDescription className="text-white/60">
@@ -545,7 +534,7 @@ export default function TeacherNotesPage() {
                     />
                     <Bar 
                       dataKey="promedio" 
-                      fill="#9f25b8"
+                      fill="#1e3cff"
                       radius={[8, 8, 0, 0]}
                     />
                   </BarChart>
@@ -582,7 +571,7 @@ export default function TeacherNotesPage() {
                     <TableCell className="text-white">
                       <div className="flex items-center gap-3">
                         <Avatar className="w-8 h-8">
-                          <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-sm">
+                          <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-sm">
                             {student.nombre.split(' ').map(n => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
@@ -619,7 +608,7 @@ export default function TeacherNotesPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                          className="border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
                           onClick={() => {
                             setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`);
                             setShowAddNoteForm(true);
@@ -650,7 +639,7 @@ export default function TeacherNotesPage() {
                 <CardHeader className="p-6">
                   <div className="flex items-center gap-4 mb-4">
                     <Avatar className="w-16 h-16">
-                      <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-lg">
+                      <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-lg">
                         {student.nombre.split(' ').map(n => n[0]).join('')}
                       </AvatarFallback>
                     </Avatar>
@@ -678,7 +667,7 @@ export default function TeacherNotesPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    className="w-full border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                    className="w-full border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
                     onClick={() => {
                       setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`);
                       setShowAddNoteForm(true);

@@ -130,7 +130,7 @@ export default function StudentTasksPage() {
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h3 className="font-semibold text-white text-lg group-hover:text-[#9f25b8] transition-colors">
+              <h3 className="font-semibold text-white text-lg group-hover:text-[#00c8ff] transition-colors">
                 {assignment.titulo}
               </h3>
               <Badge className={estado.color}>
@@ -174,7 +174,7 @@ export default function StudentTasksPage() {
                 
                 if (estado === 'pendiente') {
                   return (
-                    <div className="text-[#9f25b8] font-medium">
+                    <div className="text-[#00c8ff] font-medium">
                       {diasRestantes > 0 ? `${diasRestantes} días restantes` : 'Vencida'}
                     </div>
                   );
@@ -267,10 +267,10 @@ export default function StudentTasksPage() {
         {/* Tabs para Por Entregar y Completadas */}
         <Tabs defaultValue="por-entregar" className="w-full">
           <TabsList className="bg-white/5 border border-white/10 mb-6">
-            <TabsTrigger value="por-entregar" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="por-entregar" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
               Por Entregar ({tareasPorEntregar.length + tareasVencidas.length})
             </TabsTrigger>
-            <TabsTrigger value="completadas" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="completadas" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
               Completadas ({tareasCompletadas.length})
             </TabsTrigger>
           </TabsList>
@@ -314,7 +314,7 @@ export default function StudentTasksPage() {
                 ) : (
                   tareasVencidas.length === 0 && (
                     <div className="text-center py-12">
-                      <FileText className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                      <FileText className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-white mb-2">
                         No hay tareas pendientes
                       </h3>
@@ -350,7 +350,7 @@ export default function StudentTasksPage() {
                   </div>
                 ) : (
                   <div className="text-center py-12">
-                    <CheckCircle2 className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                    <CheckCircle2 className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-white mb-2">
                       No hay tareas completadas
                     </h3>

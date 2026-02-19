@@ -106,16 +106,16 @@ export default function TeacherTasksSummaryPage() {
 
         <Tabs defaultValue="all" className="w-full">
           <TabsList className="bg-white/5 border border-white/10 backdrop-blur-md mb-6">
-            <TabsTrigger value="all" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="all" className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white">
               Todas ({assignmentsByStatus.all.length})
             </TabsTrigger>
-            <TabsTrigger value="upcoming" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="upcoming" className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white">
               Próximas ({assignmentsByStatus.upcoming.length})
             </TabsTrigger>
-            <TabsTrigger value="past" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="past" className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white">
               Pasadas ({assignmentsByStatus.past.length})
             </TabsTrigger>
-            <TabsTrigger value="by-course" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+            <TabsTrigger value="by-course" className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white">
               Por Curso ({courses.length})
             </TabsTrigger>
           </TabsList>
@@ -166,7 +166,7 @@ export default function TeacherTasksSummaryPage() {
                                 </div>
                               </div>
                               <div className="text-right ml-4">
-                                <p className="text-sm font-semibold text-[#9f25b8]">
+                                <p className="text-sm font-semibold text-[#1e3cff]">
                                   {fechaEntrega.toLocaleTimeString('es-CO', {
                                     hour: '2-digit',
                                     minute: '2-digit'
@@ -179,7 +179,7 @@ export default function TeacherTasksSummaryPage() {
                       })
                   ) : (
                     <div className="text-center py-12">
-                      <ClipboardList className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                      <ClipboardList className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-white mb-2">No hay tareas</h3>
                       <p className="text-white/60">No se han asignado tareas este mes.</p>
                     </div>
@@ -228,13 +228,13 @@ export default function TeacherTasksSummaryPage() {
                                     })}
                                   </span>
                                   <span>•</span>
-                                  <span className="text-[#9f25b8]">
+                                  <span className="text-[#1e3cff]">
                                     {diasRestantes} {diasRestantes === 1 ? 'día restante' : 'días restantes'}
                                   </span>
                                 </div>
                               </div>
                               <div className="text-right ml-4">
-                                <p className="text-sm font-semibold text-[#9f25b8]">
+                                <p className="text-sm font-semibold text-[#1e3cff]">
                                   {fechaEntrega.toLocaleTimeString('es-CO', {
                                     hour: '2-digit',
                                     minute: '2-digit'
@@ -247,7 +247,7 @@ export default function TeacherTasksSummaryPage() {
                       })
                   ) : (
                     <div className="text-center py-12">
-                      <CheckCircle2 className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                      <CheckCircle2 className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-white mb-2">No hay tareas próximas</h3>
                       <p className="text-white/60">Todas las tareas ya han pasado.</p>
                     </div>
@@ -295,7 +295,7 @@ export default function TeacherTasksSummaryPage() {
                                 </div>
                               </div>
                               <div className="text-right ml-4">
-                                <p className="text-sm font-semibold text-[#9f25b8]">
+                                <p className="text-sm font-semibold text-[#1e3cff]">
                                   {fechaEntrega.toLocaleTimeString('es-CO', {
                                     hour: '2-digit',
                                     minute: '2-digit'
@@ -308,7 +308,7 @@ export default function TeacherTasksSummaryPage() {
                       })
                   ) : (
                     <div className="text-center py-12">
-                      <Circle className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                      <Circle className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-white mb-2">No hay tareas pasadas</h3>
                       <p className="text-white/60">Todas las tareas están por venir.</p>
                     </div>
@@ -326,7 +326,7 @@ export default function TeacherTasksSummaryPage() {
                   <Card key={curso} className="bg-white/5 border-white/10 backdrop-blur-md">
                     <CardHeader>
                       <CardTitle className="text-white flex items-center gap-2">
-                        <ClipboardList className="w-5 h-5 text-[#9f25b8]" />
+                        <ClipboardList className="w-5 h-5 text-[#1e3cff]" />
                         {curso}
                       </CardTitle>
                       <CardDescription className="text-white/60">
@@ -360,7 +360,7 @@ export default function TeacherTasksSummaryPage() {
                                     </p>
                                   </div>
                                   <div className="text-right ml-4">
-                                    <p className="text-sm font-semibold text-[#9f25b8]">
+                                    <p className="text-sm font-semibold text-[#1e3cff]">
                                       {fechaEntrega.toLocaleTimeString('es-CO', {
                                         hour: '2-digit',
                                         minute: '2-digit'
@@ -385,7 +385,7 @@ export default function TeacherTasksSummaryPage() {
               <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                 <CardContent className="p-6">
                   <div className="text-center py-12">
-                    <ClipboardList className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                    <ClipboardList className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-white mb-2">No hay cursos</h3>
                     <p className="text-white/60">No se han asignado tareas a ningún curso.</p>
                   </div>

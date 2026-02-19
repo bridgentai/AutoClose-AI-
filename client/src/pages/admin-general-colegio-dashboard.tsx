@@ -6,7 +6,7 @@ import { useInstitutionColors } from '@/hooks/useInstitutionColors';
 import { 
   Users, GraduationCap, BookOpen, UserPlus, Plus, Edit, Trash2, 
   X, Check, Settings, Bot, Link as LinkIcon, Eye, EyeOff,
-  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search, Upload, KeyRound, Copy
+  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search, Upload, KeyRound, Copy, ScrollText
 } from 'lucide-react';
 import { BulkUsersUpload } from '@/components/admin/BulkUsersUpload';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -98,7 +98,7 @@ export function AdminGeneralColegioDashboard() {
   const queryClient = useQueryClient();
   const { colorPrimario, colorSecundario } = useInstitutionColors();
   
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'usuarios' | 'cursos' | 'materias' | 'asignaciones' | 'carga-masiva' | 'ia' | 'config'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'usuarios' | 'cursos' | 'materias' | 'asignaciones' | 'carga-masiva' | 'ia' | 'auditoria' | 'config'>('dashboard');
   const [activeTab, setActiveTab] = useState<'estudiantes' | 'profesores' | 'padres' | 'directivos'>('estudiantes');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -134,6 +134,11 @@ export function AdminGeneralColegioDashboard() {
   // Caja con la nueva contraseña tras restablecer (en el diálogo de información de cuenta)
   const [resetPasswordBox, setResetPasswordBox] = useState<{ passwordTemporal: string } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+  // Filtros auditoría
+  const [auditAction, setAuditAction] = useState('');
+  const [auditEntityType, setAuditEntityType] = useState('');
+  const [auditStartDate, setAuditStartDate] = useState('');
+  const [auditEndDate, setAuditEndDate] = useState('');
 
   const isAdminColegio = user?.rol === 'admin-general-colegio' || user?.rol === 'school_admin';
 
@@ -343,6 +348,19 @@ export function AdminGeneralColegioDashboard() {
     },
   });
 
+  // Auditoría: logs del colegio (solo admin)
+  const auditParams = new URLSearchParams();
+  if (auditAction) auditParams.set('action', auditAction);
+  if (auditEntityType) auditParams.set('entityType', auditEntityType);
+  if (auditStartDate) auditParams.set('startDate', auditStartDate);
+  if (auditEndDate) auditParams.set('endDate', auditEndDate);
+  auditParams.set('limit', '50');
+  const { data: auditData, isLoading: auditLoading } = useQuery<{ logs: Array<{ _id: string; userId: string; role: string; action: string; entityType: string; entityId?: string; colegioId: string; timestamp: string; result: string; requestData?: Record<string, unknown> }>; total: number }>({
+    queryKey: ['auditLogs', user?.colegioId, auditAction, auditEntityType, auditStartDate, auditEndDate],
+    queryFn: () => apiRequest('GET', `/api/audit/logs?${auditParams.toString()}`),
+    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'auditoria',
+  });
+
   const resetPasswordMutation = useMutation({
     mutationFn: (userId: string) =>
       apiRequest<{ passwordTemporal: string }>('POST', '/api/users/reset-password', { userId }),
@@ -405,6 +423,8 @@ export function AdminGeneralColegioDashboard() {
         return <BulkUsersUpload />;
       case 'ia':
         return renderIA();
+      case 'auditoria':
+        return renderAuditoria();
       case 'config':
         return renderConfig();
       default:
@@ -793,7 +813,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige profesor" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {profesoresForAssign.map((p) => (
                     <SelectItem key={p._id} value={p._id} className="text-white focus:bg-white/10">
                       {p.nombre} {p.email ? `(${p.email})` : ''} {Array.isArray((p as any).materias) && (p as any).materias?.length ? `— ${(p as any).materias[0]}` : ''}
@@ -815,7 +835,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Añadir curso" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {gruposList.map((gr) => (
                     <SelectItem key={gr._id} value={gr.nombre} className="text-white focus:bg-white/10">{gr.nombre}</SelectItem>
                   ))}
@@ -855,7 +875,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige curso" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {gruposList.map((g) => (
                     <SelectItem key={g._id} value={g.nombre} className="text-white focus:bg-white/10">{g.nombre}</SelectItem>
                   ))}
@@ -868,7 +888,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige estudiante" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {estudiantesForAssign.map((e) => (
                     <SelectItem key={e._id} value={e._id} className="text-white focus:bg-white/10">{e.nombre} ({e.email})</SelectItem>
                   ))}
@@ -898,7 +918,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige materia" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {coursesList.map((c) => (
                     <SelectItem key={c._id} value={c._id} className="text-white focus:bg-white/10">{c.nombre}</SelectItem>
                   ))}
@@ -911,7 +931,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige profesor" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {profesoresForAssign.map((p) => (
                     <SelectItem key={p._id} value={p._id} className="text-white focus:bg-white/10">{p.nombre} ({p.email})</SelectItem>
                   ))}
@@ -968,7 +988,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige un estudiante" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {estudiantesVinculo.map((e) => (
                     <SelectItem key={e._id} value={e._id} className="text-white focus:bg-white/10">
                       {e.nombre} ({e.email}) — {e.estado === 'pendiente_vinculacion' ? 'Pend. vinculación' : e.estado === 'vinculado' ? 'Vinculado' : e.estado === 'active' ? 'Activo' : e.estado}
@@ -1029,7 +1049,7 @@ export function AdminGeneralColegioDashboard() {
       </Card>
 
       <Dialog open={relacionOpen} onOpenChange={setRelacionOpen}>
-        <DialogContent className="bg-[#0b0013] border-white/10 text-white">
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Crear vinculación Padre – Estudiante</DialogTitle>
             <DialogDescription className="text-white/60">Selecciona el padre y el estudiante para vincular.</DialogDescription>
@@ -1041,7 +1061,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige estudiante" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {estudiantesVinculo.map((e) => (
                     <SelectItem key={e._id} value={e._id} className="text-white focus:bg-white/10">{e.nombre} ({e.email})</SelectItem>
                   ))}
@@ -1054,7 +1074,7 @@ export function AdminGeneralColegioDashboard() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue placeholder="Elige padre" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0b0013] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {padresVinculo.map((p) => (
                     <SelectItem key={p._id} value={p._id} className="text-white focus:bg-white/10">{p.nombre} ({p.email})</SelectItem>
                   ))}
@@ -1092,7 +1112,122 @@ export function AdminGeneralColegioDashboard() {
     </div>
   );
 
-  // 7️⃣ Configuración del Colegio
+  // 7️⃣ Auditoría (solo admin)
+  const renderAuditoria = () => {
+    const logs = auditData?.logs ?? [];
+    const total = auditData?.total ?? 0;
+    return (
+      <div className="space-y-6">
+        <Card className={CARD_STYLE}>
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <ScrollText className="w-5 h-5" style={{ color: colorPrimario }} />
+              Auditoría
+            </CardTitle>
+            <CardDescription className="text-white/60">
+              Acciones de administración y uso del sistema. Solo lectura.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2 items-end">
+              <div>
+                <Label className="text-white/70 text-xs">Acción</Label>
+                <Select value={auditAction || 'all'} onValueChange={(v) => setAuditAction(v === 'all' ? '' : v)}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white w-[180px]">
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="create_user">create_user</SelectItem>
+                    <SelectItem value="create_group">create_group</SelectItem>
+                    <SelectItem value="assign_student">assign_student</SelectItem>
+                    <SelectItem value="assign_professor_to_groups">assign_professor_to_groups</SelectItem>
+                    <SelectItem value="assign_professor">assign_professor</SelectItem>
+                    <SelectItem value="enroll_students">enroll_students</SelectItem>
+                    <SelectItem value="vinculacion">vinculacion</SelectItem>
+                    <SelectItem value="confirmar_vinculacion">confirmar_vinculacion</SelectItem>
+                    <SelectItem value="activar_cuentas">activar_cuentas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-white/70 text-xs">Entidad</Label>
+                <Select value={auditEntityType || 'all'} onValueChange={(v) => setAuditEntityType(v === 'all' ? '' : v)}>
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white w-[140px]">
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="user">user</SelectItem>
+                    <SelectItem value="group">group</SelectItem>
+                    <SelectItem value="course">course</SelectItem>
+                    <SelectItem value="vinculacion">vinculacion</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-white/70 text-xs">Desde</Label>
+                <Input
+                  type="date"
+                  className="bg-white/5 border-white/10 text-white w-[140px]"
+                  value={auditStartDate}
+                  onChange={(e) => setAuditStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-white/70 text-xs">Hasta</Label>
+                <Input
+                  type="date"
+                  className="bg-white/5 border-white/10 text-white w-[140px]"
+                  value={auditEndDate}
+                  onChange={(e) => setAuditEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-white/50 text-sm">Total: {total} registros</p>
+            {auditLoading ? (
+              <p className="text-white/60">Cargando...</p>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-white/10">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-white/5 text-white/80">
+                    <tr>
+                      <th className="px-3 py-2">Fecha</th>
+                      <th className="px-3 py-2">Rol</th>
+                      <th className="px-3 py-2">Acción</th>
+                      <th className="px-3 py-2">Entidad</th>
+                      <th className="px-3 py-2">Resultado</th>
+                      <th className="px-3 py-2">Detalle</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-white/80">
+                    {logs.length === 0 ? (
+                      <tr><td colSpan={6} className="px-3 py-4 text-white/50">Sin registros</td></tr>
+                    ) : (
+                      logs.map((log) => (
+                        <tr key={log._id} className="border-t border-white/10">
+                          <td className="px-3 py-2">{log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}</td>
+                          <td className="px-3 py-2">{log.role ?? '-'}</td>
+                          <td className="px-3 py-2">{log.action ?? '-'}</td>
+                          <td className="px-3 py-2">{log.entityType ?? '-'}</td>
+                          <td className="px-3 py-2">{log.result ?? '-'}</td>
+                          <td className="px-3 py-2 max-w-[200px] truncate" title={log.requestData ? JSON.stringify(log.requestData) : ''}>
+                            {log.requestData ? JSON.stringify(log.requestData).slice(0, 60) + '…' : '-'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  // 8️⃣ Configuración del Colegio
   const renderConfig = () => (
     <div className="space-y-6">
       <Card className={CARD_STYLE}>
@@ -1170,6 +1305,14 @@ export function AdminGeneralColegioDashboard() {
               IA Académica
             </Button>
             <Button
+              variant={activeSection === 'auditoria' ? 'default' : 'ghost'}
+              onClick={() => setActiveSection('auditoria')}
+              className={activeSection === 'auditoria' ? '' : 'text-white/70'}
+            >
+              <ScrollText className="w-4 h-4 mr-2" />
+              Auditoría
+            </Button>
+            <Button
               variant={activeSection === 'config' ? 'default' : 'ghost'}
               onClick={() => setActiveSection('config')}
               className={activeSection === 'config' ? '' : 'text-white/70'}
@@ -1196,7 +1339,7 @@ export function AdminGeneralColegioDashboard() {
           }
         }}
       >
-        <DialogContent className="bg-[#0b0013] border-white/10 text-white">
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Crear {createUserType === 'curso' ? 'Curso' : createUserType === 'estudiante' ? 'Estudiante' : createUserType === 'profesor' ? 'Profesor' : 'Padre'}</DialogTitle>
             <DialogDescription className="text-white/60">
@@ -1227,7 +1370,7 @@ export function AdminGeneralColegioDashboard() {
                     <SelectTrigger className="bg-white/5 border-white/10 text-white mt-1">
                       <SelectValue placeholder="Selecciona la sección" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0b0013] border-white/10">
+                    <SelectContent className="bg-[#0a0a2a] border-white/10">
                       <SelectItem value="junior-school" className="text-white focus:bg-white/10">
                         Junior School
                       </SelectItem>
@@ -1250,7 +1393,7 @@ export function AdminGeneralColegioDashboard() {
                     <SelectTrigger className="bg-white/5 border-white/10 text-white mt-1">
                       <SelectValue placeholder="Sin director por ahora" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0b0013] border-white/10">
+                    <SelectContent className="bg-[#0a0a2a] border-white/10">
                       <SelectItem value="__none__" className="text-white/70 focus:bg-white/10">
                         Sin director (asignar después)
                       </SelectItem>
@@ -1343,7 +1486,7 @@ export function AdminGeneralColegioDashboard() {
                         <SelectTrigger className="bg-white/5 border-white/10 text-white">
                           <SelectValue placeholder="Selecciona una materia" />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#0b0013] border-white/10">
+                        <SelectContent className="bg-[#0a0a2a] border-white/10">
                           {coursesList.map((c) => (
                             <SelectItem key={c._id} value={c._id} className="text-white focus:bg-white/10">
                               {c.nombre}
@@ -1383,7 +1526,7 @@ export function AdminGeneralColegioDashboard() {
                         <SelectTrigger className="bg-white/5 border-white/10 text-white">
                           <SelectValue placeholder="Selecciona un curso/grupo" />
                         </SelectTrigger>
-                        <SelectContent className="bg-[#0b0013] border-white/10">
+                        <SelectContent className="bg-[#0a0a2a] border-white/10">
                           {gruposList.map((g) => (
                             <SelectItem key={g._id} value={g.nombre} className="text-white focus:bg-white/10">
                               {g.nombre}
@@ -1441,7 +1584,7 @@ export function AdminGeneralColegioDashboard() {
 
       {/* Caja con información de la cuenta recién creada */}
       <Dialog open={!!createdUserInfo} onOpenChange={(open) => !open && setCreatedUserInfo(null)}>
-        <DialogContent className="bg-[#0b0013] border-white/10 text-white max-w-md">
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <Check className="w-5 h-5 text-green-400" />
@@ -1496,7 +1639,7 @@ export function AdminGeneralColegioDashboard() {
           setEditUserOpen(open);
         }}
       >
-        <DialogContent className="bg-[#0b0013] border-white/10 text-white max-w-md">
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Información de la cuenta</DialogTitle>
             <DialogDescription className="text-white/60">

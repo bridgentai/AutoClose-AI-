@@ -283,8 +283,8 @@ export default function Chat() {
     }
   };
 
-  const accentColor = '#9f25b8';
-  const accentColorDark = '#6a0dad';
+  const accentColor = '#00c8ff';
+  const accentColorDark = '#1e3cff';
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4 relative" data-testid="chat-page">
@@ -333,14 +333,14 @@ export default function Chat() {
           {loadingHistory ? (
             <div className="flex items-center justify-center flex-1">
               <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-[#9f25b8] mx-auto mb-4" />
+                <Loader2 className="w-8 h-8 animate-spin text-[#00c8ff] mx-auto mb-4" />
                 <p className="text-white/60">Cargando historial...</p>
               </div>
             </div>
           ) : messages.length === 0 ? (
             <div className="flex items-center justify-center flex-1">
               <div className="text-center">
-                <div className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                <div className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center bg-gradient-to-br from-[#002366] to-[#1e3cff]">
                   <MessageSquare className="w-10 h-10 text-white" />
                 </div>
                 <h2 className="text-3xl font-bold text-white mb-3 font-['Poppins']">

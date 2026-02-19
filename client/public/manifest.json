@@ -1,0 +1,17 @@
+{
+  "name": "AutoClose AI",
+  "short_name": "AutoClose AI",
+  "description": "Plataforma educativa del colegio",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0013",
+  "theme_color": "#002366",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

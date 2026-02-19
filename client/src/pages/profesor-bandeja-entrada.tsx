@@ -53,7 +53,7 @@ const mensajesFicticios: Mensaje[] = [
 const MensajeFila: React.FC<{ mensaje: Mensaje; isSelected: boolean; onClick: () => void }> = ({ mensaje, isSelected, onClick }) => (
   <div
     className={`p-3 border-b border-white/10 cursor-pointer transition-colors ${
-      isSelected ? 'bg-white/10 border-l-4 border-[#9f25b8]' : 'hover:bg-white/5'
+      isSelected ? 'bg-white/10 border-l-4 border-[#1e3cff]' : 'hover:bg-white/5'
     } ${!mensaje.leido ? 'font-semibold text-white' : 'text-white/70'}`}
     onClick={onClick}
   >
@@ -102,7 +102,7 @@ export default function ProfesorBandejaEntrada() {
           <Card className="bg-white/5 border-white/10 backdrop-blur-md p-0 overflow-hidden h-full flex flex-col">
             <div className="p-4 border-b border-white/10 flex justify-between items-center">
               <Button 
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 flex items-center gap-2"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 flex items-center gap-2"
                 onClick={() => setLocation('/profesor/comunicacion/redactar')}
               >
                 <Send className="w-4 h-4" />
@@ -121,7 +121,7 @@ export default function ProfesorBandejaEntrada() {
               </div>
               <div className="flex gap-2">
                 <button className="flex items-center gap-1 text-sm text-white/70 hover:text-white transition-colors">
-                  <Filter className="w-4 h-4 text-[#9f25b8]" /> Filtros
+                  <Filter className="w-4 h-4 text-[#1e3cff]" /> Filtros
                 </button>
                 <span className="text-sm text-white/50">|</span>
                 <span className="text-sm text-white/70">No Leídos: {mensajes.filter(m => !m.leido).length}</span>
@@ -151,11 +151,11 @@ export default function ProfesorBandejaEntrada() {
                 <div className="p-6 border-b border-white/10">
                   <h2 className="text-2xl font-bold text-white font-['Poppins']">{selectedMensaje.asunto}</h2>
                   <div className="flex items-center gap-4 mt-2 text-white/70 text-sm">
-                    <User className="w-4 h-4 text-[#9f25b8]" />
+                    <User className="w-4 h-4 text-[#1e3cff]" />
                     <span>De: {selectedMensaje.remitente}</span>
                     {selectedMensaje.curso && (
                       <>
-                        <MailOpen className="w-4 h-4 text-[#9f25b8]" />
+                        <MailOpen className="w-4 h-4 text-[#1e3cff]" />
                         <span>Curso: {selectedMensaje.curso}</span>
                       </>
                     )}
@@ -178,7 +178,7 @@ export default function ProfesorBandejaEntrada() {
                   </Button>
                   <Button 
                     onClick={handleResponder}
-                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                    className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                   >
                     <Send className="w-4 h-4 mr-2" />
                     Responder
@@ -187,7 +187,7 @@ export default function ProfesorBandejaEntrada() {
               </>
             ) : (
               <div className="flex items-center justify-center h-full text-white/50 text-xl">
-                <Inbox className="w-8 h-8 mr-2 text-[#9f25b8]" />
+                <Inbox className="w-8 h-8 mr-2 text-[#1e3cff]" />
                 Selecciona un mensaje para leer su contenido.
               </div>
             )}

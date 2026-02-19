@@ -1,22 +1,12 @@
 import { useAuth } from '@/lib/authContext';
-import { Users, Save, AlertCircle, ChevronDown } from 'lucide-react';
+import { Users, AlertCircle, ChevronDown, BookOpen, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { queryClient } from '@/lib/queryClient';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { useState } from 'react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Collapsible,
   CollapsibleContent,
@@ -39,6 +29,15 @@ interface Course {
   colegioId: string;
 }
 
+interface CursoResumen {
+  _id: string;
+  nombre: string;
+  cursos: string[];
+  cantidadEstudiantes: number;
+  asistenciaMesPorcentaje: number;
+  promedioNotas: number | null;
+}
+
 const GRUPOS_DISPONIBLES = [
   '6A', '6B', '6C',
   '7A', '7B', '7C',
@@ -50,52 +49,31 @@ const GRUPOS_DISPONIBLES = [
 
 export default function DirectivoPage() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [openProfesorId, setOpenProfesorId] = useState<string | null>(null);
 
   const { data: profesores = [], isLoading: loadingProfesores, error: errorProfesores } = useQuery<Profesor[]>({
-    queryKey: ['/api/users/profesores'],
+    queryKey: ['/api/users/by-role', 'profesor'],
+    queryFn: () => apiRequest<Profesor[]>('GET', '/api/users/by-role?rol=profesor'),
   });
 
   const { data: allCourses = [], isLoading: loadingCourses } = useQuery<Course[]>({
     queryKey: ['/api/courses'],
+    queryFn: () => apiRequest<Course[]>('GET', '/api/courses'),
   });
 
-  const assignMutation = useMutation({
-    mutationFn: async (data: { profesorId: string; materia: string; grupos: string[] }) => {
-      const response = await fetch('/api/courses/assign', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Error al asignar cursos');
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
-      toast({
-        title: 'Asignacion exitosa!',
-        description: 'Los grupos han sido asignados al profesor.',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error al asignar',
-        description: error.message || 'No se pudieron asignar los grupos.',
-        variant: 'destructive',
-      });
-    },
+  const { data: resumenCursos, isLoading: loadingResumen } = useQuery<{ cursos: CursoResumen[] }>({
+    queryKey: ['/api/reports/cursos/resumen'],
+    queryFn: () => apiRequest<{ cursos: CursoResumen[] }>('GET', '/api/reports/cursos/resumen'),
+  });
+
+  const { data: stats } = useQuery<{ estudiantes: number; profesores: number; padres: number; directivos: number; cursos: number; materias: number }>({
+    queryKey: ['adminStats', user?.colegioId],
+    queryFn: () => apiRequest('GET', '/api/users/stats'),
   });
 
   const getCurrentAssignments = (profesorId: string, materia: string): string[] => {
     const course = allCourses.find(
-      c => c.profesorId === profesorId && c.nombre === materia
+      (c: Course) => (c as any).profesorId === profesorId && c.nombre === materia
     );
     return course?.cursos || [];
   };
@@ -104,12 +82,93 @@ export default function DirectivoPage() {
     <div data-testid="directivo-page">
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-          Gestion de Profesores
+          Vista Directivo (solo lectura)
         </h2>
         <p className="text-white/60">
-          Asigna grupos a cada profesor segun sus materias
+          Listas de profesores, cursos y resumen por curso. Sin opciones de edición.
         </p>
       </div>
+
+      {/* KPIs - solo lectura */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+          <CardContent className="pt-4">
+            <p className="text-white/60 text-xs uppercase">Estudiantes</p>
+            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.estudiantes ?? '-'}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+          <CardContent className="pt-4">
+            <p className="text-white/60 text-xs uppercase">Profesores</p>
+            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.profesores ?? '-'}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+          <CardContent className="pt-4">
+            <p className="text-white/60 text-xs uppercase">Padres</p>
+            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.padres ?? '-'}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+          <CardContent className="pt-4">
+            <p className="text-white/60 text-xs uppercase">Cursos</p>
+            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.cursos ?? '-'}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+          <CardContent className="pt-4">
+            <p className="text-white/60 text-xs uppercase">Materias</p>
+            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.materias ?? '-'}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Resumen por curso - solo lectura */}
+      <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-[#00c8ff]" />
+            Resumen por curso
+          </CardTitle>
+          <CardDescription className="text-white/60">
+            Estudiantes, asistencia del mes y promedio de notas por materia
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loadingResumen ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full bg-white/10" />
+              ))}
+            </div>
+          ) : resumenCursos?.cursos?.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/80">
+                    <th className="py-2 pr-4">Materia / Curso</th>
+                    <th className="py-2 pr-4">Estudiantes</th>
+                    <th className="py-2 pr-4">Asistencia mes %</th>
+                    <th className="py-2">Promedio notas</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white/90">
+                  {resumenCursos.cursos.map((c) => (
+                    <tr key={c._id} className="border-b border-white/5">
+                      <td className="py-2 pr-4 font-medium">{c.nombre}</td>
+                      <td className="py-2 pr-4">{c.cantidadEstudiantes}</td>
+                      <td className="py-2 pr-4">{c.asistenciaMesPorcentaje}%</td>
+                      <td className="py-2">{c.promedioNotas != null ? c.promedioNotas.toFixed(1) : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-white/50 py-4">No hay datos de cursos aún.</p>
+          )}
+        </CardContent>
+      </Card>
 
       {(loadingProfesores || loadingCourses) && (
         <div className="space-y-4">
@@ -153,7 +212,6 @@ export default function DirectivoPage() {
               isOpen={openProfesorId === profesor._id}
               onToggle={() => setOpenProfesorId(openProfesorId === profesor._id ? null : profesor._id)}
               getCurrentAssignments={getCurrentAssignments}
-              assignMutation={assignMutation}
             />
           ))}
         </div>
@@ -167,38 +225,9 @@ interface ProfesorCardProps {
   isOpen: boolean;
   onToggle: () => void;
   getCurrentAssignments: (profesorId: string, materia: string) => string[];
-  assignMutation: any;
 }
 
-function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assignMutation }: ProfesorCardProps) {
-  const [selectedMateria, setSelectedMateria] = useState<string>('');
-  const [selectedGrupos, setSelectedGrupos] = useState<string[]>([]);
-
-  const handleMateriaChange = (materia: string) => {
-    setSelectedMateria(materia);
-    const currentAssignments = getCurrentAssignments(profesor._id, materia);
-    setSelectedGrupos(currentAssignments);
-  };
-
-  const handleGrupoToggle = (grupo: string) => {
-    setSelectedGrupos(prev =>
-      prev.includes(grupo)
-        ? prev.filter(g => g !== grupo)
-        : [...prev, grupo]
-    );
-  };
-
-  const handleSave = () => {
-    if (!selectedMateria) {
-      return;
-    }
-    assignMutation.mutate({
-      profesorId: profesor._id,
-      materia: selectedMateria,
-      grupos: selectedGrupos,
-    });
-  };
-
+function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments }: ProfesorCardProps) {
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
       <Card className="bg-white/5 border-white/10 backdrop-blur-md">
@@ -214,11 +243,11 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
                   {profesor.email}
                 </CardDescription>
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {profesor.materias.map((materia) => (
+                  {profesor.materias?.map((materia: string) => (
                     <Badge
                       key={materia}
                       variant="secondary"
-                      className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40"
+                      className="bg-[#00c8ff]/20 text-white border border-[#00c8ff]/40"
                       data-testid={`badge-materia-${materia}`}
                     >
                       {materia}
@@ -234,66 +263,27 @@ function ProfesorCard({ profesor, isOpen, onToggle, getCurrentAssignments, assig
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <CardContent className="space-y-4 pt-4">
+          <CardContent className="pt-4">
+            <p className="text-white/60 text-sm mb-3">Grupos asignados por materia (solo lectura):</p>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-white">Selecciona una materia:</label>
-              <Select value={selectedMateria} onValueChange={handleMateriaChange}>
-                <SelectTrigger
-                  className="bg-white/5 border-white/20 text-white"
-                  data-testid="select-materia"
-                >
-                  <SelectValue placeholder="Seleccionar materia..." />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a001c] border-white/20">
-                  {profesor.materias.map((materia) => (
-                    <SelectItem
-                      key={materia}
-                      value={materia}
-                      className="text-white hover:bg-white/10"
-                      data-testid={`select-option-${materia}`}
-                    >
-                      {materia}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {selectedMateria && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-white">Asignar grupos:</label>
-                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                    {GRUPOS_DISPONIBLES.map((grupo) => (
-                      <label
-                        key={grupo}
-                        className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 cursor-pointer"
-                        data-testid={`checkbox-grupo-${grupo}`}
-                      >
-                        <Checkbox
-                          checked={selectedGrupos.includes(grupo)}
-                          onCheckedChange={() => handleGrupoToggle(grupo)}
-                          className="border-white/30"
-                        />
-                        <span className="text-white text-sm">{grupo}</span>
-                      </label>
-                    ))}
+              {(profesor.materias || []).map((materia: string) => {
+                const grupos = getCurrentAssignments(profesor._id, materia);
+                return (
+                  <div key={materia} className="flex flex-wrap items-center gap-2">
+                    <span className="text-white font-medium w-28">{materia}</span>
+                    {grupos.length ? (
+                      grupos.map((g: string) => (
+                        <Badge key={g} variant="outline" className="border-white/20 text-white/90">
+                          {g}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-white/50 text-sm">Sin grupos asignados</span>
+                    )}
                   </div>
-                </div>
-
-                <div className="flex justify-end pt-4">
-                  <Button
-                    onClick={handleSave}
-                    disabled={assignMutation.isPending}
-                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
-                    data-testid="button-save-assignment"
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    {assignMutation.isPending ? 'Guardando...' : 'Guardar Asignacion'}
-                  </Button>
-                </div>
-              </>
-            )}
+                );
+              })}
+            </div>
           </CardContent>
         </CollapsibleContent>
       </Card>

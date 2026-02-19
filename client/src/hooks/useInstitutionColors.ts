@@ -33,8 +33,17 @@ export function useInstitutionColors() {
   useEffect(() => {
     if (!institutionConfig) return;
 
-    const colorPrimario = institutionConfig.colorPrimario || '#9f25b8';
-    const colorSecundario = institutionConfig.colorSecundario || '#6a0dad';
+    // Evitar morado: identidad Caobos es azul - rechazar colores púrpura
+    const isPurple = (hex: string) => {
+      if (!hex || typeof hex !== 'string') return true;
+      const h = hex.toLowerCase().replace('#', '');
+      const purpleHexes = ['9f25b8', '6a0dad', 'c66bff', '7a1d8a'];
+      return purpleHexes.some(p => h === p || h.startsWith(p) || h.endsWith(p));
+    };
+    const colorPrimario = (institutionConfig.colorPrimario && !isPurple(institutionConfig.colorPrimario))
+      ? institutionConfig.colorPrimario : '#002366';
+    const colorSecundario = (institutionConfig.colorSecundario && !isPurple(institutionConfig.colorSecundario))
+      ? institutionConfig.colorSecundario : '#1e3cff';
 
     // Convertir colores HEX a HSL para las variables CSS
     const hexToHsl = (hex: string): string => {
@@ -103,9 +112,15 @@ export function useInstitutionColors() {
     };
   }, [institutionConfig]);
 
+  // Nunca devolver morado - identidad Caobos es azul
+  const safePrimary = institutionConfig?.colorPrimario && !['#9f25b8', '#6a0dad', '#c66bff'].includes(institutionConfig.colorPrimario.toLowerCase())
+    ? institutionConfig.colorPrimario : '#002366';
+  const safeSecondary = institutionConfig?.colorSecundario && !['#9f25b8', '#6a0dad', '#c66bff'].includes(institutionConfig.colorSecundario.toLowerCase())
+    ? institutionConfig.colorSecundario : '#1e3cff';
+
   return {
     institutionConfig,
-    colorPrimario: institutionConfig?.colorPrimario || '#9f25b8',
-    colorSecundario: institutionConfig?.colorSecundario || '#6a0dad',
+    colorPrimario: safePrimary,
+    colorSecundario: safeSecondary,
   };
 }

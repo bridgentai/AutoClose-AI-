@@ -28,7 +28,7 @@ export default function ParentPage() {
           <CardContent className="space-y-3">
             <Button
               onClick={() => setLocation('/chat')}
-              className="w-full justify-start bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+              className="w-full justify-start bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
               data-testid="button-chat"
             >
               <MessageSquare className="w-4 h-4 mr-2" />
@@ -49,7 +49,7 @@ export default function ParentPage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white">
-              <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+              <TrendingUp className="w-5 h-5 text-[#1e3cff]" />
               Rendimiento General
             </CardTitle>
             <CardDescription className="text-white/60">Promedio academico</CardDescription>
@@ -71,40 +71,40 @@ export default function ParentPage() {
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Matematicas</span>
-                <span className="text-[#9f25b8] font-bold">4.5/5.0</span>
+                <span className="text-[#1e3cff] font-bold">4.5/5.0</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
-                <div className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] h-2 rounded-full" style={{ width: '90%' }} />
+                <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '90%' }} />
               </div>
             </div>
 
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Ciencias</span>
-                <span className="text-[#9f25b8] font-bold">4.2/5.0</span>
+                <span className="text-[#1e3cff] font-bold">4.2/5.0</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
-                <div className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] h-2 rounded-full" style={{ width: '84%' }} />
+                <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '84%' }} />
               </div>
             </div>
 
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Historia</span>
-                <span className="text-[#9f25b8] font-bold">4.7/5.0</span>
+                <span className="text-[#1e3cff] font-bold">4.7/5.0</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
-                <div className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] h-2 rounded-full" style={{ width: '94%' }} />
+                <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '94%' }} />
               </div>
             </div>
 
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Fisica</span>
-                <span className="text-[#9f25b8] font-bold">4.4/5.0</span>
+                <span className="text-[#1e3cff] font-bold">4.4/5.0</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
-                <div className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] h-2 rounded-full" style={{ width: '88%' }} />
+                <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '88%' }} />
               </div>
             </div>
           </div>
@@ -119,7 +119,7 @@ export default function ParentPage() {
         <CardContent>
           <Button
             onClick={() => setLocation('/chat')}
-            className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+            className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
             data-testid="button-chat-main"
           >
             Iniciar Chat con AutoClose AI

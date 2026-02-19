@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/authContext";
+import { useQuery } from "@tanstack/react-query";
 import { 
   MessageSquare, 
   Sparkles, 
@@ -104,6 +105,17 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   };
 
   const navigationItems = getNavigationItems();
+
+  // Badge de notificaciones no leídas (estudiante y padre principalmente; visible para todos los roles con Notificaciones)
+  const { data: notifData } = useQuery<{ unreadCount: number }>({
+    queryKey: ['notifications-unread'],
+    queryFn: async () => {
+      const r = await apiRequest<{ list: unknown[]; unreadCount: number }>('GET', '/api/notifications');
+      return { unreadCount: r.unreadCount ?? 0 };
+    },
+    enabled: !!user && (user.rol === 'estudiante' || user.rol === 'padre' || user.rol === 'profesor' || user.rol === 'directivo'),
+  });
+  const unreadNotifCount = notifData?.unreadCount ?? 0;
 
   const handleNavClick = (path: string, action?: string) => {
     if (action === "chat") {
@@ -262,7 +274,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           <div className="flex items-center justify-between p-4 border-b border-white/10">
             {isExpanded && (
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
                 <span className="text-sm font-medium text-white font-['Poppins']">AI Dock</span>
@@ -301,7 +313,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                 <div className="flex-1 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-white/10 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center">
                         <MessageSquare className="w-4 h-4 text-white" />
                       </div>
                       <span className="text-sm font-medium text-white">Chat AI</span>
@@ -323,7 +335,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     {messages.length === 0 ? (
                       <div className="flex items-center justify-center h-full min-h-[200px]">
                         <div className="text-center">
-                          <div className="w-16 h-16 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                          <div className="w-16 h-16 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-[#002366] to-[#1e3cff]">
                             <MessageSquare className="w-8 h-8 text-white" />
                           </div>
                           <h3 className="text-lg font-semibold text-white mb-2 font-['Poppins']">
@@ -348,7 +360,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                               className={cn(
                                 "max-w-[85%] px-4 py-2 rounded-xl text-sm",
                                 msg.emisor === 'user'
-                                  ? 'bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] text-white rounded-br-sm'
+                                  ? 'bg-gradient-to-br from-[#002366] to-[#1e3cff] text-white rounded-br-sm'
                                   : 'bg-white/10 text-white rounded-bl-sm border border-white/20'
                               )}
                             >
@@ -387,7 +399,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     <Button
                       onClick={handleSend}
                       disabled={loading || !input.trim()}
-                      className="h-10 w-10 rounded-lg flex-shrink-0 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] hover:from-[#c66bff] hover:to-[#9f25b8]"
+                      className="h-10 w-10 rounded-lg flex-shrink-0 bg-gradient-to-br from-[#002366] to-[#1e3cff] hover:from-[#1e3cff] hover:to-[#00c8ff]"
                     >
                       {loading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -408,14 +420,14 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     }}
                     className={cn(
                       "w-full p-4 rounded-xl",
-                      "bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]",
-                      "hover:from-[#c66bff] hover:to-[#9f25b8]",
+                      "bg-gradient-to-br from-[#002366] to-[#1e3cff]",
+                      "hover:from-[#1e3cff] hover:to-[#00c8ff]",
                       "transition-all duration-300 transition-bounce",
                       "flex items-center gap-3",
                       "text-white font-medium text-expressive-subtitle",
-                      "shadow-lg shadow-[#9f25b8]/30",
-                      "hover:shadow-xl hover:shadow-[#9f25b8]/50",
-                      "hover-lift pulse-purple",
+                      "shadow-lg shadow-[#002366]/40",
+                      "hover:shadow-xl hover:shadow-[#002366]/50",
+                      "hover-lift pulse-blue",
                     )}
                   >
                     <MessageSquare className="w-5 h-5 animate-float" />
@@ -435,7 +447,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       "group hover-lift",
                     )}
                   >
-                    <Command className="w-4 h-4 text-white/70 group-hover:text-[#9f25b8] transition-colors group-hover:scale-110" />
+                    <Command className="w-4 h-4 text-white/70 group-hover:text-[#ffd700] transition-colors group-hover:scale-110" />
                     <span className="text-sm text-white/80 group-hover:text-white text-expressive-subtitle">Acceso Rápido</span>
                     <span className="ml-auto text-xs text-white/50">⌘K</span>
                   </button>
@@ -462,12 +474,12 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                                   "transition-all duration-300 transition-bounce",
                                   "flex items-center gap-3",
                                   "group hover-lift",
-                                  isActive && "bg-[#9f25b8]/20 border-[#9f25b8]/30 hover-glow"
+                                  isActive && "bg-[#002366]/30 border-[#002366]/40 hover-glow"
                                 )}
                               >
                                 <Icon className={cn(
                                   "w-4 h-4 text-white/70 mt-0.5 transition-all duration-300",
-                                  isActive ? "text-[#9f25b8] animate-float" : "group-hover:text-[#9f25b8] group-hover:scale-110"
+                                  isActive ? "text-[#ffd700] animate-float" : "group-hover:text-[#ffd700] group-hover:scale-110"
                                 )} />
                                 <span className={cn(
                                   "text-sm transition-colors text-expressive-subtitle",
@@ -475,6 +487,11 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                                 )}>
                                   {item.label}
                                 </span>
+                                {item.path === '/notificaciones' && unreadNotifCount > 0 && (
+                                  <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#002366] px-1.5 text-xs font-medium text-white">
+                                    {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                                  </span>
+                                )}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent side="left">
@@ -525,7 +542,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     )}
                     aria-label="Expandir AI Dock"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center group-hover:scale-110 transition-transform">
                       <Sparkles className="w-5 h-5 text-white" />
                     </div>
                   </button>
@@ -560,7 +577,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                   >
                     <MessageSquare className={cn(
                       "w-5 h-5 transition-colors",
-                      (isChatPage || isDashboardPage) ? "text-white/30" : "group-hover:text-[#9f25b8]"
+                      (isChatPage || isDashboardPage) ? "text-white/30" : "group-hover:text-[#ffd700]"
                     )} />
                   </button>
                 </TooltipTrigger>
@@ -580,7 +597,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     )}
                     aria-label="Acceso Rápido"
                   >
-                    <Command className="w-5 h-5 group-hover:text-[#9f25b8] transition-colors" />
+                    <Command className="w-5 h-5 group-hover:text-[#ffd700] transition-colors" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="left">

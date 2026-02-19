@@ -1,13 +1,13 @@
 export default function Setup() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-[#0a0a0c] via-[#1a001c] to-[#3d0045]">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-[#0a0a2a] via-[#002366] to-[#003d7a]">
       <div className="max-w-2xl w-full">
         <div className="backdrop-blur-xl bg-black/40 border border-white/10 rounded-3xl p-10 shadow-2xl" style={{ boxShadow: '0 0 35px rgba(159, 37, 184, 0.25)' }}>
           <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] rounded-2xl mx-auto mb-6 flex items-center justify-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-[#002366] to-[#1e3cff] rounded-2xl mx-auto mb-6 flex items-center justify-center">
               <span className="text-5xl">⚙️</span>
             </div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#9f25b8] to-[#c66bff] bg-clip-text text-transparent font-['Poppins'] mb-3">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#1e3cff] to-[#00c8ff] bg-clip-text text-transparent font-['Poppins'] mb-3">
               Configuración de AutoClose AI
             </h1>
             <p className="text-white/70 text-lg">La aplicación requiere configuración adicional</p>
@@ -61,7 +61,7 @@ export default function Setup() {
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-5">
               <h3 className="text-blue-400 font-semibold mb-2">💡 ¿No tienes MongoDB Atlas?</h3>
               <p className="text-white/70 text-sm mb-3">
-                Crea una cuenta gratuita en <a href="https://www.mongodb.com/cloud/atlas" target="_blank" className="text-[#9f25b8] underline">MongoDB Atlas</a>
+                Crea una cuenta gratuita en <a href="https://www.mongodb.com/cloud/atlas" target="_blank" className="text-[#1e3cff] underline">MongoDB Atlas</a>
               </p>
               <ol className="list-decimal list-inside space-y-1 text-white/70 text-xs">
                 <li>Crea un cluster gratuito</li>
@@ -75,7 +75,7 @@ export default function Setup() {
           <div className="mt-8 text-center">
             <button
               onClick={() => window.location.reload()}
-              className="px-8 py-3 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white rounded-xl font-medium transition-opacity"
+              className="px-8 py-3 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white rounded-xl font-medium transition-opacity"
             >
               Reintentar Conexión
             </button>

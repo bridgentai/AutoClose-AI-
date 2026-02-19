@@ -101,15 +101,25 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6"
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative"
          style={{
-           background: 'radial-gradient(circle at 20% 20%, #25003d, #0b0013 80%)'
+           background: 'linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)'
          }}>
-      <div className="w-full max-w-md">
-        <div className="backdrop-blur-xl bg-black/40 border border-white/10 rounded-3xl p-10 shadow-2xl"
-             style={{ boxShadow: '0 0 35px rgba(159, 37, 184, 0.25)' }}>
-          
-          <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-[#9f25b8] to-[#c66bff] bg-clip-text text-transparent font-['Poppins']">
+      {/* Caobos en esquina - enlace a landing */}
+      <button
+        type="button"
+        onClick={() => setLocation('/')}
+        className="absolute top-6 left-6 z-20 text-2xl font-bold text-white font-['Poppins'] tracking-tight hover:text-white/80 transition-colors"
+      >
+        Caobos
+      </button>
+      <div className="w-full max-w-md relative z-10">
+        <div className="backdrop-blur-xl border border-white/10 rounded-3xl p-10 shadow-2xl"
+             style={{ 
+               background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15))',
+               boxShadow: '0 0 40px rgba(30, 60, 255, 0.25)' 
+             }}>
+          <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-[#002366] via-[#1e3cff] to-[#003d7a] bg-clip-text text-transparent font-['Poppins']">
             Crear cuenta
           </h2>
           <p className="text-white/70 mb-8">Únete a AutoClose AI</p>
@@ -265,7 +275,7 @@ export default function Register() {
                         {materias.map((materia) => (
                           <Badge
                             key={materia}
-                            className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40 hover:bg-[#9f25b8]/30"
+                            className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 hover:bg-[#1e3cff]/30"
                             data-testid={`badge-materia-${materia.toLowerCase().replace(/\s+/g, '-')}`}
                           >
                             {materia}
@@ -317,20 +327,27 @@ export default function Register() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#c66bff] hover:opacity-90 text-white font-semibold"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white font-semibold transition-all duration-200 hover:shadow-[0_0_30px_rgba(30,60,255,0.4)]"
                 data-testid="button-register"
               >
                 {loading ? 'Registrando...' : 'Crear cuenta'}
               </Button>
             </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 space-y-3 text-center">
             <button
               onClick={() => setLocation('/login')}
-              className="text-white/60 hover:text-white/90 text-sm transition-colors"
+              className="text-white/60 hover:text-white/90 text-sm transition-colors block w-full"
               data-testid="link-login"
             >
-              ¿Ya tienes cuenta? <span className="text-[#9f25b8] font-semibold">Inicia sesión</span>
+              ¿Ya tienes cuenta? <span className="text-[#00c8ff] font-semibold">Inicia sesión</span>
+            </button>
+            <button
+              onClick={() => setLocation('/')}
+              className="text-white/50 hover:text-white/80 text-sm transition-colors"
+              data-testid="link-landing"
+            >
+              ← Volver al inicio
             </button>
           </div>
         </div>

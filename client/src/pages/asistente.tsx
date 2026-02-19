@@ -16,7 +16,7 @@ const SECTION_LABELS: Record<string, string> = {
 const SECTION_COLORS: Record<string, string> = {
   'junior-school': 'from-green-500 to-emerald-600',
   'middle-school': 'from-blue-500 to-cyan-600',
-  'high-school': 'from-purple-500 to-violet-600',
+  'high-school': 'from-[#002366] to-[#1e3cff]',
 };
 
 interface Message {
@@ -97,7 +97,7 @@ function AIChatBox() {
     <Card className={`${CARD_STYLE} cursor-pointer flex flex-col h-full`} onClick={() => setLocation('/chat')}>
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-white flex items-center gap-2 text-lg">
-          <Bot className="w-5 h-5 text-[#9f25b8] animate-pulse" />
+          <Bot className="w-5 h-5 text-[#00c8ff] animate-pulse" />
           Chat AI - Asistente
         </CardTitle>
         <CardDescription className="text-white/60 text-sm">
@@ -110,7 +110,7 @@ function AIChatBox() {
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full py-8">
               <div className="text-center">
-                <div className="w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                <div className="w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center bg-gradient-to-br from-[#002366] to-[#1e3cff]">
                   <MessageSquare className="w-7 h-7 text-white" />
                 </div>
                 <h2 className="text-lg font-semibold text-white mb-1.5">Asistente AI</h2>
@@ -123,7 +123,7 @@ function AIChatBox() {
                 <div key={idx} className={`flex ${msg.emisor === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] px-3 py-2 rounded-lg text-sm ${
                     msg.emisor === 'user'
-                      ? 'bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white'
+                      ? 'bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white'
                       : 'bg-white/10 text-white border border-white/20'
                   }`}>
                     <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
@@ -161,7 +161,7 @@ function AIChatBox() {
               onClick={(e) => { e.stopPropagation(); handleSend(); }}
               disabled={loading || !input.trim()}
               size="icon"
-              className="w-10 h-10 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+              className="w-10 h-10 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
@@ -205,7 +205,7 @@ export default function AsistentePage() {
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Mensajes</CardTitle>
-            <Mail className="w-5 h-5 text-[#9f25b8]" />
+            <Mail className="w-5 h-5 text-[#00c8ff]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">5</div>
@@ -220,7 +220,7 @@ export default function AsistentePage() {
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Permisos</CardTitle>
-            <FileCheck className="w-5 h-5 text-[#9f25b8]" />
+            <FileCheck className="w-5 h-5 text-[#00c8ff]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">3</div>
@@ -235,7 +235,7 @@ export default function AsistentePage() {
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Chat AI</CardTitle>
-            <MessageSquare className="w-5 h-5 text-[#9f25b8]" />
+            <MessageSquare className="w-5 h-5 text-[#00c8ff]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">24/7</div>
@@ -250,7 +250,7 @@ export default function AsistentePage() {
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Calendario</CardTitle>
-            <Calendar className="w-5 h-5 text-[#9f25b8]" />
+            <Calendar className="w-5 h-5 text-[#00c8ff]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">2</div>
@@ -265,7 +265,7 @@ export default function AsistentePage() {
         <Card className={CARD_STYLE}>
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-[#9f25b8]" />
+              <Calendar className="w-5 h-5 text-[#00c8ff]" />
               Calendario General - {seccionLabel}
             </CardTitle>
             <CardDescription className="text-white/60">Eventos y actividades de la sección</CardDescription>
@@ -273,7 +273,7 @@ export default function AsistentePage() {
           <CardContent>
             <div className="space-y-3">
               <div className="p-4 bg-white/5 rounded-xl flex items-start gap-3 hover:bg-white/10 transition-all cursor-pointer">
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center flex-shrink-0">
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">20</span>
                 </div>
                 <div className="flex-1">
@@ -324,7 +324,7 @@ export default function AsistentePage() {
         <Card className={CARD_STYLE}>
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <FileCheck className="w-5 h-5 text-[#9f25b8]" />
+              <FileCheck className="w-5 h-5 text-[#00c8ff]" />
               Permisos Recientes
             </CardTitle>
             <CardDescription className="text-white/60">Últimos permisos gestionados</CardDescription>
@@ -365,7 +365,7 @@ export default function AsistentePage() {
               </div>
 
               <Button 
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 mt-2"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 mt-2"
                 onClick={() => setLocation('/permisos')}
               >
                 Gestionar Permisos
@@ -378,7 +378,7 @@ export default function AsistentePage() {
         <Card className={CARD_STYLE}>
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <Mail className="w-5 h-5 text-[#9f25b8]" />
+              <Mail className="w-5 h-5 text-[#00c8ff]" />
               Mensajes Recientes
             </CardTitle>
             <CardDescription className="text-white/60">Comunicaciones pendientes</CardDescription>
@@ -398,7 +398,7 @@ export default function AsistentePage() {
                   </div>
                   <p className="text-white/60 text-xs truncate">Recordatorio: Entrega de documentos...</p>
                 </div>
-                <div className="w-2 h-2 rounded-full bg-[#9f25b8] flex-shrink-0 mt-2"></div>
+                <div className="w-2 h-2 rounded-full bg-[#00c8ff] flex-shrink-0 mt-2"></div>
               </div>
 
               <div className="p-3 bg-white/5 rounded-xl flex items-start gap-3 hover:bg-white/10 transition-all cursor-pointer">
@@ -417,7 +417,7 @@ export default function AsistentePage() {
               </div>
 
               <div className="p-3 bg-white/5 rounded-xl flex items-start gap-3 hover:bg-white/10 transition-all cursor-pointer">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center flex-shrink-0">
                   <span className="text-white font-bold text-sm">DR</span>
                 </div>
                 <div className="flex-1 min-w-0">

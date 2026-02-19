@@ -1,9 +1,12 @@
 import express from 'express';
-import { User, Vinculacion } from '../models';
+import { Types } from 'mongoose';
+import { User, Vinculacion, Notificacion } from '../models';
 import { Course } from '../models/Course';
+import { Group } from '../models/Group';
 import { protect, AuthRequest } from '../middleware/auth';
 import { normalizeIdForQuery, generateUserId } from '../utils/idGenerator';
 import { createBulkUsers, type BulkRowInput } from '../services/bulkUserService';
+import { logAdminAction } from '../services/auditLogger';
 
 const router = express.Router();
 
@@ -267,7 +270,7 @@ router.get('/relaciones/:userId', protect, async (req: AuthRequest, res) => {
 });
 
 // =========================================================================
-// GET /api/users/by-role - Obtener usuarios por rol (para admin-general-colegio)
+// GET /api/users/by-role - Obtener usuarios por rol (admin y directivo, solo lectura para directivo)
 // Permite filtrar por rol y colegioId del usuario autenticado
 router.get('/by-role', protect, async (req: AuthRequest, res) => {
   try {
@@ -278,8 +281,8 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin') {
-      return res.status(403).json({ message: 'Solo administradores del colegio pueden acceder a esta ruta' });
+    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin' && user.rol !== 'directivo') {
+      return res.status(403).json({ message: 'Solo administradores del colegio o directivos pueden acceder a esta ruta' });
     }
 
     let { rol } = req.query;
@@ -349,13 +352,15 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
     }
 
     const colegioId = user.colegioId;
+    const onlyActive = req.query.estado === 'active';
+    const estadoFilter = onlyActive ? { estado: 'active' } : {};
 
-    // Contar usuarios por rol
+    // Contar usuarios por rol (opcional: solo activos)
     const [estudiantes, profesores, padres, directivos] = await Promise.all([
-      User.countDocuments({ colegioId, rol: 'estudiante' }),
-      User.countDocuments({ colegioId, rol: 'profesor' }),
-      User.countDocuments({ colegioId, rol: 'padre' }),
-      User.countDocuments({ colegioId, rol: 'directivo' }),
+      User.countDocuments({ colegioId, rol: 'estudiante', ...estadoFilter }),
+      User.countDocuments({ colegioId, rol: 'profesor', ...estadoFilter }),
+      User.countDocuments({ colegioId, rol: 'padre', ...estadoFilter }),
+      User.countDocuments({ colegioId, rol: 'directivo', ...estadoFilter }),
     ]);
 
     const { Group } = await import('../models/Group');
@@ -474,13 +479,11 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
     await newUser.save();
 
     // Si es profesor con materias (nombres de materia, ej. "Matemáticas"): solo se guardan en User.materias.
-    // La asignación a grupos se hace después con POST /api/courses/assign-professor-to-groups.
-    // Si materias fueran IDs de Course existentes, se podría enlazar aquí; por defecto son nombres.
+    // Si además se envían cursos (grupos), asignar al profesor a esos grupos (misma lógica que assign-professor-to-groups).
     if (rol === 'profesor' && materias && Array.isArray(materias) && materias.length > 0) {
       const areIds = materias.every((m: any) => typeof m === 'string' && m.length === 24 && /^[a-f0-9]+$/i.test(m));
       if (areIds) {
         try {
-          const { Course } = await import('../models/Course');
           const profesorObjId = newUser._id;
           await Course.updateMany(
             { _id: { $in: materias }, colegioId: user.colegioId },
@@ -491,6 +494,57 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
         }
       }
     }
+
+    // Asignar profesor a grupos (cursos) si se envió el array "cursos" al crear (ej. ["11H", "11A"]).
+    const groupNames = Array.isArray(cursos) ? cursos : (typeof cursos === 'string' ? [cursos] : []);
+    if (rol === 'profesor' && groupNames.length > 0 && materias && Array.isArray(materias) && materias.length > 0) {
+      const materiaNombre = String(materias[0]).trim();
+      const normalizedGroups = groupNames.map((g: string) => String(g).toUpperCase().trim()).filter(Boolean);
+      const colegioId = user.colegioId;
+      try {
+        for (const nombreGrupo of normalizedGroups) {
+          const grupo = await Group.findOne({ nombre: nombreGrupo, colegioId }).lean();
+          if (!grupo) {
+            console.warn(`[USERS] Grupo "${nombreGrupo}" no existe al crear profesor; créalo en Cursos para asignarlo después.`);
+            continue;
+          }
+        }
+        const profesorObjId = newUser._id as Types.ObjectId;
+        let course = await Course.findOne({ nombre: materiaNombre, colegioId }).lean();
+        if (!course) {
+          await Course.create({
+            nombre: materiaNombre,
+            colegioId,
+            profesorIds: [profesorObjId],
+            profesorId: profesorObjId,
+            cursos: normalizedGroups,
+            estudiantes: [],
+            estudianteIds: [],
+          });
+        } else {
+          await Course.findByIdAndUpdate(course._id, {
+            $addToSet: {
+              profesorIds: profesorObjId,
+              cursos: { $each: normalizedGroups },
+            },
+            $set: { profesorId: course.profesorId || profesorObjId },
+          });
+        }
+        console.log(`[USERS] Profesor ${newUser.email} asignado a grupos: ${normalizedGroups.join(', ')} (materia: ${materiaNombre}).`);
+      } catch (error: any) {
+        console.error('[USERS] Error al asignar profesor a grupos al crear:', error.message);
+      }
+    }
+
+    await logAdminAction({
+      userId: normalizedUserId,
+      role: user.rol,
+      action: 'create_user',
+      entityType: 'user',
+      entityId: newUser._id,
+      colegioId: user.colegioId,
+      requestData: { rol, email: email.toLowerCase(), nombre },
+    });
 
     // TODOS devuelven passwordTemporal
     res.status(201).json({
@@ -594,7 +648,7 @@ router.post('/reset-password', protect, async (req: AuthRequest, res) => {
 const ensureAdminColegio = async (req: AuthRequest) => {
   const uid = normalizeIdForQuery(req.userId || '');
   const u = await User.findById(uid).select('rol colegioId').lean();
-  if (!u || u.rol !== 'admin-general-colegio') {
+  if (!u || (u.rol !== 'admin-general-colegio' && u.rol !== 'school_admin')) {
     return { ok: false, status: 403, message: 'Solo administradores generales del colegio pueden realizar esta acción.' };
   }
   return { ok: true, user: u };
@@ -628,6 +682,55 @@ router.get('/me/hijos', protect, async (req: AuthRequest, res) => {
   } catch (e: any) {
     console.error('Error en GET /me/hijos:', e.message);
     res.status(500).json({ message: 'Error al listar hijos.' });
+  }
+});
+
+// =========================================================================
+// GET /api/users/me/consent - Obtener estado de consentimiento del usuario
+// =========================================================================
+router.get('/me/consent', protect, async (req: AuthRequest, res) => {
+  try {
+    const uid = normalizeIdForQuery(req.userId || '');
+    const u = await User.findById(uid).select('consentimientoTerminos consentimientoPrivacidad consentimientoFecha').lean();
+    if (!u) return res.status(404).json({ message: 'Usuario no encontrado.' });
+    return res.json({
+      consentimientoTerminos: !!u.consentimientoTerminos,
+      consentimientoPrivacidad: !!u.consentimientoPrivacidad,
+      consentimientoFecha: u.consentimientoFecha ?? null,
+    });
+  } catch (e: any) {
+    console.error('Error en GET /me/consent:', e.message);
+    res.status(500).json({ message: 'Error al obtener consentimiento.' });
+  }
+});
+
+// =========================================================================
+// POST /api/users/me/consent - Registrar aceptación de términos y privacidad
+// =========================================================================
+router.post('/me/consent', protect, async (req: AuthRequest, res) => {
+  try {
+    const uid = normalizeIdForQuery(req.userId || '');
+    const { consentimientoTerminos, consentimientoPrivacidad } = req.body;
+    if (consentimientoTerminos !== true || consentimientoPrivacidad !== true) {
+      return res.status(400).json({ message: 'Debe aceptar tanto términos como política de privacidad.' });
+    }
+    await User.findByIdAndUpdate(uid, {
+      $set: {
+        consentimientoTerminos: true,
+        consentimientoPrivacidad: true,
+        consentimientoFecha: new Date(),
+      },
+    });
+    return res.json({
+      success: true,
+      message: 'Consentimiento registrado correctamente.',
+      consentimientoTerminos: true,
+      consentimientoPrivacidad: true,
+      consentimientoFecha: new Date(),
+    });
+  } catch (e: any) {
+    console.error('Error en POST /me/consent:', e.message);
+    res.status(500).json({ message: 'Error al registrar consentimiento.' });
   }
 });
 
@@ -705,6 +808,36 @@ router.post('/vinculaciones', protect, async (req: AuthRequest, res) => {
       colegioId,
     });
 
+    await logAdminAction({
+      userId: normalizeIdForQuery(req.userId || ''),
+      role: (check as any).user.rol,
+      action: 'vinculacion',
+      entityType: 'vinculacion',
+      entityId: v._id,
+      colegioId,
+      requestData: { padreId, estudianteId },
+    });
+
+    // Notificar al padre (y opcionalmente al estudiante)
+    try {
+      await Notificacion.create({
+        usuarioId: normalizeIdForQuery(padreId),
+        titulo: 'Vinculación creada',
+        descripcion: 'Se ha creado una vinculación entre usted y un estudiante. La cuenta se activará cuando el administrador confirme y active las cuentas.',
+        fecha: new Date(),
+        leido: false,
+      });
+      await Notificacion.create({
+        usuarioId: normalizeIdForQuery(estudianteId),
+        titulo: 'Vinculación con padre',
+        descripcion: 'Se ha vinculado su cuenta con un padre/tutor. La activación se completará cuando el administrador confirme.',
+        fecha: new Date(),
+        leido: false,
+      });
+    } catch (err: any) {
+      console.error('Error al crear notificaciones de vinculación:', err.message);
+    }
+
     res.status(201).json({ message: 'Vinculación creada.', vinculacion: v });
   } catch (e: any) {
     if (e.code === 11000) return res.status(400).json({ message: 'Esta vinculación ya existe.' });
@@ -750,6 +883,38 @@ router.post('/confirmar-vinculacion', protect, async (req: AuthRequest, res) => 
       { _id: { $in: padreIds }, colegioId, rol: 'padre' },
       { $set: { estado: 'vinculado' } }
     );
+
+    await logAdminAction({
+      userId: normalizeIdForQuery(req.userId || ''),
+      role: (check as any).user.rol,
+      action: 'confirmar_vinculacion',
+      entityType: 'user',
+      entityId: normalizeIdForQuery(estudianteId),
+      colegioId,
+      requestData: { estudianteId, padresActualizados: padreIds.length },
+    });
+
+    // Notificar a padres y estudiante
+    try {
+      for (const pid of padreIds) {
+        await Notificacion.create({
+          usuarioId: pid,
+          titulo: 'Vinculación confirmada',
+          descripcion: 'La vinculación con el estudiante ha sido confirmada. El administrador puede activar las cuentas para que puedan iniciar sesión.',
+          fecha: new Date(),
+          leido: false,
+        });
+      }
+      await Notificacion.create({
+        usuarioId: normalizeIdForQuery(estudianteId),
+        titulo: 'Vinculación confirmada',
+        descripcion: 'Su vinculación con su(s) padre(s)/tutor(es) ha sido confirmada. Pronto podrá acceder cuando se activen las cuentas.',
+        fecha: new Date(),
+        leido: false,
+      });
+    } catch (err: any) {
+      console.error('Error al crear notificaciones confirmar vinculación:', err.message);
+    }
 
     res.json({
       message: 'Vinculación confirmada. Estudiante y padres vinculados pasan a estado VINCULADO.',
@@ -807,6 +972,38 @@ router.post('/activar-cuentas', protect, async (req: AuthRequest, res) => {
       { _id: { $in: padreIds }, colegioId, rol: 'padre' },
       { $set: { estado: 'active' } }
     );
+
+    await logAdminAction({
+      userId: normalizeIdForQuery(req.userId || ''),
+      role: (check as any).user.rol,
+      action: 'activar_cuentas',
+      entityType: 'user',
+      entityId: normalizeIdForQuery(estudianteId),
+      colegioId,
+      requestData: { estudianteId, padresActivados: padreIds.length },
+    });
+
+    // Notificar a padres y estudiante que ya pueden iniciar sesión
+    try {
+      for (const pid of padreIds) {
+        await Notificacion.create({
+          usuarioId: pid,
+          titulo: 'Cuentas activadas',
+          descripcion: 'Las cuentas han sido activadas. Ya puede iniciar sesión en la plataforma.',
+          fecha: new Date(),
+          leido: false,
+        });
+      }
+      await Notificacion.create({
+        usuarioId: normalizeIdForQuery(estudianteId),
+        titulo: 'Cuenta activada',
+        descripcion: 'Su cuenta ha sido activada. Ya puede iniciar sesión en la plataforma.',
+        fecha: new Date(),
+        leido: false,
+      });
+    } catch (err: any) {
+      console.error('Error al crear notificaciones activar cuentas:', err.message);
+    }
 
     res.json({
       message: 'Cuentas activadas. El estudiante y los padres vinculados ya pueden iniciar sesión.',

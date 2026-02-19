@@ -40,7 +40,7 @@ export default function ProfesorTareasPage() {
             onClick={() => setLocation('/profesor/academia/tareas/asignar')}
           >
             <CardHeader className="p-6">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] mb-4 group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r from-[#002366] to-[#1e3cff] mb-4 group-hover:scale-110 transition-transform">
                 <FilePlus className="w-8 h-8 text-white" />
               </div>
               <CardTitle className="text-white text-2xl font-bold mb-2">
@@ -52,7 +52,7 @@ export default function ProfesorTareasPage() {
             </CardHeader>
             <CardContent className="p-6 pt-0">
               <Button
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                 onClick={(e) => {
                   e.stopPropagation();
                   setLocation('/profesor/academia/tareas/asignar');
@@ -69,7 +69,7 @@ export default function ProfesorTareasPage() {
             onClick={() => setLocation('/profesor/academia/tareas/revision')}
           >
             <CardHeader className="p-6">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r from-[#6a0dad] to-[#9f25b8] mb-4 group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-gradient-to-r from-[#002366] to-[#1e3cff] mb-4 group-hover:scale-110 transition-transform">
                 <ClipboardCheck className="w-8 h-8 text-white" />
               </div>
               <CardTitle className="text-white text-2xl font-bold mb-2">
@@ -82,7 +82,7 @@ export default function ProfesorTareasPage() {
             <CardContent className="p-6 pt-0">
               <Button
                 variant="outline"
-                className="w-full border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                className="w-full border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
                 onClick={(e) => {
                   e.stopPropagation();
                   setLocation('/profesor/academia/tareas/revision');

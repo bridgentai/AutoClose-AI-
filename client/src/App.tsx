@@ -1,5 +1,5 @@
 import React from "react";
-import { Switch, Route, useLocation as useWouterLocation } from "wouter";
+import { Switch, Route, useLocation, useLocation as useWouterLocation } from "wouter";
 
 // Componente helper para redireccionar
 function Redirect({ to }: { to: string }) {
@@ -19,7 +19,6 @@ import { useInstitutionColors } from "@/hooks/useInstitutionColors";
 import { AppLayout } from "@/components/app-layout";
 
 import Home from "@/pages/home";
-import Entry from "@/pages/entry";
 import LoginStandby from "@/pages/login-standby";
 import RegisterStandby from "@/pages/register-standby";
 import Login from "@/pages/login";
@@ -29,6 +28,7 @@ import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
 import Courses from "@/pages/courses";
 import CourseDetail from "@/pages/course-detail";
+import CourseGradesTable from "@/pages/course-grades-table";
 import CalendarPage from "@/pages/calendar";
 import Materials from "@/pages/materials";
 import Account from "@/pages/account";
@@ -37,6 +37,9 @@ import NotFound from "@/pages/not-found";
 import PermisosPage from "@/pages/permisos";
 import NotificacionesPage from "@/pages/notificaciones";
 import BoletinPage from "@/pages/boletin";
+import TerminosPage from "@/pages/terminos";
+import PrivacidadPage from "@/pages/privacidad";
+import ConsentPage from "@/pages/consent";
 
 import TeacherCalendarPage from "@/pages/teacher-calendar";
 import TeacherTasksSummaryPage from "@/pages/teacher-tasks-summary";
@@ -129,16 +132,21 @@ const queryClient = new QueryClient();
 function AppRouter() {
   const { user } = useAuth();
   const isLogged = Boolean(user);
+  const [location] = useLocation();
   
   // Cargar y aplicar colores de la institución (el hook maneja internamente si el usuario está autenticado)
   useInstitutionColors();
+
+  // Landing en "/" - sin AppLayout, sin AI Dock, primera página al abrir la plataforma
+  if (location === "/" || location === "") {
+    return <Home />;
+  }
 
   return (
     <>
       {isLogged ? (
         <AppLayout>
           <Switch>
-            <Route path="/" component={Home} />
 
             <Route path="/dashboard">
               <AuthGuard><Dashboard /></AuthGuard>
@@ -204,6 +212,9 @@ function AppRouter() {
             </Route>
             <Route path="/course-detail/:cursoId">
               <AuthGuard><CourseDetail /></AuthGuard>
+            </Route>
+            <Route path="/course/:cursoId/grades">
+              <AuthGuard><CourseGradesTable /></AuthGuard>
             </Route>
 
             <Route path="/mi-aprendizaje/cursos">
@@ -334,6 +345,16 @@ function AppRouter() {
               <AuthGuard><BoletinPage /></AuthGuard>
             </Route>
 
+            <Route path="/terminos">
+              <TerminosPage />
+            </Route>
+            <Route path="/privacidad">
+              <PrivacidadPage />
+            </Route>
+            <Route path="/consent">
+              <AuthGuard><ConsentPage /></AuthGuard>
+            </Route>
+
             {/* Módulos del Profesor */}
             <Route path="/profesor/academia">
               <AuthGuard><ProfesorAcademiaLayout /></AuthGuard>
@@ -456,8 +477,6 @@ function AppRouter() {
         </AppLayout>
       ) : (
         <Switch>
-          <Route path="/" component={Entry} />
-          
           {/* Rutas de login y registro activas */}
           <Route path="/login">
             <GuestGuard><Login /></GuestGuard>
@@ -469,6 +488,11 @@ function AppRouter() {
 
           <Route path="/register">
             <GuestGuard><Register /></GuestGuard>
+          </Route>
+
+          {/* Cualquier otra ruta sin login -> redirigir al landing */}
+          <Route path="/:rest*">
+            <Redirect to="/" />
           </Route>
           
           {/* Rutas de standby comentadas */}

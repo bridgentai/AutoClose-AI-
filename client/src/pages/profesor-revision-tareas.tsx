@@ -29,16 +29,16 @@ interface ProfessorGroupAssignment {
 }
 
 const GRADIENT_COLORS = [
-  'from-purple-500 to-pink-500',
+  'from-[#002366] to-[#003d7a]',
   'from-blue-500 to-cyan-500',
   'from-green-500 to-emerald-500',
   'from-yellow-500 to-orange-500',
   'from-red-500 to-rose-500',
-  'from-indigo-500 to-purple-500',
+  'from-[#003d7a] to-[#1e3cff]',
   'from-teal-500 to-cyan-500',
   'from-amber-500 to-yellow-500',
-  'from-violet-500 to-purple-500',
-  'from-fuchsia-500 to-pink-500',
+  'from-[#002366] to-[#1e3cff]',
+  'from-[#003d7a] to-[#1e3cff]',
 ];
 
 const fetchProfessorGroups = async (): Promise<ProfessorGroupAssignment[]> => {
@@ -105,9 +105,9 @@ export default function ProfesorRevisionTareasPage() {
         <div className="max-w-7xl mx-auto">
           <Alert className="bg-blue-500/10 border-blue-500/50 mt-8">
             <AlertCircle className="h-4 w-4 text-blue-400" />
-            <AlertTitle className="text-blue-200">Sin Grupos Activos</AlertTitle>
+            <AlertTitle className="text-blue-200">Sin Grupos Asignados</AlertTitle>
             <AlertDescription className="text-blue-200">
-              Aún no te has auto-asignado materias a ningún grupo. Haz clic en "Gestionar Asignaciones" para empezar.
+              Aún no tienes grupos asignados. El administrador del colegio te asignará a cursos desde su panel.
             </AlertDescription>
           </Alert>
         </div>
@@ -160,7 +160,7 @@ export default function ProfesorRevisionTareasPage() {
                 <CardContent className="p-4 pt-0 md:p-6 md:pt-0 space-y-2">
                   <Button
                     variant="outline"
-                    className="w-full border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                    className="w-full border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
                     onClick={e => {
                       e.stopPropagation();
                       handleCourseClick(group.groupId);

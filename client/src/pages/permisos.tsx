@@ -282,7 +282,7 @@ export default function PermisosPage() {
         <div className="max-w-4xl mx-auto">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
-              <FileCheck className="w-10 h-10 text-[#9f25b8]" />
+              <FileCheck className="w-10 h-10 text-[#00c8ff]" />
               Permisos de Salida
             </h1>
             <p className="text-white/60 font-['Inter']">
@@ -302,7 +302,7 @@ export default function PermisosPage() {
               {/* Tipo de Permiso */}
               <div className="space-y-3">
                 <Label htmlFor="tipoPermiso" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-[#9f25b8]" />
+                  <MapPin className="w-4 h-4 text-[#00c8ff]" />
                   Tipo de Permiso *
                 </Label>
                 <Select
@@ -311,24 +311,24 @@ export default function PermisosPage() {
                 >
                   <SelectTrigger
                     id="tipoPermiso"
-                    className="bg-white/5 border-white/10 text-white focus:ring-[#9f25b8] h-12 font-['Inter']"
+                    className="bg-white/5 border-white/10 text-white focus:ring-[#00c8ff] h-12 font-['Inter']"
                   >
                     <SelectValue placeholder="Selecciona el tipo de permiso" />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#1a001c] border-white/10">
-                    <SelectItem value="ruta-a-carro" className="text-white focus:bg-[#9f25b8]/20">
+                  <SelectContent className="bg-[#0a0a2a] border-white/10">
+                    <SelectItem value="ruta-a-carro" className="text-white focus:bg-[#00c8ff]/20">
                       De ruta a carro
                     </SelectItem>
-                    <SelectItem value="carro-a-ruta" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="carro-a-ruta" className="text-white focus:bg-[#00c8ff]/20">
                       De carro a ruta
                     </SelectItem>
-                    <SelectItem value="ruta-a-ruta" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="ruta-a-ruta" className="text-white focus:bg-[#00c8ff]/20">
                       De ruta a ruta
                     </SelectItem>
-                    <SelectItem value="carro-a-carro" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="carro-a-carro" className="text-white focus:bg-[#00c8ff]/20">
                       De carro a carro
                     </SelectItem>
-                    <SelectItem value="salida-caminando" className="text-white focus:bg-[#9f25b8]/20">
+                    <SelectItem value="salida-caminando" className="text-white focus:bg-[#00c8ff]/20">
                       Salida caminando
                     </SelectItem>
                   </SelectContent>
@@ -338,7 +338,7 @@ export default function PermisosPage() {
               {/* Nombre del Estudiante */}
               <div className="space-y-3">
                 <Label htmlFor="nombreEstudiante" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                  <User className="w-4 h-4 text-[#9f25b8]" />
+                  <User className="w-4 h-4 text-[#00c8ff]" />
                   Nombre del Estudiante *
                 </Label>
                 <Input
@@ -347,14 +347,14 @@ export default function PermisosPage() {
                   placeholder="Ingresa el nombre completo del estudiante"
                   value={formData.nombreEstudiante}
                   onChange={(e) => handleChange('nombreEstudiante', e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                 />
               </div>
 
               {/* Fecha */}
               <div className="space-y-3">
                 <Label htmlFor="fecha" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-[#9f25b8]" />
+                  <Calendar className="w-4 h-4 text-[#00c8ff]" />
                   Fecha *
                 </Label>
                 <Input
@@ -362,7 +362,7 @@ export default function PermisosPage() {
                   type="date"
                   value={formData.fecha}
                   onChange={(e) => handleChange('fecha', e.target.value)}
-                  className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8] max-w-md"
+                  className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] max-w-md"
                 />
               </div>
 
@@ -373,7 +373,7 @@ export default function PermisosPage() {
                   {necesitaRutaActual && (
                     <div className="space-y-3">
                       <Label htmlFor="numeroRutaActual" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                        <Bus className="w-4 h-4 text-[#9f25b8]" />
+                        <Bus className="w-4 h-4 text-[#00c8ff]" />
                         Número de Ruta Actual *
                       </Label>
                       <Input
@@ -382,7 +382,7 @@ export default function PermisosPage() {
                         placeholder="Ej: Ruta 5"
                         value={formData.numeroRutaActual}
                         onChange={(e) => handleChange('numeroRutaActual', e.target.value)}
-                        className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                       />
                     </div>
                   )}
@@ -391,7 +391,7 @@ export default function PermisosPage() {
                   {necesitaRutaCambio && (
                     <div className="space-y-3">
                       <Label htmlFor="numeroRutaCambio" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                        <Bus className="w-4 h-4 text-[#9f25b8]" />
+                        <Bus className="w-4 h-4 text-[#00c8ff]" />
                         Número de Ruta a la que Cambia *
                       </Label>
                       <Input
@@ -400,7 +400,7 @@ export default function PermisosPage() {
                         placeholder="Ej: Ruta 8"
                         value={formData.numeroRutaCambio}
                         onChange={(e) => handleChange('numeroRutaCambio', e.target.value)}
-                        className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                       />
                     </div>
                   )}
@@ -409,7 +409,7 @@ export default function PermisosPage() {
                   {necesitaPlacaActual && (
                     <div className="space-y-3">
                       <Label htmlFor="placaCarroActual" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                        <Car className="w-4 h-4 text-[#9f25b8]" />
+                        <Car className="w-4 h-4 text-[#00c8ff]" />
                         Placa de Carro Actual *
                       </Label>
                       <Input
@@ -418,7 +418,7 @@ export default function PermisosPage() {
                         placeholder="Ej: ABC123"
                         value={formData.placaCarroActual}
                         onChange={(e) => handleChange('placaCarroActual', e.target.value.toUpperCase())}
-                        className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8] uppercase"
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] uppercase"
                       />
                     </div>
                   )}
@@ -428,7 +428,7 @@ export default function PermisosPage() {
                     <>
                       <div className="space-y-3">
                         <Label htmlFor="placaCarroSalida" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                          <Car className="w-4 h-4 text-[#9f25b8]" />
+                          <Car className="w-4 h-4 text-[#00c8ff]" />
                           Placa del Carro en el que Sale *
                         </Label>
                         <Input
@@ -437,13 +437,13 @@ export default function PermisosPage() {
                           placeholder="Ej: XYZ789"
                           value={formData.placaCarroSalida}
                           onChange={(e) => handleChange('placaCarroSalida', e.target.value.toUpperCase())}
-                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8] uppercase"
+                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] uppercase"
                         />
                       </div>
 
                       <div className="space-y-3">
                         <Label htmlFor="nombreConductor" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                          <UserCheck className="w-4 h-4 text-[#9f25b8]" />
+                          <UserCheck className="w-4 h-4 text-[#00c8ff]" />
                           Nombre de quien Maneja el Carro *
                         </Label>
                         <Input
@@ -452,13 +452,13 @@ export default function PermisosPage() {
                           placeholder="Nombre completo del conductor"
                           value={formData.nombreConductor}
                           onChange={(e) => handleChange('nombreConductor', e.target.value)}
-                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                         />
                       </div>
 
                       <div className="space-y-3">
                         <Label htmlFor="cedulaConductor" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                          <Hash className="w-4 h-4 text-[#9f25b8]" />
+                          <Hash className="w-4 h-4 text-[#00c8ff]" />
                           Cédula de quien Maneja el Carro *
                         </Label>
                         <Input
@@ -467,7 +467,7 @@ export default function PermisosPage() {
                           placeholder="Número de cédula"
                           value={formData.cedulaConductor}
                           onChange={(e) => handleChange('cedulaConductor', e.target.value)}
-                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                          className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                         />
                       </div>
                     </>
@@ -499,7 +499,7 @@ export default function PermisosPage() {
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:from-[#6a0dad] hover:to-[#9f25b8] text-white font-['Inter']"
+                  className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white font-['Inter']"
                 >
                   <FileCheck className="w-4 h-4 mr-2" />
                   Generar Permiso
@@ -519,7 +519,7 @@ export default function PermisosPage() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
-            <FileCheck className="w-10 h-10 text-[#9f25b8]" />
+            <FileCheck className="w-10 h-10 text-[#00c8ff]" />
             Permisos de Salida
           </h1>
           <p className="text-white/60 font-['Inter']">
@@ -532,7 +532,7 @@ export default function PermisosPage() {
           <Card className="backdrop-blur-md bg-white/5 border-white/10">
             <CardHeader>
               <CardTitle className="text-white font-['Poppins'] flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#9f25b8]" />
+                <Plus className="w-5 h-5 text-[#00c8ff]" />
                 Crear Permiso
               </CardTitle>
               <CardDescription className="text-white/60 font-['Inter']">
@@ -542,7 +542,7 @@ export default function PermisosPage() {
             <CardContent>
               <Button
                 onClick={() => setMostrarFormulario(true)}
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:from-[#6a0dad] hover:to-[#9f25b8] text-white font-['Inter'] h-12"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white font-['Inter'] h-12"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Nuevo Permiso
@@ -554,7 +554,7 @@ export default function PermisosPage() {
           <Card className="backdrop-blur-md bg-white/5 border-white/10">
             <CardHeader>
               <CardTitle className="text-white font-['Poppins'] flex items-center gap-2">
-                <Clock className="w-5 h-5 text-[#9f25b8]" />
+                <Clock className="w-5 h-5 text-[#00c8ff]" />
                 Próximos Permisos
               </CardTitle>
               <CardDescription className="text-white/60 font-['Inter']">
@@ -574,7 +574,7 @@ export default function PermisosPage() {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40 font-['Inter']">
+                            <Badge className="bg-[#00c8ff]/20 text-white border border-[#00c8ff]/40 font-['Inter']">
                               {getTipoPermisoLabel(permiso.tipoPermiso as TipoPermiso)}
                             </Badge>
                           </div>
@@ -646,7 +646,7 @@ export default function PermisosPage() {
                   {/* Tipo de Permiso */}
                   <div className="space-y-3">
                     <Label htmlFor="tipoPermiso-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-[#9f25b8]" />
+                      <MapPin className="w-4 h-4 text-[#00c8ff]" />
                       Tipo de Permiso *
                     </Label>
                     <Select
@@ -655,24 +655,24 @@ export default function PermisosPage() {
                     >
                       <SelectTrigger
                         id="tipoPermiso-modal"
-                        className="bg-white/5 border-white/10 text-white focus:ring-[#9f25b8] h-12 font-['Inter']"
+                        className="bg-white/5 border-white/10 text-white focus:ring-[#00c8ff] h-12 font-['Inter']"
                       >
                         <SelectValue placeholder="Selecciona el tipo de permiso" />
                       </SelectTrigger>
-                      <SelectContent className="bg-[#1a001c] border-white/10">
-                        <SelectItem value="ruta-a-carro" className="text-white focus:bg-[#9f25b8]/20">
+                      <SelectContent className="bg-[#0a0a2a] border-white/10">
+                        <SelectItem value="ruta-a-carro" className="text-white focus:bg-[#00c8ff]/20">
                           De ruta a carro
                         </SelectItem>
-                        <SelectItem value="carro-a-ruta" className="text-white focus:bg-[#9f25b8]/20">
+                        <SelectItem value="carro-a-ruta" className="text-white focus:bg-[#00c8ff]/20">
                           De carro a ruta
                         </SelectItem>
-                        <SelectItem value="ruta-a-ruta" className="text-white focus:bg-[#9f25b8]/20">
+                        <SelectItem value="ruta-a-ruta" className="text-white focus:bg-[#00c8ff]/20">
                           De ruta a ruta
                         </SelectItem>
-                        <SelectItem value="carro-a-carro" className="text-white focus:bg-[#9f25b8]/20">
+                        <SelectItem value="carro-a-carro" className="text-white focus:bg-[#00c8ff]/20">
                           De carro a carro
                         </SelectItem>
-                        <SelectItem value="salida-caminando" className="text-white focus:bg-[#9f25b8]/20">
+                        <SelectItem value="salida-caminando" className="text-white focus:bg-[#00c8ff]/20">
                           Salida caminando
                         </SelectItem>
                       </SelectContent>
@@ -682,7 +682,7 @@ export default function PermisosPage() {
                   {/* Nombre del Estudiante */}
                   <div className="space-y-3">
                     <Label htmlFor="nombreEstudiante-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                      <User className="w-4 h-4 text-[#9f25b8]" />
+                      <User className="w-4 h-4 text-[#00c8ff]" />
                       Nombre del Estudiante *
                     </Label>
                     <Input
@@ -691,14 +691,14 @@ export default function PermisosPage() {
                       placeholder="Ingresa el nombre completo del estudiante"
                       value={formData.nombreEstudiante}
                       onChange={(e) => handleChange('nombreEstudiante', e.target.value)}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                     />
                   </div>
 
                   {/* Fecha */}
                   <div className="space-y-3">
                     <Label htmlFor="fecha-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-[#9f25b8]" />
+                      <Calendar className="w-4 h-4 text-[#00c8ff]" />
                       Fecha *
                     </Label>
                     <Input
@@ -706,7 +706,7 @@ export default function PermisosPage() {
                       type="date"
                       value={formData.fecha}
                       onChange={(e) => handleChange('fecha', e.target.value)}
-                      className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8] max-w-md"
+                      className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] max-w-md"
                     />
                   </div>
 
@@ -717,7 +717,7 @@ export default function PermisosPage() {
                       {necesitaRutaActual && (
                         <div className="space-y-3">
                           <Label htmlFor="numeroRutaActual-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                            <Bus className="w-4 h-4 text-[#9f25b8]" />
+                            <Bus className="w-4 h-4 text-[#00c8ff]" />
                             Número de Ruta Actual *
                           </Label>
                           <Input
@@ -726,7 +726,7 @@ export default function PermisosPage() {
                             placeholder="Ej: Ruta 5"
                             value={formData.numeroRutaActual}
                             onChange={(e) => handleChange('numeroRutaActual', e.target.value)}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                           />
                         </div>
                       )}
@@ -735,7 +735,7 @@ export default function PermisosPage() {
                       {necesitaRutaCambio && (
                         <div className="space-y-3">
                           <Label htmlFor="numeroRutaCambio-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                            <Bus className="w-4 h-4 text-[#9f25b8]" />
+                            <Bus className="w-4 h-4 text-[#00c8ff]" />
                             Número de Ruta a la que Cambia *
                           </Label>
                           <Input
@@ -744,7 +744,7 @@ export default function PermisosPage() {
                             placeholder="Ej: Ruta 8"
                             value={formData.numeroRutaCambio}
                             onChange={(e) => handleChange('numeroRutaCambio', e.target.value)}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                           />
                         </div>
                       )}
@@ -753,7 +753,7 @@ export default function PermisosPage() {
                       {necesitaPlacaActual && (
                         <div className="space-y-3">
                           <Label htmlFor="placaCarroActual-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                            <Car className="w-4 h-4 text-[#9f25b8]" />
+                            <Car className="w-4 h-4 text-[#00c8ff]" />
                             Placa de Carro Actual *
                           </Label>
                           <Input
@@ -762,7 +762,7 @@ export default function PermisosPage() {
                             placeholder="Ej: ABC123"
                             value={formData.placaCarroActual}
                             onChange={(e) => handleChange('placaCarroActual', e.target.value.toUpperCase())}
-                            className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8] uppercase"
+                            className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] uppercase"
                           />
                         </div>
                       )}
@@ -772,7 +772,7 @@ export default function PermisosPage() {
                         <>
                           <div className="space-y-3">
                             <Label htmlFor="placaCarroSalida-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                              <Car className="w-4 h-4 text-[#9f25b8]" />
+                              <Car className="w-4 h-4 text-[#00c8ff]" />
                               Placa del Carro en el que Sale *
                             </Label>
                             <Input
@@ -781,13 +781,13 @@ export default function PermisosPage() {
                               placeholder="Ej: XYZ789"
                               value={formData.placaCarroSalida}
                               onChange={(e) => handleChange('placaCarroSalida', e.target.value.toUpperCase())}
-                              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8] uppercase"
+                              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] uppercase"
                             />
                           </div>
 
                           <div className="space-y-3">
                             <Label htmlFor="nombreConductor-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                              <UserCheck className="w-4 h-4 text-[#9f25b8]" />
+                              <UserCheck className="w-4 h-4 text-[#00c8ff]" />
                               Nombre de quien Maneja el Carro *
                             </Label>
                             <Input
@@ -796,13 +796,13 @@ export default function PermisosPage() {
                               placeholder="Nombre completo del conductor"
                               value={formData.nombreConductor}
                               onChange={(e) => handleChange('nombreConductor', e.target.value)}
-                              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                             />
                           </div>
 
                           <div className="space-y-3">
                             <Label htmlFor="cedulaConductor-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
-                              <Hash className="w-4 h-4 text-[#9f25b8]" />
+                              <Hash className="w-4 h-4 text-[#00c8ff]" />
                               Cédula de quien Maneja el Carro *
                             </Label>
                             <Input
@@ -811,7 +811,7 @@ export default function PermisosPage() {
                               placeholder="Número de cédula"
                               value={formData.cedulaConductor}
                               onChange={(e) => handleChange('cedulaConductor', e.target.value)}
-                              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#9f25b8]"
+                              className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff]"
                             />
                           </div>
                         </>
@@ -844,7 +844,7 @@ export default function PermisosPage() {
                     </Button>
                     <Button
                       type="submit"
-                      className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:from-[#6a0dad] hover:to-[#9f25b8] text-white font-['Inter']"
+                      className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white font-['Inter']"
                     >
                       <FileCheck className="w-4 h-4 mr-2" />
                       Generar Permiso

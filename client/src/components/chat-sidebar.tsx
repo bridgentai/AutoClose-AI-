@@ -135,7 +135,7 @@ export function ChatSidebar({
             <Button
               onClick={onNewChat}
               size="sm"
-              className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white hover:opacity-90"
+              className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white hover:opacity-90"
             >
               <MessageSquare className="w-4 h-4 mr-1" />
               Nuevo
@@ -172,7 +172,7 @@ export function ChatSidebar({
                   className={`
                     w-full p-3 rounded-xl transition-all duration-200
                     ${currentSessionId === session._id
-                      ? 'bg-gradient-to-r from-[#9f25b8]/30 to-[#6a0dad]/30 border border-[#9f25b8]/50'
+                      ? 'bg-gradient-to-r from-[#1e3cff]/30 to-[#002366]/30 border border-[#1e3cff]/50'
                       : 'bg-white/5 border border-white/10 hover:bg-white/10'
                     }
                   `}

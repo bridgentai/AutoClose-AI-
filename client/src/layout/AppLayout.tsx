@@ -92,7 +92,7 @@ export const PrimaryButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElemen
   <button
     className={`
       px-5 py-3
-      bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]
+      bg-gradient-to-r from-[#002366] to-[#1e3cff]
       hover:opacity-90 transition 
       rounded-xl font-medium text-white
       ${className}
@@ -109,7 +109,7 @@ export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (pro
       w-full p-4 rounded-xl 
       bg-white/5 border border-white/20 
       text-white placeholder-white/50 
-      focus:border-[#9f25b8] focus:outline-none 
+      focus:border-[#1e3cff] focus:outline-none 
       transition-colors
     "
     {...props}

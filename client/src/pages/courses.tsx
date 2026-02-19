@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { GraduationCap, ArrowRight, AlertCircle, BookOpen, Users, Home, ClipboardList, Settings } from 'lucide-react';
+import { GraduationCap, ArrowRight, AlertCircle, BookOpen, Users, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -40,21 +40,21 @@ totalStudents: number;
 
 
 const GRADIENT_COLORS = [
-'from-purple-500 to-pink-500',
+'from-[#002366] to-[#003d7a]',
 'from-blue-500 to-cyan-500',
 'from-green-500 to-emerald-500',
 'from-yellow-500 to-orange-500',
 'from-red-500 to-rose-500',
-'from-indigo-500 to-purple-500',
+'from-[#003d7a] to-[#1e3cff]',
 'from-teal-500 to-cyan-500',
 'from-amber-500 to-yellow-500',
-'from-violet-500 to-purple-500',
-'from-fuchsia-500 to-pink-500',
+'from-[#002366] to-[#1e3cff]',
+'from-[#003d7a] to-[#1e3cff]',
 ];
 
 // Función para generar un color único basado en un curso/grupo (igual que en Calendar.tsx)
 const generateColorFromId = (id: string): string => {
-  if (!id) return '#9f25b8'; // Color por defecto si no hay ID
+  if (!id) return '#002366'; // Color por defecto si no hay ID
   
   // Hash simple basado en el string
   let hash = 0;
@@ -64,9 +64,9 @@ const generateColorFromId = (id: string): string => {
   
   // Paleta de colores vibrantes (incluyendo púrpuras y otros colores)
   const colors = [
-    '#9f25b8', // Purple Core
-    '#6a0dad', // Purple Deep
-    '#c66bff', // Purple Light
+    '#002366', // Royal Blue
+    '#1e3cff', // Electric Blue
+    '#00c8ff', // Turquoise
     '#3b82f6', // Blue
     '#10b981', // Green
     '#f59e0b', // Amber
@@ -147,18 +147,25 @@ const [, setLocation] = useLocation();
 const userRole = user?.rol;
 
 // Query para Estudiante, Padre, Directivo (devuelve Course[])
-const { data: courses = [], isLoading: isLoadingCourses, error: errorCourses } = useQuery<Course[]>({
-queryKey: ['courses', userRole],
-queryFn: () => fetchCoursesByRole(userRole),
-enabled: !!userRole && userRole !== 'profesor',
+const { data: courses = [], isLoading: isLoadingCourses, error: errorCourses, refetch: refetchCourses } = useQuery<Course[]>({
+  queryKey: ['courses', userRole],
+  queryFn: () => fetchCoursesByRole(userRole),
+  enabled: !!userRole && userRole !== 'profesor',
+  staleTime: 0,
 });
 
 // 🎯 Query específica para Profesor (devuelve ProfessorGroupAssignment[])
-const { data: professorGroups = [], isLoading: isLoadingGroups, error: errorGroups } = useQuery<ProfessorGroupAssignment[]>({
-queryKey: ['professorGroups'],
-queryFn: fetchProfessorGroups,
-enabled: userRole === 'profesor',
+const { data: professorGroups = [], isLoading: isLoadingGroups, error: errorGroups, refetch: refetchProfessorGroups } = useQuery<ProfessorGroupAssignment[]>({
+  queryKey: ['professorGroups'],
+  queryFn: fetchProfessorGroups,
+  enabled: userRole === 'profesor',
+  staleTime: 0,
 });
+
+const refetchAll = () => {
+  refetchCourses();
+  refetchProfessorGroups();
+};
 
 const isLoading = isLoadingCourses || isLoadingGroups;
 const error = errorCourses || errorGroups;
@@ -221,26 +228,17 @@ const groups = professorGroups || [];
 return (
 <>
 <NavBackButton to="/profesor/academia" label="Academia" />
-{/* 🎯 CAMBIO APLICADO: Botón de Asignación junto al título */}
-<div className="flex justify-between items-center mb-6 mt-4">
+<div className="mb-6 mt-4">
 <h2 className="text-3xl font-bold text-white font-['Poppins']">Mis Grupos Asignados</h2>
-<Button 
-variant="outline" 
-className="border-white/10 text-white hover:bg-white/10"
-onClick={() => setLocation('/group-assignment')} 
->
-<Settings className="w-4 h-4 mr-2" />
-Gestionar Asignaciones
-</Button>
 </div>
 <p className="text-white/60 mb-8 font-['Inter']">
-Estos son los grupos a los que has asignado tus materias. Haz clic para gestionarlos.
+Estos son los grupos (cursos) que el administrador del colegio te ha asignado. Haz clic en uno para ver detalle y tareas.
 </p>
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 {groups.map((group) => {
 const groupDisplayName = getGroupDisplayName(group.groupId);
-const groupColor = groupColorsMap.get(group.groupId) || '#9f25b8';
+const groupColor = groupColorsMap.get(group.groupId) || '#002366';
 
 return (
 <Card
@@ -359,7 +357,7 @@ handleCourseClick(course._id);
 {!isDirectivo && (
 <Button
 variant="outline"
-className="w-full border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+className="w-full border-[#1e3cff]/40 text-[#00c8ff] hover:bg-[#1e3cff]/10"
 onClick={e => {
 e.stopPropagation();
 setLocation('/mi-aprendizaje/notas');
@@ -464,42 +462,52 @@ return (
 }
 
 if (error) {
-return (
-<Alert className="bg-red-500/10 border-red-500/50">
-<AlertCircle className="h-4 w-4 text-red-400" />
-<AlertTitle className="text-red-200">Error al cargar datos</AlertTitle>
-<AlertDescription className="text-red-200">
-Ocurrió un error al intentar cargar los datos de cursos/grupos.
-</AlertDescription>
-</Alert>
-);
+  return (
+    <div className="space-y-4">
+      <Alert className="bg-red-500/10 border-red-500/50">
+        <AlertCircle className="h-4 w-4 text-red-400" />
+        <AlertTitle className="text-red-200">Error al cargar datos</AlertTitle>
+        <AlertDescription className="text-red-200">
+          Ocurrió un error al intentar cargar los datos de cursos/grupos.
+        </AlertDescription>
+      </Alert>
+      <Button variant="outline" className="border-white/20 text-white hover:bg-white/10" onClick={refetchAll}>
+        Reintentar
+      </Button>
+    </div>
+  );
 }
 
 if (coursesToRender.length === 0) {
-let emptyMessage = '';
-let alertTitle = 'Sin Asignaciones';
+  let emptyMessage = '';
+  let alertTitle = 'Sin Asignaciones';
 
-if (userRole === 'profesor') {
-emptyMessage = 'Aún no te has auto-asignado materias a ningún grupo. Haz clic en "Gestionar Asignaciones" para empezar.';
-alertTitle = 'Sin Grupos Activos';
-} else if (userRole === 'estudiante') {
-emptyMessage = 'Aún no hay materias asignadas a tu grupo. Los profesores deben asignar sus materias a tu curso para que aparezcan aquí.';
-alertTitle = 'Sin Materias Asignadas';
-} else if (userRole === 'directivo') {
-emptyMessage = 'No hay materias registradas en la plataforma. Crea una nueva materia para empezar.';
-} else if (userRole === 'padre') {
-emptyMessage = 'No se encontraron materias para tus hijos.';
-}
+  if (userRole === 'profesor') {
+    emptyMessage = 'Aún no tienes grupos asignados. El administrador del colegio te asignará a uno o más cursos desde su panel (Usuarios → Cursos → Asignar profesor a cursos).';
+    alertTitle = 'Sin Grupos Asignados';
+  } else if (userRole === 'estudiante') {
+    emptyMessage = 'Aún no hay materias asignadas a tu grupo. Los profesores deben asignar sus materias a tu curso para que aparezcan aquí.';
+    alertTitle = 'Sin Materias Asignadas';
+  } else if (userRole === 'directivo') {
+    emptyMessage = 'No hay materias registradas en la plataforma. Crea una nueva materia para empezar.';
+  } else if (userRole === 'padre') {
+    emptyMessage = 'No se encontraron materias para tus hijos.';
+  }
 
-return (
-<Alert className="bg-blue-500/10 border-blue-500/50">
-<AlertCircle className="h-4 w-4 text-blue-400" />
-<AlertTitle className="text-blue-200">{alertTitle}</AlertTitle>
-<AlertDescription className="text-blue-200">
-{emptyMessage}
-</AlertDescription>
-</Alert>
-);
+  return (
+    <div className="space-y-4">
+      <Alert className="bg-blue-500/10 border-blue-500/50">
+        <AlertCircle className="h-4 w-4 text-blue-400" />
+        <AlertTitle className="text-blue-200">{alertTitle}</AlertTitle>
+        <AlertDescription className="text-blue-200">
+          {emptyMessage}
+        </AlertDescription>
+      </Alert>
+      <Button variant="outline" className="border-white/20 text-white hover:bg-white/10" onClick={refetchAll}>
+        Refrescar
+      </Button>
+    </div>
+  );
 }
 
 // Llamada a la vista específica

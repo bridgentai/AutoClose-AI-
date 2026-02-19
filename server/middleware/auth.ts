@@ -78,3 +78,14 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     return res.status(401).json({ message: 'No autorizado. Token inválido.' });
   }
 };
+
+/** Solo admin general del colegio (y school_admin). Para rutas de escritura de configuración; el directivo no puede. */
+export const checkAdminColegioOnly = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const rol = req.user?.rol;
+  if (rol === 'admin-general-colegio' || rol === 'school_admin') {
+    return next();
+  }
+  return res.status(403).json({
+    message: 'Acceso denegado. Solo el administrador general del colegio puede realizar esta acción.',
+  });
+};

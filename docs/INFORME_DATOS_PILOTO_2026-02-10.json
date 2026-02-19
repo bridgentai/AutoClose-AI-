@@ -1,0 +1,31 @@
+{
+  "fechaEjecucion": "2026-02-10T23:29:27.254Z",
+  "admin": {
+    "email": "piloto-admin@colegio-piloto.local",
+    "password": "PilotoAdmin123!",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5OGJiZjQxNzkwYjA2ZmNkMmYyNjhjNCIsImlhdCI6MTc3MDc2NjE2OCwiZXhwIjoxNzczMzU4MTY4fQ.hhcy0NdNfsuUsItDjMpLNRlYhcxRGXE7Fu7RKbrPIV4"
+  },
+  "usuarios": {
+    "profesores": [],
+    "estudiantes": [],
+    "padres": []
+  },
+  "grupos": [],
+  "cursos": [],
+  "asignacionesProfesor": [],
+  "estudiantesEnGrupos": [],
+  "vinculacionesPadres": [],
+  "tareas": [],
+  "entregas": [],
+  "calificaciones": [],
+  "chats": [],
+  "resumen": {
+    "totalUsuarios": 0,
+    "totalGrupos": 0,
+    "totalCursos": 0,
+    "totalTareas": 0,
+    "totalEntregas": 0,
+    "totalCalificaciones": 0,
+    "totalChats": 0
+  }
+}

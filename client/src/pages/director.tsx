@@ -70,7 +70,7 @@ export default function DirectorPage() {
           <CardContent className="space-y-3">
             <Button
               onClick={() => setLocation('/chat')}
-              className="w-full justify-start bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+              className="w-full justify-start bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
               data-testid="button-chat"
             >
               <MessageSquare className="w-4 h-4 mr-2" />
@@ -104,7 +104,7 @@ export default function DirectorPage() {
           <CardContent className="space-y-3">
             <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <Settings className="w-5 h-5 text-[#9f25b8]" />
+                <Settings className="w-5 h-5 text-[#1e3cff]" />
                 <div>
                   <div className="font-medium text-white">Identidad Institucional</div>
                   <div className="text-sm text-white/50">Logo, colores, IA</div>
@@ -113,7 +113,7 @@ export default function DirectorPage() {
             </div>
             <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <Users className="w-5 h-5 text-[#9f25b8]" />
+                <Users className="w-5 h-5 text-[#1e3cff]" />
                 <div>
                   <div className="font-medium text-white">Gestionar Usuarios</div>
                   <div className="text-sm text-white/50">Profesores, estudiantes</div>
@@ -122,7 +122,7 @@ export default function DirectorPage() {
             </div>
             <div className="p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <BookOpen className="w-5 h-5 text-[#9f25b8]" />
+                <BookOpen className="w-5 h-5 text-[#1e3cff]" />
                 <div>
                   <div className="font-medium text-white">Contenido Curricular</div>
                   <div className="text-sm text-white/50">Metodologia y materiales</div>

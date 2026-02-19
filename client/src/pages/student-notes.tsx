@@ -84,8 +84,8 @@ export default function StudentNotesPage() {
   const [, setLocation] = useLocation();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
-  // Obtener notas reales del estudiante
-  const { data: notesData, isLoading } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
+  // Obtener notas reales del estudiante (refetch para ver datos tras calificaciones)
+  const { data: notesData, isLoading, isError, error, refetch } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
     queryKey: ['studentNotes', user?.id],
     queryFn: () => apiRequest('GET', '/api/student/notes'),
     enabled: !!user?.id && user?.rol === 'estudiante',
@@ -99,7 +99,7 @@ export default function StudentNotesPage() {
     ultimaNota: m.ultimaNota,
     estado: m.estado,
     tendencia: m.tendencia,
-    colorAcento: m.colorAcento || '#9f25b8',
+    colorAcento: m.colorAcento || '#00c8ff',
   })) || [];
 
   const selectedSubjectData = selectedSubject 
@@ -114,7 +114,7 @@ export default function StudentNotesPage() {
     ultimaNota: selectedSubjectData.ultimaNota,
     estado: selectedSubjectData.estado,
     tendencia: selectedSubjectData.tendencia,
-    colorAcento: selectedSubjectData.colorAcento || '#9f25b8',
+    colorAcento: selectedSubjectData.colorAcento || '#00c8ff',
     promedioFinal: selectedSubjectData.promedio,
     categorias: [
       {
@@ -140,7 +140,24 @@ export default function StudentNotesPage() {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          <div className="text-white">Cargando notas...</div>
+          <NavBackButton />
+          <div className="mt-4 text-white/80">Cargando notas...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <NavBackButton />
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-4">
+            <CardContent className="p-8 text-center">
+              <p className="text-red-300 mb-4">Error al cargar las notas. Revisa tu conexión.</p>
+              <Button onClick={() => refetch()} className="bg-[#00c8ff] hover:bg-[#1e3cff]">Reintentar</Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -178,13 +195,13 @@ export default function StudentNotesPage() {
   const chartData = subjects.map(s => ({
     materia: s.nombre.substring(0, 8),
     promedio: s.promedio,
-    color: s.colorAcento || '#9f25b8'
+    color: s.colorAcento || '#00c8ff'
   }));
 
   const chartConfig = {
     promedio: {
       label: 'Promedio',
-      color: '#9f25b8'
+      color: '#00c8ff'
     }
   };
 
@@ -207,13 +224,20 @@ export default function StudentNotesPage() {
             </div>
             <Card className="bg-white/5 border-white/10 backdrop-blur-md">
               <CardContent className="p-12 text-center">
-                <BookOpen className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                <BookOpen className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-white mb-2">
                   No hay notas registradas
                 </h3>
-                <p className="text-white/60">
+                <p className="text-white/60 mb-6">
                   Las notas aparecerán aquí cuando tus tareas sean calificadas.
                 </p>
+                <Button
+                  variant="outline"
+                  className="border-white/20 text-white hover:bg-white/10"
+                  onClick={() => refetch()}
+                >
+                  Refrescar
+                </Button>
               </CardContent>
             </Card>
           </div>
@@ -237,7 +261,7 @@ export default function StudentNotesPage() {
               </div>
               <Button
                 onClick={() => setLocation('/mi-aprendizaje/notas/historial')}
-                className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 whitespace-nowrap"
+                className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 whitespace-nowrap"
               >
                 Historial de notas
               </Button>
@@ -248,7 +272,7 @@ export default function StudentNotesPage() {
           <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+                <TrendingUp className="w-5 h-5 text-[#00c8ff]" />
                 Promedio General por Materia
               </CardTitle>
               <CardDescription className="text-white/60">
@@ -284,7 +308,7 @@ export default function StudentNotesPage() {
                     />
                     <Bar 
                       dataKey="promedio" 
-                      fill="#9f25b8"
+                      fill="#00c8ff"
                       radius={[8, 8, 0, 0]}
                     />
                   </BarChart>
@@ -305,7 +329,7 @@ export default function StudentNotesPage() {
                   <div className="flex items-start justify-between mb-4">
                     <div
                       className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                      style={{ backgroundColor: subject.colorAcento || '#9f25b8' }}
+                      style={{ backgroundColor: subject.colorAcento || '#00c8ff' }}
                     >
                       <BookOpen className="w-8 h-8 text-white" />
                     </div>
@@ -354,7 +378,7 @@ export default function StudentNotesPage() {
     const detailChartConfig = {
       promedio: {
         label: 'Promedio',
-        color: subjectDetail.colorAcento || '#9f25b8'
+        color: subjectDetail.colorAcento || '#00c8ff'
       }
     };
 
@@ -383,7 +407,7 @@ export default function StudentNotesPage() {
               </div>
               <div
                 className="w-20 h-20 rounded-2xl flex items-center justify-center"
-                style={{ backgroundColor: subjectDetail.colorAcento || '#9f25b8' }}
+                style={{ backgroundColor: subjectDetail.colorAcento || '#00c8ff' }}
               >
                 <BookOpen className="w-10 h-10 text-white" />
               </div>
@@ -394,7 +418,7 @@ export default function StudentNotesPage() {
           <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+                <TrendingUp className="w-5 h-5 text-[#00c8ff]" />
                 Evolución del Promedio
               </CardTitle>
               <CardDescription className="text-white/60">
@@ -425,14 +449,14 @@ export default function StudentNotesPage() {
                     />
                     <ChartTooltip 
                       content={<ChartTooltipContent />}
-                      cursor={{ stroke: '#9f25b8', strokeWidth: 1 }}
+                      cursor={{ stroke: '#00c8ff', strokeWidth: 1 }}
                     />
                     <Line 
                       type="monotone" 
                       dataKey="promedio" 
-                      stroke="#9f25b8"
+                      stroke="#00c8ff"
                       strokeWidth={3}
-                      dot={{ fill: '#9f25b8', r: 6 }}
+                      dot={{ fill: '#00c8ff', r: 6 }}
                     />
                   </LineChart>
                 </ChartContainer>
@@ -486,7 +510,7 @@ export default function StudentNotesPage() {
                         {nota.comentario && (
                           <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
                             <div className="flex items-start gap-2">
-                              <MessageSquare className="w-4 h-4 text-[#9f25b8] mt-0.5 flex-shrink-0" />
+                              <MessageSquare className="w-4 h-4 text-[#00c8ff] mt-0.5 flex-shrink-0" />
                               <p className="text-sm text-white/80">{nota.comentario}</p>
                             </div>
                           </div>

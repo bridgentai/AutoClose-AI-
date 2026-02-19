@@ -49,14 +49,14 @@ export default function Materials() {
 
           <div className="mb-6 flex gap-4">
             {user?.rol === 'profesor' && (
-              <button className="px-6 py-3 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white rounded-xl font-medium transition-opacity">
+              <button className="px-6 py-3 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white rounded-xl font-medium transition-opacity">
                 + Subir Nuevo Material
               </button>
             )}
             {user?.rol === 'estudiante' && (
               <Button
                 variant="outline"
-                className="border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
+                className="border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
                 onClick={() => setLocation('/mi-aprendizaje/notas')}
               >
                 <GraduationCap className="w-4 h-4 mr-2" />
@@ -71,7 +71,7 @@ export default function Materials() {
                 <CardContent className="p-5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-[#002366] to-[#1e3cff]">
                         {getIcon(material.tipo)}
                       </div>
                       

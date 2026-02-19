@@ -1,0 +1,353 @@
+{
+  "tipo": "RESUMEN_PRUEBA_PILOTO_CURSO_CORTO",
+  "fechaInicio": "2026-02-13T04:24:46.654Z",
+  "tests": [
+    {
+      "test": "Crear admin y grupo Noveno A",
+      "numero": 1,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "Admin creado",
+          "estado": "ok",
+          "detalle": "piloto-corto-1770956686654-admin@colegio-piloto.local",
+          "timestamp": "2026-02-13T04:24:48.712Z"
+        },
+        {
+          "paso": "Grupo Noveno A existía",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:24:49.000Z"
+        }
+      ],
+      "duracionMs": 2316
+    },
+    {
+      "test": "Crear 5 profesores y asignar al grupo",
+      "numero": 2,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "5 profesores creados y asignados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:24:59.911Z"
+        }
+      ],
+      "duracionMs": 10884
+    },
+    {
+      "test": "Crear 10 estudiantes y asignar al grupo",
+      "numero": 3,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "10 estudiantes creados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:25:24.910Z"
+        }
+      ],
+      "duracionMs": 24987
+    },
+    {
+      "test": "Crear padres, vincular, confirmar y activar",
+      "numero": 4,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "20 padres vinculados y activados",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:26:46.945Z"
+        }
+      ],
+      "duracionMs": 82021
+    },
+    {
+      "test": "Crear 6 tareas",
+      "numero": 5,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "6 tareas creadas",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:27:06.104Z"
+        }
+      ],
+      "duracionMs": 19146
+    },
+    {
+      "test": "Generar credenciales y resultados",
+      "numero": 6,
+      "estado": "ok",
+      "pasos": [
+        {
+          "paso": "Construir credenciales",
+          "estado": "ok",
+          "timestamp": "2026-02-13T04:27:06.123Z"
+        },
+        {
+          "paso": "Archivo credenciales guardado",
+          "estado": "ok",
+          "detalle": "/Users/alejosua/Documents/AutoClose-AI-06/docs/prueba-curso-corto/CREDENCIALES_PILOTO_CORTO_2026-02-13.json",
+          "timestamp": "2026-02-13T04:27:06.124Z"
+        }
+      ],
+      "duracionMs": 1
+    }
+  ],
+  "erroresEncontrados": [],
+  "credencialesArchivo": "/Users/alejosua/Documents/AutoClose-AI-06/docs/prueba-curso-corto/CREDENCIALES_PILOTO_CORTO_2026-02-13.json",
+  "credenciales": {
+    "fechaEjecucion": "2026-02-13T04:27:06.123Z",
+    "admin": {
+      "email": "piloto-corto-1770956686654-admin@colegio-piloto.local",
+      "password": "PilotoCursoAdmin123!"
+    },
+    "profesores": [
+      {
+        "nombre": "Profesor Matemáticas",
+        "email": "piloto-corto-1770956686654-prof0@colegio-piloto.local",
+        "password": "bQvcMHuqCGfd",
+        "materia": "Matemáticas"
+      },
+      {
+        "nombre": "Profesor Español",
+        "email": "piloto-corto-1770956686654-prof1@colegio-piloto.local",
+        "password": "3qSYN2hju4mK",
+        "materia": "Español"
+      },
+      {
+        "nombre": "Profesor Ciencias",
+        "email": "piloto-corto-1770956686654-prof2@colegio-piloto.local",
+        "password": "NqazUFJgybDT",
+        "materia": "Ciencias"
+      },
+      {
+        "nombre": "Profesor Sociales",
+        "email": "piloto-corto-1770956686654-prof3@colegio-piloto.local",
+        "password": "yYRnJrQzHgQg",
+        "materia": "Sociales"
+      },
+      {
+        "nombre": "Profesor Inglés",
+        "email": "piloto-corto-1770956686654-prof4@colegio-piloto.local",
+        "password": "5SzdfzfkATbn",
+        "materia": "Inglés"
+      }
+    ],
+    "estudiantes": [
+      {
+        "nombre": "Estudiante 1",
+        "email": "piloto-corto-1770956686654-est0@colegio-piloto.local",
+        "password": "eBNLk6ZwZmdK",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 2",
+        "email": "piloto-corto-1770956686654-est1@colegio-piloto.local",
+        "password": "2DeCLEurmxBn",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 3",
+        "email": "piloto-corto-1770956686654-est2@colegio-piloto.local",
+        "password": "L5jjZppKPdZV",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 4",
+        "email": "piloto-corto-1770956686654-est3@colegio-piloto.local",
+        "password": "rpWQ9jdmc3XL",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 5",
+        "email": "piloto-corto-1770956686654-est4@colegio-piloto.local",
+        "password": "5nNWjgXNP8xg",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 6",
+        "email": "piloto-corto-1770956686654-est5@colegio-piloto.local",
+        "password": "wpaVsYmdWngW",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 7",
+        "email": "piloto-corto-1770956686654-est6@colegio-piloto.local",
+        "password": "Gz7h5n7756Gj",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 8",
+        "email": "piloto-corto-1770956686654-est7@colegio-piloto.local",
+        "password": "EevhxHNzBwJr",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 9",
+        "email": "piloto-corto-1770956686654-est8@colegio-piloto.local",
+        "password": "vF9bFR66NnHw",
+        "curso": "NOVENO A"
+      },
+      {
+        "nombre": "Estudiante 10",
+        "email": "piloto-corto-1770956686654-est9@colegio-piloto.local",
+        "password": "L7ZVKnEJBhyr",
+        "curso": "NOVENO A"
+      }
+    ],
+    "padres": [
+      {
+        "nombre": "Padre de Estudiante 1",
+        "email": "piloto-corto-1770956686654-padre-0-0@colegio-piloto.local",
+        "password": "MXRXdZp6P2Yq",
+        "estudianteVinculado": "Estudiante 1"
+      },
+      {
+        "nombre": "Madre de Estudiante 1",
+        "email": "piloto-corto-1770956686654-padre-0-1@colegio-piloto.local",
+        "password": "vzpBCqWGuBkr",
+        "estudianteVinculado": "Estudiante 1"
+      },
+      {
+        "nombre": "Padre de Estudiante 2",
+        "email": "piloto-corto-1770956686654-padre-1-0@colegio-piloto.local",
+        "password": "JUNSrh9uXJsG",
+        "estudianteVinculado": "Estudiante 2"
+      },
+      {
+        "nombre": "Madre de Estudiante 2",
+        "email": "piloto-corto-1770956686654-padre-1-1@colegio-piloto.local",
+        "password": "HycW8avFv6Rh",
+        "estudianteVinculado": "Estudiante 2"
+      },
+      {
+        "nombre": "Padre de Estudiante 3",
+        "email": "piloto-corto-1770956686654-padre-2-0@colegio-piloto.local",
+        "password": "txsAn8L5Vh7q",
+        "estudianteVinculado": "Estudiante 3"
+      },
+      {
+        "nombre": "Madre de Estudiante 3",
+        "email": "piloto-corto-1770956686654-padre-2-1@colegio-piloto.local",
+        "password": "kNdPLX4xMpHE",
+        "estudianteVinculado": "Estudiante 3"
+      },
+      {
+        "nombre": "Padre de Estudiante 4",
+        "email": "piloto-corto-1770956686654-padre-3-0@colegio-piloto.local",
+        "password": "Bz96LDaNRTfP",
+        "estudianteVinculado": "Estudiante 4"
+      },
+      {
+        "nombre": "Madre de Estudiante 4",
+        "email": "piloto-corto-1770956686654-padre-3-1@colegio-piloto.local",
+        "password": "NxZmNptbAFNd",
+        "estudianteVinculado": "Estudiante 4"
+      },
+      {
+        "nombre": "Padre de Estudiante 5",
+        "email": "piloto-corto-1770956686654-padre-4-0@colegio-piloto.local",
+        "password": "kbfNF5n6U6ZS",
+        "estudianteVinculado": "Estudiante 5"
+      },
+      {
+        "nombre": "Madre de Estudiante 5",
+        "email": "piloto-corto-1770956686654-padre-4-1@colegio-piloto.local",
+        "password": "BfQSQGhR7MxT",
+        "estudianteVinculado": "Estudiante 5"
+      },
+      {
+        "nombre": "Padre de Estudiante 6",
+        "email": "piloto-corto-1770956686654-padre-5-0@colegio-piloto.local",
+        "password": "e5VdJjYsjmwb",
+        "estudianteVinculado": "Estudiante 6"
+      },
+      {
+        "nombre": "Madre de Estudiante 6",
+        "email": "piloto-corto-1770956686654-padre-5-1@colegio-piloto.local",
+        "password": "cNJVwSNzFjLx",
+        "estudianteVinculado": "Estudiante 6"
+      },
+      {
+        "nombre": "Padre de Estudiante 7",
+        "email": "piloto-corto-1770956686654-padre-6-0@colegio-piloto.local",
+        "password": "BY8hcqKdPgew",
+        "estudianteVinculado": "Estudiante 7"
+      },
+      {
+        "nombre": "Madre de Estudiante 7",
+        "email": "piloto-corto-1770956686654-padre-6-1@colegio-piloto.local",
+        "password": "gRxYpwJrMGCK",
+        "estudianteVinculado": "Estudiante 7"
+      },
+      {
+        "nombre": "Padre de Estudiante 8",
+        "email": "piloto-corto-1770956686654-padre-7-0@colegio-piloto.local",
+        "password": "fLbB9ZGbTBkk",
+        "estudianteVinculado": "Estudiante 8"
+      },
+      {
+        "nombre": "Madre de Estudiante 8",
+        "email": "piloto-corto-1770956686654-padre-7-1@colegio-piloto.local",
+        "password": "NeWqLqVqMs8Z",
+        "estudianteVinculado": "Estudiante 8"
+      },
+      {
+        "nombre": "Padre de Estudiante 9",
+        "email": "piloto-corto-1770956686654-padre-8-0@colegio-piloto.local",
+        "password": "zeKDKRrbwfFs",
+        "estudianteVinculado": "Estudiante 9"
+      },
+      {
+        "nombre": "Madre de Estudiante 9",
+        "email": "piloto-corto-1770956686654-padre-8-1@colegio-piloto.local",
+        "password": "EnDYZeLChacH",
+        "estudianteVinculado": "Estudiante 9"
+      },
+      {
+        "nombre": "Padre de Estudiante 10",
+        "email": "piloto-corto-1770956686654-padre-9-0@colegio-piloto.local",
+        "password": "FjL2Agx8Gbf5",
+        "estudianteVinculado": "Estudiante 10"
+      },
+      {
+        "nombre": "Madre de Estudiante 10",
+        "email": "piloto-corto-1770956686654-padre-9-1@colegio-piloto.local",
+        "password": "puF4tyRJhFt3",
+        "estudianteVinculado": "Estudiante 10"
+      }
+    ],
+    "grupo": "NOVENO A",
+    "tareas": [
+      {
+        "id": "698ea8094253a1b0e24cfc01",
+        "titulo": "Tarea 1 - Matemáticas"
+      },
+      {
+        "id": "698ea80c4253a1b0e24cfd02",
+        "titulo": "Tarea 2 - Matemáticas"
+      },
+      {
+        "id": "698ea80f4253a1b0e24cfe03",
+        "titulo": "Tarea 3 - Matemáticas"
+      },
+      {
+        "id": "698ea8114253a1b0e24cff04",
+        "titulo": "Tarea 4 - Matemáticas"
+      },
+      {
+        "id": "698ea8154253a1b0e24d0005",
+        "titulo": "Tarea 5 - Matemáticas"
+      },
+      {
+        "id": "698ea8184253a1b0e24d0106",
+        "titulo": "Tarea 6 - Matemáticas"
+      }
+    ],
+    "entregas": 0,
+    "calificaciones": 0
+  },
+  "fechaFin": "2026-02-13T04:27:06.130Z",
+  "duracionTotalSeg": 139,
+  "resumenArchivo": "/Users/alejosua/Documents/AutoClose-AI-06/docs/prueba-curso-corto/RESUMEN_PRUEBA_PILOTO_CORTO_2026-02-13.md"
+}

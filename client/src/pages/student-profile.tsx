@@ -218,7 +218,7 @@ export default function StudentProfilePage() {
           </Button>
           <div className="flex items-center gap-4 mb-6">
             <Avatar className="w-20 h-20">
-              <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-2xl">
+              <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-2xl">
                 {studentDetail.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
@@ -228,7 +228,7 @@ export default function StudentProfilePage() {
               </h1>
               <p className="text-white/60">{studentDetail.email}</p>
               {studentDetail.curso && (
-                <Badge className="mt-2 bg-[#9f25b8]/20 text-white border-[#9f25b8]/40">
+                <Badge className="mt-2 bg-[#1e3cff]/20 text-white border-[#1e3cff]/40">
                   Grupo {studentDetail.curso}
                 </Badge>
               )}
@@ -240,21 +240,21 @@ export default function StudentProfilePage() {
         <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <User className="w-5 h-5 text-[#9f25b8]" />
+              <User className="w-5 h-5 text-[#1e3cff]" />
               Información Personal
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex items-start gap-3">
-                <Mail className="w-5 h-5 text-[#9f25b8] mt-1 flex-shrink-0" />
+                <Mail className="w-5 h-5 text-[#1e3cff] mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-sm text-white/60 mb-1">Correo Electrónico</p>
                   <p className="text-white font-medium">{studentDetail.email || '-'}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Phone className="w-5 h-5 text-[#9f25b8] mt-1 flex-shrink-0" />
+                <Phone className="w-5 h-5 text-[#1e3cff] mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-sm text-white/60 mb-1">Teléfono</p>
                   <p className="text-white font-medium">
@@ -263,7 +263,7 @@ export default function StudentProfilePage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-[#9f25b8] mt-1 flex-shrink-0" />
+                <MapPin className="w-5 h-5 text-[#1e3cff] mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-sm text-white/60 mb-1">Dirección</p>
                   <p className="text-white font-medium">
@@ -274,7 +274,7 @@ export default function StudentProfilePage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Calendar className="w-5 h-5 text-[#9f25b8] mt-1 flex-shrink-0" />
+                <Calendar className="w-5 h-5 text-[#1e3cff] mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-sm text-white/60 mb-1">Fecha de Nacimiento</p>
                   <p className="text-white font-medium">
@@ -289,7 +289,7 @@ export default function StudentProfilePage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <School className="w-5 h-5 text-[#9f25b8] mt-1 flex-shrink-0" />
+                <School className="w-5 h-5 text-[#1e3cff] mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-sm text-white/60 mb-1">Grupo</p>
                   <p className="text-white font-medium">{studentDetail.curso || '-'}</p>
@@ -305,7 +305,7 @@ export default function StudentProfilePage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-white flex items-center gap-2">
-                  <Award className="w-5 h-5 text-[#9f25b8]" />
+                  <Award className="w-5 h-5 text-[#1e3cff]" />
                   Notas Específicas
                 </CardTitle>
                 <CardDescription className="text-white/60 mt-2">
@@ -332,7 +332,7 @@ export default function StudentProfilePage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                           <h4 className="font-semibold text-white">{nota.actividad}</h4>
-                          <Badge className="bg-[#9f25b8]/20 text-white border-[#9f25b8]/40 text-xs">
+                          <Badge className="bg-[#1e3cff]/20 text-white border-[#1e3cff]/40 text-xs">
                             {nota.categoria}
                           </Badge>
                         </div>
@@ -354,7 +354,7 @@ export default function StudentProfilePage() {
                     {nota.comentario && (
                       <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
                         <div className="flex items-start gap-2">
-                          <MessageSquare className="w-4 h-4 text-[#9f25b8] mt-0.5 flex-shrink-0" />
+                          <MessageSquare className="w-4 h-4 text-[#1e3cff] mt-0.5 flex-shrink-0" />
                           <p className="text-sm text-white/80">{nota.comentario}</p>
                         </div>
                       </div>

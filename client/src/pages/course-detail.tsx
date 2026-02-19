@@ -27,6 +27,11 @@ import { DocumentEditor } from '@/components/document-editor';
 // 1. INTERFACES
 // =========================================================
 
+interface Submission {
+    estudianteId: string;
+    calificacion?: number;
+}
+
 interface Assignment {
     _id: string;
     titulo: string;
@@ -35,6 +40,8 @@ interface Assignment {
     courseId?: string; // ID de la materia (opcional para compatibilidad)
     fechaEntrega: string;
     profesorNombre: string;
+    submissions?: Submission[];
+    entregas?: Submission[];
 }
 
 interface CourseSubject {
@@ -79,6 +86,11 @@ const fetchAssignments = async (id: string, isGroup: boolean, month: number, yea
     return apiRequest('GET', `/api/assignments?${queryParam}&month=${month}&year=${year}`);
 };
 
+// Función para tabla de notas: tareas del grupo + materia (sin filtro de mes)
+const fetchGradeTableAssignments = async (groupId: string, courseId: string): Promise<Assignment[]> => {
+    return apiRequest('GET', `/api/assignments?groupId=${encodeURIComponent(groupId)}&courseId=${courseId}`);
+};
+
 // Función para obtener estudiantes de un grupo (Usado por Profesor)
 const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
     try {
@@ -116,26 +128,25 @@ export default function CourseDetailPage() {
         ? cursoId // Si es un ObjectId, mantenerlo (aunque no debería pasar para profesores)
         : (cursoId || '').toUpperCase().trim(); // Normalizar a mayúsculas para mostrar
 
-    // VALIDACIÓN: Solo estudiantes pueden acceder a esta página desde /course-detail
-    // Los profesores usan otra ruta (/course/:cursoId para grupos)
     const isStudent = userRole === 'estudiante';
     const isProfessor = userRole === 'profesor';
+    const isPadre = userRole === 'padre';
     const isStudentOrParent = userRole === 'estudiante' || userRole === 'padre';
 
     const [, setLocation] = useLocation();
     const { toast } = useToast();
 
-    // Redirigir si no es estudiante ni profesor
+    // Redirigir si no es estudiante, profesor ni padre (padre ve solo lectura)
     useEffect(() => {
-        if (user && !isStudent && !isProfessor) {
+        if (user && !isStudent && !isProfessor && !isPadre) {
             toast({
                 title: 'Acceso denegado',
-                description: 'Solo los estudiantes y profesores pueden acceder a esta página.',
+                description: 'Solo estudiantes, profesores y padres pueden acceder a esta página.',
                 variant: 'destructive'
             });
             setLocation('/courses');
         }
-    }, [user, isStudent, isProfessor, setLocation, toast]);
+    }, [user, isStudent, isProfessor, isPadre, setLocation, toast]);
 
     // Estados del Formulario
     const [showAssignmentForm, setShowAssignmentForm] = useState(false);
@@ -148,44 +159,6 @@ export default function CourseDetailPage() {
         fechaEntrega: '',
         courseId: '', // ID de la materia
     });
-
-    // Estado para notas editables (estructura: { estudianteId: { actividadId: nota } })
-    const [editableNotes, setEditableNotes] = useState<Record<string, Record<string, string>>>({});
-
-    // Estado para actividades/trabajos (personalizable)
-    const [actividades, setActividades] = useState([
-        { id: 'act1', nombre: 'Examen Parcial 1' },
-        { id: 'act2', nombre: 'Tarea de Álgebra' },
-        { id: 'act3', nombre: 'Proyecto Final' },
-        { id: 'act4', nombre: 'Quiz Semanal' },
-    ]);
-
-    const [newActivityName, setNewActivityName] = useState('');
-    const [showAddActivity, setShowAddActivity] = useState(false);
-
-    // Función para agregar nueva actividad
-    const handleAddActivity = () => {
-        if (newActivityName.trim()) {
-            const newId = `act${Date.now()}`;
-            setActividades([...actividades, { id: newId, nombre: newActivityName.trim() }]);
-            setNewActivityName('');
-            setShowAddActivity(false);
-        }
-    };
-
-    // Función para eliminar actividad
-    const handleRemoveActivity = (activityId: string) => {
-        setActividades(actividades.filter(a => a.id !== activityId));
-        // Limpiar notas de esa actividad
-        setEditableNotes(prev => {
-            const updated = { ...prev };
-            Object.keys(updated).forEach(studentId => {
-                const { [activityId]: removed, ...rest } = updated[studentId];
-                updated[studentId] = rest;
-            });
-            return updated;
-        });
-    };
 
     // Obtener mes y año actuales
     const now = new Date();
@@ -231,6 +204,17 @@ export default function CourseDetailPage() {
         gcTime: 10 * 60 * 1000, // 10 minutos de caché
     });
 
+    const firstSubjectId = subjectsForGroup[0]?._id;
+
+    // Query 5: Tareas para tabla de notas (grupo + materia, sin filtro mes)
+    const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
+        queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
+        queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
+        enabled: isProfessor && !!cursoId && !!firstSubjectId,
+        staleTime: 2 * 60 * 1000,
+        gcTime: 5 * 60 * 1000,
+    });
+
     // Efecto para Profesor (Auto-seleccionar materia)
     useEffect(() => {
         if (subjectsForGroup.length === 1 && showAssignmentForm) {
@@ -269,6 +253,7 @@ export default function CourseDetailPage() {
         onSuccess: () => {
             toast({ title: '¡Tarea creada!', description: 'La tarea ha sido asignada al curso exitosamente.' });
             queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
+            queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setShowAssignmentForm(false);
         },
@@ -335,11 +320,11 @@ export default function CourseDetailPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-4xl mx-auto">
                     {/* Carta 1: Estudiantes */}
                     <Card 
-                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#9f25b8]/20"
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
                         onClick={() => setShowStudentsDialog(true)}
                     >
                         <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#9f25b8] via-[#6a0dad] to-[#c66bff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#9f25b8]/30">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#1e3cff] via-[#002366] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#1e3cff]/30">
                                 <Users className="w-10 h-10 text-white" />
                             </div>
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Estudiantes</CardTitle>
@@ -350,7 +335,7 @@ export default function CourseDetailPage() {
                         <CardContent className="text-center pt-0">
                             <Button
                                 variant="outline"
-                                className="border-[#9f25b8]/50 text-[#9f25b8] hover:bg-[#9f25b8]/20 hover:border-[#9f25b8] w-full font-semibold"
+                                className="border-[#1e3cff]/50 text-[#1e3cff] hover:bg-[#1e3cff]/20 hover:border-[#1e3cff] w-full font-semibold"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setShowStudentsDialog(true);
@@ -371,7 +356,7 @@ export default function CourseDetailPage() {
                         }}
                     >
                         <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-orange-500/30">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#002366] via-[#003d7a] to-[#1e3cff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#002366]/40">
                                 <ClipboardList className="w-10 h-10 text-white" />
                             </div>
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Tareas</CardTitle>
@@ -395,46 +380,43 @@ export default function CourseDetailPage() {
                     </Card>
                 </div>
 
-                {/* Tabla General de Notas Editable (Estilo Excel) */}
+                {/* Tabla General de Notas (fondo blanco, columnas dinámicas desde tareas) */}
                 {firstSubjectId && (
-                    <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
-                        <CardHeader>
+                    <Card className="bg-white border-[#002366]/20 shadow-lg mb-8">
+                        <CardHeader className="bg-gradient-to-r from-[#002366] to-[#003d7a] text-white rounded-t-lg">
                             <div className="flex items-center justify-between flex-wrap gap-4">
                                 <div>
                                     <CardTitle className="text-white flex items-center gap-2">
-                                        <Award className="w-5 h-5 text-[#9f25b8]" />
+                                        <Award className="w-5 h-5 text-[#ffd700]" />
                                         Tabla General de Notas
                                     </CardTitle>
-                                    <CardDescription className="text-white/60">
-                                        Ingresa las notas directamente en las celdas (Escala: 10-100) - Grupo {displayGroupId}
+                                    <CardDescription className="text-white/80">
+                                        Las columnas se actualizan al crear tareas. Las notas se sincronizan al calificar entregas (Escala: 10-100) - Grupo {displayGroupId}
                                         {subjects.length > 0 && ` - ${subjects[0].nombre}`}
                                     </CardDescription>
                                 </div>
                                 <div className="flex gap-2">
                                     <Button
-                                        variant="outline"
                                         size="sm"
-                                        className="border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10"
-                                        onClick={() => setShowAddActivity(!showAddActivity)}
+                                        className="bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60"
+                                        onClick={() => setShowAssignmentForm(true)}
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
-                                        Agregar Actividad
-                                    </Button>
-                                    <Button
-                                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
-                                        onClick={() => {
-                                            if (firstSubjectId) {
-                                                setLocation(`/profesor/cursos/${cursoId}/notas`);
-                                            }
-                                        }}
-                                    >
-                                        <Settings className="w-4 h-4 mr-2" />
-                                        Gestionar Notas
+                                        Asignar Nueva Tarea
                                     </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="border-white/10 text-white hover:bg-white/10"
+                                        className="border-white/40 text-white hover:bg-white/20 hover:border-white/60"
+                                        onClick={() => setLocation(`/course/${cursoId}/grades`)}
+                                    >
+                                        <Maximize2 className="w-4 h-4 mr-2" />
+                                        Ver Tabla Completa
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-white/40 text-white hover:bg-white/20 hover:border-white/60"
                                         onClick={() => setLocation('/materials')}
                                     >
                                         <FileText className="w-4 h-4 mr-2" />
@@ -442,97 +424,55 @@ export default function CourseDetailPage() {
                                     </Button>
                                 </div>
                             </div>
-                            {showAddActivity && (
-                                <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-lg">
-                                    <div className="flex gap-2">
-                                        <Input
-                                            value={newActivityName}
-                                            onChange={(e) => setNewActivityName(e.target.value)}
-                                            placeholder="Nombre de la actividad (ej: Examen Final)"
-                                            className="bg-white/10 border-white/20 text-white flex-1"
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    handleAddActivity();
-                                                }
-                                            }}
-                                        />
-                                        <Button
-                                            onClick={handleAddActivity}
-                                            disabled={!newActivityName.trim()}
-                                            className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
-                                        >
-                                            <Plus className="w-4 h-4 mr-2" />
-                                            Agregar
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => {
-                                                setShowAddActivity(false);
-                                                setNewActivityName('');
-                                            }}
-                                            className="border-white/20 text-white hover:bg-white/10"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            )}
                         </CardHeader>
                         <CardContent>
-                            {isLoadingStudents ? (
+                            {isLoadingStudents || isLoadingGradeTable ? (
                                 <div className="space-y-2">
-                                    <Skeleton className="h-12 w-full bg-white/10" />
-                                    <Skeleton className="h-12 w-full bg-white/10" />
-                                    <Skeleton className="h-12 w-full bg-white/10" />
+                                    <Skeleton className="h-12 w-full bg-[#002366]/10" />
+                                    <Skeleton className="h-12 w-full bg-[#002366]/10" />
+                                    <Skeleton className="h-12 w-full bg-[#002366]/10" />
                                 </div>
                             ) : students.length > 0 ? (
-                                <div className="overflow-x-auto -mx-4 md:mx-0 rounded-xl border-2 border-[#9f25b8]/30 shadow-2xl">
+                                <div className="overflow-x-auto -mx-4 md:mx-0 rounded-xl border border-[#002366]/20 shadow-sm">
                                     <div className="inline-block min-w-full align-middle px-4 md:px-0">
-                                        <table className="min-w-full border-collapse bg-[#1a001c]/80">
+                                        <table className="min-w-full border-collapse bg-white">
                                             <thead>
-                                                <tr className="bg-gradient-to-r from-[#9f25b8]/40 via-[#6a0dad]/35 to-[#9f25b8]/40 border-b-2 border-[#9f25b8]/50">
-                                                    <th className="sticky left-0 z-20 bg-gradient-to-r from-[#9f25b8]/40 to-[#6a0dad]/35 px-3 py-3 text-left text-xs font-bold text-white border-r-2 border-[#9f25b8]/50 min-w-[200px] shadow-lg">
+                                                <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
+                                                    <th className="sticky left-0 z-20 bg-[#002366] px-3 py-3 text-left text-xs font-bold text-white border-r border-white/20 min-w-[200px] shadow-md">
                                                         <div className="flex items-center gap-2">
                                                             <User className="w-3.5 h-3.5 text-white" />
                                                             <span>Estudiante</span>
                                                         </div>
                                                     </th>
-                                                    {actividades.map((actividad, idx) => (
+                                                    {assignmentsForTable.map((assignment, idx) => (
                                                         <th
-                                                            key={actividad.id}
-                                                            className="relative px-2 py-3 text-center text-xs font-bold text-white border-r border-[#9f25b8]/30 min-w-[130px] group"
+                                                            key={assignment._id}
+                                                            className="px-2 py-3 text-center text-xs font-bold text-white border-r border-white/20 min-w-[130px]"
                                                             style={{
-                                                                background: idx % 2 === 0 
-                                                                    ? 'linear-gradient(to bottom, rgba(159,37,184,0.35), rgba(106,13,173,0.25))'
-                                                                    : 'linear-gradient(to bottom, rgba(198,107,255,0.30), rgba(159,37,184,0.20))'
+                                                                background: idx % 2 === 0
+                                                                    ? 'linear-gradient(to bottom, #002366, #003d7a)'
+                                                                    : 'linear-gradient(to bottom, #003d7a, #002366)'
                                                             }}
                                                         >
-                                                            <div className="flex items-center justify-center gap-1.5">
-                                                                <span className="truncate max-w-[110px] text-[11px]">{actividad.nombre}</span>
-                                                                {actividades.length > 1 && (
-                                                                    <button
-                                                                        onClick={() => handleRemoveActivity(actividad.id)}
-                                                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-500/30 rounded"
-                                                                        title="Eliminar actividad"
-                                                                    >
-                                                                        <X className="w-3 h-3 text-red-300" />
-                                                                    </button>
-                                                                )}
-                                                            </div>
+                                                            <span className="truncate block max-w-[110px] mx-auto text-[11px]">{assignment.titulo}</span>
                                                         </th>
                                                     ))}
-                                                    <th className="px-3 py-3 text-center text-xs font-bold text-white bg-gradient-to-br from-[#9f25b8]/50 via-[#6a0dad]/40 to-[#9f25b8]/50 min-w-[100px] border-l-2 border-[#9f25b8]/60">
+                                                    <th className="px-3 py-3 text-center text-xs font-bold text-white bg-[#002366] min-w-[100px] border-l-2 border-white/30">
                                                         Promedio
                                                     </th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {students.map((student, studentIdx) => {
-                                                    const notasEstudiante = editableNotes[student._id] || {};
-                                                    // Calcular promedio de las notas ingresadas (escala 10-100)
-                                                    const notasValidas = Object.values(notasEstudiante)
-                                                        .map(n => parseFloat(n))
-                                                        .filter(n => !isNaN(n) && n >= 10 && n <= 100);
+                                                    const subs = (a: Assignment) => a.submissions || a.entregas || [];
+                                                    const notasValidas: number[] = [];
+                                                    assignmentsForTable.forEach(a => {
+                                                        const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
+                                                            x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
+                                                        );
+                                                        const cal = (s as { calificacion?: number })?.calificacion;
+                                                        if (cal != null && !isNaN(cal)) notasValidas.push(cal);
+                                                    });
                                                     const promedio = notasValidas.length > 0
                                                         ? Math.round(notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length)
                                                         : '-';
@@ -540,92 +480,52 @@ export default function CourseDetailPage() {
                                                     return (
                                                         <tr
                                                             key={student._id}
-                                                            className={`border-b border-[#9f25b8]/20 hover:bg-[#9f25b8]/10 transition-all ${
-                                                                studentIdx % 2 === 0 ? 'bg-[#1a001c]/60' : 'bg-[#25003d]/40'
+                                                            className={`border-b border-[#002366]/10 hover:bg-[#1e3cff]/5 transition-all ${
+                                                                studentIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
                                                             }`}
                                                         >
-                                                            <td className="sticky left-0 z-10 px-3 py-2.5 bg-inherit border-r-2 border-[#9f25b8]/30 shadow-md">
+                                                            <td className="sticky left-0 z-10 px-3 py-2.5 bg-inherit border-r border-[#002366]/20 shadow-sm">
                                                                 <div className="flex items-center gap-2">
                                                                     <Avatar className="w-7 h-7 flex-shrink-0">
-                                                                        <AvatarFallback className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] text-white text-[10px] font-semibold">
+                                                                        <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-[10px] font-semibold">
                                                                             {student.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                                                         </AvatarFallback>
                                                                     </Avatar>
                                                                     <div className="min-w-0 flex-1">
-                                                                        <div className="font-semibold text-white text-sm truncate leading-tight">{student.nombre}</div>
+                                                                        <div className="font-semibold text-[#0a0a2a] text-sm truncate leading-tight">{student.nombre}</div>
                                                                         {student.email && (
-                                                                            <div className="text-[10px] text-[#c66bff]/70 truncate leading-tight">{student.email}</div>
+                                                                            <div className="text-[10px] text-gray-500 truncate leading-tight">{student.email}</div>
                                                                         )}
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            {actividades.map((actividad, actIdx) => (
-                                                                <td
-                                                                    key={actividad.id}
-                                                                    className="px-1.5 py-1.5 border-r border-[#9f25b8]/20"
-                                                                    style={{
-                                                                        backgroundColor: actIdx % 2 === 0 
-                                                                            ? 'rgba(26,0,28,0.4)' 
-                                                                            : 'rgba(159,37,184,0.08)'
-                                                                    }}
-                                                                >
-                                                                    <Input
-                                                                        type="text"
-                                                                        inputMode="numeric"
-                                                                        value={notasEstudiante[actividad.id] || ''}
-                                                                        onChange={(e) => {
-                                                                            const value = e.target.value;
-                                                                            // Permitir solo números y validar rango 10-100
-                                                                            if (value === '') {
-                                                                                setEditableNotes(prev => ({
-                                                                                    ...prev,
-                                                                                    [student._id]: {
-                                                                                        ...(prev[student._id] || {}),
-                                                                                        [actividad.id]: ''
-                                                                                    }
-                                                                                }));
-                                                                                return;
-                                                                            }
-                                                                            // Solo permitir números
-                                                                            if (/^\d+$/.test(value) || /^\d+\.\d*$/.test(value)) {
-                                                                                const numValue = parseFloat(value);
-                                                                                if (numValue >= 10 && numValue <= 100) {
-                                                                                    setEditableNotes(prev => ({
-                                                                                        ...prev,
-                                                                                        [student._id]: {
-                                                                                            ...(prev[student._id] || {}),
-                                                                                            [actividad.id]: value
-                                                                                        }
-                                                                                    }));
-                                                                                }
-                                                                            }
-                                                                        }}
-                                                                        onBlur={(e) => {
-                                                                            const value = e.target.value;
-                                                                            const numValue = parseFloat(value);
-                                                                            // Si está fuera del rango, limpiar o ajustar
-                                                                            if (value && (!isNaN(numValue) && (numValue < 10 || numValue > 100))) {
-                                                                                setEditableNotes(prev => ({
-                                                                                    ...prev,
-                                                                                    [student._id]: {
-                                                                                        ...(prev[student._id] || {}),
-                                                                                        [actividad.id]: ''
-                                                                                    }
-                                                                                }));
-                                                                            }
-                                                                        }}
-                                                                        className="w-full h-9 bg-[#25003d]/60 border-[#9f25b8]/40 text-white text-center font-bold text-sm focus:bg-[#9f25b8]/20 focus:border-[#c66bff]/60 focus:ring-1 focus:ring-[#c66bff]/50 hover:bg-[#9f25b8]/15 hover:border-[#c66bff]/50 transition-all rounded-md"
-                                                                        placeholder="--"
-                                                                    />
-                                                                </td>
-                                                            ))}
-                                                            <td className="px-3 py-2.5 text-center bg-gradient-to-br from-[#9f25b8]/25 to-[#6a0dad]/20 border-l-2 border-[#9f25b8]/40">
+                                                            {assignmentsForTable.map((assignment, actIdx) => {
+                                                                const subsA = assignment.submissions || assignment.entregas || [];
+                                                                const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
+                                                                    x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
+                                                                );
+                                                                const cal = (sub as { calificacion?: number })?.calificacion;
+                                                                const displayValue = cal != null && !isNaN(cal) ? String(cal) : '--';
+                                                                return (
+                                                                    <td
+                                                                        key={assignment._id}
+                                                                        className={`px-1.5 py-1.5 border-r border-[#002366]/20 text-center text-sm font-medium ${
+                                                                            actIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
+                                                                        } hover:bg-[#1e3cff]/10`}
+                                                                    >
+                                                                        <span className={displayValue === '--' ? 'text-gray-400' : 'text-[#0a0a2a]'}>
+                                                                            {displayValue}
+                                                                        </span>
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                            <td className="px-3 py-2.5 text-center border-l-2 border-[#002366]/20 bg-[#002366]/5">
                                                                 <div className="flex items-center justify-center gap-1">
-                                                                    <span className="text-lg font-bold text-white">
+                                                                    <span className={`text-lg font-bold ${promedio === '-' ? 'text-gray-400' : 'text-[#0a0a2a]'}`}>
                                                                         {promedio}
                                                                     </span>
                                                                     {promedio !== '-' && (
-                                                                        <span className="text-[#c66bff]/60 text-[10px]">/ 100</span>
+                                                                        <span className="text-gray-500 text-[10px]">/ 100</span>
                                                                     )}
                                                                 </div>
                                                             </td>
@@ -638,8 +538,8 @@ export default function CourseDetailPage() {
                                 </div>
                             ) : (
                                 <div className="text-center py-8">
-                                    <Award className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
-                                    <p className="text-white/60">No hay estudiantes para mostrar notas</p>
+                                    <Award className="w-16 h-16 text-[#002366]/40 mx-auto mb-4" />
+                                    <p className="text-gray-500">No hay estudiantes para mostrar notas</p>
                                 </div>
                             )}
                         </CardContent>
@@ -653,7 +553,7 @@ export default function CourseDetailPage() {
                 <div className="flex gap-4 mb-8 mt-8">
                     <Button
                         onClick={() => setShowAssignmentForm(!showAssignmentForm)}
-                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                         data-testid="button-assign-task"
                     >
                         <ClipboardList className="w-4 h-4 mr-2" />
@@ -675,18 +575,18 @@ export default function CourseDetailPage() {
                                             <Button
                                                 type="button"
                                                 onClick={() => setAssignmentType('recordatorio')}
-                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#9f25b8]/20 to-[#6a0dad]/20 border border-[#9f25b8]/40 hover:from-[#9f25b8]/30 hover:to-[#6a0dad]/30 hover:border-[#9f25b8]/60 transition-all"
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#1e3cff]/60 transition-all"
                                             >
-                                                <Bell className="w-8 h-8 text-[#c66bff]" />
+                                                <Bell className="w-8 h-8 text-[#00c8ff]" />
                                                 <span className="text-white font-semibold">Recordatorio</span>
                                                 <span className="text-white/60 text-sm">Tarea simple con título y descripción</span>
                                             </Button>
                                             <Button
                                                 type="button"
                                                 onClick={() => setAssignmentType('documento')}
-                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#9f25b8]/20 to-[#6a0dad]/20 border border-[#9f25b8]/40 hover:from-[#9f25b8]/30 hover:to-[#6a0dad]/30 hover:border-[#9f25b8]/60 transition-all"
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#1e3cff]/60 transition-all"
                                             >
-                                                <FileText className="w-8 h-8 text-[#c66bff]" />
+                                                <FileText className="w-8 h-8 text-[#00c8ff]" />
                                                 <span className="text-white font-semibold">Documento</span>
                                                 <span className="text-white/60 text-sm">Tarea con editor de documentos completo</span>
                                             </Button>
@@ -697,7 +597,7 @@ export default function CourseDetailPage() {
                                     <>
                                         <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center gap-2">
-                                                <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40">
+                                                <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40">
                                                     {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Documento'}
                                                 </Badge>
                                             </div>
@@ -747,7 +647,7 @@ export default function CourseDetailPage() {
                                         <div>
                                             <Label className="text-white mb-2 block">Materia</Label>
                                             <div className="flex items-center gap-2">
-                                                <Badge className="bg-[#9f25b8]/20 text-white border border-[#9f25b8]/40 text-base px-4 py-2">
+                                                <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2">
                                                     {subjects[0].nombre}
                                                 </Badge>
                                                 <span className="text-white/50 text-sm">(auto-seleccionada)</span>
@@ -772,7 +672,7 @@ export default function CourseDetailPage() {
                                                 </div>
                                             )}
 
-                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0} className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90">
+                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0} className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90">
                                                 {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Tarea'}
                                             </Button>
                                         </form>
@@ -784,10 +684,10 @@ export default function CourseDetailPage() {
 
                 {/* Dialog para Lista de Estudiantes */}
                 <Dialog open={showStudentsDialog} onOpenChange={setShowStudentsDialog}>
-                    <DialogContent className="bg-[#1a001c] border-white/10 text-white max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-4xl max-h-[80vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle className="text-white flex items-center gap-2">
-                                <Users className="w-5 h-5 text-[#9f25b8]" />
+                                <Users className="w-5 h-5 text-[#1e3cff]" />
                                 Estudiantes del Grupo {displayGroupId}
                             </DialogTitle>
                             <DialogDescription className="text-white/60">
@@ -856,7 +756,7 @@ export default function CourseDetailPage() {
                                 </div>
                             ) : (
                                 <div className="text-center py-8">
-                                    <Users className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <Users className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                                     <p className="text-white/60">No hay estudiantes registrados en este grupo</p>
                                 </div>
                             )}
@@ -918,7 +818,7 @@ export default function CourseDetailPage() {
             );
         }
 
-        const titleColor = details.colorAcento || '#9f25b8';
+        const titleColor = details.colorAcento || '#1e3cff';
         const cursoAsignado = details.cursoAsignado || user?.curso || 'N/A';
         
         // Calcular estadísticas de la materia
@@ -973,7 +873,7 @@ export default function CourseDetailPage() {
                 </Breadcrumb>
 
                 {/* Encabezado Visual Mejorado */}
-                <div className="mb-8 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#9f25b8]/20 via-[#6a0dad]/20 to-[#c66bff]/20 border border-white/10 backdrop-blur-md">
+                <div className="mb-8 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e3cff]/20 via-[#002366]/20 to-[#00c8ff]/20 border border-white/10 backdrop-blur-md">
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent"></div>
                     <div className="relative p-4 sm:p-6 md:p-8">
                         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 sm:gap-6">
@@ -1024,7 +924,7 @@ export default function CourseDetailPage() {
                             <div className="flex flex-col gap-3">
                                 <NavBackButton to="/courses" label="Materias" />
                                 <Button
-                                    className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                                    className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
                                     onClick={() => setLocation('/mi-aprendizaje/tareas')}
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
@@ -1032,7 +932,7 @@ export default function CourseDetailPage() {
                                 </Button>
                                 <Button
                                     variant="outline"
-                                    className="bg-white/5 border-[#9f25b8]/40 text-[#9f25b8] hover:bg-[#9f25b8]/10 backdrop-blur-sm"
+                                    className="bg-white/5 border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10 backdrop-blur-sm"
                                     onClick={() => setLocation('/mi-aprendizaje/notas')}
                                 >
                                     <Award className="w-4 h-4 mr-2" />
@@ -1048,7 +948,7 @@ export default function CourseDetailPage() {
                     <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between mb-2">
-                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]">
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#002366] to-[#1e3cff]">
                                     <TrendingUp className="w-6 h-6 text-white" />
                                 </div>
                             </div>
@@ -1117,28 +1017,28 @@ export default function CourseDetailPage() {
                     <TabsList className="bg-white/5 border border-white/10 backdrop-blur-md mb-6">
                         <TabsTrigger 
                             value="tareas" 
-                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
                         >
                             <ClipboardList className="w-4 h-4 mr-2" />
                             Tareas ({assignments.length})
                         </TabsTrigger>
                         <TabsTrigger 
                             value="notas" 
-                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
                         >
                             <Award className="w-4 h-4 mr-2" />
                             Notas
                         </TabsTrigger>
                         <TabsTrigger 
                             value="materiales" 
-                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
                         >
                             <FileText className="w-4 h-4 mr-2" />
                             Materiales
                         </TabsTrigger>
                         <TabsTrigger 
                             value="anuncios" 
-                            className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
                         >
                             <Bell className="w-4 h-4 mr-2" />
                             Anuncios
@@ -1152,7 +1052,7 @@ export default function CourseDetailPage() {
                 <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                                     <CardHeader>
                                         <CardTitle className="text-white flex items-center gap-2">
-                                            <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                                            <CalendarIcon className="w-5 h-5 text-[#1e3cff]" />
                                             Calendario de Tareas
                                         </CardTitle>
                                         <CardDescription className="text-white/60">
@@ -1189,7 +1089,7 @@ export default function CourseDetailPage() {
                                                             <div className="flex items-start justify-between gap-4">
                                                                 <div className="flex-1">
                                                                     <div className="flex items-center gap-3 mb-2">
-                                                                        <h4 className="font-semibold text-white text-lg group-hover:text-[#9f25b8] transition-colors">
+                                                                        <h4 className="font-semibold text-white text-lg group-hover:text-[#1e3cff] transition-colors">
                                                                             {assignment.titulo}
                                                                         </h4>
                                                                         {isVencida ? (
@@ -1231,7 +1131,7 @@ export default function CourseDetailPage() {
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                                <ChevronRight className="w-5 h-5 text-white/40 group-hover:text-[#9f25b8] transition-colors flex-shrink-0 mt-1" />
+                                                                <ChevronRight className="w-5 h-5 text-white/40 group-hover:text-[#1e3cff] transition-colors flex-shrink-0 mt-1" />
                                                             </div>
                                                         </div>
                                                     );
@@ -1243,7 +1143,7 @@ export default function CourseDetailPage() {
                         ) : (
                             <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                                 <CardContent className="p-12 text-center">
-                                    <ClipboardList className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <ClipboardList className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                                     <h3 className="text-xl font-semibold text-white mb-2">
                                         No hay tareas asignadas
                                     </h3>
@@ -1260,7 +1160,7 @@ export default function CourseDetailPage() {
                         <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                             <CardHeader>
                                 <CardTitle className="text-white flex items-center gap-2">
-                                    <Award className="w-5 h-5 text-[#9f25b8]" />
+                                    <Award className="w-5 h-5 text-[#1e3cff]" />
                                     Notas de {details.nombre}
                                 </CardTitle>
                                 <CardDescription className="text-white/60">
@@ -1269,7 +1169,7 @@ export default function CourseDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-center py-12">
-                                    <Award className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <Award className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                                     <h3 className="text-xl font-semibold text-white mb-2">
                                         Ver todas tus notas
                                     </h3>
@@ -1277,7 +1177,7 @@ export default function CourseDetailPage() {
                                         Accede a la sección completa de notas para ver tu historial detallado.
                                     </p>
                                     <Button
-                                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
                                         onClick={() => setLocation('/mi-aprendizaje/notas')}
                                     >
                                         <Award className="w-4 h-4 mr-2" />
@@ -1293,7 +1193,7 @@ export default function CourseDetailPage() {
                         <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                             <CardHeader>
                                 <CardTitle className="text-white flex items-center gap-2">
-                                    <FileText className="w-5 h-5 text-[#9f25b8]" />
+                                    <FileText className="w-5 h-5 text-[#1e3cff]" />
                                     Materiales de {details.nombre}
                                 </CardTitle>
                                 <CardDescription className="text-white/60">
@@ -1302,7 +1202,7 @@ export default function CourseDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-center py-12">
-                                    <FileText className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <FileText className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                                     <h3 className="text-xl font-semibold text-white mb-2">
                                         Materiales del curso
                                     </h3>
@@ -1327,7 +1227,7 @@ export default function CourseDetailPage() {
                         <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                             <CardHeader>
                                 <CardTitle className="text-white flex items-center gap-2">
-                                    <Bell className="w-5 h-5 text-[#9f25b8]" />
+                                    <Bell className="w-5 h-5 text-[#1e3cff]" />
                                     Anuncios del Profesor
                                 </CardTitle>
                                 <CardDescription className="text-white/60">
@@ -1336,7 +1236,7 @@ export default function CourseDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-center py-12">
-                                    <Bell className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+                                    <Bell className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
                                     <h3 className="text-xl font-semibold text-white mb-2">
                                         Sin anuncios
                                     </h3>
@@ -1359,7 +1259,7 @@ export default function CourseDetailPage() {
             <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-white">
-                        <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                        <CalendarIcon className="w-5 h-5 text-[#1e3cff]" />
                         Calendario de Tareas
                     </CardTitle>
                     <CardDescription className="text-white/60">

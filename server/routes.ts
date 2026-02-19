@@ -26,6 +26,8 @@ import notificationsRoutes from "./routes/notifications";
 import treasuryRoutes from "./routes/treasury";
 import messagesRoutes from "./routes/messages";
 import boletinRoutes from "./routes/boletin";
+import auditRoutes from "./routes/audit";
+import reportsRoutes from "./routes/reports";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Conectar a MongoDB
@@ -60,6 +62,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/treasury', treasuryRoutes);
   app.use('/api/messages', messagesRoutes);
   app.use('/api/boletin', boletinRoutes);
+  app.use('/api/audit', auditRoutes);
+  app.use('/api/reports', reportsRoutes);
 
   // Seed grupos fijos al iniciar
   await seedGroups();

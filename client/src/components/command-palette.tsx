@@ -490,9 +490,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                       key={item.path}
                       value={`${item.label} ${item.keywords?.join(' ') || ''}`}
                       onSelect={() => handleSelect(item.path)}
-                      className="text-white hover:bg-white/10 data-[selected]:bg-[#9f25b8]/30 data-[selected]:text-white cursor-pointer rounded-lg mx-1 transition-all duration-150"
+                      className="text-white hover:bg-white/10 data-[selected]:bg-[#1e3cff]/30 data-[selected]:text-white cursor-pointer rounded-lg mx-1 transition-all duration-150"
                     >
-                      <Icon className="w-4 h-4 text-white/70 data-[selected]:text-[#9f25b8]" />
+                      <Icon className="w-4 h-4 text-white/70 data-[selected]:text-[#1e3cff]" />
                       <span className="font-medium">{item.label}</span>
                       {item.shortcut && (
                         <CommandShortcut className="text-white/40 text-xs">

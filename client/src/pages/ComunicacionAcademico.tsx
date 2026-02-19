@@ -146,7 +146,7 @@ const ComunicacionAcademico: React.FC = () => {
               placeholder="Buscar materias o profesores..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-[#9f25b8]"
+              className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-[#1e3cff]"
             />
           </div>
         </CardContent>
@@ -174,13 +174,13 @@ const ComunicacionAcademico: React.FC = () => {
                 <div className="flex items-start gap-4">
                   {/* Avatar del Grupo */}
                   <div className="relative">
-                    <Avatar className="w-14 h-14 bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] border-2 border-white/20">
+                    <Avatar className="w-14 h-14 bg-gradient-to-br from-[#002366] to-[#1e3cff] border-2 border-white/20">
                       <AvatarFallback className="text-white font-bold text-lg">
                         {getInitials(group.materiaNombre)}
                       </AvatarFallback>
                     </Avatar>
                     {group.mensajesSinLeer > 0 && (
-                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-[#9f25b8] rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-[#0a0a0c]">
+                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-[#1e3cff] rounded-full flex items-center justify-center text-white text-xs font-bold border-2 border-[#0a0a0c]">
                         {group.mensajesSinLeer > 9 ? '9+' : group.mensajesSinLeer}
                       </div>
                     )}

@@ -139,7 +139,7 @@ export default function StudentNotesHistoryPage() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Award className="w-8 h-8 text-[#9f25b8]" />
+              <Award className="w-8 h-8 text-[#1e3cff]" />
             </div>
           </div>
         </div>
@@ -149,13 +149,13 @@ export default function StudentNotesHistoryPage() {
           <CardContent className="p-6">
             <Tabs value={selectedTrimestre} onValueChange={setSelectedTrimestre}>
               <TabsList className="grid w-full grid-cols-3 bg-white/5 border border-white/10">
-                <TabsTrigger value="1er" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+                <TabsTrigger value="1er" className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white">
                   1er Trimestre
                 </TabsTrigger>
-                <TabsTrigger value="2do" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+                <TabsTrigger value="2do" className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white">
                   2do Trimestre
                 </TabsTrigger>
-                <TabsTrigger value="3er" className="data-[state=active]:bg-[#9f25b8] data-[state=active]:text-white">
+                <TabsTrigger value="3er" className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white">
                   3er Trimestre
                 </TabsTrigger>
               </TabsList>
@@ -164,10 +164,10 @@ export default function StudentNotesHistoryPage() {
         </Card>
 
         {/* Resumen General del Trimestre */}
-        <Card className="bg-gradient-to-br from-[#9f25b8]/20 to-[#6a0dad]/20 border-[#9f25b8]/30 backdrop-blur-md mb-8">
+        <Card className="bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border-[#1e3cff]/30 backdrop-blur-md mb-8">
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+              <TrendingUp className="w-5 h-5 text-[#1e3cff]" />
               Resumen del {selectedTrimestre} Trimestre
             </CardTitle>
             <CardDescription className="text-white/60">
@@ -192,7 +192,7 @@ export default function StudentNotesHistoryPage() {
               </div>
               <div className="p-4 bg-white/5 rounded-lg border border-white/10">
                 <div className="flex items-center gap-3 mb-2">
-                  <Award className="w-5 h-5 text-[#9f25b8]" />
+                  <Award className="w-5 h-5 text-[#1e3cff]" />
                   <p className="text-white/60 text-sm">Promedio General</p>
                 </div>
                 <p className="text-3xl font-bold text-white">{trimestreData.resumen.promedioGeneral.toFixed(1)}</p>
@@ -225,7 +225,7 @@ export default function StudentNotesHistoryPage() {
                     <div className="flex items-center gap-3">
                       <div
                         className="w-12 h-12 rounded-xl flex items-center justify-center"
-                        style={{ backgroundColor: '#9f25b8' }}
+                        style={{ backgroundColor: '#1e3cff' }}
                       >
                         <BookOpen className="w-6 h-6 text-white" />
                       </div>
@@ -245,7 +245,7 @@ export default function StudentNotesHistoryPage() {
                   </div>
                   <div className="w-full bg-white/10 rounded-full h-2">
                     <div
-                      className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] h-2 rounded-full transition-all"
+                      className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full transition-all"
                       style={{ width: `${(materia.promedio / 5) * 100}%` }}
                     />
                   </div>

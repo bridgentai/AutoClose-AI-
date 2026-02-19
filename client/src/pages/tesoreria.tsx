@@ -112,7 +112,7 @@ export default function TesoreriaPage() {
           <Card className={`${CARD_STYLE} hover:bg-white/[0.07] transition-colors`}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
-                <DollarSign className="w-5 h-5 text-[#9f25b8]" />
+                <DollarSign className="w-5 h-5 text-[#00c8ff]" />
                 Pagos Pendientes
               </CardTitle>
             </CardHeader>
@@ -124,7 +124,7 @@ export default function TesoreriaPage() {
           <Card className={`${CARD_STYLE} hover:bg-white/[0.07] transition-colors`}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
-                <TrendingUp className="w-5 h-5 text-[#9f25b8]" />
+                <TrendingUp className="w-5 h-5 text-[#00c8ff]" />
                 Ingresos del Mes
               </CardTitle>
             </CardHeader>
@@ -136,7 +136,7 @@ export default function TesoreriaPage() {
           <Card className={`${CARD_STYLE} hover:bg-white/[0.07] transition-colors`}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
-                <FileText className="w-5 h-5 text-[#9f25b8]" />
+                <FileText className="w-5 h-5 text-[#00c8ff]" />
                 Facturas Emitidas
               </CardTitle>
             </CardHeader>
@@ -148,7 +148,7 @@ export default function TesoreriaPage() {
           <Card className={`${CARD_STYLE} hover:bg-white/[0.07] transition-colors`}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
-                <Users className="w-5 h-5 text-[#9f25b8]" />
+                <Users className="w-5 h-5 text-[#00c8ff]" />
                 Padres con Deuda
               </CardTitle>
             </CardHeader>
@@ -162,7 +162,7 @@ export default function TesoreriaPage() {
 
       {canManage && (
         <div className="flex gap-3 mb-6">
-          <Button onClick={() => setModalFactura(true)} className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]">
+          <Button onClick={() => setModalFactura(true)} className="bg-gradient-to-r from-[#002366] to-[#1e3cff]">
             <Plus className="w-4 h-4 mr-2" />
             Nueva factura
           </Button>
@@ -266,7 +266,7 @@ export default function TesoreriaPage() {
                 />
               </div>
               <Button
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff]"
                 onClick={() => createFacturaMutation.mutate({
                   usuarioId: formFactura.usuarioId,
                   concepto: formFactura.concepto,
@@ -338,7 +338,7 @@ export default function TesoreriaPage() {
                 </select>
               </div>
               <Button
-                className="w-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]"
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff]"
                 onClick={() => createPagoMutation.mutate({
                   usuarioId: formPago.usuarioId,
                   monto: Number(formPago.monto),

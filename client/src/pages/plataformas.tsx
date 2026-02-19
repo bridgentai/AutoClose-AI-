@@ -83,7 +83,7 @@ const plataformas = [
     descripcion: 'Formularios y encuestas',
     url: 'https://forms.google.com',
     icono: PenTool,
-    color: 'from-purple-500 to-purple-600'
+    color: 'from-[#002366] to-[#003d7a]'
   },
   {
     id: 'sites',
@@ -142,7 +142,7 @@ export default function PlataformasPage() {
                       <CardContent className="pt-0">
                         <Button
                           onClick={() => window.open(plataforma.url, '_blank')}
-                          className="w-full hover:opacity-90 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad]"
+                          className="w-full hover:opacity-90 bg-gradient-to-r from-[#002366] to-[#1e3cff]"
                           data-testid={`button-open-${plataforma.id}`}
                         >
                           <ExternalLink className="w-4 h-4 mr-2" />

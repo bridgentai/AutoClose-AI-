@@ -42,7 +42,7 @@ type ViewMode = 'month' | 'week' | 'day';
 
 // Paleta de colores para cursos (si no tienen colorAcento)
 const DEFAULT_COLORS = [
-  '#9f25b8', // Purple Core
+  '#1e3cff', // Purple Core
   '#3b82f6', // Blue
   '#10b981', // Green
   '#f59e0b', // Amber
@@ -54,7 +54,7 @@ const DEFAULT_COLORS = [
   '#14b8a6', // Teal
 ];
 
-const INSTITUTIONAL_COLOR = '#6a0dad'; // Purple Deep para eventos institucionales
+const INSTITUTIONAL_COLOR = '#002366'; // Purple Deep para eventos institucionales
 
 export function CalendarioGeneral() {
   const { user } = useAuth();
@@ -244,7 +244,7 @@ export function CalendarioGeneral() {
               </button>
             </HoverCardTrigger>
             <HoverCardContent 
-              className="w-80 bg-black/90 border-[#9f25b8]/30 backdrop-blur-lg max-h-96 overflow-y-auto"
+              className="w-80 bg-black/90 border-[#1e3cff]/30 backdrop-blur-lg max-h-96 overflow-y-auto"
             >
               <div className="space-y-3">
                 <p className="text-sm text-white/60 font-semibold">
@@ -436,7 +436,7 @@ export function CalendarioGeneral() {
         ))}
         {dayEvents.assignments.length === 0 && dayEvents.events.length === 0 && (
           <div className="text-center py-12">
-            <CalendarIcon className="w-16 h-16 text-[#9f25b8]/40 mx-auto mb-4" />
+            <CalendarIcon className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
             <p className="text-white/60">No hay eventos para este día</p>
           </div>
         )}
@@ -451,7 +451,7 @@ export function CalendarioGeneral() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2 text-white">
-                <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                <CalendarIcon className="w-5 h-5 text-[#1e3cff]" />
                 Calendario General
               </CardTitle>
               <p className="text-sm text-white/60 mt-1">
@@ -473,7 +473,7 @@ export function CalendarioGeneral() {
                   className={cn(
                     "h-8 px-3 text-xs",
                     viewMode === 'month' 
-                      ? "bg-[#9f25b8] text-white" 
+                      ? "bg-[#1e3cff] text-white" 
                       : "text-white/70 hover:text-white hover:bg-white/10"
                   )}
                 >
@@ -486,7 +486,7 @@ export function CalendarioGeneral() {
                   className={cn(
                     "h-8 px-3 text-xs",
                     viewMode === 'week' 
-                      ? "bg-[#9f25b8] text-white" 
+                      ? "bg-[#1e3cff] text-white" 
                       : "text-white/70 hover:text-white hover:bg-white/10"
                   )}
                 >
@@ -499,7 +499,7 @@ export function CalendarioGeneral() {
                   className={cn(
                     "h-8 px-3 text-xs",
                     viewMode === 'day' 
-                      ? "bg-[#9f25b8] text-white" 
+                      ? "bg-[#1e3cff] text-white" 
                       : "text-white/70 hover:text-white hover:bg-white/10"
                   )}
                 >

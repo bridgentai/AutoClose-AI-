@@ -33,7 +33,7 @@ const PerfilLayout: React.FC = () => {
           <Link key={item.path} href={item.path} data-testid={item.testId}>
             <Card className="hover-elevate cursor-pointer">
               <CardContent className="flex flex-col items-center justify-center p-8">
-                <item.icon className="w-12 h-12 mb-4 text-primary" />
+                <item.icon className="w-12 h-12 mb-4 text-[#1e3cff]" />
                 <span className="text-lg font-medium">{item.title}</span>
               </CardContent>
             </Card>

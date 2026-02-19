@@ -130,7 +130,7 @@ export function QuickActions() {
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <div className={cn(
-                      "w-10 h-10 rounded-lg bg-gradient-to-br from-[#9f25b8] to-[#6a0dad] flex items-center justify-center",
+                      "w-10 h-10 rounded-lg bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center",
                       "group-hover:scale-110 transition-transform duration-300",
                       "badge-glow"
                     )}>
@@ -153,16 +153,16 @@ export function QuickActions() {
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
             "w-14 h-14 rounded-full",
-            "bg-gradient-to-br from-[#9f25b8] to-[#6a0dad]",
-            "hover:from-[#c66bff] hover:to-[#9f25b8]",
-            "shadow-lg shadow-[#9f25b8]/30",
-            "hover:shadow-xl hover:shadow-[#9f25b8]/50",
+            "bg-gradient-to-br from-[#002366] to-[#1e3cff]",
+            "hover:from-[#1e3cff] hover:to-[#00c8ff]",
+            "shadow-lg shadow-[#002366]/40",
+            "hover:shadow-xl hover:shadow-[#002366]/50",
             "transition-all duration-300 transition-bounce",
             "flex items-center justify-center",
             "hover:scale-110 active:scale-95",
             "border border-white/20",
             "relative z-50",
-            "hover-glow pulse-purple",
+            "hover-glow pulse-blue",
             "badge-glow",
           )}
           aria-label="Páginas recientes"

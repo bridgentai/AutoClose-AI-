@@ -49,8 +49,8 @@ export default function SuperAdminPage() {
     colegioId: '',
     logoUrl: '',
     nombreIA: 'AutoClose AI',
-    colorPrimario: '#9f25b8',
-    colorSecundario: '#6a0dad',
+    colorPrimario: '#00c8ff',
+    colorSecundario: '#1e3cff',
   });
   const [creatingSchool, setCreatingSchool] = useState(false);
 
@@ -97,8 +97,8 @@ export default function SuperAdminPage() {
         colegioId: '',
         logoUrl: '',
         nombreIA: 'AutoClose AI',
-        colorPrimario: '#9f25b8',
-        colorSecundario: '#6a0dad',
+        colorPrimario: '#00c8ff',
+        colorSecundario: '#1e3cff',
       });
       loadSchools();
       setTimeout(() => setSuccess(''), 3000);
@@ -167,7 +167,7 @@ export default function SuperAdminPage() {
         <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Total Colegios</CardTitle>
-            <Building2 className="w-5 h-5 text-[#9f25b8]" />
+            <Building2 className="w-5 h-5 text-[#00c8ff]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{schools.length}</div>
@@ -178,7 +178,7 @@ export default function SuperAdminPage() {
         <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Total Usuarios</CardTitle>
-            <Users className="w-5 h-5 text-[#9f25b8]" />
+            <Users className="w-5 h-5 text-[#00c8ff]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
@@ -191,7 +191,7 @@ export default function SuperAdminPage() {
         <Card className={CARD_STYLE}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">Super Admins Asignados</CardTitle>
-            <UserPlus className="w-5 h-5 text-[#9f25b8]" />
+            <UserPlus className="w-5 h-5 text-[#00c8ff]" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
@@ -206,12 +206,12 @@ export default function SuperAdminPage() {
       <div className="mb-6 flex gap-4">
         <Dialog open={createSchoolOpen} onOpenChange={setCreateSchoolOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white">
+            <Button className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white">
               <Plus className="w-4 h-4 mr-2" />
               Crear Nuevo Colegio
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-[#0b0013] border-white/10 text-white">
+          <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
             <DialogHeader>
               <DialogTitle>Crear Nuevo Colegio</DialogTitle>
               <DialogDescription className="text-white/60">
@@ -285,7 +285,7 @@ export default function SuperAdminPage() {
                 <Button
                   type="submit"
                   disabled={creatingSchool}
-                  className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                  className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
                 >
                   {creatingSchool ? (
                     <>
@@ -305,7 +305,7 @@ export default function SuperAdminPage() {
       {/* Lista de colegios */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-[#9f25b8]" />
+          <Loader2 className="w-8 h-8 animate-spin text-[#00c8ff]" />
         </div>
       ) : schools.length === 0 ? (
         <Card className={CARD_STYLE}>
@@ -326,7 +326,7 @@ export default function SuperAdminPage() {
                       ID: {school.colegioId}
                     </CardDescription>
                   </div>
-                  <Badge className="bg-[#9f25b8]/20 text-[#9f25b8] border-[#9f25b8]/40">
+                  <Badge className="bg-[#00c8ff]/20 text-[#00c8ff] border-[#00c8ff]/40">
                     {school.userCount || 0} usuarios
                   </Badge>
                 </div>
@@ -371,7 +371,7 @@ export default function SuperAdminPage() {
                         {school.superAdmin ? 'Cambiar Super Admin' : 'Asignar Super Admin'}
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-[#0b0013] border-white/10 text-white">
+                    <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
                       <DialogHeader>
                         <DialogTitle>
                           {school.superAdmin ? 'Cambiar Super Admin del Colegio' : 'Asignar Super Admin del Colegio'}
@@ -432,7 +432,7 @@ export default function SuperAdminPage() {
                           <Button
                             type="submit"
                             disabled={assigningAdmin}
-                            className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                            className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
                           >
                             {assigningAdmin ? (
                               <>

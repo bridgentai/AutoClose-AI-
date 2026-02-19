@@ -205,16 +205,17 @@ export default function TeacherCalendarPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <CalendarIcon className="w-5 h-5 text-[#9f25b8]" />
+                      <CalendarIcon className="w-5 h-5 text-[#00c8ff]" />
                       <CardTitle className="text-white">
                         Calendario del Mes
                       </CardTitle>
                     </div>
                     <Button
                       onClick={() => setIsDialogOpen(true)}
-                      className="w-10 h-10 rounded-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 shadow-lg shadow-purple-500/30"
+                      className="w-10 h-10 rounded-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 shadow-lg shadow-[#1e3cff]/30"
                       size="icon"
                       data-testid="button-create-assignment"
+                      aria-label="Crear nueva tarea"
                     >
                       <Plus className="w-5 h-5" />
                     </Button>
@@ -231,7 +232,7 @@ export default function TeacherCalendarPage() {
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] transition-all duration-300"
+                          className="h-full bg-gradient-to-r from-[#002366] to-[#1e3cff] transition-all duration-300"
                           style={{ 
                             width: `${Math.min(100, (assignments.length / Math.max(1, daysInMonth)) * 100)}%` 
                           }}
@@ -265,7 +266,7 @@ export default function TeacherCalendarPage() {
                       </div>
                       <Button
                         onClick={() => setLocation('/profesor/tareas/resumen')}
-                        className="bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90 text-white"
+                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
                       >
                         Ver Resumen
                       </Button>
@@ -278,7 +279,7 @@ export default function TeacherCalendarPage() {
           </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="bg-[#1a001c] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">Crear Nueva Tarea</DialogTitle>
             <DialogDescription className="text-white/60">
@@ -329,7 +330,7 @@ export default function TeacherCalendarPage() {
                       : formData.curso || ''}
                   </SelectValue>
                 </SelectTrigger>
-                <SelectContent className="bg-[#1a001c] border-white/10">
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
                   {availableGroups.map((grupo) => {
                     const subjects = getSubjectsForGroup(grupo);
                     const subjectNames = subjects.map(s => s.nombre).join(', ') || 'Sin materia asignada';
@@ -351,7 +352,7 @@ export default function TeacherCalendarPage() {
               )}
               {!isLoadingGroups && availableGroups.length === 0 && (
                 <p className="text-xs text-amber-400">
-                  Primero debes asignar grupos a tu materia desde "Mis Cursos" → "Gestionar Asignaciones".
+                  Aún no tienes grupos asignados. El administrador del colegio te asignará a cursos desde su panel.
                 </p>
               )}
             </div>
@@ -389,7 +390,7 @@ export default function TeacherCalendarPage() {
                 <div className="space-y-2">
                   {adjuntos.map((adj, index) => (
                     <div key={index} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-                      {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#9f25b8]" /> : <FileText className="w-4 h-4 text-[#9f25b8]" />}
+                      {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#00c8ff]" /> : <FileText className="w-4 h-4 text-[#00c8ff]" />}
                       <span className="flex-1 text-sm truncate">{adj.nombre}</span>
                       <Button
                         type="button"
@@ -413,7 +414,7 @@ export default function TeacherCalendarPage() {
                   <SelectTrigger className="w-28 bg-white/5 border-white/10 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#1a001c] border-white/10">
+                  <SelectContent className="bg-[#0a0a2a] border-white/10">
                     <SelectItem value="link" className="text-white hover:bg-white/10">Link</SelectItem>
                     <SelectItem value="pdf" className="text-white hover:bg-white/10">PDF</SelectItem>
                     <SelectItem value="documento" className="text-white hover:bg-white/10">Doc</SelectItem>
@@ -455,7 +456,7 @@ export default function TeacherCalendarPage() {
               <Button
                 type="submit"
                 disabled={createAssignmentMutation.isPending}
-                className="flex-1 bg-gradient-to-r from-[#9f25b8] to-[#6a0dad] hover:opacity-90"
+                className="flex-1 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
                 data-testid="button-submit-assignment"
               >
                 {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Tarea'}
