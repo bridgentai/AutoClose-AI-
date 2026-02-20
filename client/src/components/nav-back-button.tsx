@@ -152,7 +152,7 @@ export function NavBackButton({ to, label, className }: NavBackButtonProps) {
       "/profesor": "Profesor",
       "/profesor/academia": "Academia",
       "/profesor/academia/cursos": "Cursos",
-      "/profesor/academia/tareas": "Tareas",
+      "/profesor/academia/tareas": "Asignaciones",
       "/profesor/comunicacion": "Comunicación",
       "/directivo": "Directivo",
       "/directivo/academia": "Academia",

@@ -1,4 +1,4 @@
-import { Assignment, User, Course } from '../models';
+import { Assignment, User, Course, LogroCalificacion } from '../models';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import type { IAssignment } from '../models/Assignment';
 import * as syncService from './syncService';
@@ -13,6 +13,7 @@ export interface CreateAssignmentParams {
   adjuntos?: string[];
   profesorId: string;
   colegioId: string;
+  logroCalificacionId?: string; // Tipo de logro (Tareas, Exámenes, etc.) para ponderar la nota
 }
 
 export interface CreateAssignmentResult {
@@ -27,7 +28,7 @@ export interface CreateAssignmentResult {
  */
 export async function createAssignment(params: CreateAssignmentParams): Promise<CreateAssignmentResult> {
   try {
-    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos, profesorId, colegioId } = params;
+    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos, profesorId, colegioId, logroCalificacionId } = params;
 
     // Validar campos obligatorios
     if (!titulo || !descripcion || !curso || !fechaEntrega) {
@@ -98,6 +99,32 @@ export async function createAssignment(params: CreateAssignmentParams): Promise<
       };
     }
 
+    // Si la materia tiene logros configurados, se debe seleccionar uno obligatoriamente
+    const logrosMateria = await LogroCalificacion.find({ courseId: normalizedCourseId, colegioId }).lean();
+    if (logrosMateria.length > 0 && !logroCalificacionId) {
+      return {
+        success: false,
+        error: 'Debes seleccionar el tipo de logro al que pertenece esta asignación.',
+      };
+    }
+
+    // Validar logro si se proporciona
+    let logroObjId: import('mongoose').Types.ObjectId | undefined;
+    if (logroCalificacionId) {
+      const logro = await LogroCalificacion.findOne({
+        _id: normalizeIdForQuery(logroCalificacionId),
+        courseId: normalizedCourseId,
+        colegioId,
+      }).lean();
+      if (!logro) {
+        return {
+          success: false,
+          error: 'El tipo de logro no existe o no pertenece a esta materia.',
+        };
+      }
+      logroObjId = logro._id as import('mongoose').Types.ObjectId;
+    }
+
     // Obtener materiaId del curso
     const materiaId = course.materiaId || course._id; // Fallback si no tiene materiaId
 
@@ -117,6 +144,7 @@ export async function createAssignment(params: CreateAssignmentParams): Promise<
       curso: cursoNormalizado, // Usar curso normalizado para consistencia
       courseId: normalizedCourseId,
       profesorNombre: user.nombre,
+      logroCalificacionId: logroObjId,
     });
 
     await newAssignment.save();

@@ -110,7 +110,7 @@ router.get('/debug/profesor/:profesorId/:mes/:year', async (req, res) => {
 // POST /api/assignments - Crear nueva tarea (solo profesores)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos } = req.body;
+    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos, logroCalificacionId } = req.body;
 
     if (!titulo || !descripcion || !curso || !fechaEntrega) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
@@ -145,6 +145,7 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       adjuntos: adjuntos || [],
       profesorId: normalizedUserId,
       colegioId: user.colegioId,
+      logroCalificacionId: logroCalificacionId || undefined,
     });
 
     if (!result.success) {
@@ -216,6 +217,11 @@ router.get('/', protect, async (req: AuthRequest, res) => {
       } else {
         query.curso = { $in: [cursoNormalizado, cursoNormalizado.toLowerCase(), user.curso as string] };
       }
+    }
+
+    // Si es profesor, solo ver las tareas que él creó (su materia): no ver tareas de otros profesores del mismo curso
+    if (user.rol === 'profesor') {
+      query.profesorId = normalizedUserId;
     }
 
     // Obtener todas las tareas que coinciden con los filtros
@@ -619,8 +625,8 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
   try {
     const { curso, mes, año } = req.params;
 
-    // Obtener el usuario para filtrar por colegio - optimizado
-    const user = await User.findById(req.userId).select('colegioId').lean();
+    const normalizedUserId = normalizeIdForQuery(req.userId || '');
+    const user = await User.findById(normalizedUserId).select('colegioId rol').lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
@@ -635,8 +641,7 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
     // Normalizar curso para búsqueda case-insensitive
     const cursoNormalizado = curso.toUpperCase().trim();
 
-    // Filtrar por curso Y colegio para evitar conflictos entre colegios
-    const assignments = await Assignment.find({
+    const query: any = {
       $or: [
         { curso: cursoNormalizado },
         { curso: cursoNormalizado.toLowerCase() },
@@ -647,7 +652,14 @@ router.get('/curso/:curso/:mes/:año', protect, async (req: AuthRequest, res) =>
         $gte: primerDia,
         $lte: ultimoDia,
       },
-    })
+    };
+
+    // Si es profesor, solo ver las tareas que él asignó (su materia)
+    if (user.rol === 'profesor') {
+      query.profesorId = normalizedUserId;
+    }
+
+    const assignments = await Assignment.find(query)
       .select('titulo descripcion curso courseId fechaEntrega profesorNombre profesorId')
       .sort({ fechaEntrega: 1 })
       .lean();
@@ -751,6 +763,14 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
     // Verificar que el usuario pertenece al mismo colegio
     if (user.colegioId !== assignment.colegioId) {
       return res.status(403).json({ message: 'No tienes acceso a esta tarea.' });
+    }
+
+    // Si es profesor, solo puede ver tareas que él creó (su materia)
+    if (user.rol === 'profesor') {
+      const assignmentProfesorId = (assignment as any).profesorId?.toString?.();
+      if (assignmentProfesorId !== normalizedUserId) {
+        return res.status(403).json({ message: 'No tienes acceso a esta tarea. Solo puedes ver las tareas de tu materia.' });
+      }
     }
 
     // Si es estudiante, verificar que pertenece al curso y agregar estado

@@ -218,7 +218,7 @@ export default function ProfesorPanelCalificacionPage() {
     <div className="flex-1 overflow-auto p-6 md:p-10">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <NavBackButton to="/profesor/academia/tareas/revision" label="Revisión de Tareas" />
+          <NavBackButton to="/profesor/academia/tareas/revision" label="Revisión de Asignaciones" />
           <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] mt-4">
             Panel de Calificación
           </h1>

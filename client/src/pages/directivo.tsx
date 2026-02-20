@@ -1,6 +1,8 @@
 import { useAuth } from '@/lib/authContext';
-import { Users, AlertCircle, ChevronDown, BookOpen, BarChart3 } from 'lucide-react';
+import { useLocation } from 'wouter';
+import { Users, AlertCircle, ChevronDown, BookOpen, BarChart3, GraduationCap, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -49,26 +51,37 @@ const GRUPOS_DISPONIBLES = [
 
 export default function DirectivoPage() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [openProfesorId, setOpenProfesorId] = useState<string | null>(null);
 
   const { data: profesores = [], isLoading: loadingProfesores, error: errorProfesores } = useQuery<Profesor[]>({
-    queryKey: ['/api/users/by-role', 'profesor'],
+    queryKey: ['/api/users/by-role', 'profesor', user?.colegioId],
     queryFn: () => apiRequest<Profesor[]>('GET', '/api/users/by-role?rol=profesor'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
   });
 
   const { data: allCourses = [], isLoading: loadingCourses } = useQuery<Course[]>({
-    queryKey: ['/api/courses'],
+    queryKey: ['/api/courses', user?.colegioId],
     queryFn: () => apiRequest<Course[]>('GET', '/api/courses'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
   });
 
   const { data: resumenCursos, isLoading: loadingResumen } = useQuery<{ cursos: CursoResumen[] }>({
-    queryKey: ['/api/reports/cursos/resumen'],
+    queryKey: ['/api/reports/cursos/resumen', user?.colegioId],
     queryFn: () => apiRequest<{ cursos: CursoResumen[] }>('GET', '/api/reports/cursos/resumen'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
   });
 
   const { data: stats } = useQuery<{ estudiantes: number; profesores: number; padres: number; directivos: number; cursos: number; materias: number }>({
     queryKey: ['adminStats', user?.colegioId],
     queryFn: () => apiRequest('GET', '/api/users/stats'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
+  });
+
+  const { data: gruposList = [] } = useQuery<{ _id: string; nombre: string }[]>({
+    queryKey: ['/api/groups/all', user?.colegioId],
+    queryFn: () => apiRequest<{ _id: string; nombre: string }[]>('GET', '/api/groups/all'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
   });
 
   const getCurrentAssignments = (profesorId: string, materia: string): string[] => {
@@ -80,95 +93,148 @@ export default function DirectivoPage() {
 
   return (
     <div data-testid="directivo-page">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-          Vista Directivo (solo lectura)
-        </h2>
-        <p className="text-white/60">
-          Listas de profesores, cursos y resumen por curso. Sin opciones de edición.
-        </p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
+            Vista Directivo
+          </h2>
+          <p className="text-white/60">
+            Información de Academia en tiempo real: profesores, cursos, estudiantes por curso y notas. Cada panel es clicable para ver el detalle.
+          </p>
+        </div>
+        <Button
+          onClick={() => setLocation('/directivo/cursos')}
+          className="bg-[#00c8ff]/20 border border-[#00c8ff]/50 text-[#00c8ff] hover:bg-[#00c8ff]/30 shrink-0"
+        >
+          <BookOpen className="w-4 h-4 mr-2" />
+          Cursos y estudiantes
+        </Button>
       </div>
 
-      {/* KPIs - solo lectura */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-          <CardContent className="pt-4">
-            <p className="text-white/60 text-xs uppercase">Estudiantes</p>
-            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.estudiantes ?? '-'}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-          <CardContent className="pt-4">
-            <p className="text-white/60 text-xs uppercase">Profesores</p>
-            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.profesores ?? '-'}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-          <CardContent className="pt-4">
-            <p className="text-white/60 text-xs uppercase">Padres</p>
-            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.padres ?? '-'}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-          <CardContent className="pt-4">
-            <p className="text-white/60 text-xs uppercase">Cursos</p>
-            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.cursos ?? '-'}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-          <CardContent className="pt-4">
-            <p className="text-white/60 text-xs uppercase">Materias</p>
-            <p className="text-2xl font-bold text-white font-['Poppins']">{stats?.materias ?? '-'}</p>
-          </CardContent>
-        </Card>
+      {/* KPIs - datos reales del colegio, click-ups */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <button
+          type="button"
+          onClick={() => document.getElementById('seccion-profesores')?.scrollIntoView({ behavior: 'smooth' })}
+          className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 text-left hover:bg-white/10 hover:border-[#00c8ff]/30 transition-all duration-200 shadow-lg hover:shadow-[0_0_24px_-4px_rgba(0,200,255,0.2)]"
+        >
+          <p className="text-white/60 text-xs uppercase tracking-wide mb-1">Profesores</p>
+          <p className="text-3xl font-bold text-white font-['Poppins']">{stats?.profesores ?? '-'}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocation('/directivo/estudiantes')}
+          className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 text-left hover:bg-white/10 hover:border-[#00c8ff]/30 transition-all duration-200 shadow-lg hover:shadow-[0_0_24px_-4px_rgba(0,200,255,0.2)]"
+        >
+          <p className="text-white/60 text-xs uppercase tracking-wide mb-1">Estudiantes</p>
+          <p className="text-3xl font-bold text-white font-['Poppins']">{stats?.estudiantes ?? '-'}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocation('/directivo/cursos')}
+          className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 text-left hover:bg-white/10 hover:border-[#00c8ff]/30 transition-all duration-200 shadow-lg hover:shadow-[0_0_24px_-4px_rgba(0,200,255,0.2)]"
+        >
+          <p className="text-white/60 text-xs uppercase tracking-wide mb-1">Cursos Activos</p>
+          <p className="text-3xl font-bold text-white font-['Poppins']">{stats?.cursos ?? '-'}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setLocation('/directivo/cursos')}
+          className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 text-left hover:bg-white/10 hover:border-[#00c8ff]/30 transition-all duration-200 shadow-lg hover:shadow-[0_0_24px_-4px_rgba(0,200,255,0.2)]"
+        >
+          <p className="text-white/60 text-xs uppercase tracking-wide mb-1">Materias</p>
+          <p className="text-3xl font-bold text-white font-['Poppins']">{stats?.materias ?? '-'}</p>
+          <p className="text-white/50 text-xs mt-1">Cursos / grupos</p>
+        </button>
       </div>
 
-      {/* Resumen por curso - solo lectura */}
-      <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-[#00c8ff]" />
-            Resumen por curso
-          </CardTitle>
-          <CardDescription className="text-white/60">
-            Estudiantes, asistencia del mes y promedio de notas por materia
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loadingResumen ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-12 w-full bg-white/10" />
-              ))}
-            </div>
-          ) : resumenCursos?.cursos?.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead>
-                  <tr className="border-b border-white/10 text-white/80">
-                    <th className="py-2 pr-4">Materia / Curso</th>
-                    <th className="py-2 pr-4">Estudiantes</th>
-                    <th className="py-2 pr-4">Asistencia mes %</th>
-                    <th className="py-2">Promedio notas</th>
+      {/* Resumen por curso - click-up a academia */}
+      <button
+        type="button"
+        onClick={() => setLocation('/directivo/cursos')}
+        className="w-full text-left rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md mb-8 p-6 hover:bg-white/10 hover:border-[#00c8ff]/30 transition-all duration-200 shadow-lg hover:shadow-[0_0_24px_-4px_rgba(0,200,255,0.2)]"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <CardTitle className="text-white flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-[#00c8ff]" />
+              Resumen por curso (Academia)
+            </CardTitle>
+            <CardDescription className="text-white/60 mt-1">
+              Estudiantes, asistencia del mes y promedio por materia. Clic para ver cursos y estudiantes.
+            </CardDescription>
+          </div>
+          <ChevronRight className="w-5 h-5 text-white/50 shrink-0" />
+        </div>
+        {loadingResumen ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-10 w-full bg-white/10 rounded-lg" />
+            ))}
+          </div>
+        ) : resumenCursos?.cursos?.length ? (
+          <div className="overflow-x-auto rounded-xl border border-white/10">
+            <table className="w-full text-sm text-left">
+              <thead>
+                <tr className="border-b border-white/10 text-white/80 bg-white/5">
+                  <th className="py-3 px-4">Materia / Curso</th>
+                  <th className="py-3 px-4">Estudiantes</th>
+                  <th className="py-3 px-4">Asistencia mes %</th>
+                  <th className="py-3 px-4">Promedio notas</th>
+                </tr>
+              </thead>
+              <tbody className="text-white/90">
+                {resumenCursos.cursos.slice(0, 8).map((c) => (
+                  <tr key={c._id} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-3 px-4 font-medium">{c.nombre}</td>
+                    <td className="py-3 px-4">{c.cantidadEstudiantes}</td>
+                    <td className="py-3 px-4">{c.asistenciaMesPorcentaje}%</td>
+                    <td className="py-3 px-4">{c.promedioNotas != null ? c.promedioNotas.toFixed(1) : '-'}</td>
                   </tr>
-                </thead>
-                <tbody className="text-white/90">
-                  {resumenCursos.cursos.map((c) => (
-                    <tr key={c._id} className="border-b border-white/5">
-                      <td className="py-2 pr-4 font-medium">{c.nombre}</td>
-                      <td className="py-2 pr-4">{c.cantidadEstudiantes}</td>
-                      <td className="py-2 pr-4">{c.asistenciaMesPorcentaje}%</td>
-                      <td className="py-2">{c.promedioNotas != null ? c.promedioNotas.toFixed(1) : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-white/50 py-4">No hay datos de cursos aún.</p>
-          )}
-        </CardContent>
-      </Card>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-white/50 py-4">No hay datos de cursos aún.</p>
+        )}
+      </button>
+
+      {/* Cursos / Grupos del colegio - click-up a estudiantes por curso */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white font-['Poppins'] flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-[#00c8ff]" />
+            Cursos del colegio
+          </h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[#00c8ff] hover:bg-[#00c8ff]/10"
+            onClick={() => setLocation('/directivo/cursos')}
+          >
+            Ver todos
+            <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
+        </div>
+        {gruposList.length === 0 ? (
+          <p className="text-white/50 text-sm py-4">No hay cursos registrados.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {gruposList.slice(0, 10).map((g) => (
+              <button
+                key={g._id}
+                type="button"
+                onClick={() => setLocation(`/directivo/cursos/${encodeURIComponent(g.nombre)}/estudiantes`)}
+                className="rounded-xl border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 hover:border-[#00c8ff]/30 transition-all duration-200 flex items-center justify-between group"
+              >
+                <span className="font-semibold text-white">{g.nombre}</span>
+                <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-[#00c8ff]" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {(loadingProfesores || loadingCourses) && (
         <div className="space-y-4">
@@ -193,6 +259,11 @@ export default function DirectivoPage() {
         </Alert>
       )}
 
+      <div id="seccion-profesores" className="scroll-mt-6">
+        <h3 className="text-lg font-semibold text-white font-['Poppins'] mb-4 flex items-center gap-2">
+          <Users className="w-5 h-5 text-[#00c8ff]" />
+          Profesores del colegio
+        </h3>
       {!loadingProfesores && !errorProfesores && profesores.length === 0 && (
         <Alert className="bg-blue-500/10 border-blue-500/50">
           <Users className="h-4 w-4 text-blue-400" />
@@ -216,6 +287,7 @@ export default function DirectivoPage() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

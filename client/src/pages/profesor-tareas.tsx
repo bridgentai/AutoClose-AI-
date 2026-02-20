@@ -26,10 +26,10 @@ export default function ProfesorTareasPage() {
         <div className="mb-8">
           <NavBackButton />
           <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">
-            Gestión de Tareas
+            Gestión de Asignaciones
           </h1>
           <p className="text-white/60">
-            Asigna nuevas tareas o revisa las tareas existentes de tus cursos
+            Crea asignaciones y revisa las existentes en tus cursos
           </p>
         </div>
 
@@ -47,7 +47,7 @@ export default function ProfesorTareasPage() {
                 Asignación
               </CardTitle>
               <CardDescription className="text-white/60">
-                Crea y asigna nuevas tareas a tus cursos. Las tareas aparecerán automáticamente en el calendario de profesores y estudiantes.
+                Crea y asigna nuevas asignaciones a tus cursos. Aparecerán en el calendario de profesores y estudiantes.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0">
@@ -76,7 +76,7 @@ export default function ProfesorTareasPage() {
                 Revisión
               </CardTitle>
               <CardDescription className="text-white/60">
-                Accede al módulo de tareas de cada uno de tus cursos para revisar entregas, calificar y gestionar las tareas asignadas.
+                Accede al módulo de asignaciones de cada curso para revisar entregas, calificar y gestionar.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0">

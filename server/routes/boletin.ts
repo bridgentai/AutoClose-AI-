@@ -1,5 +1,6 @@
 import express from 'express';
-import { Boletin, User, Vinculacion } from '../models';
+import { Types } from 'mongoose';
+import { Boletin, User, Vinculacion, Group, GroupStudent, Assignment, Nota, Course, LogroCalificacion } from '../models';
 import { protect, AuthRequest } from '../middleware/auth';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 
@@ -77,6 +78,249 @@ router.get('/inteligente/:studentId', protect, async (req: AuthRequest, res) => 
   } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al obtener Boletín Inteligente.' });
+  }
+});
+
+// POST /api/boletin/generar-por-curso - Crear boletines/reportes académicos para un curso completo (cada estudiante con su resumen personalizado)
+// Solo directivo o admin-general-colegio. Genera un solo documento Boletin con resumen por estudiante (todas las materias).
+router.post('/generar-por-curso', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const rol = req.user?.rol;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (rol !== 'directivo' && rol !== 'admin-general-colegio') {
+      return res.status(403).json({ message: 'Solo directivos o administradores pueden generar boletines por curso.' });
+    }
+
+    const { grupoId, grupoNombre, periodo } = req.body as { grupoId?: string; grupoNombre?: string; periodo?: string };
+    const nombreOId = grupoNombre || grupoId;
+    if (!nombreOId) {
+      return res.status(400).json({ message: 'Indica el curso/grupo (grupoId o grupoNombre).' });
+    }
+
+    const grupoNombreNorm = (nombreOId as string).toUpperCase().trim();
+    const isObjectId = /^[a-fA-F0-9]{24}$/.test((nombreOId as string).trim());
+    const groupQuery: any = { colegioId };
+    if (isObjectId) {
+      groupQuery.$or = [
+        { nombre: grupoNombreNorm },
+        { nombre: (nombreOId as string).trim() },
+        { _id: normalizeIdForQuery(nombreOId as string) },
+      ];
+    } else {
+      groupQuery.$or = [
+        { nombre: grupoNombreNorm },
+        { nombre: (nombreOId as string).trim() },
+      ];
+    }
+    const grupo = await Group.findOne(groupQuery).lean();
+    if (!grupo) {
+      return res.status(404).json({ message: 'Curso/grupo no encontrado.' });
+    }
+
+    const groupStudents = await GroupStudent.find({
+      grupoId: grupo._id,
+      colegioId,
+    })
+      .select('estudianteId')
+      .lean();
+    const estudianteIds = groupStudents
+      .map((gs) => (gs as { estudianteId: Types.ObjectId }).estudianteId)
+      .filter(Boolean);
+    if (estudianteIds.length === 0) {
+      return res.status(400).json({ message: 'El curso no tiene estudiantes asignados.' });
+    }
+
+    const nombreGrupo = (grupo as { nombre: string }).nombre;
+    const assignments = await Assignment.find({
+      colegioId,
+      $or: [
+        { curso: grupoNombreNorm },
+        { curso: nombreGrupo },
+        { curso: nombreGrupo.toLowerCase() },
+      ],
+    })
+      .select('_id courseId cursoId logroCalificacionId')
+      .lean();
+
+    const assignmentIds = assignments.map((a) => a._id);
+    const assignmentToCourse: Record<string, string> = {};
+    const assignmentToLogro: Record<string, string> = {};
+    assignments.forEach((a: any) => {
+      const cid = (a.courseId || a.cursoId)?.toString();
+      if (cid) assignmentToCourse[a._id.toString()] = cid;
+      const lid = (a.logroCalificacionId as Types.ObjectId)?.toString?.();
+      if (lid) assignmentToLogro[a._id.toString()] = lid;
+    });
+
+    const logrosByCourse = await LogroCalificacion.find({ courseId: { $in: [...new Set(Object.values(assignmentToCourse))] }, colegioId })
+      .select('_id courseId nombre porcentaje')
+      .lean();
+    const logroInfo: Record<string, { courseId: string; porcentaje: number }> = {};
+    logrosByCourse.forEach((l: any) => {
+      logroInfo[l._id.toString()] = { courseId: (l.courseId as Types.ObjectId).toString(), porcentaje: l.porcentaje ?? 0 };
+    });
+
+    const notas = await Nota.find({
+      tareaId: { $in: assignmentIds },
+      estudianteId: { $in: estudianteIds },
+    }).lean();
+
+    type ByCourse = { sum: number; count: number };
+    type ByLogro = { sum: number; count: number };
+    const byStudentCourse: Record<string, Record<string, ByCourse>> = {};
+    const byStudentLogro: Record<string, Record<string, ByLogro>> = {};
+    for (const n of notas) {
+      const sid = (n as any).estudianteId?.toString();
+      const tid = (n as any).tareaId?.toString();
+      const cid = tid ? assignmentToCourse[tid] : null;
+      const lid = tid ? assignmentToLogro[tid] : null;
+      const notaVal = (n as any).nota ?? 0;
+      if (!sid || !cid) continue;
+      if (!byStudentCourse[sid]) byStudentCourse[sid] = {};
+      if (!byStudentCourse[sid][cid]) byStudentCourse[sid][cid] = { sum: 0, count: 0 };
+      if (lid && logroInfo[lid]) {
+        if (!byStudentLogro[sid]) byStudentLogro[sid] = {};
+        if (!byStudentLogro[sid][lid]) byStudentLogro[sid][lid] = { sum: 0, count: 0 };
+        byStudentLogro[sid][lid].sum += notaVal;
+        byStudentLogro[sid][lid].count += 1;
+      } else {
+        byStudentCourse[sid][cid].sum += notaVal;
+        byStudentCourse[sid][cid].count += 1;
+      }
+    }
+
+    let allCourseIds = [...new Set(Object.values(assignmentToCourse))];
+    const coursesFromGroup = await Course.find({
+      colegioId,
+      $or: [
+        { cursos: grupoNombreNorm },
+        { cursos: nombreGrupo },
+        { cursos: nombreGrupo.toLowerCase() },
+      ],
+    })
+      .select('_id nombre')
+      .lean();
+    const allCourseIdsSet = new Set(allCourseIds);
+    coursesFromGroup.forEach((c: any) => allCourseIdsSet.add(c._id.toString()));
+    allCourseIds = [...allCourseIdsSet];
+
+    const courses = await Course.find({ _id: { $in: allCourseIds }, colegioId }).select('_id nombre').lean();
+    const courseNames: Record<string, string> = {};
+    courses.forEach((c: any) => {
+      courseNames[c._id.toString()] = c.nombre || 'Materia';
+    });
+
+    const students = await User.find({
+      _id: { $in: estudianteIds },
+      rol: 'estudiante',
+    })
+      .select('_id nombre')
+      .lean();
+
+    const periodoText = periodo || `Reporte ${(grupo as { nombre: string }).nombre} - ${new Date().toLocaleDateString('es')}`;
+
+    const firstCourse = await Course.findOne({
+      colegioId,
+      $or: [{ cursos: grupoNombreNorm }, { cursos: (grupo as { nombre: string }).nombre }],
+    })
+      .select('_id')
+      .lean();
+    let cursoIdRef = firstCourse?._id || (courses[0] as any)?._id;
+    if (!cursoIdRef) {
+      const anyCourse = await Course.findOne({ colegioId }).select('_id').lean();
+      cursoIdRef = anyCourse?._id;
+    }
+    if (!cursoIdRef) {
+      return res.status(400).json({
+        message: 'No hay cursos configurados en el colegio. Crea al menos una materia/curso primero.',
+      });
+    }
+
+    const logrosPorCurso: Record<string, { _id: string; porcentaje: number }[]> = {};
+    for (const l of logrosByCourse) {
+      const cid = (l as any).courseId?.toString();
+      if (!cid) continue;
+      if (!logrosPorCurso[cid]) logrosPorCurso[cid] = [];
+      logrosPorCurso[cid].push({ _id: (l as any)._id.toString(), porcentaje: (l as any).porcentaje ?? 0 });
+    }
+
+    const boletinIds: string[] = [];
+    for (const s of students) {
+      const sid = (s as any)._id.toString();
+      const byCourse = byStudentCourse[sid] || {};
+      const byLogro = byStudentLogro[sid] || {};
+      const materias = allCourseIds.map((materiaId) => {
+        let promedio = 0;
+        let cantidadNotas = 0;
+        const logrosMateria = logrosPorCurso[materiaId] || [];
+        if (logrosMateria.length > 0) {
+          let ponderado = 0;
+          for (const logro of logrosMateria) {
+            const data = byLogro[logro._id];
+            const avg = data && data.count > 0 ? data.sum / data.count : 0;
+            ponderado += avg * (logro.porcentaje / 100);
+            cantidadNotas += data?.count ?? 0;
+          }
+          promedio = Math.round(ponderado * 100) / 100;
+        } else {
+          const data = byCourse[materiaId];
+          promedio = data && data.count > 0 ? Math.round((data.sum / data.count) * 100) / 100 : 0;
+          cantidadNotas = data?.count ?? 0;
+        }
+        return {
+          materiaId,
+          nombre: courseNames[materiaId] || 'Materia',
+          promedio,
+          cantidadNotas,
+        };
+      });
+      const materiasConNotas = materias.filter((m) => m.cantidadNotas > 0);
+      const promedioGeneral =
+        materiasConNotas.length > 0
+          ? Math.round(
+              (materiasConNotas.reduce((acc, m) => acc + m.promedio, 0) / materiasConNotas.length) * 100
+            ) / 100
+          : 0;
+      const nombreEstudiante = (s as any).nombre || 'Estudiante';
+      const resumenEstudiante = [{
+        estudianteId: (s as any)._id,
+        nombre: nombreEstudiante,
+        promedioGeneral,
+        materias,
+      }];
+
+      const periodoIndividual = periodo
+        ? `${periodo} - ${nombreEstudiante}`
+        : `Boletín ${nombreEstudiante} - ${(grupo as { nombre: string }).nombre} - ${new Date().toLocaleDateString('es')}`;
+
+      const boletin = await Boletin.create({
+        colegioId,
+        cursoId: cursoIdRef,
+        periodo: periodoIndividual,
+        grupoNombre: (grupo as { nombre: string }).nombre,
+        grupoId: grupo._id,
+        generadoPor: new Types.ObjectId(userId),
+        resumen: resumenEstudiante,
+      });
+      boletinIds.push(boletin._id.toString());
+    }
+
+    return res.status(201).json({
+      message: `Se crearon ${boletinIds.length} boletines (uno por estudiante) para el curso ${(grupo as { nombre: string }).nombre}.`,
+      boletinIds,
+      estudiantes: boletinIds.length,
+      periodo: periodoText,
+    });
+  } catch (e: unknown) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    console.error('Error al generar boletines por curso:', err.message, err.stack);
+    const detail = process.env.NODE_ENV !== 'production' ? err.message : undefined;
+    return res.status(500).json({
+      message: detail || 'Error al generar boletines por curso.',
+      error: detail,
+    });
   }
 });
 
@@ -222,24 +466,119 @@ router.get('/:id/pdf', protect, async (req: AuthRequest, res) => {
 
     const periodo = doc.periodo || 'Boletín';
     const cursoNombre = (doc.cursoId as { nombre?: string })?.nombre || (doc as { grupoNombre?: string }).grupoNombre || '';
-    const resumen = (doc.resumen || []) as { estudianteId: string; nombre: string; promedioGeneral: number; materias: { nombre: string; promedio: number }[] }[];
-    const rows = resumen
-      .map(
-        (r) =>
-          `<tr><td>${r.nombre}</td><td>${(r.promedioGeneral ?? 0).toFixed(1)}</td><td>${(r.materias || [])
-            .map((m) => `${m.nombre}: ${(m.promedio ?? 0).toFixed(1)}`)
-            .join(', ')}</td></tr>`
-      )
-      .join('');
+    const resumen = (doc.resumen || []) as { nombre: string; promedioGeneral: number; materias: { nombre: string; promedio: number; cantidadNotas?: number }[] }[];
+    const isIndividual = resumen.length === 1;
+    const fecha = new Date((doc as { fecha?: Date }).fecha || Date.now()).toLocaleDateString('es');
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${periodo}</title>
-<style>body{font-family:system-ui,sans-serif;padding:1rem;max-width:800px;margin:0 auto;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #ddd;padding:8px;text-align:left;} th{background:#f5f5f5;}</style>
+    let html: string;
+    if (isIndividual && resumen[0]) {
+      const r = resumen[0];
+      const prom = r.promedioGeneral ?? 0;
+      const materiasRows = (r.materias || []).map(
+        (m) => {
+          const nota = (m.cantidadNotas ?? 0) > 0 ? (m.promedio ?? 0).toFixed(1) : 'Sin nota';
+          return `<tr><td>${m.nombre}</td><td style="text-align:center">${nota}</td></tr>`;
+        }
+      ).join('') + `<tr style="font-weight:bold;background:#e8f4fc"><td>Promedio general</td><td style="text-align:center">${prom.toFixed(1)}</td></tr>`;
+      const fortalezas = prom >= 4 ? 'Análisis crítico, Buen desempeño general' : prom >= 3.5 ? 'Esfuerzo constante, Áreas de oportunidad' : 'Refuerzo recomendado, Seguimiento personalizado';
+      const areasMejora = prom >= 4 ? 'Mantener consistencia' : 'Organización del tiempo, Práctica adicional';
+      const recomendacion = prom >= 4.5 ? 'Excelente desempeño. Continúa así.' : prom >= 4 ? 'Refuerza la práctica en las materias con menor promedio.' : 'Refuerza la práctica en resolución de problemas y lectura diaria.';
+      const proyeccion = prom >= 4 ? (prom + 0.2).toFixed(1) : (prom + 0.3).toFixed(1);
+
+      html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Boletín - ${r.nombre}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:0;background:#fff;color:#0a2540}
+.banner{background:linear-gradient(135deg,#0a2540,#1e3c72);color:#fff;padding:1rem 1.5rem;text-align:center}
+.banner h1{margin:0;font-size:1.5rem;font-weight:700}
+.banner .sub{margin-top:0.25rem;opacity:0.9;font-size:0.9rem}
+.container{max-width:900px;margin:0 auto;padding:1.5rem}
+.title{text-align:center;color:#1e3c72;font-size:1.75rem;margin:0 0 1.5rem}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.card h3{color:#00c8ff;font-size:0.9rem;margin:0 0 0.75rem;font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:600px){.grid{grid-template-columns:1fr}}
+.metric-big{font-size:2.5rem;font-weight:700;color:#00c8ff;text-align:center}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{border:1px solid #e2e8f0;padding:8px 12px;text-align:left}
+.table th{background:#00c8ff;color:#fff;font-weight:600}
+.table td:last-child{text-align:center}
+.footer{margin-top:2rem;padding-top:1.5rem;border-top:1px solid #e2e8f0}
+.firma{display:inline-block;width:45%;margin:0.5rem 2% 0 0;text-align:center}
+.firma .line{border-bottom:1px solid #0a2540;height:2.5rem;margin-bottom:0.25rem}
+.firma .name{font-weight:600;color:#1e3c72}
+.firma .role{font-size:0.85rem;color:#64748b}
+.wave{height:8px;background:linear-gradient(90deg,#00c8ff,#1e3c72);margin-top:2rem;border-radius:0 0 8px 8px}
+.print-hint{margin-top:1rem;color:#64748b;font-size:0.85rem;text-align:center}
+</style>
+</head><body>
+<div class="banner">
+  <h1>AutoClose AI</h1>
+  <div class="sub">BOLETÍN ACADÉMICO INTELIGENTE</div>
+</div>
+<div class="container">
+  <h2 class="title">${r.nombre} · Grado ${cursoNombre || '—'} · ${periodo}</h2>
+
+  <div class="card" style="background:linear-gradient(135deg,#f0f9ff,#e8f4fc);border-color:#00c8ff40">
+    <div class="metric-big">${prom.toFixed(1)}</div>
+    <div style="text-align:center;color:#1e3c72;font-weight:600">Promedio General</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Notas por materia</h3>
+      <table class="table"><thead><tr><th>Materia</th><th>Nota</th></tr></thead><tbody>${materiasRows}</tbody></table>
+    </div>
+    <div class="card">
+      <h3>Perfil académico</h3>
+      <p style="margin:0 0 0.5rem"><strong>Fortalezas:</strong> ${fortalezas}</p>
+      <p style="margin:0 0 0.5rem"><strong>Áreas de mejora:</strong> ${areasMejora}</p>
+      <p style="margin:0"><strong>Índice de bienestar:</strong> <span style="color:#22c55e">●</span> Estable</p>
+    </div>
+    <div class="card">
+      <h3>Recomendación</h3>
+      <p style="margin:0;font-size:0.95rem">${recomendacion}</p>
+    </div>
+    <div class="card">
+      <h3>Proyección</h3>
+      <p style="margin:0 0 0.5rem">De mantenerse así, podría finalizar el período con un promedio:</p>
+      <div class="metric-big" style="font-size:2rem">${proyeccion}</div>
+    </div>
+    <div class="card">
+      <h3>Apoyo desde casa</h3>
+      <ul style="margin:0;padding-left:1.25rem;font-size:0.95rem">
+        <li>Supervisar tareas diarias</li>
+        <li>Fomentar hábitos de estudio</li>
+        <li>Mantener comunicación con el docente</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Logros del período</h3>
+      <p style="margin:0;font-size:0.95rem">Participación activa en las actividades del curso.</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="firma"><div class="line"></div><div class="name">_________________________</div><div class="role">Directora Académica</div></div>
+    <div class="firma"><div class="line"></div><div class="name">_________________________</div><div class="role">Coordinador(a) de Grado</div></div>
+  </div>
+</div>
+<div class="wave"></div>
+<p class="print-hint">AutoClose AI · Use "Imprimir" (Ctrl+P) y "Guardar como PDF" para exportar.</p>
+</body></html>`;
+    } else {
+      const rows = resumen.map(
+        (r) => `<tr><td>${r.nombre}</td><td>${(r.promedioGeneral ?? 0).toFixed(1)}</td><td>${(r.materias || []).map((m) => `${m.nombre}: ${(m.promedio ?? 0).toFixed(1)}`).join(', ')}</td></tr>`
+      ).join('');
+      html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${periodo}</title>
+<style>body{font-family:system-ui,sans-serif;padding:1rem;max-width:800px;margin:0 auto} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ddd;padding:8px} th{background:#00c8ff;color:#fff}</style>
 </head><body>
 <h1>${periodo}</h1>
-<p>${cursoNombre} · ${new Date((doc as { fecha?: Date }).fecha || Date.now()).toLocaleDateString('es')}</p>
+<p>${cursoNombre} · ${fecha}</p>
 <table><thead><tr><th>Estudiante</th><th>Promedio</th><th>Materias</th></tr></thead><tbody>${rows}</tbody></table>
-<p style="margin-top:2rem;color:#666;font-size:0.9rem;">AutoClose AI · Use "Imprimir" y "Guardar como PDF" para exportar.</p>
+<p style="margin-top:2rem;color:#666;font-size:0.9rem">AutoClose AI · Use "Imprimir" y "Guardar como PDF" para exportar.</p>
 </body></html>`;
+    }
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', `inline; filename="boletin-${periodo.replace(/\s/g, '-')}.html"`);

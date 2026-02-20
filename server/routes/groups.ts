@@ -1,5 +1,6 @@
 import express from 'express';
 import { Group } from '../models/Group';
+import { Section } from '../models/Section';
 import { GroupStudent } from '../models/GroupStudent';
 import { User } from '../models/User';
 import { Assignment } from '../models/Assignment';
@@ -68,16 +69,21 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear grupos' });
     }
 
-    const { nombre, seccion, directorGrupoId } = req.body;
+    const { nombre, seccion, directorGrupoId, sectionId } = req.body;
 
-    if (!nombre || !seccion) {
-      return res.status(400).json({ message: 'Faltan campos obligatorios: nombre (curso) y seccion' });
+    // nombre es obligatorio; seccion es opcional si se envía sectionId (módulo Secciones)
+    if (!nombre) {
+      return res.status(400).json({ message: 'Falta el nombre del curso/grupo.' });
     }
-
-    // Validar sección
-    const seccionesValidas = ['junior-school', 'middle-school', 'high-school'];
-    if (!seccionesValidas.includes(seccion)) {
-      return res.status(400).json({ message: 'Sección inválida. Debe ser: junior-school, middle-school o high-school.' });
+    const useLegacySeccion = seccion != null && seccion !== '';
+    if (useLegacySeccion) {
+      const seccionesValidas = ['junior-school', 'middle-school', 'high-school'];
+      if (!seccionesValidas.includes(seccion)) {
+        return res.status(400).json({ message: 'Sección inválida. Debe ser: junior-school, middle-school o high-school.' });
+      }
+    }
+    if (!useLegacySeccion && !sectionId) {
+      return res.status(400).json({ message: 'Indica la sección (junior-school, middle-school, high-school) o la sección del módulo (sectionId).' });
     }
 
     // Director de grupo opcional: los cursos pueden crearse primero y asignar director después
@@ -107,12 +113,23 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: `El grupo ${nombreCompleto} ya existe` });
     }
 
+    // Validar sectionId si se envía (módulo Secciones)
+    let sectionIdNormalized = null;
+    if (sectionId) {
+      const section = await Section.findOne({ _id: normalizeIdForQuery(sectionId), colegioId: user.colegioId });
+      if (!section) {
+        return res.status(400).json({ message: 'La sección indicada no existe o no pertenece al colegio.' });
+      }
+      sectionIdNormalized = section._id;
+    }
+
     // Crear el grupo
     const nuevoGrupo = await Group.create({
       nombre: nombreCompleto,
       descripcion: `Grupo ${nombreCompleto}`,
       colegioId: user.colegioId,
-      seccion,
+      ...(useLegacySeccion && { seccion }),
+      ...(sectionIdNormalized && { sectionId: sectionIdNormalized }),
     });
 
     await logAdminAction({
@@ -122,7 +139,7 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       entityType: 'group',
       entityId: nuevoGrupo._id,
       colegioId: user.colegioId,
-      requestData: { nombre: nombreCompleto, seccion },
+      requestData: { nombre: nombreCompleto, seccion: useLegacySeccion ? seccion : undefined, sectionId: sectionIdNormalized },
     });
 
     res.status(201).json({
@@ -133,6 +150,7 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
         descripcion: nuevoGrupo.descripcion,
         colegioId: nuevoGrupo.colegioId,
         seccion: nuevoGrupo.seccion,
+        sectionId: (nuevoGrupo as any).sectionId,
       },
     });
   } catch (error: any) {

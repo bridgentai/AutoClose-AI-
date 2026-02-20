@@ -6,7 +6,7 @@ import { useInstitutionColors } from '@/hooks/useInstitutionColors';
 import { 
   Users, GraduationCap, BookOpen, UserPlus, Plus, Edit, Trash2, 
   X, Check, Settings, Bot, Link as LinkIcon, Eye, EyeOff,
-  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search, Upload, KeyRound, Copy, ScrollText
+  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search, Upload, KeyRound, Copy, ScrollText, LayoutGrid
 } from 'lucide-react';
 import { BulkUsersUpload } from '@/components/admin/BulkUsersUpload';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -109,7 +109,7 @@ export function AdminGeneralColegioDashboard() {
   
   // Estados para diálogos
   const [createUserOpen, setCreateUserOpen] = useState(false);
-  const [createUserType, setCreateUserType] = useState<'estudiante' | 'profesor' | 'padre' | 'curso'>('estudiante');
+  const [createUserType, setCreateUserType] = useState<'estudiante' | 'profesor' | 'padre' | 'directivo' | 'curso'>('estudiante');
   const [editUserOpen, setEditUserOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [relacionOpen, setRelacionOpen] = useState(false);
@@ -202,6 +202,16 @@ export function AdminGeneralColegioDashboard() {
     directorGrupo: '',
   });
 
+  // Módulo Crear Sección: estado y formulario
+  const [createSectionOpen, setCreateSectionOpen] = useState(false);
+  const [newSectionNombre, setNewSectionNombre] = useState('');
+  const [newSectionCursoIds, setNewSectionCursoIds] = useState<string[]>([]);
+  const [newSectionNuevosCursos, setNewSectionNuevosCursos] = useState<string[]>([]);
+  const [newSectionNuevoCursoInput, setNewSectionNuevoCursoInput] = useState('');
+  const [addCursosToSectionId, setAddCursosToSectionId] = useState('');
+  const [addCursosToSectionIds, setAddCursosToSectionIds] = useState<string[]>([]);
+  const [addCursosToSectionOpen, setAddCursosToSectionOpen] = useState(false);
+
   // Obtener profesores para el selector de director de grupo
   const { data: profesores = [] } = useQuery<User[]>({
     queryKey: ['profesoresForCourse', user?.colegioId],
@@ -266,7 +276,19 @@ export function AdminGeneralColegioDashboard() {
   const { data: gruposList = [] } = useQuery<GroupItem[]>({
     queryKey: ['groupsAll', user?.colegioId],
     queryFn: () => apiRequest<GroupItem[]>('GET', '/api/groups/all'),
-    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'cursos' || createUserOpen),
+    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'cursos' || createUserOpen || createSectionOpen),
+  });
+
+  interface SectionItem {
+    _id: string;
+    nombre: string;
+    colegioId: string;
+    cursos: { _id: string; nombre: string }[];
+  }
+  const { data: sectionsList = [], refetch: refetchSections } = useQuery<SectionItem[]>({
+    queryKey: ['sections', user?.colegioId],
+    queryFn: () => apiRequest<SectionItem[]>('GET', '/api/sections'),
+    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'cursos' || createSectionOpen || addCursosToSectionOpen),
   });
   const { data: coursesList = [] } = useQuery<CourseItem[]>({
     queryKey: ['coursesAdmin', user?.colegioId],
@@ -348,6 +370,46 @@ export function AdminGeneralColegioDashboard() {
     },
   });
 
+  const createSectionMutation = useMutation({
+    mutationFn: async (payload: { nombre: string; cursoIds: string[]; nuevosCursos: string[] }) => {
+      const res = await apiRequest<{ section: { _id: string; nombre: string; cursos: { _id: string; nombre: string }[] } }>(
+        'POST',
+        '/api/sections',
+        { nombre: payload.nombre, cursoIds: payload.cursoIds }
+      );
+      const sectionId = res?.section?._id;
+      if (sectionId && payload.nuevosCursos.length > 0) {
+        for (const nombre of payload.nuevosCursos) {
+          const name = nombre.trim().toUpperCase();
+          if (name) {
+            await apiRequest('POST', '/api/groups/create', { nombre: name, sectionId });
+          }
+        }
+      }
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sections', 'groupsAll', 'adminStats'] });
+      setCreateSectionOpen(false);
+      setNewSectionNombre('');
+      setNewSectionCursoIds([]);
+      setNewSectionNuevosCursos([]);
+      setNewSectionNuevoCursoInput('');
+    },
+  });
+
+  const addCursosToSectionMutation = useMutation({
+    mutationFn: (payload: { sectionId: string; addCursoIds: string[] }) =>
+      apiRequest('PATCH', `/api/sections/${payload.sectionId}`, { addCursoIds: payload.addCursoIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sections', 'groupsAll'] });
+      setAddCursosToSectionOpen(false);
+      setAddCursosToSectionId('');
+      setAddCursosToSectionIds([]);
+      refetchSections();
+    },
+  });
+
   // Auditoría: logs del colegio (solo admin)
   const auditParams = new URLSearchParams();
   if (auditAction) auditParams.set('action', auditAction);
@@ -397,7 +459,9 @@ export function AdminGeneralColegioDashboard() {
         telefono: newUser.telefono || undefined,
         celular: newUser.celular || undefined,
       };
-      if (createUserType === 'profesor') {
+      if (createUserType === 'directivo') {
+        // Directiva: solo datos básicos, sin materia ni cursos
+      } else if (createUserType === 'profesor') {
         if (newUser.materiaNombre) payload.materia = newUser.materiaNombre;
         if (newUser.materias.length > 0) payload.materias = newUser.materias;
         if (newUser.cursos.length > 0) payload.cursos = newUser.cursos;
@@ -575,7 +639,7 @@ export function AdminGeneralColegioDashboard() {
           <CardDescription className="text-white/60">Gestiona rápidamente usuarios y cursos</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Button
               onClick={() => {
                 setCreateUserType('estudiante');
@@ -617,6 +681,19 @@ export function AdminGeneralColegioDashboard() {
             </Button>
             <Button
               onClick={() => {
+                setCreateUserType('directivo');
+                setCreateUserOpen(true);
+              }}
+              className="h-20 flex flex-col gap-2"
+              style={{
+                background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+              }}
+            >
+              <UserPlus className="w-6 h-6" />
+              <span>Crear Directiva</span>
+            </Button>
+            <Button
+              onClick={() => {
                 setCreateUserType('curso');
                 setNewCourse({ curso: '', seccion: '', directorGrupo: '' });
                 setCreateUserOpen(true);
@@ -628,6 +705,22 @@ export function AdminGeneralColegioDashboard() {
             >
               <Plus className="w-6 h-6" />
               <span>Crear Curso</span>
+            </Button>
+            <Button
+              onClick={() => {
+                setCreateSectionOpen(true);
+                setNewSectionNombre('');
+                setNewSectionCursoIds([]);
+                setNewSectionNuevosCursos([]);
+                setNewSectionNuevoCursoInput('');
+              }}
+              className="h-20 flex flex-col gap-2"
+              style={{
+                background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+              }}
+            >
+              <LayoutGrid className="w-6 h-6" />
+              <span>Crear Sección</span>
             </Button>
           </div>
         </CardContent>
@@ -788,9 +881,62 @@ export function AdminGeneralColegioDashboard() {
     </div>
   );
 
-  // 4️⃣ Cursos y Estructura Académica (flujo: 1.Cursos 2.Profesores 3.Asignaciones 4.Estudiantes)
+  // 4️⃣ Cursos y Estructura Académica (flujo: 1.Secciones 2.Cursos 3.Profesores 4.Asignaciones 5.Estudiantes)
   const renderCursos = () => (
     <div className="space-y-6">
+      <Card className={CARD_STYLE}>
+        <CardHeader>
+          <CardTitle className="text-white flex items-center gap-2">
+            <LayoutGrid className="w-5 h-5" />
+            Secciones
+          </CardTitle>
+          <CardDescription className="text-white/60">
+            Agrupa cursos en secciones (ej. Primaria, Bachillerato). Puedes crear una sección y añadir cursos al crearla o después.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {sectionsList.length === 0 ? (
+            <p className="text-white/60 text-sm">No hay secciones. Usa &quot;Crear Sección&quot; en Acciones Rápidas.</p>
+          ) : (
+            <div className="space-y-3">
+              {sectionsList.map((sec) => (
+                <div
+                  key={sec._id}
+                  className="flex flex-wrap items-center justify-between gap-2 p-4 rounded-xl bg-white/5 border border-white/10"
+                >
+                  <div>
+                    <span className="font-semibold text-white">{sec.nombre}</span>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {sec.cursos.length === 0 ? (
+                        <span className="text-white/50 text-sm">Sin cursos</span>
+                      ) : (
+                        sec.cursos.map((c) => (
+                          <Badge key={c._id} className="bg-white/10 text-white border-white/20">
+                            {c.nombre}
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-white/10 text-white hover:bg-white/10"
+                    onClick={() => {
+                      setAddCursosToSectionId(sec._id);
+                      setAddCursosToSectionIds([]);
+                      setAddCursosToSectionOpen(true);
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Añadir cursos
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <Card className={CARD_STYLE}>
         <CardHeader>
           <CardTitle className="text-white">Crear curso / grupo</CardTitle>
@@ -1341,9 +1487,9 @@ export function AdminGeneralColegioDashboard() {
       >
         <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Crear {createUserType === 'curso' ? 'Curso' : createUserType === 'estudiante' ? 'Estudiante' : createUserType === 'profesor' ? 'Profesor' : 'Padre'}</DialogTitle>
+            <DialogTitle>Crear {createUserType === 'curso' ? 'Curso' : createUserType === 'estudiante' ? 'Estudiante' : createUserType === 'profesor' ? 'Profesor' : createUserType === 'directivo' ? 'Directiva' : 'Padre'}</DialogTitle>
             <DialogDescription className="text-white/60">
-              Completa los datos para crear un nuevo {createUserType === 'curso' ? 'curso' : 'usuario'}
+              Completa los datos para crear un nuevo {createUserType === 'curso' ? 'curso' : createUserType === 'directivo' ? 'miembro de directiva' : 'usuario'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1458,6 +1604,8 @@ export function AdminGeneralColegioDashboard() {
                   <p className="text-xs text-white/50 mt-1">
                     {createUserType === 'estudiante' 
                       ? 'El correo funciona como usuario. Se genera una contraseña temporal automáticamente. El estudiante no puede iniciar sesión hasta vincularse con un padre y activar la cuenta.'
+                      : createUserType === 'directivo'
+                      ? 'Se genera una contraseña temporal automáticamente. La directiva tendrá acceso al panel de directivo del colegio.'
                       : 'Se genera una contraseña temporal automáticamente. La cuenta solo funciona para este colegio.'}
                   </p>
                 </div>
@@ -1578,6 +1726,185 @@ export function AdminGeneralColegioDashboard() {
                 </div>
               </>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo Crear Sección */}
+      <Dialog open={createSectionOpen} onOpenChange={setCreateSectionOpen}>
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <LayoutGrid className="w-5 h-5" />
+              Crear Sección
+            </DialogTitle>
+            <DialogDescription className="text-white/60">
+              Crea una sección y asigna cursos existentes o añade nuevos ahora.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-white/90">Nombre de la sección *</Label>
+              <Input
+                value={newSectionNombre}
+                onChange={(e) => setNewSectionNombre(e.target.value)}
+                className="bg-white/5 border-white/10 text-white mt-1"
+                placeholder="Ej: Primaria, Bachillerato"
+              />
+            </div>
+            <div>
+              <Label className="text-white/90 mb-2 block">Cursos existentes (opcional)</Label>
+              <Select
+                value=""
+                onValueChange={(v) => {
+                  if (v && !newSectionCursoIds.includes(v)) setNewSectionCursoIds([...newSectionCursoIds, v]);
+                }}
+              >
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                  <SelectValue placeholder="Añadir curso existente" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
+                  {gruposList.map((g) => (
+                    <SelectItem key={g._id} value={g.nombre} className="text-white focus:bg-white/10">
+                      {g.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {newSectionCursoIds.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {newSectionCursoIds.map((id) => (
+                    <Badge key={id} className="bg-white/10 text-white border-white/20">
+                      {id}
+                      <button type="button" onClick={() => setNewSectionCursoIds(newSectionCursoIds.filter((x) => x !== id))} className="ml-2 hover:text-red-400">×</button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <Label className="text-white/90 mb-2 block">Crear nuevos cursos en esta sección (opcional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={newSectionNuevoCursoInput}
+                  onChange={(e) => setNewSectionNuevoCursoInput(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white"
+                  placeholder="Ej: 7A, 8B"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const n = newSectionNuevoCursoInput.trim().toUpperCase();
+                      if (n && !newSectionNuevosCursos.includes(n)) {
+                        setNewSectionNuevosCursos([...newSectionNuevosCursos, n]);
+                        setNewSectionNuevoCursoInput('');
+                      }
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-white/10 text-white shrink-0"
+                  onClick={() => {
+                    const n = newSectionNuevoCursoInput.trim().toUpperCase();
+                    if (n && !newSectionNuevosCursos.includes(n)) {
+                      setNewSectionNuevosCursos([...newSectionNuevosCursos, n]);
+                      setNewSectionNuevoCursoInput('');
+                    }
+                  }}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+              {newSectionNuevosCursos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {newSectionNuevosCursos.map((c) => (
+                    <Badge key={c} className="bg-white/10 text-white border-white/20">
+                      {c} (nuevo)
+                      <button type="button" onClick={() => setNewSectionNuevosCursos(newSectionNuevosCursos.filter((x) => x !== c))} className="ml-2 hover:text-red-400">×</button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                onClick={() => {
+                  if (!newSectionNombre.trim()) {
+                    alert('Indica el nombre de la sección.');
+                    return;
+                  }
+                  createSectionMutation.mutate({
+                    nombre: newSectionNombre.trim(),
+                    cursoIds: newSectionCursoIds,
+                    nuevosCursos: newSectionNuevosCursos,
+                  });
+                }}
+                disabled={createSectionMutation.isPending || !newSectionNombre.trim()}
+                style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+              >
+                {createSectionMutation.isPending ? 'Creando...' : 'Crear Sección'}
+              </Button>
+              <Button variant="outline" onClick={() => setCreateSectionOpen(false)} className="border-white/10 text-white">
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo Añadir cursos a sección */}
+      <Dialog open={addCursosToSectionOpen} onOpenChange={(open) => !open && setAddCursosToSectionOpen(false)}>
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Añadir cursos a la sección</DialogTitle>
+            <DialogDescription className="text-white/60">
+              Elige cursos existentes para asignarlos a esta sección.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Select
+              value=""
+              onValueChange={(v) => {
+                if (v && !addCursosToSectionIds.includes(v)) setAddCursosToSectionIds([...addCursosToSectionIds, v]);
+              }}
+            >
+              <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                <SelectValue placeholder="Selecciona un curso" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#0a0a2a] border-white/10">
+                {gruposList.map((g) => (
+                  <SelectItem key={g._id} value={g.nombre} className="text-white focus:bg-white/10">
+                    {g.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {addCursosToSectionIds.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {addCursosToSectionIds.map((id) => (
+                  <Badge key={id} className="bg-white/10 text-white border-white/20">
+                    {id}
+                    <button type="button" onClick={() => setAddCursosToSectionIds(addCursosToSectionIds.filter((x) => x !== id))} className="ml-2 hover:text-red-400">×</button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  if (!addCursosToSectionId || addCursosToSectionIds.length === 0) return;
+                  addCursosToSectionMutation.mutate({ sectionId: addCursosToSectionId, addCursoIds: addCursosToSectionIds });
+                }}
+                disabled={addCursosToSectionMutation.isPending || addCursosToSectionIds.length === 0}
+                style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+              >
+                {addCursosToSectionMutation.isPending ? 'Añadiendo...' : 'Añadir cursos'}
+              </Button>
+              <Button variant="outline" onClick={() => setAddCursosToSectionOpen(false)} className="border-white/10 text-white">
+                Cerrar
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

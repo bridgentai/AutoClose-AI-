@@ -45,6 +45,10 @@ import TeacherCalendarPage from "@/pages/teacher-calendar";
 import TeacherTasksSummaryPage from "@/pages/teacher-tasks-summary";
 import AssignmentDetailPage from "@/pages/assignment-detail";
 import DirectivoPage from "@/pages/directivo";
+import DirectivoCursosPage from "@/pages/directivo-cursos";
+import DirectivoEstudiantesPage from "@/pages/directivo-estudiantes";
+import DirectivoCursoEstudiantesPage from "@/pages/directivo-curso-estudiantes";
+import DirectivoEstudianteNotasPage from "@/pages/directivo-estudiante-notas";
 import PlataformasPage from "@/pages/plataformas";
 
 import MiAprendizajeLayout from "@/pages/mi-aprendizaje";
@@ -78,6 +82,7 @@ import ProfesorBandejaEntrada from "@/pages/profesor-bandeja-entrada";
 import ProfesorRedactarMensaje from "@/pages/profesor-redactar-mensaje";
 import ProfesorMensajesEnviados from "@/pages/profesor-mensajes-enviados";
 import ProfesorTareasPage from "@/pages/profesor-tareas";
+import ProfesorCalificacionLogrosPage from "@/pages/profesor-calificacion-logros";
 import ProfesorAsignarTareaPage from "@/pages/profesor-asignar-tarea";
 import ProfesorRevisionTareasPage from "@/pages/profesor-revision-tareas";
 import ProfesorPanelCalificacionPage from "@/pages/profesor-panel-calificacion";
@@ -94,6 +99,7 @@ import CafeteriaPage from "@/pages/cafeteria";
 // Módulos de Directivo
 import DirectivoComunidadLayout from "@/pages/directivo-comunidad";
 import DirectivoAcademiaLayout from "@/pages/directivo-academia";
+import DirectivoReportesPage from "@/pages/directivo-reportes";
 import DirectivoComunicacionLayout from "@/pages/directivo-comunicacion";
 
 // Módulos de Administrador General
@@ -383,6 +389,9 @@ function AppRouter() {
             <Route path="/profesor/academia/tareas">
               <AuthGuard><ProfesorTareasPage /></AuthGuard>
             </Route>
+            <Route path="/profesor/academia/calificacion">
+              <AuthGuard><ProfesorCalificacionLogrosPage /></AuthGuard>
+            </Route>
             <Route path="/profesor/academia/notas">
               <AuthGuard><Courses /></AuthGuard>
             </Route>
@@ -410,8 +419,23 @@ function AppRouter() {
             <Route path="/directivo/comunidad">
               <AuthGuard><DirectivoComunidadLayout /></AuthGuard>
             </Route>
+            <Route path="/directivo/academia/reportes">
+              <AuthGuard><DirectivoReportesPage /></AuthGuard>
+            </Route>
             <Route path="/directivo/academia">
               <AuthGuard><DirectivoAcademiaLayout /></AuthGuard>
+            </Route>
+            <Route path="/directivo/estudiantes">
+              <AuthGuard><DirectivoEstudiantesPage /></AuthGuard>
+            </Route>
+            <Route path="/directivo/cursos">
+              <AuthGuard><DirectivoCursosPage /></AuthGuard>
+            </Route>
+            <Route path="/directivo/cursos/:grupoId/estudiantes">
+              <AuthGuard><DirectivoCursoEstudiantesPage /></AuthGuard>
+            </Route>
+            <Route path="/directivo/cursos/:grupoId/estudiantes/:estudianteId/notas">
+              <AuthGuard><DirectivoEstudianteNotasPage /></AuthGuard>
             </Route>
             <Route path="/directivo/comunicacion">
               <AuthGuard><DirectivoComunicacionLayout /></AuthGuard>

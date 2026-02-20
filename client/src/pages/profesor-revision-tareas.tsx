@@ -119,9 +119,9 @@ export default function ProfesorRevisionTareasPage() {
     <div className="flex-1 overflow-auto p-6 md:p-10">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <NavBackButton to="/profesor/academia/tareas" label="Tareas" />
+          <NavBackButton to="/profesor/academia/tareas" label="Asignaciones" />
           <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">
-            Panel de Cursos - Revisión de Tareas
+            Panel de Cursos - Revisión de Asignaciones
           </h2>
           <p className="text-white/60">
             Selecciona un curso para acceder al módulo de tareas y gestionar las tareas asignadas.
@@ -167,7 +167,7 @@ export default function ProfesorRevisionTareasPage() {
                     }}
                   >
                     <ClipboardList className="w-4 h-4 mr-2" />
-                    Ver Tareas del Curso
+                    Ver Asignaciones del Curso
                   </Button>
                   <Button
                     variant="outline"

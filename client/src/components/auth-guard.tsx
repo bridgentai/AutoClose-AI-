@@ -37,7 +37,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!CONSENT_EXEMPT_PATHS.includes(location) && consentLoading) {
-    return null;
+    return (
+      <div className="flex items-center justify-center min-h-[200px] text-white/80">
+        <div className="animate-pulse flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+          <span className="text-sm">Cargando…</span>
+        </div>
+      </div>
+    );
   }
   if (!CONSENT_EXEMPT_PATHS.includes(location) && consent && (!consent.consentimientoTerminos || !consent.consentimientoPrivacidad)) {
     return null;

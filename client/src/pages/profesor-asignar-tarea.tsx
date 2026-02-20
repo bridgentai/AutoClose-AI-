@@ -13,7 +13,6 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { NavBackButton } from '@/components/nav-back-button';
-import { DocumentEditor } from '@/components/document-editor';
 
 interface Course {
   _id: string;
@@ -45,9 +44,11 @@ export default function ProfesorAsignarTareaPage() {
     titulo: '',
     descripcion: '',
     curso: '',
+    materiaId: '', // courseId - materia cuando hay varias
     fechaEntrega: '',
     horaEntrega: '23:59',
   });
+  const [logroCalificacionId, setLogroCalificacionId] = useState('');
   const [adjuntos, setAdjuntos] = useState<Attachment[]>([]);
   const [newAttachment, setNewAttachment] = useState<Attachment>({ tipo: 'link', nombre: '', url: '' });
   const [instrucciones, setInstrucciones] = useState('');
@@ -56,18 +57,29 @@ export default function ProfesorAsignarTareaPage() {
   const [asignarA, setAsignarA] = useState('todos');
   const instruccionesRef = useRef<HTMLDivElement>(null);
 
-  const { data: professorGroups = [], isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
+  const { data: professorGroupsRaw, isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
     queryKey: ['professorGroups'],
     queryFn: () => apiRequest('GET', '/api/professor/my-groups'),
-    enabled: !!user?.id,
+    enabled: !!(user?.id ?? user?._id),
     staleTime: 0,
   });
+  const professorGroups = Array.isArray(professorGroupsRaw) ? professorGroupsRaw : [];
 
-  const availableGroups = professorGroups.map(g => g.groupId);
+  const availableGroups = professorGroups.map(g => g?.groupId).filter(Boolean) as string[];
   const getSubjectsForGroup = (groupId: string) => {
-    const group = professorGroups.find(g => g.groupId === groupId);
-    return group?.subjects || [];
+    const group = professorGroups.find(g => g?.groupId === groupId);
+    return Array.isArray(group?.subjects) ? group.subjects : [];
   };
+
+  const courseIdForLogros = formData.materiaId || (formData.curso ? getSubjectsForGroup(formData.curso)[0]?._id : '');
+  const { data: logrosData, isLoading: isLoadingLogros, isFetched: logrosFetched } = useQuery<{ logros: { _id: string; nombre: string; porcentaje: number }[] }>({
+    queryKey: ['/api/logros-calificacion', courseIdForLogros],
+    queryFn: () =>
+      apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
+    enabled: !!courseIdForLogros,
+  });
+  const logros = logrosData?.logros ?? [];
+  const logroBlocksCreation = !!courseIdForLogros && (isLoadingLogros || (logrosFetched && (logros.length === 0 || !logroCalificacionId)));
 
 
   const createAssignmentMutation = useMutation({
@@ -75,7 +87,7 @@ export default function ProfesorAsignarTareaPage() {
       return apiRequest('POST', '/api/assignments', data);
     },
     onSuccess: () => {
-      toast({ title: 'Tarea creada exitosamente', description: 'La tarea ha sido asignada correctamente.' });
+      toast({ title: 'Asignación creada', description: 'La asignación ha sido creada correctamente.' });
       resetForm();
       
       // Invalidar queries del profesor
@@ -98,10 +110,10 @@ export default function ProfesorAsignarTareaPage() {
       // Opcional: Redirigir después de crear
       setTimeout(() => {
         setLocation('/profesor/academia/tareas');
-      }, 1500);
+      }, 1200);
     },
     onError: (error: any) => {
-      toast({ title: 'Error', description: error.message || 'No se pudo crear la tarea', variant: 'destructive' });
+      toast({ title: 'Error', description: error.message || 'No se pudo crear la asignación', variant: 'destructive' });
     },
   });
 
@@ -110,9 +122,11 @@ export default function ProfesorAsignarTareaPage() {
       titulo: '',
       descripcion: '',
       curso: '',
+      materiaId: '',
       fechaEntrega: '',
       horaEntrega: '23:59',
     });
+    setLogroCalificacionId('');
     setAdjuntos([]);
     setAssignmentType(null);
     setDocumentContent('');
@@ -175,7 +189,15 @@ export default function ProfesorAsignarTareaPage() {
       return;
     }
 
-    const courseId = subjectsForGroup[0]._id;
+    const courseId = formData.materiaId || subjectsForGroup[0]._id;
+    if (logros.length === 0) {
+      toast({ title: 'Error', description: 'Configura los logros de calificación para esta materia en Calificación antes de crear asignaciones.', variant: 'destructive' });
+      return;
+    }
+    if (!logroCalificacionId) {
+      toast({ title: 'Error', description: 'Selecciona el tipo de logro al que pertenece esta asignación (ej: Tareas, Exámenes).', variant: 'destructive' });
+      return;
+    }
     const fechaEntregaCompleta = formData.fechaEntrega 
       ? new Date(`${formData.fechaEntrega}T${formData.horaEntrega}`)
       : undefined;
@@ -189,15 +211,16 @@ export default function ProfesorAsignarTareaPage() {
       fechaEntrega: fechaEntregaCompleta?.toISOString() || undefined,
       adjuntos,
       puntos: puntos !== '0' ? parseInt(puntos) : undefined,
+      logroCalificacionId: logroCalificacionId || undefined,
     });
   };
 
   return (
     <div className="flex-1 overflow-auto w-full">
       <div className="mb-6">
-        <NavBackButton to="/profesor/academia/tareas" label="Tareas" />
+        <NavBackButton to="/profesor/academia/tareas" label="Asignaciones" />
         <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">
-          Crear Tarea
+          Crear Asignación
         </h2>
       </div>
 
@@ -407,7 +430,12 @@ export default function ProfesorAsignarTareaPage() {
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">Para</Label>
                   <Select
                     value={formData.curso}
-                    onValueChange={(value) => setFormData({ ...formData, curso: value })}
+                    onValueChange={(value) => {
+                    const subjects = getSubjectsForGroup(value);
+                    const materiaId = subjects.length === 1 ? subjects[0]._id : '';
+                    setFormData({ ...formData, curso: value, materiaId });
+                    setLogroCalificacionId('');
+                  }}
                     disabled={isLoadingGroups || availableGroups.length === 0}
                   >
                     <SelectTrigger className="bg-white border-gray-300 text-gray-900">
@@ -433,6 +461,73 @@ export default function ProfesorAsignarTareaPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {getSubjectsForGroup(formData.curso).length > 1 && (
+                  <div className="mb-6">
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">Materia</Label>
+                    <Select
+                      value={formData.materiaId}
+                      onValueChange={(value) => setFormData({ ...formData, materiaId: value })}
+                    >
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900">
+                        <SelectValue placeholder="Selecciona la materia" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white">
+                        {getSubjectsForGroup(formData.curso).map((s) => (
+                          <SelectItem key={s._id} value={s._id} className="text-gray-900">
+                            {s.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {courseIdForLogros && (
+                  <div className="mb-6">
+                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Tipo de logro<span className="text-red-500">*</span>
+                    </Label>
+                    {isLoadingLogros ? (
+                      <p className="text-sm text-gray-500 py-2">Cargando logros...</p>
+                    ) : logros.length > 0 ? (
+                      <>
+                        <Select
+                          value={logroCalificacionId}
+                          onValueChange={setLogroCalificacionId}
+                        >
+                          <SelectTrigger className="bg-white border-gray-300 text-gray-900">
+                            <SelectValue placeholder="Selecciona el logro al que pertenece esta asignación" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white">
+                            {logros.map((l) => (
+                              <SelectItem key={l._id} value={l._id} className="text-gray-900">
+                                {l.nombre} ({l.porcentaje}%)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          La calificación se calculará según el porcentaje de este logro.
+                        </p>
+                      </>
+                    ) : (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                        <p className="font-medium">No hay logros configurados</p>
+                        <p className="mt-1">Configura los logros de calificación para esta materia en Calificación → Logros antes de crear asignaciones.</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-2 border-amber-300 text-amber-800 hover:bg-amber-100"
+                          onClick={() => setLocation('/profesor/academia/calificacion')}
+                        >
+                          Ir a configurar logros
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Asignar a */}
                 <div className="mb-6">
@@ -548,8 +643,8 @@ export default function ProfesorAsignarTareaPage() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={createAssignmentMutation.isPending}
-                    className="flex-1 bg-[#1e3cff] hover:bg-[#002366] text-white"
+                    disabled={createAssignmentMutation.isPending || logroBlocksCreation}
+                    className="flex-1 bg-[#1e3cff] hover:bg-[#002366] text-white disabled:opacity-60"
                   >
                     {createAssignmentMutation.isPending ? 'Creando...' : 'Asignar'}
                   </Button>

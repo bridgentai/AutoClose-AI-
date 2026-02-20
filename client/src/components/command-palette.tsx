@@ -144,23 +144,23 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         },
         { 
           icon: CheckSquare, 
-          label: "Tareas", 
+          label: "Asignaciones", 
           path: "/profesor/academia/tareas",
           keywords: ["tareas", "asignaciones", "ejercicios"],
           roles: ["profesor"]
         },
         { 
           icon: Sparkles, 
-          label: "Asignar Tarea", 
+          label: "Crear Asignación", 
           path: "/profesor/academia/tareas/asignar",
-          keywords: ["crear", "asignar", "nueva", "tarea"],
+          keywords: ["crear", "asignar", "nueva", "asignación", "tarea"],
           roles: ["profesor"]
         },
         { 
           icon: FolderOpen, 
-          label: "Revisar Tareas", 
+          label: "Revisar Asignaciones", 
           path: "/profesor/academia/tareas/revision",
-          keywords: ["revisar", "corregir", "evaluar", "tareas"],
+          keywords: ["revisar", "corregir", "evaluar", "asignaciones", "tareas"],
           roles: ["profesor"]
         },
         { 
@@ -172,7 +172,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         },
         { 
           icon: Clock, 
-          label: "Resumen de Tareas", 
+          label: "Resumen de Asignaciones", 
           path: "/profesor/tareas/resumen",
           keywords: ["resumen", "tareas", "resumen", "listado"],
           roles: ["profesor"]

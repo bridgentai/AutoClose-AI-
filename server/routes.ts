@@ -16,6 +16,7 @@ import assignmentsRoutes from "./routes/assignments";
 import subjectsRoutes from "./routes/subjects";
 import usersRoutes from "./routes/users";
 import groupsRoutes, { seedGroups } from "./routes/groups";
+import sectionsRoutes from "./routes/sections";
 import professorRoutes from "./routes/professor";
 import studentRoutes from "./routes/student";
 import superAdminRoutes from "./routes/superAdmin";
@@ -26,6 +27,7 @@ import notificationsRoutes from "./routes/notifications";
 import treasuryRoutes from "./routes/treasury";
 import messagesRoutes from "./routes/messages";
 import boletinRoutes from "./routes/boletin";
+import logrosCalificacionRoutes from "./routes/logrosCalificacion";
 import auditRoutes from "./routes/audit";
 import reportsRoutes from "./routes/reports";
 
@@ -52,6 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/subjects', subjectsRoutes);
   app.use('/api/users', usersRoutes);
   app.use('/api/groups', groupsRoutes);
+  app.use('/api/sections', sectionsRoutes);
   app.use('/api/professor', professorRoutes);
   app.use('/api/student', studentRoutes);
   app.use('/api/super-admin', superAdminRoutes);
@@ -62,6 +65,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/treasury', treasuryRoutes);
   app.use('/api/messages', messagesRoutes);
   app.use('/api/boletin', boletinRoutes);
+  app.use('/api/logros-calificacion', logrosCalificacionRoutes);
   app.use('/api/audit', auditRoutes);
   app.use('/api/reports', reportsRoutes);
 

@@ -39,6 +39,8 @@ export interface IAssignment {
   curso?: string;
   courseId?: Types.ObjectId;
   profesorNombre?: string;
+  /** Tipo de logro de calificación (ej: Tareas, Exámenes) - usado para ponderar la nota sobre el 100% */
+  logroCalificacionId?: Types.ObjectId;
   // Campo legacy para migración gradual
   entregas?: IEntrega[];
 }
@@ -82,6 +84,7 @@ const assignmentSchema = new Schema<IAssignment>({
   curso: { type: String },
   courseId: { type: Schema.Types.ObjectId, ref: 'cursos' },
   profesorNombre: { type: String },
+  logroCalificacionId: { type: Schema.Types.ObjectId, ref: 'logros_calificacion' },
   // Campo legacy para migración gradual
   entregas: { type: [entregaSchema], default: [] },
 });
