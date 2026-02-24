@@ -26,7 +26,8 @@ interface Profesor {
 interface Course {
   _id: string;
   nombre: string;
-  profesorId: string;
+  profesorId?: string;
+  profesorIds?: string[] | { toString(): string }[];
   cursos: string[];
   colegioId: string;
 }
@@ -85,10 +86,38 @@ export default function DirectivoPage() {
   });
 
   const getCurrentAssignments = (profesorId: string, materia: string): string[] => {
-    const course = allCourses.find(
-      (c: Course) => (c as any).profesorId === profesorId && c.nombre === materia
-    );
-    return course?.cursos || [];
+    const normalized = (profesorId?.toString?.() ?? profesorId)?.trim?.() || '';
+    const idMatches = (id: unknown) => {
+      if (id == null) return false;
+      const s = (id as any)?._id?.toString?.() ?? (id as any)?.toString?.() ?? String(id);
+      return s === normalized;
+    };
+    const isAssigned = (c: Course) => {
+      const ids = (c as any).profesorIds;
+      if (Array.isArray(ids)) return ids.some(idMatches);
+      return idMatches((c as any).profesorId);
+    };
+    const matchesMateria = (nombreCurso: string) => {
+      if (!nombreCurso || !materia) return false;
+      const n = nombreCurso.trim();
+      const m = materia.trim();
+      return n === m || n.startsWith(m + ' ') || n.startsWith(m + '-');
+    };
+    const grupos: string[] = [];
+    for (const c of allCourses) {
+      if (!isAssigned(c) || !matchesMateria(c.nombre)) continue;
+      const curs = c.cursos || [];
+      for (const g of curs) {
+        const name = typeof g === 'string' ? g : (g as any)?.toString?.() ?? '';
+        if (name && !grupos.includes(name)) grupos.push(name);
+      }
+    }
+    return grupos.sort((a, b) => {
+      const numA = parseInt(a, 10) || 0;
+      const numB = parseInt(b, 10) || 0;
+      if (numA !== numB) return numA - numB;
+      return a.localeCompare(b);
+    });
   };
 
   return (

@@ -33,6 +33,8 @@ import {
   Award,
   History,
   Send,
+  BarChart3,
+  Bell,
 } from "lucide-react";
 
 interface CommandPaletteProps {
@@ -250,6 +252,26 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           keywords: ["comunicacion", "directivo", "mensajes"],
           roles: ["directivo"]
         },
+      ],
+    },
+    {
+      group: "Academia - Directivo (subcategorías)",
+      items: [
+        { icon: BookOpen, label: "Cursos y estudiantes", path: "/directivo/cursos", keywords: ["cursos", "estudiantes", "grupos", "academia"], roles: ["directivo"] },
+        { icon: Users, label: "Asignación de Profesores", path: "/directivo", keywords: ["profesores", "asignacion", "docentes"], roles: ["directivo"] },
+        { icon: BarChart3, label: "Análisis de Rendimiento", path: "/directivo/academia/rendimiento", keywords: ["rendimiento", "analisis", "estadisticas", "academia"], roles: ["directivo"] },
+        { icon: FileText, label: "Reportes Académicos", path: "/directivo/academia/reportes", keywords: ["reportes", "boletines", "academia"], roles: ["directivo"] },
+        { icon: Settings, label: "Configuración Académica", path: "/directivo/academia/configuracion", keywords: ["configuracion", "academia"], roles: ["directivo"] },
+        { icon: GraduationCap, label: "Materiales Institucionales", path: "/materials", keywords: ["materiales", "institucionales", "recursos"], roles: ["directivo"] },
+      ],
+    },
+    {
+      group: "Comunidad - Directivo (subcategorías)",
+      items: [
+        { icon: Users, label: "Gestión de Grupos", path: "/directivo/comunidad/grupos", keywords: ["grupos", "comunidad", "gestion"], roles: ["directivo"] },
+        { icon: FileText, label: "Boletines Institucionales", path: "/directivo/comunidad/boletines", keywords: ["boletines", "institucionales", "comunidad"], roles: ["directivo"] },
+        { icon: Bell, label: "Notificaciones Masivas", path: "/directivo/comunidad/notificaciones", keywords: ["notificaciones", "masivas", "comunidad"], roles: ["directivo"] },
+        { icon: Calendar, label: "Calendario de Eventos", path: "/comunidad/calendario", keywords: ["calendario", "eventos", "comunidad"], roles: ["directivo"] },
       ],
     },
     {

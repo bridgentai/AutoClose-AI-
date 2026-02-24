@@ -50,6 +50,25 @@ export default function DirectivoEstudiantesPage() {
     );
   }, [estudiantes, searchTerm]);
 
+  const ordenados = useMemo(() => {
+    const list = [...filtrados];
+    const ordenCurso = (curso: string | undefined): [number, string] => {
+      if (!curso || !curso.trim()) return [0, ''];
+      const match = curso.trim().match(/^(\d+)(.*)$/);
+      const grado = match ? parseInt(match[1], 10) : 0;
+      const letra = (match && match[2]) ? match[2].toUpperCase() : '';
+      return [grado, letra];
+    };
+    list.sort((a, b) => {
+      const [gA, lA] = ordenCurso(a.curso);
+      const [gB, lB] = ordenCurso(b.curso);
+      if (gA !== gB) return gA - gB;
+      if (lA !== lB) return lA.localeCompare(lB);
+      return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+    });
+    return list;
+  }, [filtrados]);
+
   if (!user || user.rol !== "directivo") return null;
 
   return (
@@ -95,7 +114,7 @@ export default function DirectivoEstudiantesPage() {
             </p>
           ) : (
             <div className="space-y-2">
-              {filtrados.map((est) => (
+              {ordenados.map((est) => (
                 <div
                   key={est._id}
                   className="flex flex-wrap items-center justify-between gap-2 p-4 rounded-xl bg-white/5 border border-white/10"

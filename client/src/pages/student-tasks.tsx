@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { 
@@ -8,11 +9,19 @@ import {
   Circle,
   FileText,
   AlertCircle,
-  Star
+  Star,
+  Filter
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
@@ -24,6 +33,8 @@ interface Assignment {
   curso: string;
   fechaEntrega: string;
   profesorNombre: string;
+  /** Nombre de la materia (ej. Física, Matemáticas) */
+  materiaNombre?: string;
   estado?: 'pendiente' | 'entregada' | 'calificada';
   submissions?: Array<{
     estudianteId: string;
@@ -36,6 +47,20 @@ interface Assignment {
     fechaEntrega: string;
     calificacion?: number;
   }>;
+}
+
+// Mismo criterio de color que el calendario (por materia)
+const MATERIA_COLORS = [
+  '#1e3cff', '#002366', '#00c8ff', '#003d7a', '#10b981', '#f59e0b',
+  '#ef4444', '#06b6d4', '#f97316', '#14b8a6', '#84cc16', '#ffd700',
+];
+function colorForMateria(name: string): string {
+  if (!name) return MATERIA_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return MATERIA_COLORS[Math.abs(hash) % MATERIA_COLORS.length];
 }
 
 export default function StudentTasksPage() {
@@ -80,6 +105,28 @@ export default function StudentTasksPage() {
     return estado === 'pendiente' && fechaEntrega < now;
   });
 
+  // Materias únicas para el filtro (ordenadas)
+  const materiasUnicas = useMemo(() => {
+    const set = new Set<string>();
+    assignments.forEach(a => {
+      const m = a.materiaNombre || a.curso || 'Sin materia';
+      if (m) set.add(m);
+    });
+    return ['', ...Array.from(set).sort()];
+  }, [assignments]);
+
+  const [materiaFiltro, setMateriaFiltro] = useState<string>('');
+
+  const coincideMateria = (a: Assignment) => {
+    if (!materiaFiltro) return true;
+    const m = a.materiaNombre || a.curso || 'Sin materia';
+    return m === materiaFiltro;
+  };
+
+  const tareasPorEntregarFiltradas = useMemo(() => tareasPorEntregar.filter(coincideMateria), [tareasPorEntregar, materiaFiltro]);
+  const tareasVencidasFiltradas = useMemo(() => tareasVencidas.filter(coincideMateria), [tareasVencidas, materiaFiltro]);
+  const tareasCompletadasFiltradas = useMemo(() => tareasCompletadas.filter(coincideMateria), [tareasCompletadas, materiaFiltro]);
+
   // Función para determinar el estado de una tarea
   const getEstadoTarea = (assignment: Assignment) => {
     const submissions = assignment.submissions || assignment.entregas || [];
@@ -120,22 +167,31 @@ export default function StudentTasksPage() {
     const EstadoIcon = estado.icon;
     const diasRestantes = getDiasRestantes(assignment.fechaEntrega);
     const fechaEntrega = new Date(assignment.fechaEntrega);
+    const materiaNombre = assignment.materiaNombre || assignment.curso || 'Sin materia';
+    const materiaColor = colorForMateria(materiaNombre);
 
     return (
       <div
         key={assignment._id}
-        className="p-6 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer group"
+        className="p-6 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer group relative overflow-hidden"
+        style={{ borderLeftWidth: '4px', borderLeftColor: materiaColor }}
         onClick={() => setLocation(`/assignment/${assignment._id}`)}
       >
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <h3 className="font-semibold text-white text-lg group-hover:text-[#00c8ff] transition-colors">
                 {assignment.titulo}
               </h3>
               <Badge className={estado.color}>
                 <EstadoIcon className="w-3 h-3 mr-1" />
                 {estado.texto}
+              </Badge>
+              <Badge
+                className="bg-white/10 text-white/90 border border-white/20 font-medium"
+                style={{ backgroundColor: `${materiaColor}22`, borderColor: materiaColor, color: materiaColor }}
+              >
+                {materiaNombre}
               </Badge>
             </div>
             <p className="text-sm text-white/70 mb-4 line-clamp-2">
@@ -264,14 +320,48 @@ export default function StudentTasksPage() {
           </Card>
         </div>
 
-        {/* Tabs para Por Entregar y Completadas */}
+        {/* Filtro por materia */}
+        {materiasUnicas.length > 1 && (
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <div className="flex items-center gap-2 text-white/80">
+              <Filter className="w-4 h-4 text-[#00c8ff]" />
+              <span className="text-sm font-medium">Filtrar por materia</span>
+            </div>
+            <Select value={materiaFiltro || 'todas'} onValueChange={(v) => setMateriaFiltro(v === 'todas' ? '' : v)}>
+              <SelectTrigger className="w-[200px] bg-white/5 border-white/10 text-white">
+                <SelectValue placeholder="Todas las materias" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas" className="text-white focus:bg-white/10">
+                  Todas las materias
+                </SelectItem>
+                {materiasUnicas.filter(Boolean).map((m) => (
+                  <SelectItem key={m} value={m} className="text-white focus:bg-white/10">
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {materiaFiltro && (
+              <Badge
+                variant="outline"
+                className="cursor-pointer border-white/20 text-white/80 hover:bg-white/10"
+                onClick={() => setMateriaFiltro('')}
+              >
+                Quitar filtro
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Tabs para Por Entregar y Completadas (conteos según filtro) */}
         <Tabs defaultValue="por-entregar" className="w-full">
           <TabsList className="bg-white/5 border border-white/10 mb-6">
             <TabsTrigger value="por-entregar" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
-              Por Entregar ({tareasPorEntregar.length + tareasVencidas.length})
+              Por Entregar ({tareasPorEntregarFiltradas.length + tareasVencidasFiltradas.length})
             </TabsTrigger>
             <TabsTrigger value="completadas" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
-              Completadas ({tareasCompletadas.length})
+              Completadas ({tareasCompletadasFiltradas.length})
             </TabsTrigger>
           </TabsList>
 
@@ -280,46 +370,46 @@ export default function StudentTasksPage() {
               <CardHeader>
                 <CardTitle className="text-white">Tareas por Entregar</CardTitle>
                 <CardDescription className="text-white/60">
-                  Tareas pendientes y vencidas
+                  {materiaFiltro ? `Tareas pendientes y vencidas en ${materiaFiltro}` : 'Tareas pendientes y vencidas'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {tareasVencidas.length > 0 && (
+                {tareasVencidasFiltradas.length > 0 && (
                   <div className="mb-6">
                     <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-red-400" />
-                      Vencidas ({tareasVencidas.length})
+                      Vencidas ({tareasVencidasFiltradas.length})
                     </h3>
                     <div className="space-y-4">
-                      {tareasVencidas
+                      {tareasVencidasFiltradas
                         .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
                         .map(assignment => renderTaskCard(assignment))}
                     </div>
                   </div>
                 )}
-                {tareasPorEntregar.length > 0 ? (
+                {tareasPorEntregarFiltradas.length > 0 ? (
                   <div>
-                    {tareasVencidas.length > 0 && (
+                    {tareasVencidasFiltradas.length > 0 && (
                       <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
                         <Clock className="w-4 h-4 text-yellow-400" />
-                        Pendientes ({tareasPorEntregar.length})
+                        Pendientes ({tareasPorEntregarFiltradas.length})
                       </h3>
                     )}
                     <div className="space-y-4">
-                      {tareasPorEntregar
+                      {tareasPorEntregarFiltradas
                         .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
                         .map(assignment => renderTaskCard(assignment))}
                     </div>
                   </div>
                 ) : (
-                  tareasVencidas.length === 0 && (
+                  tareasVencidasFiltradas.length === 0 && (
                     <div className="text-center py-12">
                       <FileText className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                       <h3 className="text-xl font-semibold text-white mb-2">
-                        No hay tareas pendientes
+                        {materiaFiltro ? `No hay tareas pendientes en ${materiaFiltro}` : 'No hay tareas pendientes'}
                       </h3>
                       <p className="text-white/60">
-                        ¡Excelente! Has completado todas tus tareas.
+                        {materiaFiltro ? 'Prueba otra materia o quita el filtro.' : '¡Excelente! Has completado todas tus tareas.'}
                       </p>
                     </div>
                   )
@@ -333,16 +423,18 @@ export default function StudentTasksPage() {
               <CardHeader>
                 <CardTitle className="text-white">Tareas Completadas</CardTitle>
                 <CardDescription className="text-white/60">
-                  Tareas que ya has entregado
+                  {materiaFiltro ? `Tareas entregadas en ${materiaFiltro}` : 'Tareas que ya has entregado'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {tareasCompletadas.length > 0 ? (
+                {tareasCompletadasFiltradas.length > 0 ? (
                   <div className="space-y-4">
-                    {tareasCompletadas
+                    {tareasCompletadasFiltradas
                       .sort((a, b) => {
-                        const entregaA = a.entregas?.find(e => e.estudianteId === user?.id);
-                        const entregaB = b.entregas?.find(e => e.estudianteId === user?.id);
+                        const subsA = a.submissions || a.entregas || [];
+                        const subsB = b.submissions || b.entregas || [];
+                        const entregaA = subsA.find((e: any) => e.estudianteId === user?.id);
+                        const entregaB = subsB.find((e: any) => e.estudianteId === user?.id);
                         if (!entregaA || !entregaB) return 0;
                         return new Date(entregaB.fechaEntrega).getTime() - new Date(entregaA.fechaEntrega).getTime();
                       })
@@ -352,10 +444,10 @@ export default function StudentTasksPage() {
                   <div className="text-center py-12">
                     <CheckCircle2 className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-white mb-2">
-                      No hay tareas completadas
+                      {materiaFiltro ? `No hay tareas completadas en ${materiaFiltro}` : 'No hay tareas completadas'}
                     </h3>
                     <p className="text-white/60">
-                      Las tareas que entregues aparecerán aquí.
+                      {materiaFiltro ? 'Prueba otra materia o quita el filtro.' : 'Las tareas que entregues aparecerán aquí.'}
                     </p>
                   </div>
                 )}

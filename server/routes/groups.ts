@@ -271,7 +271,7 @@ const calcularEstado = (promedio?: number): 'excelente' | 'bueno' | 'regular' | 
   return 'bajo';
 };
 
-// GET /api/groups/:groupId/students - Obtener estudiantes de un grupo (optimizado: solo nombre y estado)
+// GET /api/groups/:groupId/students - Obtener estudiantes de un grupo (incluye GroupStudent + User.curso para evitar "dos grupos")
 router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
   try {
     const { groupId } = req.params;
@@ -287,21 +287,46 @@ router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
       return res.status(404).json({ message: 'Grupo no encontrado.' });
     }
 
-    // Buscar estudiantes del grupo en GroupStudent usando ObjectId
-    const groupStudents = await GroupStudent.find({ 
+    // 1) Estudiantes en GroupStudent
+    const groupStudents = await GroupStudent.find({
       grupoId: grupo._id,
-      colegioId 
+      colegioId
     })
     .populate('estudianteId', 'nombre curso')
     .select('estudianteId createdAt')
     .lean();
 
-    console.log(`[GROUPS] Encontrados ${groupStudents.length} registros en GroupStudent para ${grupoIdNormalizado}`);
+    const idsEnGroupStudent = new Set(
+      groupStudents.filter(gs => gs.estudianteId).map(gs => (gs.estudianteId as any)._id.toString())
+    );
 
-    // Obtener IDs de estudiantes
-    const estudianteIds = groupStudents
-      .filter(gs => gs.estudianteId)
-      .map(gs => (gs.estudianteId as any)._id.toString());
+    // 2) Incluir también estudiantes con User.curso = este grupo (no solo GroupStudent) para que directivo vea todos y pueda crear boletines
+    const usuariosConCurso = await User.find({
+      rol: 'estudiante',
+      colegioId,
+      $or: [
+        { curso: grupoIdNormalizado },
+        { curso: groupId.trim() },
+        { curso: (groupId as string).toLowerCase() },
+      ],
+    }).select('_id nombre').lean();
+
+    const estudiantesUnificados = new Map<string, { _id: string; nombre: string }>();
+    groupStudents.forEach(gs => {
+      const est = gs.estudianteId as any;
+      if (est?._id) {
+        const id = est._id.toString();
+        estudiantesUnificados.set(id, { _id: id, nombre: est.nombre || 'Estudiante' });
+      }
+    });
+    usuariosConCurso.forEach(u => {
+      const id = (u as any)._id.toString();
+      if (!estudiantesUnificados.has(id)) {
+        estudiantesUnificados.set(id, { _id: id, nombre: (u as any).nombre || 'Estudiante' });
+      }
+    });
+
+    const todosLosIds = [...estudiantesUnificados.values()];
 
     // Calcular promedios y estados desde las calificaciones de tareas
     const assignments = await Assignment.find({
@@ -311,9 +336,7 @@ router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
     .select('entregas')
     .lean();
 
-    // Calcular promedio por estudiante
     const promediosPorEstudiante: Record<string, { suma: number; cantidad: number }> = {};
-    
     assignments.forEach(assignment => {
       if (assignment.entregas && Array.isArray(assignment.entregas)) {
         assignment.entregas.forEach((entrega: any) => {
@@ -331,26 +354,16 @@ router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
       }
     });
 
-    // Formatear respuesta con solo nombre y estado
-    const students = groupStudents
-      .filter(gs => gs.estudianteId) // Filtrar estudiantes que existan
-      .map(gs => {
-        const estudiante = gs.estudianteId as any;
-        const estudianteId = estudiante._id.toString();
-        const promedioData = promediosPorEstudiante[estudianteId];
-        const promedio = promedioData && promedioData.cantidad > 0
-          ? promedioData.suma / promedioData.cantidad
-          : undefined;
-        const estado = calcularEstado(promedio);
+    const students = todosLosIds.map(({ _id: estudianteId, nombre }) => {
+      const promedioData = promediosPorEstudiante[estudianteId];
+      const promedio = promedioData && promedioData.cantidad > 0
+        ? promedioData.suma / promedioData.cantidad
+        : undefined;
+      const estado = calcularEstado(promedio);
+      return { _id: estudianteId, nombre, estado };
+    });
 
-        return {
-          _id: estudianteId,
-          nombre: estudiante.nombre,
-          estado: estado,
-        };
-      });
-
-    console.log(`[GROUPS] Retornando ${students.length} estudiantes para ${grupoIdNormalizado}`);
+    console.log(`[GROUPS] Retornando ${students.length} estudiantes para ${grupoIdNormalizado} (GroupStudent: ${idsEnGroupStudent.size}, User.curso: ${estudiantesUnificados.size})`);
     res.json(students);
   } catch (error) {
     console.error('Error al obtener estudiantes del grupo:', error);

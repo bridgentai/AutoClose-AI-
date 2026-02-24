@@ -55,8 +55,8 @@ export default function ParentPage() {
             <CardDescription className="text-white/60">Promedio academico</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-5xl font-bold text-white mb-2">4.5</div>
-            <p className="text-sm text-white/50">de 5.0</p>
+            <div className="text-5xl font-bold text-white mb-2">90</div>
+            <p className="text-sm text-white/50">de 100</p>
           </CardContent>
         </Card>
       </div>
@@ -71,7 +71,7 @@ export default function ParentPage() {
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Matematicas</span>
-                <span className="text-[#1e3cff] font-bold">4.5/5.0</span>
+                <span className="text-[#1e3cff] font-bold">90/100</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
                 <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '90%' }} />
@@ -81,7 +81,7 @@ export default function ParentPage() {
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Ciencias</span>
-                <span className="text-[#1e3cff] font-bold">4.2/5.0</span>
+                <span className="text-[#1e3cff] font-bold">84/100</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
                 <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '84%' }} />
@@ -91,7 +91,7 @@ export default function ParentPage() {
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Historia</span>
-                <span className="text-[#1e3cff] font-bold">4.7/5.0</span>
+                <span className="text-[#1e3cff] font-bold">94/100</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
                 <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '94%' }} />
@@ -101,7 +101,7 @@ export default function ParentPage() {
             <div className="p-4 bg-white/5 rounded-xl">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-white font-medium">Fisica</span>
-                <span className="text-[#1e3cff] font-bold">4.4/5.0</span>
+                <span className="text-[#1e3cff] font-bold">88/100</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-2">
                 <div className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full" style={{ width: '88%' }} />

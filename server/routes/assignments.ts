@@ -1,5 +1,5 @@
 import express from 'express';
-import { Assignment, User, Course, Nota } from '../models';
+import { Assignment, User, Course, Nota, Materia } from '../models';
 import type { IAssignment, ISubmission } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
 import { normalizeIdForQuery } from '../utils/idGenerator';
@@ -524,37 +524,29 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
       return res.json([]);
     }
 
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    const primerDia = new Date(currentYear, currentMonth, 1);
-    const ultimoDia = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
-
     const cursoNormalizado = (user.curso as string).toUpperCase().trim();
     console.log(`Student assignments query: curso=${user.curso} (normalized: ${cursoNormalizado}), colegioId=${user.colegioId}`);
-    console.log(`Date range: ${primerDia.toISOString()} to ${ultimoDia.toISOString()}`);
 
-    // Buscar tareas por curso normalizado (usando $in para buscar variantes)
+    // Buscar todas las tareas del estudiante por curso (sin filtrar por mes; el calendario filtra en cliente)
     const assignments = await Assignment.find({
       curso: { $in: [cursoNormalizado, cursoNormalizado.toLowerCase(), user.curso as string] },
       colegioId: user.colegioId,
-      fechaEntrega: {
-        $gte: primerDia,
-        $lte: ultimoDia,
-      },
     })
       .select('titulo descripcion curso courseId materiaId fechaEntrega profesorNombre profesorId submissions')
+      .populate('materiaId', 'nombre')
       .sort({ fechaEntrega: 1 })
       .lean();
 
     console.log(`Found ${assignments.length} assignments for student in curso ${user.curso}`);
 
-    // Agregar estado a cada tarea
-    const assignmentsWithState = assignments.map((assignment: any) => {
+    // Agregar estado y nombre de materia a cada tarea
+    const assignmentsWithState = (assignments as any[]).map((assignment: any) => {
       const state = calculateAssignmentState(assignment, normalizedUserId);
+      const materiaNombre = assignment.materiaId?.nombre ?? (assignment.materiaId ? null : null);
+      const { materiaId, ...rest } = assignment;
       return {
-        ...assignment,
+        ...rest,
+        materiaNombre: materiaNombre ?? 'Sin materia',
         estado: state,
       };
     });
@@ -593,24 +585,24 @@ router.get('/hijo/:estudianteId', protect, async (req: AuthRequest, res) => {
     const curso = estudiante.curso as string | undefined;
     if (!curso) return res.json([]);
 
-    const now = new Date();
-    const primerDia = new Date(now.getFullYear(), now.getMonth(), 1);
-    const ultimoDia = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
     const cursoNormalizado = curso.toUpperCase().trim();
 
+    // Mismas tareas que ve el hijo (sin filtro de mes); el calendario filtra por mes en el cliente
     const assignments = await Assignment.find({
       curso: { $in: [cursoNormalizado, cursoNormalizado.toLowerCase(), curso] },
       colegioId: estudiante.colegioId,
-      fechaEntrega: { $gte: primerDia, $lte: ultimoDia },
     })
       .select('titulo descripcion curso courseId materiaId fechaEntrega profesorNombre profesorId submissions')
+      .populate('materiaId', 'nombre')
       .sort({ fechaEntrega: 1 })
       .lean();
 
     const normalizedEstudianteId = (estudiante._id ?? req.params.estudianteId).toString();
-    const assignmentsWithState = assignments.map((assignment: any) => {
+    const assignmentsWithState = (assignments as any[]).map((assignment: any) => {
       const state = calculateAssignmentState(assignment, normalizedEstudianteId);
-      return { ...assignment, estado: state };
+      const materiaNombre = assignment.materiaId?.nombre ?? 'Sin materia';
+      const { materiaId, ...rest } = assignment;
+      return { ...rest, materiaNombre, estado: state };
     });
 
     return res.json(assignmentsWithState);

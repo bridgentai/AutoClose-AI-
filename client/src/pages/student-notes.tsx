@@ -49,6 +49,7 @@ interface SubjectDetail extends SubjectGrade {
   promedioFinal: number;
   categorias: GradeDetail[];
   evolucion: { mes: string; promedio: number }[];
+  profesorNombre?: string | null;
 }
 
 // Interfaces para datos reales
@@ -69,10 +70,11 @@ interface MateriaConNotas {
   colorAcento?: string;
   icono?: string;
   notas: NotaReal[];
-  promedio: number; // 0-5
-  ultimaNota: number; // 0-5
+  promedio: number; // 0-100
+  ultimaNota: number; // 0-100
   estado: 'excelente' | 'bueno' | 'regular' | 'bajo';
   tendencia: 'up' | 'down' | 'stable';
+  profesorNombre?: string | null;
 }
 
 // =========================================================
@@ -84,13 +86,35 @@ export default function StudentNotesPage() {
   const [, setLocation] = useLocation();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
-  // Obtener notas reales del estudiante (refetch para ver datos tras calificaciones)
-  const { data: notesData, isLoading, isError, error, refetch } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
+  const isPadre = user?.rol === 'padre';
+  const isEstudiante = user?.rol === 'estudiante';
+
+  const { data: hijos = [] } = useQuery<{ _id: string; nombre: string }[]>({
+    queryKey: ['/api/users/me/hijos'],
+    queryFn: () => apiRequest('GET', '/api/users/me/hijos'),
+    enabled: !!user?.id && isPadre,
+  });
+  const primerHijoId = hijos[0]?._id;
+  const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
+
+  const { data: notesDataEstudiante, isLoading: loadingEstudiante, isError: errorEstudiante, refetch: refetchEstudiante } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
     queryKey: ['studentNotes', user?.id],
     queryFn: () => apiRequest('GET', '/api/student/notes'),
-    enabled: !!user?.id && user?.rol === 'estudiante',
+    enabled: !!user?.id && isEstudiante,
     staleTime: 0,
   });
+
+  const { data: notesDataHijo, isLoading: loadingHijo, isError: errorHijo, refetch: refetchHijo } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
+    queryKey: ['/api/student/hijo', primerHijoId, 'notes'],
+    queryFn: () => apiRequest('GET', `/api/student/hijo/${primerHijoId}/notes`),
+    enabled: !!primerHijoId && isPadre,
+    staleTime: 0,
+  });
+
+  const notesData = isEstudiante ? notesDataEstudiante : notesDataHijo;
+  const isLoading = isEstudiante ? loadingEstudiante : loadingHijo;
+  const isError = isEstudiante ? errorEstudiante : errorHijo;
+  const refetch = isEstudiante ? refetchEstudiante : refetchHijo;
 
   const subjects: SubjectGrade[] = notesData?.materias.map(m => ({
     _id: m._id,
@@ -98,7 +122,7 @@ export default function StudentNotesPage() {
     promedio: m.promedio,
     ultimaNota: m.ultimaNota,
     estado: m.estado,
-    tendencia: m.tendencia,
+    tendencia: (m as MateriaConNotas).tendencia ?? 'stable',
     colorAcento: m.colorAcento || '#00c8ff',
   })) || [];
 
@@ -116,19 +140,31 @@ export default function StudentNotesPage() {
     tendencia: selectedSubjectData.tendencia,
     colorAcento: selectedSubjectData.colorAcento || '#00c8ff',
     promedioFinal: selectedSubjectData.promedio,
+    profesorNombre: selectedSubjectData.profesorNombre ?? selectedSubjectData.notas?.[0]?.profesorNombre ?? null,
     categorias: [
       {
         categoria: 'Tareas',
         promedio: selectedSubjectData.promedio,
         notas: selectedSubjectData.notas.map(n => ({
           actividad: n.tareaTitulo,
-          nota: n.nota / 20, // Convertir de 0-100 a 0-5
+          nota: n.nota, // Escala 0-100
           fecha: n.fecha,
           comentario: n.comentario || n.logro,
         })),
       },
     ],
-    evolucion: [], // Por ahora vacío, se puede calcular después
+    // Evolución: cada nota ordenada por fecha para la gráfica de líneas
+    evolucion: [...selectedSubjectData.notas]
+      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+      .map((n, i, arr) => {
+        const hastaFecha = arr.slice(0, i + 1);
+        const promedioAcum = hastaFecha.reduce((s, x) => s + x.nota, 0) / hastaFecha.length;
+        return {
+          mes: new Date(n.fecha).toLocaleDateString('es-CO', { month: 'short', day: 'numeric', year: '2-digit' }),
+          promedio: Math.round(promedioAcum * 10) / 10,
+          nota: n.nota,
+        };
+      }),
   } : null;
 
   // Calcular promedio general
@@ -136,11 +172,25 @@ export default function StudentNotesPage() {
     ? subjects.reduce((acc, s) => acc + s.promedio, 0) / subjects.length
     : 0;
 
+  if (isPadre && !primerHijoId && !isLoading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <NavBackButton to="/dashboard" label="Dashboard" />
+          <div className="mt-4">
+            <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
+            <p className="text-white/60">Vincula un estudiante en tu perfil para ver sus notas.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          <NavBackButton />
+          <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
           <div className="mt-4 text-white/80">Cargando notas...</div>
         </div>
       </div>
@@ -151,7 +201,7 @@ export default function StudentNotesPage() {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          <NavBackButton />
+          <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
           <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-4">
             <CardContent className="p-8 text-center">
               <p className="text-red-300 mb-4">Error al cargar las notas. Revisa tu conexión.</p>
@@ -208,17 +258,24 @@ export default function StudentNotesPage() {
   // Vista principal (lista de materias)
   if (!selectedSubject) {
     if (subjects.length === 0) {
+      const pageTitle = isPadre ? `Notas de ${nombreHijo}` : 'Mis Notas';
+      const pageSubtitle = isPadre
+        ? `Revisa el rendimiento académico de ${nombreHijo} por materia`
+        : 'Revisa tu rendimiento académico por materia';
+      const emptyMessage = isPadre
+        ? `Las notas aparecerán aquí cuando las tareas de ${nombreHijo} sean calificadas.`
+        : 'Las notas aparecerán aquí cuando tus tareas sean calificadas.';
       return (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
           <div className="max-w-7xl mx-auto w-full">
             <div className="mb-8">
-              <NavBackButton />
+              <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
               <div className="mt-4">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins']">
-                  Mis Notas
+                  {pageTitle}
                 </h1>
                 <p className="text-white/60 text-sm sm:text-base">
-                  Revisa tu rendimiento académico por materia
+                  {pageSubtitle}
                 </p>
               </div>
             </div>
@@ -229,7 +286,7 @@ export default function StudentNotesPage() {
                   No hay notas registradas
                 </h3>
                 <p className="text-white/60 mb-6">
-                  Las notas aparecerán aquí cuando tus tareas sean calificadas.
+                  {emptyMessage}
                 </p>
                 <Button
                   variant="outline"
@@ -244,23 +301,29 @@ export default function StudentNotesPage() {
         </div>
       );
     }
+    const pageTitle = isPadre ? `Notas de ${nombreHijo}` : 'Mis Notas';
+    const pageSubtitle = isPadre
+      ? `Revisa el rendimiento académico de ${nombreHijo} por materia (solo visualización)`
+      : 'Revisa tu rendimiento académico por materia';
+    const historialPath = isPadre ? '/parent/notas/historial' : '/mi-aprendizaje/notas/historial';
+
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
           {/* Header */}
           <div className="mb-8">
-            <NavBackButton />
+            <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mt-4">
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins']">
-                  Mis Notas
+                  {pageTitle}
                 </h1>
                 <p className="text-white/60 text-sm sm:text-base">
-                  Revisa tu rendimiento académico por materia
+                  {pageSubtitle}
                 </p>
               </div>
               <Button
-                onClick={() => setLocation('/mi-aprendizaje/notas/historial')}
+                onClick={() => setLocation(historialPath)}
                 className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 whitespace-nowrap"
               >
                 Historial de notas
@@ -276,7 +339,7 @@ export default function StudentNotesPage() {
                 Promedio General por Materia
               </CardTitle>
               <CardDescription className="text-white/60">
-                Promedio general: <span className="text-white font-semibold">{promedioGeneral.toFixed(2)}</span>
+                Promedio general: <span className="text-white font-semibold">{Math.round(promedioGeneral * 10) / 10}</span>
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6">
@@ -297,7 +360,7 @@ export default function StudentNotesPage() {
                       interval={0}
                     />
                     <YAxis 
-                      domain={[0, 5]}
+                      domain={[0, 100]}
                       stroke="rgba(255,255,255,0.5)"
                       tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
                       width={40}
@@ -340,9 +403,9 @@ export default function StudentNotesPage() {
                   </CardTitle>
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-3xl font-bold text-white">
-                      {subject.promedio.toFixed(1)}
+                      {Math.round(subject.promedio)}
                     </span>
-                    <span className="text-white/50">/ 5.0</span>
+                    <span className="text-white/50">/ 100</span>
                   </div>
                   <div className="flex items-center gap-2 mb-2">
                     <Badge className={getEstadoColor(subject.estado)}>
@@ -350,7 +413,7 @@ export default function StudentNotesPage() {
                     </Badge>
                   </div>
                   <p className="text-sm text-white/60">
-                    Última nota: <span className="text-white font-semibold">{subject.ultimaNota.toFixed(1)}</span>
+                    Última nota: <span className="text-white font-semibold">{Math.round(subject.ultimaNota)}</span>
                   </p>
                 </CardHeader>
                 <CardContent className="p-6 pt-0">
@@ -390,15 +453,18 @@ export default function StudentNotesPage() {
             <NavBackButton to="/mi-aprendizaje/notas" label="Notas" />
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 font-['Poppins'] break-words">
                   {subjectDetail.nombre}
                 </h1>
+                {subjectDetail.profesorNombre && (
+                  <p className="text-white/70 text-sm mb-3">Profesor: {subjectDetail.profesorNombre}</p>
+                )}
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl font-bold text-white">
-                      {subjectDetail.promedioFinal.toFixed(1)}
+                      {Math.round(subjectDetail.promedioFinal)}
                     </span>
-                    <span className="text-white/50">/ 5.0</span>
+                    <span className="text-white/50">/ 100</span>
                   </div>
                   <Badge className={getEstadoColor(subjectDetail.estado)}>
                     {subjectDetail.estado.charAt(0).toUpperCase() + subjectDetail.estado.slice(1)}
@@ -442,7 +508,7 @@ export default function StudentNotesPage() {
                       height={60}
                     />
                     <YAxis 
-                      domain={[0, 5]}
+                      domain={[0, 100]}
                       stroke="rgba(255,255,255,0.5)"
                       tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
                       width={40}
@@ -473,9 +539,9 @@ export default function StudentNotesPage() {
                     <CardTitle className="text-white">{categoria.categoria}</CardTitle>
                     <div className="flex items-center gap-2">
                       <span className="text-xl font-bold text-white">
-                        {categoria.promedio.toFixed(1)}
+                        {Math.round(categoria.promedio)}
                       </span>
-                      <span className="text-white/50">/ 5.0</span>
+                      <span className="text-white/50">/ 100</span>
                     </div>
                   </div>
                   <CardDescription className="text-white/60">
@@ -502,9 +568,9 @@ export default function StudentNotesPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-2xl font-bold text-white">
-                              {nota.nota.toFixed(1)}
+                              {Math.round(nota.nota)}
                             </span>
-                            <span className="text-white/50">/ 5.0</span>
+                            <span className="text-white/50">/ 100</span>
                           </div>
                         </div>
                         {nota.comentario && (

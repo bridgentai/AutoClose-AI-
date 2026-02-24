@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2 } from 'lucide-react';
+import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,6 +89,7 @@ export default function AssignmentDetailPage() {
     },
     enabled: !!params.id,
     staleTime: 0,
+    refetchInterval: isProfesor ? 15000 : false, // Actualizar cada 15s para ver nuevas entregas al instante
   });
 
   const updateAssignmentMutation = useMutation({
@@ -196,8 +197,21 @@ export default function AssignmentDetailPage() {
   const primerHijoId = hijos[0]?._id;
   const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
 
+  // Estudiantes del curso/grupo de la tarea (para sección Pendiente en vista profesor)
+  const cursoNombre = assignment?.curso?.trim() ?? '';
+  const { data: groupStudents = [] } = useQuery<{ _id: string; nombre: string; estado?: string }[]>({
+    queryKey: ['/api/groups', cursoNombre, 'students'],
+    queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoNombre)}/students`),
+    enabled: isProfesor && !!cursoNombre,
+  });
+
   // Usar submissions si existe, sino usar entregas (legacy)
   const submissions = assignment?.submissions || assignment?.entregas || [];
+  const submittedIds = useMemo(() => new Set(submissions.map((s: Submission) => String(s.estudianteId))), [submissions]);
+  const pendingStudents = useMemo(
+    () => groupStudents.filter((s) => !submittedIds.has(String(s._id))),
+    [groupStudents, submittedIds]
+  );
   const mySubmission = submissions.find((e: Submission) => e.estudianteId === user?.id);
   const hijoSubmission = isPadre && primerHijoId
     ? submissions.find((e: Submission) => e.estudianteId === primerHijoId)
@@ -275,7 +289,7 @@ export default function AssignmentDetailPage() {
           <NavBackButton to="/calendar" label="Calendario" />
         )}
         {isProfesor && (
-          <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+          <NavBackButton to="/profesor/academia/tareas" label="Tareas" />
         )}
               {isProfesor ? (
                 <Tabs defaultValue="info" className="w-full">
@@ -496,13 +510,18 @@ export default function AssignmentDetailPage() {
                           Entregas de Estudiantes
                         </CardTitle>
                         <CardDescription className="text-white/60">
-                          {submissions.length} estudiantes han entregado
+                          {submissions.length} han entregado · {pendingStudents.length} pendientes
                         </CardDescription>
                       </CardHeader>
-                      <CardContent>
-                        {submissions.length > 0 ? (
-                          <div className="space-y-4">
-                            {submissions.map((submission, index) => (
+                      <CardContent className="space-y-8">
+                        {submissions.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold text-white/80 mb-3 flex items-center gap-2">
+                              <Check className="w-4 h-4 text-green-500" />
+                              Han entregado ({submissions.length})
+                            </h4>
+                            <div className="space-y-4">
+                              {submissions.map((submission, index) => (
                               <div key={index} className="p-4 bg-white/5 rounded-lg border border-white/10">
                                 <div className="flex items-start justify-between mb-3">
                                   <div className="flex-1">
@@ -609,10 +628,32 @@ export default function AssignmentDetailPage() {
                                 )}
                               </div>
                             ))}
+                            </div>
                           </div>
-                        ) : (
-                          <p className="text-white/50 text-center py-8">Aún no hay entregas</p>
                         )}
+
+                        <div>
+                          <h4 className="text-sm font-semibold text-white/80 mb-3 flex items-center gap-2">
+                            <UserX className="w-4 h-4 text-amber-500" />
+                            Pendiente ({pendingStudents.length})
+                          </h4>
+                          {pendingStudents.length > 0 ? (
+                            <ul className="space-y-2">
+                              {pendingStudents.map((est) => (
+                                <li
+                                  key={est._id}
+                                  className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10 text-white/90"
+                                >
+                                  <Users className="w-4 h-4 text-white/50 flex-shrink-0" />
+                                  <span className="font-medium">{est.nombre}</span>
+                                  <span className="text-xs text-white/50 ml-auto">Sin entregar</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-white/50 text-sm py-4">Todos los estudiantes del curso han entregado.</p>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   </TabsContent>

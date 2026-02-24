@@ -196,7 +196,7 @@ export default function StudentNotesHistoryPage() {
                   <p className="text-white/60 text-sm">Promedio General</p>
                 </div>
                 <p className="text-3xl font-bold text-white">{trimestreData.resumen.promedioGeneral.toFixed(1)}</p>
-                <p className="text-white/50 text-sm">/ 5.0</p>
+                <p className="text-white/50 text-sm">/ 100</p>
               </div>
             </div>
             <div className="mt-6 p-4 bg-white/5 rounded-lg border border-white/10">
@@ -240,13 +240,13 @@ export default function StudentNotesHistoryPage() {
                       <p className="text-2xl font-bold text-white">
                         {materia.promedio.toFixed(1)}
                       </p>
-                      <p className="text-white/50 text-sm">/ 5.0</p>
+                      <p className="text-white/50 text-sm">/ 100</p>
                     </div>
                   </div>
                   <div className="w-full bg-white/10 rounded-full h-2">
                     <div
                       className="bg-gradient-to-r from-[#002366] to-[#1e3cff] h-2 rounded-full transition-all"
-                      style={{ width: `${(materia.promedio / 5) * 100}%` }}
+                      style={{ width: `${Math.min(100, materia.promedio)}%` }}
                     />
                   </div>
                 </div>

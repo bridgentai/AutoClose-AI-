@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2 } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -206,7 +206,15 @@ export default function CourseDetailPage() {
 
     const firstSubjectId = subjectsForGroup[0]?._id;
 
-    // Query 5: Tareas para tabla de notas (grupo + materia, sin filtro mes)
+    // Query 5: Notas del estudiante (para tarjetas Promedio / Última Nota / Estado en vista estudiante)
+    const { data: notesData } = useQuery<{ materias: { _id: string; nombre: string; promedio: number; ultimaNota: number; estado: string }[]; total: number }>({
+        queryKey: ['studentNotes', user?.id],
+        queryFn: () => apiRequest('GET', '/api/student/notes'),
+        enabled: isStudent && !!user?.id,
+        staleTime: 0,
+    });
+
+    // Query 6: Tareas para tabla de notas (grupo + materia, sin filtro mes)
     const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
         queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
         queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
@@ -827,15 +835,16 @@ export default function CourseDetailPage() {
             const fechaEntrega = new Date(a.fechaEntrega);
             return fechaEntrega >= now;
         });
-        const proximaTarea = tareasPendientes.length > 0 
+        const proximaTarea = tareasPendientes.length > 0
             ? tareasPendientes.sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())[0]
             : null;
-        
-        // Datos mock para el resumen (en producción vendrían del backend)
-        const promedioMock = 4.2;
-        const ultimaNotaMock = 4.5;
-        const estadoMock = promedioMock >= 4.5 ? 'excelente' : promedioMock >= 4.0 ? 'bueno' : promedioMock >= 3.5 ? 'regular' : 'bajo';
-        
+
+        // Datos reales de notas para esta materia (escala 0-100)
+        const materiaNotas = notesData?.materias?.find((m: any) => String(m._id) === String(details._id));
+        const promedioReal = materiaNotas != null ? materiaNotas.promedio : null;
+        const ultimaNotaReal = materiaNotas?.ultimaNota ?? null;
+        const estadoReal = materiaNotas?.estado ?? null;
+
         const getEstadoColor = (estado: string) => {
             switch (estado) {
                 case 'excelente':
@@ -953,8 +962,10 @@ export default function CourseDetailPage() {
                                 </div>
                             </div>
                             <p className="text-white/60 text-sm mb-1">Promedio</p>
-                            <p className="text-3xl font-bold text-white">{promedioMock.toFixed(1)}</p>
-                            <p className="text-white/40 text-xs mt-1">/ 5.0</p>
+                            <p className="text-3xl font-bold text-white">
+                                {promedioReal != null ? (Math.round(promedioReal * 10) / 10).toFixed(1) : '—'}
+                            </p>
+                            <p className="text-white/40 text-xs mt-1">/ 100</p>
                         </CardContent>
                     </Card>
                     
@@ -966,8 +977,10 @@ export default function CourseDetailPage() {
                                 </div>
                             </div>
                             <p className="text-white/60 text-sm mb-1">Última Nota</p>
-                            <p className="text-3xl font-bold text-white">{ultimaNotaMock.toFixed(1)}</p>
-                            <p className="text-white/40 text-xs mt-1">/ 5.0</p>
+                            <p className="text-3xl font-bold text-white">
+                                {ultimaNotaReal != null ? (Math.round(ultimaNotaReal * 10) / 10).toFixed(1) : '—'}
+                            </p>
+                            <p className="text-white/40 text-xs mt-1">/ 100</p>
                         </CardContent>
                     </Card>
                     
@@ -975,15 +988,17 @@ export default function CourseDetailPage() {
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-green-500 to-emerald-500">
-                                    <Badge className={getEstadoColor(estadoMock)}>
-                                        {estadoMock.charAt(0).toUpperCase() + estadoMock.slice(1)}
-                                    </Badge>
+                                    <Gauge className="w-6 h-6 text-white" />
                                 </div>
                             </div>
                             <p className="text-white/60 text-sm mb-1">Estado</p>
-                            <Badge className={`${getEstadoColor(estadoMock)} text-base px-3 py-1`}>
-                                {estadoMock.charAt(0).toUpperCase() + estadoMock.slice(1)}
-                            </Badge>
+                            {estadoReal ? (
+                                <Badge className={`${getEstadoColor(estadoReal)} text-base px-3 py-1`}>
+                                    {estadoReal.charAt(0).toUpperCase() + estadoReal.slice(1)}
+                                </Badge>
+                            ) : (
+                                <span className="text-white/50 text-sm">Sin datos</span>
+                            )}
                         </CardContent>
                     </Card>
                     
@@ -992,8 +1007,8 @@ export default function CourseDetailPage() {
                             <div className="flex items-center justify-between mb-2">
                                 <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-yellow-500 to-orange-500">
                                     <Clock className="w-6 h-6 text-white" />
+                                </div>
                             </div>
-                    </div>
                             <p className="text-white/60 text-sm mb-1">Próxima Tarea</p>
                             {proximaTarea ? (
                                 <>

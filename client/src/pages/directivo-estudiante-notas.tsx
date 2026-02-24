@@ -99,9 +99,9 @@ export default function DirectivoEstudianteNotasPage() {
                   <CardTitle className="text-white">{materia.nombre}</CardTitle>
                   <div className="flex items-center gap-2">
                     <span className="text-xl font-bold text-white">
-                      {(materia.promedio ?? 0).toFixed(1)}
+                      {Math.round(materia.promedio ?? 0)}
                     </span>
-                    <span className="text-white/50">/ 5.0</span>
+                    <span className="text-white/50">/ 100</span>
                     <span
                       className={`text-sm ${
                         materia.estado === "excelente"
@@ -145,9 +145,9 @@ export default function DirectivoEstudianteNotasPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-2xl font-bold text-white">
-                            {(nota.nota != null ? nota.nota / 20 : 0).toFixed(1)}
+                            {nota.nota != null ? Math.round(nota.nota) : '—'}
                           </span>
-                          <span className="text-white/50">/ 5.0</span>
+                          <span className="text-white/50">/ 100</span>
                         </div>
                       </div>
                       {(nota.comentario || nota.logro) && (

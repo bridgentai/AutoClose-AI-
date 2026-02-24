@@ -86,9 +86,12 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"], action: "chat" },
       { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
       { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["estudiante"] },
-      { icon: UsersRound, label: "Comunidad", path: "/comunidad", roles: ["estudiante", "profesor", "directivo", "padre"] },
+      { icon: UsersRound, label: "Comunidad", path: "/comunidad", roles: ["estudiante", "profesor", "padre"] },
+      { icon: UsersRound, label: "Comunidad", path: "/directivo/comunidad", roles: ["directivo"] },
       // Módulos principales del profesor
       { icon: BookOpen, label: "Academia", path: "/profesor/academia", roles: ["profesor"] },
+      // Academia y acceso a módulo directivo en el panel (no solo Acceso Rápido)
+      { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
       { icon: Mail, label: "Comunicación", path: "/profesor/comunicacion", roles: ["profesor"] },
       { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
       // Otros roles

@@ -249,7 +249,7 @@ export default function BoletinInteligentePage() {
                       <span className="text-5xl sm:text-6xl font-bold text-white font-['Poppins']">
                         {promedioGeneral.toFixed(1)}
                       </span>
-                      <span className="text-white/50 text-lg">/ 5.0</span>
+                      <span className="text-white/50 text-lg">/ 100</span>
                       <span className="text-sm text-white/60">Promedio general</span>
                     </div>
                   </div>
@@ -348,7 +348,7 @@ export default function BoletinInteligentePage() {
                       <div className="flex justify-between items-start mb-3">
                         <h4 className="font-semibold text-white">{m.nombre}</h4>
                         <div className="flex items-center gap-2">
-                          <span className="text-2xl font-bold text-white">{m.nota.toFixed(1)}</span>
+                          <span className="text-2xl font-bold text-white">{Math.round(m.nota)}</span>
                           <span
                             className={`flex items-center text-sm ${
                               m.tendencia >= 0 ? "text-emerald-400" : "text-red-400"

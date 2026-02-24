@@ -63,10 +63,10 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative" 
-         style={{
-           background: 'linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)'
-         }}>
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative"
+      style={{
+        background: 'linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)'
+      }}>
       {/* Caobos en esquina - enlace a landing */}
       <button
         type="button"
@@ -77,11 +77,11 @@ export default function Login() {
       </button>
       <div className="w-full max-w-md relative z-10">
         <div className="backdrop-blur-xl border border-white/10 rounded-3xl p-10 shadow-2xl"
-             style={{ 
-               background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15))',
-               boxShadow: '0 0 40px rgba(30, 60, 255, 0.25)' 
-             }}>
-          <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-[#002366] via-[#1e3cff] to-[#003d7a] bg-clip-text text-transparent font-['Poppins']">
+          style={{
+            background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15))',
+            boxShadow: '0 0 40px rgba(30, 60, 255, 0.25)'
+          }}>
+          <h2 className="text-3xl font-bold mb-2 text-[#1e3cff] font-['Poppins']">
             Iniciar sesión
           </h2>
           <p className="text-white/70 mb-8">Accede a AutoClose AI</p>

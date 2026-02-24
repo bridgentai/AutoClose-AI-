@@ -70,6 +70,8 @@ import GroupAssignmentPage from "@/pages/GroupAssignmentPage";
 import StudentNotesPage from "@/pages/student-notes";
 import StudentNotesHistoryPage from "@/pages/student-notes-history";
 import StudentTasksPage from "@/pages/student-tasks";
+import ParentMateriasPage from "@/pages/parent-materias";
+import ParentNotesHistorialPage from "@/pages/parent-notes-historial";
 import TeacherNotesPage from "@/pages/teacher-notes";
 import TeacherGroupTasksPage from "@/pages/teacher-group-tasks";
 import StudentProfilePage from "@/pages/student-profile";
@@ -181,6 +183,12 @@ function AppRouter() {
               <AuthGuard>
                 <Redirect to="/dashboard" />
               </AuthGuard>
+            </Route>
+            <Route path="/parent/materias">
+              <AuthGuard><ParentMateriasPage /></AuthGuard>
+            </Route>
+            <Route path="/parent/notas/historial">
+              <AuthGuard><ParentNotesHistorialPage /></AuthGuard>
             </Route>
             <Route path="/directivo">
               <AuthGuard><DirectivoPage /></AuthGuard>

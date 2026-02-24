@@ -63,32 +63,32 @@ const mockStudents: Student[] = [
     nombre: 'Juan Pérez',
     email: 'juan.perez@example.com',
     estado: 'activo',
-    promedio: 4.5,
-    ultimaNota: 4.8
+    promedio: 90,
+    ultimaNota: 96
   },
   {
     _id: '2',
     nombre: 'María García',
     email: 'maria.garcia@example.com',
     estado: 'activo',
-    promedio: 4.8,
-    ultimaNota: 5.0
+    promedio: 96,
+    ultimaNota: 100
   },
   {
     _id: '3',
     nombre: 'Carlos Rodríguez',
     email: 'carlos.rodriguez@example.com',
     estado: 'activo',
-    promedio: 3.9,
-    ultimaNota: 4.0
+    promedio: 78,
+    ultimaNota: 80
   },
   {
     _id: '4',
     nombre: 'Ana Martínez',
     email: 'ana.martinez@example.com',
     estado: 'activo',
-    promedio: 4.2,
-    ultimaNota: 4.3
+    promedio: 84,
+    ultimaNota: 86
   }
 ];
 
@@ -97,33 +97,33 @@ const mockStudentDetail: StudentDetail = {
   nombre: 'Juan Pérez',
   email: 'juan.perez@example.com',
   estado: 'activo',
-  promedio: 4.5,
-  ultimaNota: 4.8,
+  promedio: 90,
+  ultimaNota: 96,
   materiaId: 'mat-1',
   materiaNombre: 'Matemáticas',
-  promedioFinal: 4.5,
+  promedioFinal: 90,
   categorias: [
     {
       categoria: 'Exámenes',
-      promedio: 4.6,
+      promedio: 92,
       notas: [
-        { actividad: 'Examen Parcial 1', nota: 4.5, fecha: '2024-01-15', comentario: 'Buen trabajo, sigue así' },
-        { actividad: 'Examen Parcial 2', nota: 4.7, fecha: '2024-02-20', comentario: 'Excelente progreso' }
+        { actividad: 'Examen Parcial 1', nota: 90, fecha: '2024-01-15', comentario: 'Buen trabajo, sigue así' },
+        { actividad: 'Examen Parcial 2', nota: 94, fecha: '2024-02-20', comentario: 'Excelente progreso' }
       ]
     },
     {
       categoria: 'Tareas',
-      promedio: 4.4,
+      promedio: 88,
       notas: [
-        { actividad: 'Tarea de Álgebra', nota: 4.3, fecha: '2024-01-10', comentario: 'Bien hecho' },
-        { actividad: 'Tarea de Geometría', nota: 4.5, fecha: '2024-02-05' }
+        { actividad: 'Tarea de Álgebra', nota: 86, fecha: '2024-01-10', comentario: 'Bien hecho' },
+        { actividad: 'Tarea de Geometría', nota: 90, fecha: '2024-02-05' }
       ]
     },
     {
       categoria: 'Proyectos',
-      promedio: 4.5,
+      promedio: 90,
       notas: [
-        { actividad: 'Proyecto Final', nota: 4.5, fecha: '2024-03-01', comentario: 'Buen proyecto, bien estructurado' }
+        { actividad: 'Proyecto Final', nota: 90, fecha: '2024-03-01', comentario: 'Buen proyecto, bien estructurado' }
       ]
     }
   ]
@@ -265,12 +265,12 @@ export default function TeacherNotesPage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="nota" className="text-white">Nota (0.0 - 5.0) *</Label>
+                      <Label htmlFor="nota" className="text-white">Nota (0 - 100) *</Label>
                       <Input
-                        id="nota"
-                        type="number"
-                        min="0"
-                        max="5"
+        id="nota"
+        type="number"
+        min="0"
+        max="100"
                         step="0.1"
                         value={formData.nota}
                         onChange={(e) => setFormData({ ...formData, nota: e.target.value })}
@@ -331,7 +331,7 @@ export default function TeacherNotesPage() {
                 <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-white font-semibold">Estado</span>
-                    <Badge className={studentDetail.promedioFinal >= 4.0 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
+                    <Badge className={studentDetail.promedioFinal >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
                       {studentDetail.promedioFinal >= 4.0 ? 'Aprobado' : 'En Proceso'}
                     </Badge>
                   </div>
@@ -351,7 +351,7 @@ export default function TeacherNotesPage() {
                       <span className="text-xl font-bold text-white">
                         {categoria.promedio.toFixed(1)}
                       </span>
-                      <span className="text-white/50">/ 5.0</span>
+                      <span className="text-white/50">/ 100</span>
                     </div>
                   </div>
                   <CardDescription className="text-white/60">
@@ -378,9 +378,9 @@ export default function TeacherNotesPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-2xl font-bold text-white">
-                              {nota.nota.toFixed(1)}
+                              {Math.round(nota.nota)}
                             </span>
-                            <span className="text-white/50">/ 5.0</span>
+                            <span className="text-white/50">/ 100</span>
                           </div>
                         </div>
                         {nota.comentario && (
@@ -421,10 +421,10 @@ export default function TeacherNotesPage() {
 
   // Datos para gráfica por categoría (mock)
   const categoryData = [
-    { categoria: 'Exámenes', promedio: 4.5 },
-    { categoria: 'Tareas', promedio: 4.3 },
-    { categoria: 'Proyectos', promedio: 4.4 },
-    { categoria: 'Participación', promedio: 4.2 }
+    { categoria: 'Exámenes', promedio: 90 },
+    { categoria: 'Tareas', promedio: 86 },
+    { categoria: 'Proyectos', promedio: 88 },
+    { categoria: 'Participación', promedio: 84 }
   ];
 
   return (
@@ -475,7 +475,7 @@ export default function TeacherNotesPage() {
                       interval={0}
                     />
                     <YAxis 
-                      domain={[0, 5]}
+                      domain={[0, 100]}
                       stroke="rgba(255,255,255,0.5)"
                       tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
                       width={40}
@@ -523,7 +523,7 @@ export default function TeacherNotesPage() {
                       interval={0}
                     />
                     <YAxis 
-                      domain={[0, 5]}
+                      domain={[0, 100]}
                       stroke="rgba(255,255,255,0.5)"
                       tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
                       width={40}
@@ -583,14 +583,14 @@ export default function TeacherNotesPage() {
                     </TableCell>
                     <TableCell className="text-white">
                       <span className="text-lg font-semibold">{student.promedio.toFixed(1)}</span>
-                      <span className="text-white/50 text-sm ml-1">/ 5.0</span>
+                      <span className="text-white/50 text-sm ml-1">/ 100</span>
                     </TableCell>
                     <TableCell className="text-white">
                       <span className="font-medium">{student.ultimaNota.toFixed(1)}</span>
-                      <span className="text-white/50 text-sm ml-1">/ 5.0</span>
+                      <span className="text-white/50 text-sm ml-1">/ 100</span>
                     </TableCell>
                     <TableCell>
-                      <Badge className={student.promedio >= 4.0 ? 'bg-green-500/20 text-green-400 border-green-500/40' : student.promedio >= 3.0 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'}>
+                      <Badge className={student.promedio >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : student.promedio >= 50 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'}>
                         {student.promedio >= 4.0 ? 'Excelente' : student.promedio >= 3.0 ? 'Bueno' : 'Requiere Atención'}
                       </Badge>
                     </TableCell>
@@ -652,7 +652,7 @@ export default function TeacherNotesPage() {
                     <Badge className={student.estado === 'activo' ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'}>
                       {student.estado}
                     </Badge>
-                    <Badge className={student.promedio >= 4.0 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
+                    <Badge className={student.promedio >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
                       Promedio: {student.promedio.toFixed(1)}
                     </Badge>
                   </div>

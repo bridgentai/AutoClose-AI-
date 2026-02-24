@@ -2,7 +2,7 @@ import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth';
 import { Course } from '../models/Course';
 import { User } from '../models/User';
-import { Nota, Assignment } from '../models';
+import { Nota, Assignment, Materia } from '../models';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 
 const router = express.Router();
@@ -338,7 +338,7 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
     }
 
     const notas = await Nota.find({ estudianteId: normalizedEstudianteId })
-      .populate('tareaId', 'titulo descripcion courseId materiaId fechaEntrega submissions')
+      .populate('tareaId', 'titulo descripcion curso cursoId courseId materiaId fechaEntrega submissions')
       .populate('profesorId', 'nombre')
       .sort({ fecha: -1 })
       .lean();
@@ -347,15 +347,22 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
     for (const nota of notas) {
       const tarea = nota.tareaId as any;
       if (!tarea) continue;
-      const materiaId = tarea.materiaId || tarea.courseId;
-      if (!materiaId) continue;
-      const materiaIdStr = materiaId.toString();
+      const courseIdRef = tarea.cursoId || tarea.courseId || tarea.materiaId;
+      if (!courseIdRef) continue;
+      const materiaIdStr = courseIdRef.toString();
       if (!notasPorMateria[materiaIdStr]) {
-        const materia = await Course.findById(materiaId).select('nombre colorAcento icono').lean();
+        const idParaCourse = tarea.cursoId || tarea.courseId;
+        const courseDoc = idParaCourse
+          ? await Course.findById(idParaCourse).select('nombre colorAcento icono').lean()
+          : null;
+        const materiaDoc = !(courseDoc as any)?.nombre && tarea.materiaId
+          ? await Materia.findById(tarea.materiaId).select('nombre').lean()
+          : null;
+        const nombre = (courseDoc as any)?.nombre || (materiaDoc as any)?.nombre || 'Materia';
         notasPorMateria[materiaIdStr] = {
           _id: materiaIdStr,
-          nombre: materia?.nombre || 'Materia',
-          colorAcento: materia?.colorAcento || '#9f25b8',
+          nombre,
+          colorAcento: (courseDoc as any)?.colorAcento || '#9f25b8',
           notas: [],
           promedio: 0,
         };
@@ -375,9 +382,11 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
       const promedio = materia.notas.length ? materia.notas.reduce((s: number, n: any) => s + n.nota, 0) / materia.notas.length : 0;
       return {
         ...materia,
-        promedio: promedio / 20,
-        ultimaNota: materia.notas[0] ? materia.notas[0].nota / 20 : 0,
+        promedio,
+        ultimaNota: materia.notas[0] ? materia.notas[0].nota : 0,
         estado: promedio >= 90 ? 'excelente' : promedio >= 70 ? 'bueno' : promedio >= 50 ? 'regular' : 'bajo',
+        tendencia: 'stable',
+        profesorNombre: materia.notas.length > 0 ? (materia.notas[0].profesorNombre || null) : null,
       };
     });
     return res.json({ materias, total: materias.length });
@@ -417,7 +426,7 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
     let notas = await Nota.find({
       estudianteId: normalizedEstudianteId,
     })
-    .populate('tareaId', 'titulo descripcion curso courseId materiaId fechaEntrega submissions')
+    .populate('tareaId', 'titulo descripcion curso cursoId courseId materiaId fechaEntrega submissions')
     .populate('profesorId', 'nombre')
     .sort({ fecha: -1 })
     .lean();
@@ -432,23 +441,30 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
       };
       if (colegioId) assignmentQuery.colegioId = colegioId;
       const assignments = await Assignment.find(assignmentQuery)
-        .select('titulo curso courseId materiaId profesorId submissions')
+        .select('titulo curso cursoId courseId materiaId profesorId submissions')
         .populate('profesorId', 'nombre')
         .sort({ fechaEntrega: -1 })
         .lean();
       for (const tarea of assignments as any[]) {
         const sub = tarea.submissions?.find((s: any) => s.estudianteId?.toString() === normalizedEstudianteId);
         if (!sub || sub.calificacion == null) continue;
-        const courseId = tarea.courseId || tarea.materiaId;
-        if (!courseId) continue;
-        const materiaIdStr = courseId.toString();
+        const courseIdRef = tarea.cursoId || tarea.courseId || tarea.materiaId;
+        if (!courseIdRef) continue;
+        const materiaIdStr = courseIdRef.toString();
         if (!notasPorMateria[materiaIdStr]) {
-          const materia = await Course.findById(materiaIdStr).select('nombre colorAcento icono').lean();
+          const idParaCourse = tarea.cursoId || tarea.courseId;
+          const courseDoc = idParaCourse
+            ? await Course.findById(idParaCourse).select('nombre colorAcento icono').lean()
+            : null;
+          const materiaDoc = !(courseDoc as any)?.nombre && tarea.materiaId
+            ? await Materia.findById(tarea.materiaId).select('nombre').lean()
+            : null;
+          const nombre = (courseDoc as any)?.nombre || (materiaDoc as any)?.nombre || 'Materia';
           notasPorMateria[materiaIdStr] = {
             _id: materiaIdStr,
-            nombre: materia?.nombre || 'Materia',
-            colorAcento: materia?.colorAcento || '#9f25b8',
-            icono: materia?.icono,
+            nombre,
+            colorAcento: (courseDoc as any)?.colorAcento || '#9f25b8',
+            icono: (courseDoc as any)?.icono,
             notas: [],
             promedio: 0,
           };
@@ -469,18 +485,25 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
         const tarea = nota.tareaId as any;
         if (!tarea) continue;
 
-        const materiaId = tarea.materiaId || tarea.courseId;
-        if (!materiaId) continue;
+        const courseIdRef = tarea.cursoId || tarea.courseId || tarea.materiaId;
+        if (!courseIdRef) continue;
 
-        const materiaIdStr = materiaId.toString();
+        const materiaIdStr = courseIdRef.toString();
 
         if (!notasPorMateria[materiaIdStr]) {
-          const materia = await Course.findById(materiaId).select('nombre colorAcento icono').lean();
+          const idParaCourse = tarea.cursoId || tarea.courseId;
+          const courseDoc = idParaCourse
+            ? await Course.findById(idParaCourse).select('nombre colorAcento icono').lean()
+            : null;
+          const materiaDoc = !(courseDoc as any)?.nombre && tarea.materiaId
+            ? await Materia.findById(tarea.materiaId).select('nombre').lean()
+            : null;
+          const nombre = (courseDoc as any)?.nombre || (materiaDoc as any)?.nombre || 'Materia';
           notasPorMateria[materiaIdStr] = {
             _id: materiaIdStr,
-            nombre: materia?.nombre || 'Materia desconocida',
-            colorAcento: materia?.colorAcento || '#9f25b8',
-            icono: materia?.icono,
+            nombre,
+            colorAcento: (courseDoc as any)?.colorAcento || '#9f25b8',
+            icono: (courseDoc as any)?.icono,
             notas: [],
             promedio: 0,
           };
@@ -507,7 +530,7 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
       }
     }
 
-    // Calcular promedios por materia
+    // Calcular promedios por materia (escala 0-100) y añadir profesor
     const materias = Object.values(notasPorMateria).map((materia: any) => {
       const promedio = materia.notas.length > 0
         ? materia.notas.reduce((sum: number, n: any) => sum + n.nota, 0) / materia.notas.length
@@ -515,10 +538,11 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
 
       return {
         ...materia,
-        promedio: promedio / 20,
-        ultimaNota: materia.notas.length > 0 ? materia.notas[0].nota / 20 : 0,
+        promedio,
+        ultimaNota: materia.notas.length > 0 ? materia.notas[0].nota : 0,
         estado: promedio >= 90 ? 'excelente' : promedio >= 70 ? 'bueno' : promedio >= 50 ? 'regular' : 'bajo',
         tendencia: 'stable',
+        profesorNombre: materia.notas.length > 0 ? (materia.notas[0].profesorNombre || null) : null,
       };
     });
 

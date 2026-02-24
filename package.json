@@ -13,7 +13,9 @@
     "test:e2e:crear-datos": "playwright test e2e/piloto-crear-datos.spec.ts",
     "test:e2e:curso-operativo": "playwright test e2e/piloto-curso-operativo.spec.ts",
     "test:e2e:curso-corto": "playwright test e2e/piloto-curso-corto.spec.ts",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "seed:bodytech": "tsx server/scripts/seed-bodytech-courses.ts",
+    "seed:bodytech:reset": "tsx server/scripts/reset-and-seed-bodytech.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -125,9 +125,24 @@ router.post('/generar-por-curso', protect, async (req: AuthRequest, res) => {
     })
       .select('estudianteId')
       .lean();
-    const estudianteIds = groupStudents
-      .map((gs) => (gs as { estudianteId: Types.ObjectId }).estudianteId)
-      .filter(Boolean);
+    const nombreGrupoForQuery = (grupo as { nombre: string }).nombre;
+    const idsFromGroupStudent = new Set(
+      groupStudents
+        .map((gs) => (gs as { estudianteId: Types.ObjectId }).estudianteId?.toString())
+        .filter(Boolean)
+    );
+    // Incluir también estudiantes con User.curso = este grupo (misma lógica que GET /api/groups/:id/students)
+    const usuariosConCurso = await User.find({
+      rol: 'estudiante',
+      colegioId,
+      $or: [
+        { curso: grupoNombreNorm },
+        { curso: nombreGrupoForQuery },
+        { curso: nombreGrupoForQuery.toLowerCase() },
+      ],
+    }).select('_id').lean();
+    usuariosConCurso.forEach((u) => idsFromGroupStudent.add((u as any)._id.toString()));
+    const estudianteIds = [...idsFromGroupStudent];
     if (estudianteIds.length === 0) {
       return res.status(400).json({ message: 'El curso no tiene estudiantes asignados.' });
     }

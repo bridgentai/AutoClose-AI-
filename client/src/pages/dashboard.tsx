@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -246,13 +246,35 @@ function EstudianteDashboard() {
   const RED_ALERT = 'text-red-400';
   const YELLOW_TROPHY = '#facc15';
 
-  // Query para obtener tareas del estudiante
+  // Query para obtener tareas del estudiante (todas; el calendario filtra por mes en cliente)
   const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
     queryKey: ['studentAssignments', user?.curso],
     queryFn: () => apiRequest('GET', '/api/assignments/student'),
     enabled: !!user?.id && !!user?.curso,
     staleTime: 0,
   });
+
+  const now = new Date();
+  const assignmentsThisMonth = useMemo(() => {
+    const m = now.getMonth();
+    const y = now.getFullYear();
+    return assignments.filter((a) => {
+      const d = new Date(a.fechaEntrega);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+  }, [assignments]);
+
+  // Notas del estudiante (misma fuente que Mis Notas): para contar materias perdidas (promedio < 65)
+  const { data: notesData } = useQuery<{ materias: { promedio: number }[]; total: number }>({
+    queryKey: ['studentNotes', user?.id],
+    queryFn: () => apiRequest('GET', '/api/student/notes'),
+    enabled: !!user?.id && user?.rol === 'estudiante',
+    staleTime: 0,
+  });
+  const materiasPerdidas = useMemo(
+    () => (notesData?.materias ?? []).filter((m) => m.promedio < 65).length,
+    [notesData?.materias]
+  );
 
   const handleDayClick = (assignment: Assignment) => {
     setLocation(`/assignment/${assignment._id}`);
@@ -287,7 +309,7 @@ function EstudianteDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
-            <p className="text-xs text-white/60 mt-1">Por entregar esta semana</p>
+            <p className="text-xs text-white/60 mt-1">Tareas asignadas</p>
           </CardContent>
         </Card>
 
@@ -301,8 +323,10 @@ function EstudianteDashboard() {
             <AlertTriangle className={`w-5 h-5 ${RED_ALERT} animate-pulse-glow`} />
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold ${RED_ALERT} font-['Poppins']`}>2</div>
-            <p className="text-xs text-white/60 mt-1">Requieren atencion</p>
+            <div className={`text-3xl font-bold ${RED_ALERT} font-['Poppins']`}>
+              {notesData === undefined ? '—' : materiasPerdidas}
+            </div>
+            <p className="text-xs text-white/60 mt-1">Requieren atención (promedio menor a 65)</p>
           </CardContent>
         </Card>
 
@@ -333,7 +357,7 @@ function EstudianteDashboard() {
             <CardDescription className="text-white/60 text-expressive-subtitle">
               {isLoadingAssignments
                 ? 'Cargando tareas...'
-                : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
+                : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
               }
             </CardDescription>
           </CardHeader>
@@ -486,8 +510,8 @@ function DirectivoDashboard() {
   const [, setLocation] = useLocation();
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="flex flex-col gap-6 min-h-[calc(100vh-18rem)]">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-shrink-0">
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
@@ -541,7 +565,7 @@ function DirectivoDashboard() {
         </Card>
       </div>
 
-      <div className="reveal-fade" style={{ animationDelay: '0.5s' }}>
+      <div className="flex-1 min-h-0 reveal-fade" style={{ animationDelay: '0.5s' }}>
         <AIChatBox rol="directivo" />
       </div>
     </div>
@@ -1103,6 +1127,16 @@ function PadreDashboard() {
   const promedioDisplay = promedioGeneral.toFixed(1);
   const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
 
+  const now = new Date();
+  const assignmentsThisMonth = useMemo(() => {
+    const m = now.getMonth();
+    const y = now.getFullYear();
+    return assignments.filter((a) => {
+      const d = new Date(a.fechaEntrega);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+  }, [assignments]);
+
   const handleDayClick = (assignment: Assignment) => {
     setLocation(`/assignment/${assignment._id}`);
   };
@@ -1135,23 +1169,23 @@ function PadreDashboard() {
             <GraduationCap className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
-            <p className="text-xs text-white/60 mt-1">Tareas este mes</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{assignmentsThisMonth.length}</div>
+            <p className="text-xs text-white/60 mt-1">Tareas este mes (solo visualización)</p>
           </CardContent>
         </Card>
 
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.3s' }}
-          onClick={() => setLocation('/parent')}
+          onClick={() => setLocation('/parent/materias')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias de {nombreHijo}</CardTitle>
             <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{notasData?.total ?? 0}</div>
-            <p className="text-xs text-white/60 mt-1">Materias activas</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{materias.length}</div>
+            <p className="text-xs text-white/60 mt-1">Materias activas (solo visualización)</p>
           </CardContent>
         </Card>
 
@@ -1183,17 +1217,17 @@ function PadreDashboard() {
                 <p className="text-white/60 py-4">No hay notas cargadas aún. {!primerHijoId && 'Vincula un estudiante en tu perfil.'}</p>
               ) : (
                 materias.map((materia, index) => {
-                  const score = materia.ultimaNota ?? materia.promedio / 20;
-                  const widthPercent = Math.min(100, (score / 5.0) * 100);
+                  const score = materia.ultimaNota ?? materia.promedio;
+                  const widthPercent = Math.min(100, score);
                   return (
                     <div
-                      key={materia.nombre}
+                      key={materia._id || materia.nombre}
                       className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue"
                       style={{ animationDelay: `${0.7 + index * 0.1}s` }}
                     >
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-white font-medium text-expressive-subtitle">{materia.nombre}</span>
-                        <span className="text-[#ffd700] font-bold font-['Poppins']">{(score || 0).toFixed(1)}/5.0</span>
+                        <span className="text-[#ffd700] font-bold font-['Poppins']">{Math.round(score || 0)}/100</span>
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
                         <div
@@ -1212,30 +1246,22 @@ function PadreDashboard() {
           </CardContent>
         </Card>
 
-        {assignments.length > 0 ? (
-          <Card
-            className={`${CARD_STYLE} cursor-pointer`}
-            onClick={() => setLocation('/calendar')}
-          >
-            <CardHeader>
-              <CardTitle className="text-white">Tareas de {nombreHijo}</CardTitle>
-              <CardDescription className="text-white/60">
-                Calendario del mes (solo visualización)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div onClick={(e) => e.stopPropagation()}>
-                <Calendar assignments={assignments} onDayClick={handleDayClick} />
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className={CARD_STYLE}>
-            <CardContent className="py-12 text-center">
-              <p className="text-white/60">No hay tareas este mes para {nombreHijo}.</p>
-            </CardContent>
-          </Card>
-        )}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/calendar')}
+        >
+          <CardHeader>
+            <CardTitle className="text-white">Tareas de {nombreHijo}</CardTitle>
+            <CardDescription className="text-white/60">
+              Calendario (igual que el de tu hijo, solo visualización)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Calendar assignments={assignments} onDayClick={handleDayClick} />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <AIChatBox rol="padre" />

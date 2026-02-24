@@ -177,7 +177,7 @@ export default function BoletínPage() {
       <Card className={CARD_STYLE}>
         <CardHeader>
           <CardTitle className="text-white font-['Poppins']">Calificaciones</CardTitle>
-          <CardDescription className="text-white/60">Escala 0.0 - 5.0</CardDescription>
+          <CardDescription className="text-white/60">Escala 0 - 100</CardDescription>
         </CardHeader>
         <CardContent>
           {materias.length === 0 ? (
@@ -189,7 +189,7 @@ export default function BoletínPage() {
                   <thead>
                     <tr className="border-b border-white/10">
                       <th className="py-3 px-4 text-white font-['Poppins']">Materia</th>
-                      <th className="py-3 px-4 text-white font-['Poppins']">Promedio (0-5)</th>
+                      <th className="py-3 px-4 text-white font-['Poppins']">Promedio (0-100)</th>
                       <th className="py-3 px-4 text-white font-['Poppins']">Estado</th>
                     </tr>
                   </thead>

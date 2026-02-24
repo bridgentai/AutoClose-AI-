@@ -171,12 +171,36 @@ export function AdminGeneralColegioDashboard() {
       return usuarios;
     }
     const termino = searchTerm.toLowerCase().trim();
-    return usuarios.filter(usuario => 
+    return usuarios.filter(usuario =>
       usuario.nombre.toLowerCase().includes(termino) ||
       usuario.email.toLowerCase().includes(termino) ||
       (usuario.curso && usuario.curso.toLowerCase().includes(termino))
     );
   }, [usuarios, searchTerm]);
+
+  // Ordenar: estudiantes por curso (grado 9→12) y luego alfabético por nombre; resto por nombre
+  const usuariosOrdenados = useMemo(() => {
+    const list = [...usuariosFiltrados];
+    if (activeTab === 'estudiantes') {
+      const ordenCurso = (curso: string | undefined): [number, string] => {
+        if (!curso || !curso.trim()) return [0, ''];
+        const match = curso.trim().match(/^(\d+)(.*)$/);
+        const grado = match ? parseInt(match[1], 10) : 0;
+        const letra = (match && match[2]) ? match[2].toUpperCase() : '';
+        return [grado, letra];
+      };
+      list.sort((a, b) => {
+        const [gA, lA] = ordenCurso(a.curso);
+        const [gB, lB] = ordenCurso(b.curso);
+        if (gA !== gB) return gA - gB;
+        if (lA !== lB) return lA.localeCompare(lB);
+        return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+      });
+    } else {
+      list.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+    }
+    return list;
+  }, [usuariosFiltrados, activeTab]);
 
   // Limpiar búsqueda cuando cambia el tab
   useEffect(() => {
@@ -779,7 +803,8 @@ export function AdminGeneralColegioDashboard() {
                 ) : (
                   <>
                     <div className="text-sm text-white/60 mb-2">
-                      Mostrando {usuariosFiltrados.length} de {usuarios.length} {activeTab}
+                      Mostrando {usuariosOrdenados.length} de {usuarios.length} {activeTab}
+                      {activeTab === 'estudiantes' && ' (orden: curso 9→12, luego alfabético por nombre)'}
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full">
@@ -797,7 +822,7 @@ export function AdminGeneralColegioDashboard() {
                           </tr>
                         </thead>
                         <tbody>
-                          {usuariosFiltrados.map((usuario) => (
+                          {usuariosOrdenados.map((usuario) => (
                             <tr
                               key={usuario._id}
                               className="border-b border-white/5 cursor-pointer hover:bg-white/5 transition-colors"

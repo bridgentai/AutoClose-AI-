@@ -12,11 +12,6 @@ const navigationItems = [
     icon: BookOpen,
   },
   {
-    title: "Creación de Cursos",
-    path: "/directivo/academia/cursos",
-    icon: BookOpen,
-  },
-  {
     title: "Asignación de Profesores",
     path: "/directivo",
     icon: Users,
