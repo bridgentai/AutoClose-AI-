@@ -14,7 +14,14 @@ import {
   CheckCircle2,
   Compass,
   Clock,
-  TrendingUp
+  TrendingUp,
+  User,
+  Settings,
+  Truck,
+  Wallet,
+  Apple,
+  Coffee,
+  UserCog
 } from 'lucide-react';
 
 export default function Home() {
@@ -309,50 +316,110 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              {
-                role: "Estudiantes",
-                icon: GraduationCap,
-                benefits: ["Asistencia personalizada", "Materiales organizados", "Seguimiento de progreso"]
-              },
-              {
-                role: "Profesores",
-                icon: BookOpen,
-                benefits: ["Gestión de cursos", "Creación de materiales", "Análisis de estudiantes"]
-              },
-              {
-                role: "Directivos",
-                icon: BarChart3,
-                benefits: ["Métricas institucionales", "Configuración global", "Reportes automáticos"]
-              },
-              {
-                role: "Padres",
-                icon: Users,
-                benefits: ["Seguimiento en tiempo real", "Comunicación directa", "Notificaciones"]
-              }
-            ].map((roleCard, idx) => {
-              const Icon = roleCard.icon;
-              return (
-                <div
-                  key={idx}
-                  className="backdrop-blur-xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-2xl p-6"
-                >
-                  <div className="w-12 h-12 bg-[#1e3cff]/20 rounded-xl flex items-center justify-center mb-4">
-                    <Icon className="w-6 h-6 text-[#1e3cff]" />
+          <div className="space-y-6">
+            {/* Primeras 8 tarjetas en grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {[
+                {
+                  role: "Estudiantes",
+                  icon: GraduationCap,
+                  benefits: ["Asistencia personalizada", "Materiales organizados", "Seguimiento de progreso"]
+                },
+                {
+                  role: "Profesores",
+                  icon: BookOpen,
+                  benefits: ["Gestión de cursos", "Creación de materiales", "Análisis de estudiantes"]
+                },
+                {
+                  role: "Directivos",
+                  icon: BarChart3,
+                  benefits: ["Métricas institucionales", "Configuración global", "Reportes automáticos"]
+                },
+                {
+                  role: "Padres",
+                  icon: User,
+                  benefits: ["Seguimiento en tiempo real", "Comunicación directa", "Notificaciones"]
+                },
+                {
+                  role: "Administrador General",
+                  icon: Settings,
+                  benefits: ["Gestión completa del colegio", "Configuración del sistema", "Control de usuarios"]
+                },
+                {
+                  role: "Transporte",
+                  icon: Truck,
+                  benefits: ["Gestión de rutas", "Control de permisos", "Seguimiento de vehículos"]
+                },
+                {
+                  role: "Tesorería",
+                  icon: Wallet,
+                  benefits: ["Gestión de pagos", "Reportes financieros", "Control de facturación"]
+                },
+                {
+                  role: "Nutrición",
+                  icon: Apple,
+                  benefits: ["Planificación de menús", "Seguimiento nutricional", "Control de dietas"]
+                }
+              ].map((roleCard, idx) => {
+                const Icon = roleCard.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="backdrop-blur-xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-2xl p-6 hover:border-[#1e3cff]/50 transition-all"
+                  >
+                    <div className="w-12 h-12 bg-[#1e3cff]/20 rounded-xl flex items-center justify-center mb-4">
+                      <Icon className="w-6 h-6 text-[#1e3cff]" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-4">{roleCard.role}</h3>
+                    <ul className="space-y-2">
+                      {roleCard.benefits.map((benefit, bidx) => (
+                        <li key={bidx} className="flex items-start gap-2 text-white/70 text-sm">
+                          <CheckCircle2 className="w-4 h-4 text-[#1e3cff] flex-shrink-0 mt-0.5" />
+                          <span>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-4">{roleCard.role}</h3>
-                  <ul className="space-y-2">
-                    {roleCard.benefits.map((benefit, bidx) => (
-                      <li key={bidx} className="flex items-start gap-2 text-white/70 text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-[#1e3cff] flex-shrink-0 mt-0.5" />
-                        <span>{benefit}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            
+            {/* Últimas 2 tarjetas centradas */}
+            <div className="flex flex-wrap justify-center gap-6">
+              {[
+                {
+                  role: "Cafetería",
+                  icon: Coffee,
+                  benefits: ["Gestión de pedidos", "Control de inventario", "Reportes de ventas"]
+                },
+                {
+                  role: "Asistente",
+                  icon: UserCog,
+                  benefits: ["Apoyo administrativo", "Gestión de secciones", "Coordinación académica"]
+                }
+              ].map((roleCard, idx) => {
+                const Icon = roleCard.icon;
+                return (
+                  <div
+                    key={idx}
+                    className="backdrop-blur-xl bg-gradient-to-br from-white/5 to-white/0 border border-white/10 rounded-2xl p-6 hover:border-[#1e3cff]/50 transition-all w-full md:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-1rem)] xl:w-[calc(25%-1.5rem)]"
+                  >
+                    <div className="w-12 h-12 bg-[#1e3cff]/20 rounded-xl flex items-center justify-center mb-4">
+                      <Icon className="w-6 h-6 text-[#1e3cff]" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-4">{roleCard.role}</h3>
+                    <ul className="space-y-2">
+                      {roleCard.benefits.map((benefit, bidx) => (
+                        <li key={bidx} className="flex items-start gap-2 text-white/70 text-sm">
+                          <CheckCircle2 className="w-4 h-4 text-[#1e3cff] flex-shrink-0 mt-0.5" />
+                          <span>{benefit}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
@@ -365,7 +432,7 @@ export default function Home() {
               {[
                 { icon: Clock, value: "24/7", label: "Disponibilidad del Asistente IA" },
                 { icon: TrendingUp, value: "100%", label: "Centralización de Herramientas" },
-                { icon: Shield, value: "4 Roles", label: "Diferentes Perfiles de Usuario" }
+                { icon: Shield, value: "10+ Roles", label: "Diferentes Perfiles de Usuario" }
               ].map((stat, idx) => {
                 const Icon = stat.icon;
                 return (
