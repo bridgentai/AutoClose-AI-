@@ -2,6 +2,7 @@ export { User } from './User';
 export { Course } from './Course';
 export { Material } from './Material';
 export { ChatSession } from './ChatSession';
+export { ChatMessage, type IChatMessage, type ChatMessageRole } from './ChatMessage';
 export { InstitutionConfig } from './InstitutionConfig';
 export { Assignment, type IAssignment, type ISubmission, type IAttachment } from './Assignment';
 export { Group } from './Group';

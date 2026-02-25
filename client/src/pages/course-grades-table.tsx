@@ -330,73 +330,96 @@ export default function CourseGradesTablePage() {
                                 <div className="inline-block min-w-full align-middle">
                                     <table className="border-collapse bg-white" style={{ width: '100%', minWidth: '800px' }}>
                                         <thead>
-                                            {/* Fila de encabezados de logros (categorías) */}
-                                            {Object.keys(assignmentsByLogro).length > 0 && (
-                                                <tr className="bg-gradient-to-r from-[#1e3cff] to-[#002366] border-b-2 border-white/30">
-                                                    <th 
-                                                        rowSpan={2}
-                                                        className="sticky left-0 z-20 bg-[#1e3cff] px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 shadow-md min-w-[180px] max-w-[180px]"
-                                                    >
+                                            {/* Fila de encabezados de logros (categorías) — todos los logros del curso */}
+                                            {Object.keys(assignmentsByLogro).length > 0 ? (
+                                                <>
+                                                    <tr className="bg-gradient-to-r from-[#1e3cff] to-[#002366] border-b-2 border-white/30">
+                                                        <th 
+                                                            rowSpan={2}
+                                                            className="sticky left-0 z-20 bg-[#1e3cff] px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 shadow-md min-w-[180px] max-w-[180px]"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <User className="w-4 h-4 text-white" />
+                                                                <span>Estudiante</span>
+                                                            </div>
+                                                        </th>
+                                                        {Object.values(assignmentsByLogro).map((grupo, grupoIdx) => {
+                                                            const colSpan = grupo.assignments.length > 0 ? grupo.assignments.length : 1;
+                                                            const isSinCategoria = grupo.logro._id === 'sin-logro';
+                                                            return (
+                                                                <th
+                                                                    key={grupo.logro._id}
+                                                                    colSpan={colSpan}
+                                                                    className={`px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 ${
+                                                                        isSinCategoria ? 'bg-amber-600/80' : grupoIdx % 2 === 0 ? 'bg-[#1e3cff]' : 'bg-[#002366]'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex flex-col items-center justify-center gap-1">
+                                                                        <span className="font-bold">{grupo.logro.nombre.toUpperCase()}</span>
+                                                                        {grupo.logro.porcentaje > 0 && (
+                                                                            <span className="text-[10px] text-white/90 font-normal">
+                                                                                {grupo.logro.porcentaje}% del total
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </th>
+                                                            );
+                                                        })}
+                                                        <th 
+                                                            rowSpan={2}
+                                                            className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider bg-[#1e3cff] min-w-[100px] max-w-[100px] border-l-2 border-white/30"
+                                                        >
+                                                            Promedio
+                                                        </th>
+                                                    </tr>
+                                                    <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
+                                                        {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
+                                                    grupo.assignments.length > 0
+                                                        ? grupo.assignments.map((assignment, idx) => {
+                                                            const isSinCategoria = grupo.logro._id === 'sin-logro';
+                                                            return (
+                                                                <th
+                                                                    key={assignment._id}
+                                                                    className={`px-2 py-2 text-center text-[10px] font-bold text-white uppercase tracking-wider border-r border-white/20 min-w-[100px] max-w-[120px] ${
+                                                                        isSinCategoria 
+                                                                            ? 'bg-amber-500/60' 
+                                                                            : idx % 2 === 0
+                                                                            ? 'bg-[#002366]'
+                                                                            : 'bg-[#003d7a]'
+                                                                    }`}
+                                                                >
+                                                                    <span className="truncate block w-full mx-auto text-[9px] leading-tight px-1">
+                                                                        {assignment.titulo}
+                                                                    </span>
+                                                                </th>
+                                                            );
+                                                        })
+                                                        : [(
+                                                            <th
+                                                                key={`empty-${grupo.logro._id}`}
+                                                                className={`px-2 py-2 text-center text-[10px] text-white/70 border-r border-white/20 min-w-[100px] max-w-[120px] ${
+                                                                    grupoIdx % 2 === 0 ? 'bg-[#002366]' : 'bg-[#003d7a]'
+                                                                }`}
+                                                            >
+                                                                —
+                                                            </th>
+                                                        )]
+                                                        )}
+                                                    </tr>
+                                                </>
+                                            ) : (
+                                                <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
+                                                    <th className="sticky left-0 z-20 bg-[#002366] px-3 py-3 text-left text-xs font-bold text-white border-r border-white/20 min-w-[180px] shadow-md">
                                                         <div className="flex items-center gap-2">
                                                             <User className="w-4 h-4 text-white" />
                                                             <span>Estudiante</span>
                                                         </div>
                                                     </th>
-                                                    {Object.values(assignmentsByLogro).map((grupo, grupoIdx) => {
-                                                        if (grupo.assignments.length === 0) return null;
-                                                        const colSpan = grupo.assignments.length;
-                                                        const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                        return (
-                                                            <th
-                                                                key={grupo.logro._id}
-                                                                colSpan={colSpan}
-                                                                className={`px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 ${
-                                                                    isSinCategoria ? 'bg-amber-600/80' : grupoIdx % 2 === 0 ? 'bg-[#1e3cff]' : 'bg-[#002366]'
-                                                                }`}
-                                                            >
-                                                                <div className="flex flex-col items-center justify-center gap-1">
-                                                                    <span className="font-bold">{grupo.logro.nombre.toUpperCase()}</span>
-                                                                    {grupo.logro.porcentaje > 0 && (
-                                                                        <span className="text-[10px] text-white/90 font-normal">
-                                                                            {grupo.logro.porcentaje}% del total
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </th>
-                                                        );
-                                                    })}
-                                                    <th 
-                                                        rowSpan={2}
-                                                        className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider bg-[#1e3cff] min-w-[100px] max-w-[100px] border-l-2 border-white/30"
-                                                    >
+                                                    <th className="px-3 py-3 text-center text-xs font-bold text-white bg-[#002366] min-w-[100px] border-l-2 border-white/30">
                                                         Promedio
                                                     </th>
                                                 </tr>
                                             )}
-                                            {/* Fila de encabezados de asignaciones individuales */}
-                                            <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
-                                                {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
-                                                    grupo.assignments.map((assignment, idx) => {
-                                                        const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                        return (
-                                                            <th
-                                                                key={assignment._id}
-                                                                className={`px-2 py-2 text-center text-[10px] font-bold text-white uppercase tracking-wider border-r border-white/20 min-w-[100px] max-w-[120px] ${
-                                                                    isSinCategoria 
-                                                                        ? 'bg-amber-500/60' 
-                                                                        : idx % 2 === 0
-                                                                        ? 'bg-[#002366]'
-                                                                        : 'bg-[#003d7a]'
-                                                                }`}
-                                                            >
-                                                                <span className="truncate block w-full mx-auto text-[9px] leading-tight px-1">
-                                                                    {assignment.titulo}
-                                                                </span>
-                                                            </th>
-                                                        );
-                                                    })
-                                                )}
-                                            </tr>
                                         </thead>
                                         <tbody>
                                             {students.map((student, studentIdx) => {
@@ -429,31 +452,42 @@ export default function CourseGradesTablePage() {
                                                             </div>
                                                         </td>
                                                         {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
-                                                            grupo.assignments.map((assignment, actIdx) => {
-                                                                const subsA = assignment.submissions || assignment.entregas || [];
-                                                                const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
-                                                                    x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
-                                                                );
-                                                                const cal = (sub as { calificacion?: number })?.calificacion;
-                                                                const displayValue = cal != null && !isNaN(cal) ? String(cal) : '--';
-                                                                const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                                return (
+                                                            grupo.assignments.length > 0
+                                                                ? grupo.assignments.map((assignment, actIdx) => {
+                                                                    const subsA = assignment.submissions || assignment.entregas || [];
+                                                                    const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
+                                                                        x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
+                                                                    );
+                                                                    const cal = (sub as { calificacion?: number })?.calificacion;
+                                                                    const displayValue = cal != null && !isNaN(cal) ? String(cal) : '--';
+                                                                    const isSinCategoria = grupo.logro._id === 'sin-logro';
+                                                                    return (
+                                                                        <td
+                                                                            key={assignment._id}
+                                                                            className={`px-2 py-2 border-r-2 border-[#002366]/30 text-center text-xs font-medium min-w-[100px] max-w-[120px] ${
+                                                                                isSinCategoria
+                                                                                    ? 'bg-amber-50 hover:bg-amber-100'
+                                                                                    : actIdx % 2 === 0 
+                                                                                    ? 'bg-white' 
+                                                                                    : 'bg-[#002366]/5'
+                                                                            } hover:bg-[#1e3cff]/10 transition-colors`}
+                                                                        >
+                                                                            <span className={displayValue === '--' ? 'text-gray-400' : 'text-[#0a0a2a] font-semibold'}>
+                                                                                {displayValue}
+                                                                            </span>
+                                                                        </td>
+                                                                    );
+                                                                })
+                                                                : [(
                                                                     <td
-                                                                        key={assignment._id}
-                                                                        className={`px-2 py-2 border-r-2 border-[#002366]/30 text-center text-xs font-medium min-w-[100px] max-w-[120px] ${
-                                                                            isSinCategoria
-                                                                                ? 'bg-amber-50 hover:bg-amber-100'
-                                                                                : actIdx % 2 === 0 
-                                                                                ? 'bg-white' 
-                                                                                : 'bg-[#002366]/5'
-                                                                        } hover:bg-[#1e3cff]/10 transition-colors`}
+                                                                        key={`empty-${grupo.logro._id}-${student._id}`}
+                                                                        className={`px-2 py-2 border-r-2 border-[#002366]/30 text-center text-xs text-gray-400 min-w-[100px] max-w-[120px] ${
+                                                                            grupoIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
+                                                                        }`}
                                                                     >
-                                                                        <span className={displayValue === '--' ? 'text-gray-400' : 'text-[#0a0a2a] font-semibold'}>
-                                                                            {displayValue}
-                                                                        </span>
+                                                                        —
                                                                     </td>
-                                                                );
-                                                            })
+                                                                )]
                                                         )}
                                                         <td className="px-2 py-2 text-center border-l-2 border-[#002366]/20 bg-[#002366]/5 min-w-[100px] max-w-[100px]">
                                                             <div className="flex items-center justify-center gap-1">

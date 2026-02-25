@@ -16,6 +16,8 @@ export interface RoleContext {
   notasRecientes?: number;
   hijos?: any[];
   permisos?: string[];
+  /** Resumen de notas de los estudiantes del profesor (solo sus cursos) */
+  resumenNotasProfesor?: { materiaNombre: string; grupo: string; notas: { estudianteNombre: string; tareaTitulo: string; nota: number; fecha?: string }[] }[];
 }
 
 /**
@@ -87,9 +89,12 @@ export async function buildProfessorContext(
     totalEstudiantes += estudiantes.length;
   }
 
+  const resumenNotasProfesor = await dataQuery.queryProfessorNotesSummary(userId, colegioId);
+
   return {
     role: 'profesor',
     cursosAsignados: cursosConGrupos,
+    resumenNotasProfesor,
     permisos: [
       'consultar_notas_curso',
       'consultar_materias',
@@ -209,6 +214,17 @@ export function formatContextForPrompt(context: RoleContext): string {
       prompt += `    - Cuando el usuario menciona cualquiera de estos grupos (${grupos}), se refiere a esta materia\n`;
     });
     prompt += `\nIMPORTANTE: Los "cursos" son los grupos (12C, 12D, etc.), NO las materias. Cuando el usuario dice "12C" o "curso 12C", se refiere al GRUPO 12C.\n`;
+  }
+
+  if (context.resumenNotasProfesor && context.resumenNotasProfesor.length > 0) {
+    prompt += `\n- NOTAS DE TUS ESTUDIANTES (solo de tus cursos):\n`;
+    context.resumenNotasProfesor.forEach((materia: any) => {
+      prompt += `  * ${materia.materiaNombre} (grupo ${materia.grupo}):\n`;
+      materia.notas.forEach((n: any) => {
+        prompt += `    - ${n.estudianteNombre}: "${n.tareaTitulo}" = ${n.nota}${n.fecha ? ` (${n.fecha})` : ''}\n`;
+      });
+    });
+    prompt += `\nUsa esta información cuando te pregunten por notas, promedios o rendimiento de sus estudiantes.\n`;
   }
   
   if (context.tareasPendientes !== undefined) {

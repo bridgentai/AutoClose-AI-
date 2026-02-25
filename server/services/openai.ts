@@ -149,8 +149,8 @@ Importante:
 }
 
 /**
- * Genera una respuesta de IA con Function Calling
- * Permite que el AI ejecute acciones en el sistema
+ * Genera una respuesta de IA con Function Calling.
+ * Recibe historial + mensaje actual y construye [system, ...historial, userMessage]. Roles en minúscula.
  */
 export async function generateAIResponseWithFunctions(
   userMessage: string,
@@ -165,65 +165,29 @@ export async function generateAIResponseWithFunctions(
   }
 
   try {
-    // Construir contexto del rol
     const roleContext = await buildRoleContext(userId, role, colegioId);
     const contextPrompt = formatContextForPrompt(roleContext);
-
-    // Construir system prompt dinámico según rol
     const systemPrompt = buildSystemPrompt(role, roleContext) + contextPrompt;
-
-    // Obtener herramientas disponibles según rol
     const tools = getOpenAITools(role);
-    
-    // Log para debugging
-    console.log(`[OpenAI] Rol: ${role}, Herramientas disponibles:`, tools.map(t => t.function?.name || 'unknown'));
-    if (role === 'padre') {
-      console.log('[OpenAI] ========== DEBUG PADRE ==========');
-      console.log('[OpenAI] Total de herramientas para padre:', tools.length);
-      console.log('[OpenAI] Nombres de herramientas:', tools.map(t => t.function?.name).join(', '));
-      const crearPermisoTool = tools.find(t => t.function?.name === 'crear_permiso');
-      if (crearPermisoTool) {
-        console.log('[OpenAI] ✅ crear_permiso está disponible para padre');
-        console.log('[OpenAI] Descripción de crear_permiso:', crearPermisoTool.function?.description?.substring(0, 100));
-      } else {
-        console.log('[OpenAI] ❌ ERROR: crear_permiso NO está disponible para padre');
-        console.log('[OpenAI] Esto es un ERROR CRÍTICO - la función debería estar disponible');
-      }
-      console.log('[OpenAI] =================================');
-    }
 
-    // Construir mensajes
-    const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
+    const historialNormalizado = conversationHistory.map((m) => ({
+      role: (String(m.role ?? 'user').toLowerCase()) as 'user' | 'assistant',
+      content: m.content ?? '',
+    }));
+
+    const messagesToSend: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
-      ...conversationHistory,
-      { role: 'user', content: userMessage }
+      ...historialNormalizado,
+      { role: 'user', content: userMessage ?? '' },
     ];
 
-    console.log('[OpenAI] Total de mensajes a enviar:', messages.length);
-    console.log('[OpenAI] Historial incluido:', conversationHistory.length, 'mensajes');
-    console.log('[OpenAI] Mensaje actual del usuario:', userMessage.substring(0, 100));
-    
-    // Verificar que el historial se esté pasando correctamente
-    if (conversationHistory.length === 0 && messages.length === 2) {
-      console.log('[OpenAI] ⚠️ ADVERTENCIA: No hay historial de conversación. El AI no tendrá contexto de mensajes anteriores.');
-    } else if (conversationHistory.length > 0) {
-      console.log('[OpenAI] ✅ Historial correcto. El AI tendrá contexto de', conversationHistory.length, 'mensajes anteriores.');
-      console.log('[OpenAI] Resumen del historial:');
-      conversationHistory.forEach((msg, idx) => {
-        const preview = msg.content.length > 60 ? msg.content.substring(0, 60) + '...' : msg.content;
-        console.log(`  [${idx + 1}] ${msg.role}: ${preview}`);
-      });
-    }
-    
-    // Log del system prompt para debugging (solo primeros 500 caracteres)
-    if (role === 'padre') {
-      console.log('[OpenAI] System prompt (primeros 500 chars):', systemPrompt.substring(0, 500));
-    }
+    console.log('==== MENSAJES ENVIADOS AL MODELO ====');
+    console.log(JSON.stringify(messagesToSend, null, 2));
+    console.log('=====================================');
 
-    // Primera llamada a OpenAI
     let response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
-      messages: messages as any,
+      messages: messagesToSend as any,
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? 'auto' : undefined,
       max_completion_tokens: 2000,
@@ -237,7 +201,7 @@ export async function generateAIResponseWithFunctions(
     // Procesar function calls si existen
     while (functionCalls.length > 0) {
       // Agregar la respuesta del asistente con function calls
-      messages.push({
+      messagesToSend.push({
         role: 'assistant',
         content: finalResponse || null,
         tool_calls: functionCalls.map((call: any) => ({
@@ -300,12 +264,12 @@ export async function generateAIResponseWithFunctions(
       );
 
       // Agregar resultados de funciones
-      messages.push(...functionResults as any);
+      messagesToSend.push(...functionResults as any);
 
       // Llamar nuevamente a OpenAI con los resultados
       response = await openaiClient.chat.completions.create({
         model: 'gpt-4o',
-        messages: messages as any,
+        messages: messagesToSend as any,
         tools: tools.length > 0 ? tools : undefined,
         tool_choice: tools.length > 0 ? 'auto' : undefined,
         max_completion_tokens: 2000,
@@ -319,7 +283,8 @@ export async function generateAIResponseWithFunctions(
     if (executedActions.length > 0) {
       return {
         response: finalResponse || 'Lo siento, no pude generar una respuesta.',
-        executedActions: executedActions
+        executedActions: executedActions,
+        actionData: Object.keys(actionData).length > 0 ? actionData : undefined,
       };
     }
     
