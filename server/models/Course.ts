@@ -15,6 +15,8 @@ interface ICourse {
   colorAcento?: string;
   icono?: string;
   createdAt: Date;
+  /** Optional grading schema (new engine); when set, categories and GradeEvents are used. */
+  gradingSchemaId?: Types.ObjectId;
 }
 
 const courseSchema = new Schema<ICourse>({
@@ -31,6 +33,7 @@ const courseSchema = new Schema<ICourse>({
   colorAcento: { type: String, default: '#9f25b8' },
   icono: { type: String },
   createdAt: { type: Date, default: Date.now },
+  gradingSchemaId: { type: Schema.Types.ObjectId, ref: 'grading_schemas' },
 });
 
 export const Course = model<ICourse>('cursos', courseSchema);

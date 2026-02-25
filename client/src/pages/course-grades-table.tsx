@@ -291,6 +291,22 @@ export default function CourseGradesTablePage() {
                                     variant="outline"
                                     size="sm"
                                     className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
+                                    onClick={() => setLocation(`/course/${cursoId}/grades/input`)}
+                                >
+                                    Vista por categorías
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
+                                    onClick={() => setLocation(`/course/${cursoId}/analytics`)}
+                                >
+                                    Vista analítica
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
                                     onClick={() => setLocation('/profesor/academia/calificacion/logros')}
                                 >
                                     <Percent className="w-4 h-4 mr-2" />

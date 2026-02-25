@@ -1,9 +1,11 @@
 import express from 'express';
-import { Assignment, User, Course, Nota, Materia } from '../models';
+import { Types } from 'mongoose';
+import { Assignment, User, Course, Nota, Materia, GradeEvent } from '../models';
 import type { IAssignment, ISubmission } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import { createAssignment as createAssignmentService } from '../services/assignmentService';
+import { enqueueRecalculateStudentCourse } from '../services/grading/recalculation';
 
 const router = express.Router();
 
@@ -450,6 +452,38 @@ router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
 
     if (!updateResult) {
       return res.status(404).json({ message: 'Tarea no encontrada después de actualizar.' });
+    }
+
+    // Grading engine: upsert GradeEvent and enqueue recalc (if assignment has course + category)
+    const courseId = assignment.courseId ?? assignment.materiaId;
+    const categoryId = assignment.categoryId ?? assignment.logroCalificacionId;
+    const colegioId = assignment.colegioId;
+    if (courseId && categoryId && colegioId) {
+      const maxScore = assignment.maxScore ?? 100;
+      const normalizedScore = maxScore > 0 ? (calificacion / maxScore) * 100 : 0;
+      await GradeEvent.findOneAndUpdate(
+        {
+          studentId: normalizedEstudianteId,
+          courseId: new Types.ObjectId(courseId),
+          assignmentId: assignment._id,
+          colegioId,
+        },
+        {
+          $set: {
+            categoryId: new Types.ObjectId(categoryId),
+            score: calificacion,
+            maxScore,
+            normalizedScore: Math.round(normalizedScore * 100) / 100,
+            recordedAt: new Date(),
+            recordedBy: new Types.ObjectId(normalizedUserId),
+          },
+        },
+        { upsert: true }
+      );
+      enqueueRecalculateStudentCourse(
+        normalizedEstudianteId.toString(),
+        courseId.toString()
+      );
     }
 
     // Recargar el assignment para obtener los datos actualizados con todas las relaciones

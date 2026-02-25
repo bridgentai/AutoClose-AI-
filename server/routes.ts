@@ -28,6 +28,8 @@ import treasuryRoutes from "./routes/treasury";
 import messagesRoutes from "./routes/messages";
 import boletinRoutes from "./routes/boletin";
 import logrosCalificacionRoutes from "./routes/logrosCalificacion";
+import gradeEventsRoutes from "./routes/gradeEvents";
+import gradingSchemaRoutes from "./routes/gradingSchema";
 import auditRoutes from "./routes/audit";
 import reportsRoutes from "./routes/reports";
 
@@ -66,6 +68,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/messages', messagesRoutes);
   app.use('/api/boletin', boletinRoutes);
   app.use('/api/logros-calificacion', logrosCalificacionRoutes);
+  app.use('/api/grade-events', gradeEventsRoutes);
+  app.use('/api/grading-schemas', gradingSchemaRoutes);
   app.use('/api/audit', auditRoutes);
   app.use('/api/reports', reportsRoutes);
 

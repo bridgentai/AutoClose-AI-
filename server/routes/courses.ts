@@ -1,10 +1,19 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { Course, User } from '../models';
+import {
+  Course,
+  User,
+  GradingSchemaModel,
+  Category,
+  PerformanceSnapshot,
+  PerformanceForecast,
+  RiskAssessment,
+} from '../models';
 import { Group } from '../models/Group';
 import { protect, AuthRequest, checkAdminColegioOnly } from '../middleware/auth';
 import { Types } from 'mongoose';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import { logAdminAction } from '../services/auditLogger';
+import { runAcademicInsightEngine } from '../services/grading/intelligence/insightEngine';
 
 const router = express.Router();
 
@@ -151,6 +160,174 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
   } catch (error: any) {
     console.error('Error al obtener materia:', error.message);
     res.status(500).json({ message: 'Error en el servidor al obtener la materia.' });
+  }
+});
+
+// =========================================================================
+// Grading engine: schema, snapshots, forecast, risk, insights (by courseId)
+// GET /api/courses/:id/grading-schema
+router.get('/:id/grading-schema', protect, async (req: AuthRequest, res) => {
+  try {
+    const courseId = req.params.id;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const course = await Course.findOne({
+      _id: normalizeIdForQuery(courseId),
+      colegioId,
+    }).lean();
+    if (!course) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const schema = course.gradingSchemaId
+      ? await GradingSchemaModel.findOne({
+          _id: course.gradingSchemaId,
+          colegioId,
+        }).lean()
+      : null;
+    if (!schema) return res.json({ schema: null, categories: [] });
+    const categories = await Category.find({
+      gradingSchemaId: schema._id,
+      colegioId,
+    })
+      .sort({ orden: 1 })
+      .lean();
+    return res.json({ schema, categories });
+  } catch (e: unknown) {
+    console.error('Error GET grading-schema:', e);
+    return res.status(500).json({ message: 'Error al obtener esquema de calificación.' });
+  }
+});
+
+// GET /api/courses/:id/snapshots?studentId=
+router.get('/:id/snapshots', protect, async (req: AuthRequest, res) => {
+  try {
+    const courseId = req.params.id;
+    const studentId = req.query.studentId as string | undefined;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const query: Record<string, unknown> = {
+      courseId: normalizeIdForQuery(courseId),
+      colegioId,
+    };
+    if (studentId) query.studentId = normalizeIdForQuery(studentId);
+    const snapshots = await PerformanceSnapshot.find(query)
+      .sort({ at: -1 })
+      .limit(studentId ? 20 : 50)
+      .lean();
+    return res.json(snapshots);
+  } catch (e: unknown) {
+    console.error('Error GET snapshots:', e);
+    return res.status(500).json({ message: 'Error al obtener snapshots.' });
+  }
+});
+
+// GET /api/courses/:id/forecast?studentId=
+router.get('/:id/forecast', protect, async (req: AuthRequest, res) => {
+  try {
+    const courseId = req.params.id;
+    const studentId = req.query.studentId as string | undefined;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
+    const forecast = await PerformanceForecast.findOne({
+      courseId: normalizeIdForQuery(courseId),
+      studentId: normalizeIdForQuery(studentId),
+      colegioId,
+    }).lean();
+    return res.json(forecast ?? null);
+  } catch (e: unknown) {
+    console.error('Error GET forecast:', e);
+    return res.status(500).json({ message: 'Error al obtener pronóstico.' });
+  }
+});
+
+// GET /api/courses/:id/risk?studentId=
+router.get('/:id/risk', protect, async (req: AuthRequest, res) => {
+  try {
+    const courseId = req.params.id;
+    const studentId = req.query.studentId as string | undefined;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
+    const risk = await RiskAssessment.findOne({
+      courseId: normalizeIdForQuery(courseId),
+      studentId: normalizeIdForQuery(studentId),
+      colegioId,
+    })
+      .sort({ at: -1 })
+      .lean();
+    return res.json(risk ?? null);
+  } catch (e: unknown) {
+    console.error('Error GET risk:', e);
+    return res.status(500).json({ message: 'Error al obtener riesgo.' });
+  }
+});
+
+// GET /api/courses/:id/insights?studentId=
+router.get('/:id/insights', protect, async (req: AuthRequest, res) => {
+  try {
+    const courseId = req.params.id;
+    const studentId = req.query.studentId as string | undefined;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
+    const course = await Course.findOne({
+      _id: normalizeIdForQuery(courseId),
+      colegioId,
+    })
+      .select('gradingSchemaId')
+      .lean();
+    const schemaId = course?.gradingSchemaId;
+    const [snapshot, forecast, risk, categories] = await Promise.all([
+      PerformanceSnapshot.findOne({
+        courseId: normalizeIdForQuery(courseId),
+        studentId: normalizeIdForQuery(studentId),
+        colegioId,
+      })
+        .sort({ at: -1 })
+        .lean(),
+      PerformanceForecast.findOne({
+        courseId: normalizeIdForQuery(courseId),
+        studentId: normalizeIdForQuery(studentId),
+        colegioId,
+      }).lean(),
+      RiskAssessment.findOne({
+        courseId: normalizeIdForQuery(courseId),
+        studentId: normalizeIdForQuery(studentId),
+        colegioId,
+      })
+        .sort({ at: -1 })
+        .lean(),
+      schemaId
+        ? Category.find({ gradingSchemaId: schemaId, colegioId }).lean()
+        : Promise.resolve([]),
+    ]);
+    const { GradeEvent } = await import('../models');
+    const gradeEvents = await GradeEvent.find({
+      courseId: normalizeIdForQuery(courseId),
+      studentId: normalizeIdForQuery(studentId),
+      colegioId,
+    })
+      .sort({ recordedAt: 1 })
+      .lean();
+    const insightResult =
+      snapshot && forecast && risk
+        ? runAcademicInsightEngine({
+            snapshot,
+            forecast,
+            risk,
+            categories: categories ?? [],
+            gradeEvents,
+          })
+        : null;
+    return res.json(
+      insightResult ?? {
+        insights: [],
+        academicStabilityIndex: undefined,
+        recoveryPotentialScore: undefined,
+      }
+    );
+  } catch (e: unknown) {
+    console.error('Error GET insights:', e);
+    return res.status(500).json({ message: 'Error al obtener insights.' });
   }
 });
 

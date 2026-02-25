@@ -41,6 +41,12 @@ export interface IAssignment {
   profesorNombre?: string;
   /** Tipo de logro de calificación (ej: Tareas, Exámenes) - usado para ponderar la nota sobre el 100% */
   logroCalificacionId?: Types.ObjectId;
+  /** New grading engine: category under GradingSchema (takes precedence when present) */
+  categoryId?: Types.ObjectId;
+  /** Max score for this assignment (default 100); used for normalization. */
+  maxScore?: number;
+  /** Whether forecast can adjust for future assignments in this category. */
+  predictiveWeightAdjustmentAllowed?: boolean;
   // Campo legacy para migración gradual
   entregas?: IEntrega[];
 }
@@ -85,6 +91,9 @@ const assignmentSchema = new Schema<IAssignment>({
   courseId: { type: Schema.Types.ObjectId, ref: 'cursos' },
   profesorNombre: { type: String },
   logroCalificacionId: { type: Schema.Types.ObjectId, ref: 'logros_calificacion' },
+  categoryId: { type: Schema.Types.ObjectId, ref: 'grading_categories' },
+  maxScore: { type: Number, default: 100 },
+  predictiveWeightAdjustmentAllowed: { type: Boolean, default: false },
   // Campo legacy para migración gradual
   entregas: { type: [entregaSchema], default: [] },
 });
