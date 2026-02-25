@@ -9,15 +9,8 @@ const AvisosNoticias: React.FC = () => {
   
   return (
     <div className="p-6">
+      <NavBackButton to="/comunidad" label="Comunidad" />
       <div className="mb-8">
-        <Button
-          variant="ghost"
-          onClick={() => setLocation('/comunidad')}
-          className="mb-4 text-white/70 hover:text-white"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Volver a Comunidad
-        </Button>
         <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
           Avisos y Noticias
         </h1>

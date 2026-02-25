@@ -176,7 +176,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       }));
 
       // Llamar al nuevo endpoint del Chat AI Global
-      const response = await apiRequest<{ success: boolean; response: string; error?: string }>('POST', '/api/ai/chat', {
+      const response = await apiRequest<{ success: boolean; response: string; error?: string; executedActions?: string[]; actionData?: Record<string, any> }>('POST', '/api/ai/chat', {
         message: currentInput,
         contexto_extra: {
           rol: user?.rol,
@@ -196,6 +196,17 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       };
 
       setMessages(prev => [...prev, aiMessage]);
+      
+      // Si se ejecutaron acciones, refrescar la página o mostrar notificación
+      if (response.executedActions && response.executedActions.length > 0) {
+        // Si se crearon logros de calificación, refrescar la página después de un breve delay
+        if (response.executedActions.includes('crear_logros_calificacion')) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        }
+      }
+      
       // Scroll después de agregar el mensaje de AI
       setTimeout(() => scrollToBottom(), 150);
     } catch (error: any) {

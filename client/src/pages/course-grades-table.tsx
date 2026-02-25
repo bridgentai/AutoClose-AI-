@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Award, User, Plus, Settings, FileText } from 'lucide-react';
+import { Award, User, Plus, Settings, Percent } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,20 @@ interface Assignment {
     profesorNombre: string;
     submissions?: Submission[];
     entregas?: Submission[];
+    logroCalificacionId?: string;
+}
+
+interface LogroCalificacion {
+    _id: string;
+    nombre: string;
+    porcentaje: number;
+    orden?: number;
+}
+
+interface LogrosResponse {
+    logros: LogroCalificacion[];
+    totalPorcentaje: number;
+    completo: boolean;
 }
 
 interface CourseSubject {
@@ -107,7 +121,7 @@ export default function CourseGradesTablePage() {
 
     const firstSubjectId = subjectsForGroup[0]?._id;
 
-    // Query 3: Tareas para tabla de notas
+    // Query 3: Asignaciones para tabla de notas
     const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
         queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
         queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
@@ -116,6 +130,118 @@ export default function CourseGradesTablePage() {
         gcTime: 5 * 60 * 1000,
     });
 
+    // Query 4: Logros de calificación para esta materia
+    const { data: logrosData, isLoading: isLoadingLogros } = useQuery<LogrosResponse>({
+        queryKey: ['/api/logros-calificacion', firstSubjectId],
+        queryFn: () =>
+            apiRequest<LogrosResponse>('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(firstSubjectId || '')}`),
+        enabled: !!firstSubjectId && user?.rol === 'profesor',
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+    });
+
+    // Agrupar asignaciones por logro y ordenar
+    const assignmentsByLogro = useMemo(() => {
+        const logros = logrosData?.logros || [];
+        // Ordenar logros por su campo 'orden' o por nombre si no tienen orden
+        const logrosOrdenados = [...logros].sort((a, b) => {
+            const ordenA = a.orden ?? 999;
+            const ordenB = b.orden ?? 999;
+            if (ordenA !== ordenB) return ordenA - ordenB;
+            return a.nombre.localeCompare(b.nombre);
+        });
+        
+        const grouped: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }> = {};
+        
+        // Inicializar grupos por logro (en orden)
+        logrosOrdenados.forEach(logro => {
+            grouped[logro._id] = { logro, assignments: [] };
+        });
+        
+        // Agregar asignaciones sin logro a un grupo especial
+        const sinLogro: Assignment[] = [];
+        
+        assignmentsForTable.forEach(assignment => {
+            if (assignment.logroCalificacionId) {
+                // Normalizar IDs para comparación (pueden venir como string u ObjectId)
+                const assignmentLogroId = String(assignment.logroCalificacionId);
+                const matchingLogro = logrosOrdenados.find(logro => 
+                    String(logro._id) === assignmentLogroId
+                );
+                
+                if (matchingLogro && grouped[matchingLogro._id]) {
+                    grouped[matchingLogro._id].assignments.push(assignment);
+                } else {
+                    // Si no encuentra el logro, agregar a sin logro
+                    console.warn(`Asignación ${assignment._id} tiene logroCalificacionId ${assignmentLogroId} que no existe en los logros`);
+                    sinLogro.push(assignment);
+                }
+            } else {
+                sinLogro.push(assignment);
+            }
+        });
+        
+        // Si hay asignaciones sin logro, crear un grupo temporal al final
+        if (sinLogro.length > 0) {
+            grouped['sin-logro'] = {
+                logro: { _id: 'sin-logro', nombre: 'Sin categoría', porcentaje: 0, orden: 999 },
+                assignments: sinLogro
+            };
+        }
+        
+        return grouped;
+    }, [assignmentsForTable, logrosData]);
+
+    // Calcular promedio ponderado por logros
+    const calcularPromedioPonderado = (studentId: string): number | string => {
+        const logros = logrosData?.logros || [];
+        if (logros.length === 0) {
+            // Si no hay logros configurados, calcular promedio simple
+            const subs = (a: Assignment) => a.submissions || a.entregas || [];
+            const notasValidas: number[] = [];
+            assignmentsForTable.forEach(a => {
+                const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
+                    x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
+                );
+                const cal = (s as { calificacion?: number })?.calificacion;
+                if (cal != null && !isNaN(cal)) notasValidas.push(cal);
+            });
+            return notasValidas.length > 0
+                ? Math.round(notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length)
+                : '-';
+        }
+
+        let totalPonderado = 0;
+        let totalPorcentaje = 0;
+
+        logros.forEach(logro => {
+            const assignmentsDelLogro = assignmentsByLogro[logro._id]?.assignments || [];
+            const subs = (a: Assignment) => a.submissions || a.entregas || [];
+            const notasDelLogro: number[] = [];
+            
+            assignmentsDelLogro.forEach(a => {
+                const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
+                    x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
+                );
+                const cal = (s as { calificacion?: number })?.calificacion;
+                if (cal != null && !isNaN(cal)) notasDelLogro.push(cal);
+            });
+
+            if (notasDelLogro.length > 0) {
+                const promedioLogro = notasDelLogro.reduce((a, b) => a + b, 0) / notasDelLogro.length;
+                const ponderacion = (promedioLogro * logro.porcentaje) / 100;
+                totalPonderado += ponderacion;
+                totalPorcentaje += logro.porcentaje;
+            }
+        });
+
+        if (totalPonderado === 0) return '-';
+        
+        // Si el total de porcentajes es menor a 100, ajustar
+        const factorAjuste = totalPorcentaje > 0 ? (100 / totalPorcentaje) : 1;
+        return Math.round(totalPonderado * factorAjuste);
+    };
+
     // Redirigir si no es profesor
     useEffect(() => {
         if (user && user.rol !== 'profesor') {
@@ -123,13 +249,13 @@ export default function CourseGradesTablePage() {
         }
     }, [user, setLocation]);
 
-    const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable;
+    const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
     const subjects = subjectsForGroup;
     const subjectName = subjects.length > 0 ? subjects[0].nombre : '';
 
     return (
         <div className="w-full min-h-[calc(100vh-8rem)]">
-            <div className="w-full max-w-[98vw] mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
+            <div className="w-full mx-auto px-2 md:px-4 lg:px-6 py-4 md:py-6 lg:py-8">
                 {/* Botón de regreso */}
                 <div className="mb-6">
                     <NavBackButton to={`/course-detail/${cursoId}`} label="Volver al curso" />
@@ -146,20 +272,12 @@ export default function CourseGradesTablePage() {
                                     <span>Tabla General de Notas</span>
                                 </CardTitle>
                                 <CardDescription className="text-white/90 text-sm md:text-base mt-2">
-                                    Las columnas se actualizan al crear tareas. Las notas se sincronizan al calificar entregas (Escala: 10-100)
+                                    Las notas se sincronizan automáticamente al calificar entregas (Escala: 10-100)
                                     {displayGroupId && ` - Grupo ${displayGroupId}`}
                                     {subjectName && ` - ${subjectName}`}
                                 </CardDescription>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                <Button
-                                    size="sm"
-                                    className="bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60 text-sm px-4 py-2"
-                                    onClick={() => setLocation(`/course-detail/${cursoId}`)}
-                                >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Asignar Nueva Tarea
-                                </Button>
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -173,10 +291,10 @@ export default function CourseGradesTablePage() {
                                     variant="outline"
                                     size="sm"
                                     className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
-                                    onClick={() => setLocation('/materials')}
+                                    onClick={() => setLocation('/profesor/academia/calificacion/logros')}
                                 >
-                                    <FileText className="w-4 h-4 mr-2" />
-                                    Materiales
+                                    <Percent className="w-4 h-4 mr-2" />
+                                    Logros de Calificación
                                 </Button>
                             </div>
                         </div>
@@ -192,51 +310,81 @@ export default function CourseGradesTablePage() {
                                 <Skeleton className="h-12 w-full bg-[#002366]/10" />
                             </div>
                         ) : students.length > 0 ? (
-                            <div className="overflow-x-auto rounded-xl border border-[#002366]/20 shadow-sm">
+                            <div className="w-full rounded-xl border border-[#002366]/20 shadow-sm" style={{ overflowX: 'auto', maxWidth: '100%' }}>
                                 <div className="inline-block min-w-full align-middle">
-                                    <table className="min-w-full border-collapse bg-white">
+                                    <table className="border-collapse bg-white" style={{ width: '100%', minWidth: '800px' }}>
                                         <thead>
-                                            <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
-                                                <th className="sticky left-0 z-20 bg-[#002366] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-r border-white/20 min-w-[220px] shadow-md">
-                                                    <div className="flex items-center gap-2">
-                                                        <User className="w-4 h-4 text-white" />
-                                                        <span>Estudiante</span>
-                                                    </div>
-                                                </th>
-                                                {assignmentsForTable.map((assignment, idx) => (
-                                                    <th
-                                                        key={assignment._id}
-                                                        className="px-3 py-4 text-center text-xs font-bold text-white uppercase tracking-wider border-r border-white/20 min-w-[140px]"
-                                                        style={{
-                                                            background: idx % 2 === 0
-                                                                ? 'linear-gradient(to bottom, #002366, #003d7a)'
-                                                                : 'linear-gradient(to bottom, #003d7a, #002366)'
-                                                        }}
+                                            {/* Fila de encabezados de logros (categorías) */}
+                                            {Object.keys(assignmentsByLogro).length > 0 && (
+                                                <tr className="bg-gradient-to-r from-[#1e3cff] to-[#002366] border-b-2 border-white/30">
+                                                    <th 
+                                                        rowSpan={2}
+                                                        className="sticky left-0 z-20 bg-[#1e3cff] px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 shadow-md min-w-[180px] max-w-[180px]"
                                                     >
-                                                        <span className="truncate block max-w-[120px] mx-auto text-[11px] leading-tight">
-                                                            {assignment.titulo}
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <User className="w-4 h-4 text-white" />
+                                                            <span>Estudiante</span>
+                                                        </div>
                                                     </th>
-                                                ))}
-                                                <th className="px-4 py-4 text-center text-xs font-bold text-white uppercase tracking-wider bg-[#002366] min-w-[120px] border-l-2 border-white/30">
-                                                    Promedio
-                                                </th>
+                                                    {Object.values(assignmentsByLogro).map((grupo, grupoIdx) => {
+                                                        if (grupo.assignments.length === 0) return null;
+                                                        const colSpan = grupo.assignments.length;
+                                                        const isSinCategoria = grupo.logro._id === 'sin-logro';
+                                                        return (
+                                                            <th
+                                                                key={grupo.logro._id}
+                                                                colSpan={colSpan}
+                                                                className={`px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 ${
+                                                                    isSinCategoria ? 'bg-amber-600/80' : grupoIdx % 2 === 0 ? 'bg-[#1e3cff]' : 'bg-[#002366]'
+                                                                }`}
+                                                            >
+                                                                <div className="flex flex-col items-center justify-center gap-1">
+                                                                    <span className="font-bold">{grupo.logro.nombre.toUpperCase()}</span>
+                                                                    {grupo.logro.porcentaje > 0 && (
+                                                                        <span className="text-[10px] text-white/90 font-normal">
+                                                                            {grupo.logro.porcentaje}% del total
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </th>
+                                                        );
+                                                    })}
+                                                    <th 
+                                                        rowSpan={2}
+                                                        className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider bg-[#1e3cff] min-w-[100px] max-w-[100px] border-l-2 border-white/30"
+                                                    >
+                                                        Promedio
+                                                    </th>
+                                                </tr>
+                                            )}
+                                            {/* Fila de encabezados de asignaciones individuales */}
+                                            <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
+                                                {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
+                                                    grupo.assignments.map((assignment, idx) => {
+                                                        const isSinCategoria = grupo.logro._id === 'sin-logro';
+                                                        return (
+                                                            <th
+                                                                key={assignment._id}
+                                                                className={`px-2 py-2 text-center text-[10px] font-bold text-white uppercase tracking-wider border-r border-white/20 min-w-[100px] max-w-[120px] ${
+                                                                    isSinCategoria 
+                                                                        ? 'bg-amber-500/60' 
+                                                                        : idx % 2 === 0
+                                                                        ? 'bg-[#002366]'
+                                                                        : 'bg-[#003d7a]'
+                                                                }`}
+                                                            >
+                                                                <span className="truncate block w-full mx-auto text-[9px] leading-tight px-1">
+                                                                    {assignment.titulo}
+                                                                </span>
+                                                            </th>
+                                                        );
+                                                    })
+                                                )}
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {students.map((student, studentIdx) => {
-                                                const subs = (a: Assignment) => a.submissions || a.entregas || [];
-                                                const notasValidas: number[] = [];
-                                                assignmentsForTable.forEach(a => {
-                                                    const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
-                                                        x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
-                                                    );
-                                                    const cal = (s as { calificacion?: number })?.calificacion;
-                                                    if (cal != null && !isNaN(cal)) notasValidas.push(cal);
-                                                });
-                                                const promedio = notasValidas.length > 0
-                                                    ? Math.round(notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length)
-                                                    : '-';
+                                                const promedio = calcularPromedioPonderado(student._id);
 
                                                 return (
                                                     <tr
@@ -245,52 +393,59 @@ export default function CourseGradesTablePage() {
                                                             studentIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
                                                         }`}
                                                     >
-                                                        <td className="sticky left-0 z-10 px-4 py-3 bg-inherit border-r border-[#002366]/20 shadow-sm">
-                                                            <div className="flex items-center gap-3">
-                                                                <Avatar className="w-9 h-9 flex-shrink-0">
-                                                                    <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-xs font-semibold">
+                                                        <td className="sticky left-0 z-10 px-2 py-2 bg-inherit border-r border-[#002366]/20 shadow-sm min-w-[180px] max-w-[180px]">
+                                                            <div className="flex items-center gap-2">
+                                                                <Avatar className="w-7 h-7 flex-shrink-0">
+                                                                    <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-[10px] font-semibold">
                                                                         {student.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                                                     </AvatarFallback>
                                                                 </Avatar>
                                                                 <div className="min-w-0 flex-1">
-                                                                    <div className="font-semibold text-[#0a0a2a] text-sm truncate leading-tight">
+                                                                    <div className="font-semibold text-[#0a0a2a] text-xs truncate leading-tight">
                                                                         {student.nombre}
                                                                     </div>
                                                                     {student.email && (
-                                                                        <div className="text-[11px] text-gray-500 truncate leading-tight">
+                                                                        <div className="text-[9px] text-gray-500 truncate leading-tight">
                                                                             {student.email}
                                                                         </div>
                                                                     )}
                                                                 </div>
                                                             </div>
                                                         </td>
-                                                        {assignmentsForTable.map((assignment, actIdx) => {
-                                                            const subsA = assignment.submissions || assignment.entregas || [];
-                                                            const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
-                                                                x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
-                                                            );
-                                                            const cal = (sub as { calificacion?: number })?.calificacion;
-                                                            const displayValue = cal != null && !isNaN(cal) ? String(cal) : '--';
-                                                            return (
-                                                                <td
-                                                                    key={assignment._id}
-                                                                    className={`px-3 py-3 border-r border-[#002366]/20 text-center text-sm font-medium ${
-                                                                        actIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
-                                                                    } hover:bg-[#1e3cff]/10 transition-colors`}
-                                                                >
-                                                                    <span className={displayValue === '--' ? 'text-gray-400' : 'text-[#0a0a2a] font-semibold'}>
-                                                                        {displayValue}
-                                                                    </span>
-                                                                </td>
-                                                            );
-                                                        })}
-                                                        <td className="px-4 py-3 text-center border-l-2 border-[#002366]/20 bg-[#002366]/5">
+                                                        {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
+                                                            grupo.assignments.map((assignment, actIdx) => {
+                                                                const subsA = assignment.submissions || assignment.entregas || [];
+                                                                const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
+                                                                    x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
+                                                                );
+                                                                const cal = (sub as { calificacion?: number })?.calificacion;
+                                                                const displayValue = cal != null && !isNaN(cal) ? String(cal) : '--';
+                                                                const isSinCategoria = grupo.logro._id === 'sin-logro';
+                                                                return (
+                                                                    <td
+                                                                        key={assignment._id}
+                                                                        className={`px-2 py-2 border-r-2 border-[#002366]/30 text-center text-xs font-medium min-w-[100px] max-w-[120px] ${
+                                                                            isSinCategoria
+                                                                                ? 'bg-amber-50 hover:bg-amber-100'
+                                                                                : actIdx % 2 === 0 
+                                                                                ? 'bg-white' 
+                                                                                : 'bg-[#002366]/5'
+                                                                        } hover:bg-[#1e3cff]/10 transition-colors`}
+                                                                    >
+                                                                        <span className={displayValue === '--' ? 'text-gray-400' : 'text-[#0a0a2a] font-semibold'}>
+                                                                            {displayValue}
+                                                                        </span>
+                                                                    </td>
+                                                                );
+                                                            })
+                                                        )}
+                                                        <td className="px-2 py-2 text-center border-l-2 border-[#002366]/20 bg-[#002366]/5 min-w-[100px] max-w-[100px]">
                                                             <div className="flex items-center justify-center gap-1">
-                                                                <span className={`text-lg font-bold ${promedio === '-' ? 'text-gray-400' : 'text-[#0a0a2a]'}`}>
+                                                                <span className={`text-sm font-bold ${promedio === '-' ? 'text-gray-400' : 'text-[#0a0a2a]'}`}>
                                                                     {promedio}
                                                                 </span>
                                                                 {promedio !== '-' && (
-                                                                    <span className="text-gray-500 text-xs">/ 100</span>
+                                                                    <span className="text-gray-500 text-[10px]">/ 100</span>
                                                                 )}
                                                             </div>
                                                         </td>

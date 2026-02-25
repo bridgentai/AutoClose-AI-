@@ -5,6 +5,7 @@ import { useLocation } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { NavBackButton } from '@/components/nav-back-button';
 
 interface Assignment {
   _id: string;
@@ -58,6 +59,7 @@ export default function CalendarPage() {
   return (
     <div className="flex-1 overflow-auto p-8">
             <div className="max-w-5xl mx-auto">
+              <NavBackButton />
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
                   {pageTitle}

@@ -1,9 +1,10 @@
 import { Link } from "wouter";
-import { Route, MapPin, Users, Bus } from "lucide-react";
+import { Route, MapPin, Users, Bus, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -26,6 +27,11 @@ const navigationItems = [
     path: "/transporte/comunidad/vehiculos",
     icon: Bus,
   },
+  {
+    title: "Calendario de Eventos",
+    path: "/comunidad/calendario",
+    icon: Calendar,
+  },
 ];
 
 export default function TransporteComunidadLayout() {
@@ -44,6 +50,7 @@ export default function TransporteComunidadLayout() {
 
   return (
     <div className="p-6" data-testid="transporte-comunidad-layout">
+      <NavBackButton to="/transporte" label="Transporte" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Comunidad: Gestión de Transporte
       </h1>

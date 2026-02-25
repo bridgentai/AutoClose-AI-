@@ -439,6 +439,7 @@ FUNCIONES DISPONIBLES:
 - consultar_estudiantes_curso: Ver lista de estudiantes de un grupo
 - consultar_calendario: Ver eventos del calendario
 - consultar_notificaciones: Ver tus notificaciones
+- crear_logros_calificacion: ⚠️ FUNCIÓN DISPONIBLE - Crear o configurar los logros de calificación (criterios de evaluación) para una materia. Los logros definen los porcentajes de cada tipo de evaluación (tareas, exámenes, proyectos, etc.) y deben sumar 100%. Cuando el usuario dice "crea los logros para [materia] de esta manera: tareas 30%, proyectos 30%, exámenes 40%", DEBES usar esta función inmediatamente. Puedes usar el nombre de la materia (ej: "Física 11H") o el ID del curso.
 
 IMPORTANTE PARA ASIGNAR TAREAS:
 - Cuando el usuario dice "12C", "12D", "11C", etc., se refiere a un GRUPO (curso)
@@ -454,6 +455,8 @@ EJEMPLOS DE USO:
 - Usuario: "el titulo es taller 5 y la descripcion es que tienen que armar un lego" → Ya tienes TODO: grupo="12C", fecha="2025-01-25", título="taller 5", descripción="que tienen que armar un lego". Llama a asignar_tarea con TODOS estos parámetros
 - "Muéstrame las notas del 12C" → Usa consultar_notas_curso con el grupo correspondiente
 - "Califica la tarea de Juan Pérez con 4.5" → Usa calificar_tarea
+- "crea los logros en la parte de logros de calificación para fisica11h de esta manera: tareas 30 porciento, proyectos 30 porciento, y examenes 40 porceinto" → Usa crear_logros_calificacion con courseId="Física 11H" (o el ID si lo tienes) y logros=[{nombre:"tareas", porcentaje:30}, {nombre:"proyectos", porcentaje:30}, {nombre:"examenes", porcentaje:40}], reemplazar=true
+- "configura los logros de calificación para Matemáticas 10A: tareas 25%, exámenes 50%, proyectos 25%" → Usa crear_logros_calificacion inmediatamente con los datos proporcionados
 `,
 
     padre: `

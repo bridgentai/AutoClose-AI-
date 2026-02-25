@@ -1,9 +1,10 @@
 import { Link } from "wouter";
-import { Users, MessageSquare, Mail, Bell } from "lucide-react";
+import { Users, MessageSquare, Mail, Bell, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -26,6 +27,11 @@ const navigationItems = [
     path: "/tesoreria/comunidad/notificaciones",
     icon: Bell,
   },
+  {
+    title: "Calendario de Eventos",
+    path: "/comunidad/calendario",
+    icon: Calendar,
+  },
 ];
 
 export default function TesoreriaComunidadLayout() {
@@ -44,6 +50,7 @@ export default function TesoreriaComunidadLayout() {
 
   return (
     <div className="p-6" data-testid="tesoreria-comunidad-layout">
+      <NavBackButton to="/tesoreria" label="Tesoría" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Comunidad: Comunicación con Padres
       </h1>

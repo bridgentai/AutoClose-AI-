@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -49,6 +50,7 @@ export default function CafeteriaAcademiaLayout() {
 
   return (
     <div className="p-6" data-testid="cafeteria-academia-layout">
+      <NavBackButton to="/cafeteria" label="Cafetería" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Academia: Registro de Compras
       </h1>

@@ -254,6 +254,16 @@ export default function Chat() {
           queryClient.invalidateQueries({ queryKey: ['notas'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['notas_curso'], exact: false });
         }
+        
+        // Si se crearon logros de calificación, invalidar queries y refrescar
+        if (response.executedActions.includes('crear_logros_calificacion')) {
+          console.log('[Chat] Invalidando queries después de crear logros de calificación');
+          queryClient.invalidateQueries({ queryKey: ['/api/logros-calificacion'], exact: false });
+          // Refrescar la página después de un breve delay para mostrar los cambios
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        }
       }
       
       // Refrescar sidebar para mostrar sesión actualizada

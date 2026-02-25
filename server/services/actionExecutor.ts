@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { Assignment, Nota, Notificacion, User, Course, Boletin, Group, GroupStudent } from '../models';
+import { Assignment, Nota, Notificacion, User, Course, Boletin, Group, GroupStudent, LogroCalificacion } from '../models';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import * as permissionValidator from './permissionValidator';
 import * as dataQuery from './dataQuery';
@@ -82,6 +82,9 @@ export async function executeAction(
 
       case 'crear_permiso':
         return await executeCreatePermiso(parameters, userId, colegioId);
+
+      case 'crear_logros_calificacion':
+        return await executeCreateLogrosCalificacion(parameters, userId, colegioId);
 
       default:
         return {
@@ -1041,4 +1044,163 @@ async function executeCreatePermiso(
     data: permiso,
     message: `Permiso de salida "${tipoPermiso}" creado exitosamente para ${nombreEstudiante} el ${fecha}.`
   };
+}
+
+async function executeCreateLogrosCalificacion(
+  params: any,
+  userId: string,
+  colegioId: string
+): Promise<ActionResult> {
+  const { courseId, logros, reemplazar = false } = params;
+  
+  if (!courseId || !logros || !Array.isArray(logros) || logros.length === 0) {
+    return {
+      success: false,
+      error: 'courseId y logros (array) son requeridos'
+    };
+  }
+
+  const normalizedUserId = normalizeIdForQuery(userId);
+  
+  // Buscar el curso por ID o nombre
+  let course = await Course.findOne({
+    _id: normalizeIdForQuery(courseId),
+    profesorIds: normalizedUserId,
+    colegioId,
+  }).lean();
+
+  // Si no se encuentra por ID, buscar por nombre (más flexible)
+  if (!course) {
+    const searchName = String(courseId).trim().replace(/\s+/g, ' '); // Normalizar espacios
+    // Buscar por coincidencia parcial (sin importar mayúsculas/minúsculas)
+    course = await Course.findOne({
+      $or: [
+        { nombre: { $regex: new RegExp(searchName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } },
+        { nombre: { $regex: new RegExp(searchName.replace(/\s/g, ''), 'i') } }, // Sin espacios
+        { nombre: { $regex: new RegExp(searchName.replace(/\s+/g, '.*'), 'i') } }, // Espacios como .*
+      ],
+      profesorIds: normalizedUserId,
+      colegioId,
+    }).lean();
+  }
+
+  if (!course) {
+    await logAIAction({
+      userId,
+      role: 'profesor',
+      action: 'crear_logros_calificacion',
+      entityType: 'logro',
+      colegioId,
+      result: 'denied',
+      error: 'No tienes acceso a esta materia o la materia no existe',
+      requestData: params
+    });
+    return {
+      success: false,
+      error: `No tienes acceso a la materia "${courseId}" o la materia no existe. Verifica que la materia esté asignada a ti.`
+    };
+  }
+
+  const normalizedCourseId = normalizeIdForQuery(course._id.toString());
+
+  // Validar que los porcentajes sean válidos
+  const totalPorcentaje = logros.reduce((sum: number, logro: any) => {
+    const pct = parseFloat(String(logro.porcentaje || 0));
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      throw new Error(`El porcentaje de "${logro.nombre}" debe estar entre 0 y 100`);
+    }
+    return sum + pct;
+  }, 0);
+
+  if (totalPorcentaje > 100.01) {
+    return {
+      success: false,
+      error: `Los porcentajes suman ${totalPorcentaje.toFixed(1)}%, pero deben sumar máximo 100%`
+    };
+  }
+
+  // Obtener logros existentes
+  const existentes = await LogroCalificacion.find({
+    courseId: normalizedCourseId,
+    colegioId,
+  }).lean();
+
+  const totalActual = existentes.reduce((sum, l) => sum + (l.porcentaje || 0), 0);
+  const nuevoTotal = reemplazar ? totalPorcentaje : totalActual + totalPorcentaje;
+
+  if (nuevoTotal > 100.01) {
+    const disponible = 100 - totalActual;
+    return {
+      success: false,
+      error: reemplazar
+        ? `Los nuevos logros suman ${totalPorcentaje.toFixed(1)}%, pero deben sumar máximo 100%`
+        : `Los logros actuales suman ${totalActual.toFixed(1)}% y los nuevos suman ${totalPorcentaje.toFixed(1)}%, excediendo el 100%. Disponible: ${disponible.toFixed(1)}%`
+    };
+  }
+
+  try {
+    // Si reemplazar es true, eliminar los existentes
+    if (reemplazar && existentes.length > 0) {
+      await LogroCalificacion.deleteMany({
+        courseId: normalizedCourseId,
+        colegioId,
+      });
+    }
+
+    // Crear los nuevos logros
+    const logrosCreados = [];
+    for (let i = 0; i < logros.length; i++) {
+      const logro = logros[i];
+      const nuevoLogro = await LogroCalificacion.create({
+        nombre: String(logro.nombre).trim(),
+        porcentaje: parseFloat(String(logro.porcentaje)),
+        courseId: normalizedCourseId,
+        profesorId: userId,
+        colegioId,
+        orden: (reemplazar ? 0 : existentes.length) + i,
+      });
+      logrosCreados.push(nuevoLogro);
+    }
+
+    await logAIAction({
+      userId,
+      role: 'profesor',
+      action: 'crear_logros_calificacion',
+      entityType: 'logro',
+      entityId: normalizedCourseId.toString(),
+      colegioId,
+      result: 'success',
+      requestData: params
+    });
+
+    const mensaje = reemplazar
+      ? `Se crearon ${logrosCreados.length} logros de calificación para "${course.nombre}". Total: ${totalPorcentaje.toFixed(1)}%`
+      : `Se agregaron ${logrosCreados.length} logros de calificación a "${course.nombre}". Total acumulado: ${nuevoTotal.toFixed(1)}%`;
+
+    return {
+      success: true,
+      data: {
+        logros: logrosCreados,
+        totalPorcentaje: nuevoTotal,
+        completo: Math.abs(nuevoTotal - 100) < 0.01
+      },
+      message: mensaje
+    };
+  } catch (error: any) {
+    await logAIAction({
+      userId,
+      role: 'profesor',
+      action: 'crear_logros_calificacion',
+      entityType: 'logro',
+      entityId: normalizedCourseId.toString(),
+      colegioId,
+      result: 'error',
+      error: error.message,
+      requestData: params
+    });
+    return {
+      success: false,
+      error: error.message || 'Error al crear los logros de calificación'
+    };
+  }
 }

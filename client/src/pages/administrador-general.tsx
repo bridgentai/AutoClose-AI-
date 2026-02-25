@@ -3,6 +3,7 @@ import { Users, Shield, BarChart3, MessageSquare, Settings, Database } from 'luc
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 export default function AdministradorGeneralPage() {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ export default function AdministradorGeneralPage() {
 
   return (
     <div data-testid="administrador-general-page">
+      <NavBackButton to="/dashboard" label="Dashboard" />
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
           Bienvenido, Administrador {user?.nombre?.split(' ')[0] || ''}

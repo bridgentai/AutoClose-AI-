@@ -159,6 +159,7 @@ export default function CourseDetailPage() {
         fechaEntrega: '',
         courseId: '', // ID de la materia
     });
+    const [logroCalificacionId, setLogroCalificacionId] = useState('');
 
     // Obtener mes y año actuales
     const now = new Date();
@@ -230,20 +231,34 @@ export default function CourseDetailPage() {
         }
     }, [subjectsForGroup, showAssignmentForm]);
 
+    // Query para obtener logros de calificación
+    const courseIdForLogros = formData.courseId || subjectsForGroup[0]?._id || '';
+    const { data: logrosData, isLoading: isLoadingLogros } = useQuery<{ logros: { _id: string; nombre: string; porcentaje: number }[] }>({
+        queryKey: ['/api/logros-calificacion', courseIdForLogros],
+        queryFn: () =>
+            apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
+        enabled: !!courseIdForLogros && user?.rol === 'profesor',
+    });
+    const logros = logrosData?.logros ?? [];
+
     // Efecto para resetear el formulario
     useEffect(() => {
         if (!showAssignmentForm) {
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setAssignmentType(null);
             setDocumentContent('');
+            setLogroCalificacionId('');
         }
     }, [showAssignmentForm]);
 
-    // Mutation (Crear Tarea)
+    // Mutation (Crear Asignación)
     const createAssignmentMutation = useMutation({
         mutationFn: async (data: typeof formData) => {
             if (!data.courseId) {
-                throw new Error('Debes seleccionar una materia para esta tarea');
+                throw new Error('Debes seleccionar una materia para esta asignación');
+            }
+            if (logros.length > 0 && !logroCalificacionId) {
+                throw new Error('Debes seleccionar el tipo de logro de calificación para esta asignación');
             }
             // Aquí enviamos el ID del grupo (cursoId) como el campo 'curso' y el ID de la materia como 'courseId'
             return await apiRequest('POST', '/api/assignments', {
@@ -256,17 +271,19 @@ export default function CourseDetailPage() {
                 profesorId: user?.id,
                 profesorNombre: user?.nombre,
                 colegioId: user?.colegioId || 'default_colegio',
+                logroCalificacionId: logroCalificacionId || undefined,
             });
         },
         onSuccess: () => {
-            toast({ title: '¡Tarea creada!', description: 'La tarea ha sido asignada al curso exitosamente.' });
+            toast({ title: '¡Asignación creada!', description: 'La asignación ha sido asignada al curso exitosamente.' });
             queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
             queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
+            setLogroCalificacionId('');
             setShowAssignmentForm(false);
         },
         onError: (error: any) => {
-            toast({ title: 'Error', description: error.message || 'No se pudo crear la tarea', variant: 'destructive' });
+            toast({ title: 'Error', description: error.message || 'No se pudo crear la asignación', variant: 'destructive' });
         },
     });
 
@@ -399,7 +416,7 @@ export default function CourseDetailPage() {
                                         Tabla General de Notas
                                     </CardTitle>
                                     <CardDescription className="text-white/80">
-                                        Las columnas se actualizan al crear tareas. Las notas se sincronizan al calificar entregas (Escala: 10-100) - Grupo {displayGroupId}
+                                        Las columnas se actualizan al crear asignaciones. Las notas se sincronizan al calificar entregas (Escala: 10-100) - Grupo {displayGroupId}
                                         {subjects.length > 0 && ` - ${subjects[0].nombre}`}
                                     </CardDescription>
                                 </div>
@@ -410,7 +427,7 @@ export default function CourseDetailPage() {
                                         onClick={() => setShowAssignmentForm(true)}
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
-                                        Asignar Nueva Tarea
+                                        Asignar Nueva Asignación
                                     </Button>
                                     <Button
                                         variant="outline"
@@ -557,7 +574,7 @@ export default function CourseDetailPage() {
                 {/* Calendario */}
                 {renderCalendarAndAssignmentList(assignments, `Grupo ${displayGroupId}`)}
 
-                {/* Botones de acción y Formulario para asignar tarea (Movido debajo del calendario) */}
+                {/* Botones de acción y Formulario para asignar asignación (Movido debajo del calendario) */}
                 <div className="flex gap-4 mb-8 mt-8">
                     <Button
                         onClick={() => setShowAssignmentForm(!showAssignmentForm)}
@@ -565,20 +582,20 @@ export default function CourseDetailPage() {
                         data-testid="button-assign-task"
                     >
                         <ClipboardList className="w-4 h-4 mr-2" />
-                        {showAssignmentForm ? 'Cancelar' : 'Asignar Nueva Tarea'}
+                        {showAssignmentForm ? 'Cancelar' : 'Asignar Nueva Asignación'}
                     </Button>
                 </div>
 
                 {showAssignmentForm && (
                     <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
                            <CardHeader>
-                                <CardTitle className="text-white">Nueva Tarea</CardTitle>
+                                <CardTitle className="text-white">Nueva Asignación</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 {!assignmentType ? (
-                                    // Selección de tipo de tarea
+                                    // Selección de tipo de asignación
                                     <div className="space-y-4">
-                                        <p className="text-white/70 mb-4">Selecciona el tipo de tarea que deseas crear:</p>
+                                        <p className="text-white/70 mb-4">Selecciona el tipo de asignación que deseas crear:</p>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <Button
                                                 type="button"
@@ -587,7 +604,7 @@ export default function CourseDetailPage() {
                                             >
                                                 <Bell className="w-8 h-8 text-[#00c8ff]" />
                                                 <span className="text-white font-semibold">Recordatorio</span>
-                                                <span className="text-white/60 text-sm">Tarea simple con título y descripción</span>
+                                                <span className="text-white/60 text-sm">Asignación simple con título y descripción</span>
                                             </Button>
                                             <Button
                                                 type="button"
@@ -596,7 +613,7 @@ export default function CourseDetailPage() {
                                             >
                                                 <FileText className="w-8 h-8 text-[#00c8ff]" />
                                                 <span className="text-white font-semibold">Documento</span>
-                                                <span className="text-white/60 text-sm">Tarea con editor de documentos completo</span>
+                                                <span className="text-white/60 text-sm">Asignación con editor de documentos completo</span>
                                             </Button>
                                         </div>
                                     </div>
@@ -663,9 +680,42 @@ export default function CourseDetailPage() {
                                         </div>
                                     )}
 
+                                    {/* Selector de Logro de Calificación */}
+                                    {logros.length > 0 && (
+                                        <div>
+                                            <Label htmlFor="logro" className="text-white">Tipo de Logro de Calificación *</Label>
+                                            <Select
+                                                value={logroCalificacionId}
+                                                onValueChange={setLogroCalificacionId}
+                                                required
+                                            >
+                                                <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                                                    <SelectValue placeholder="Selecciona el tipo de logro (ej: Tareas, Exámenes, Proyectos)" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {logros.map((logro) => (
+                                                        <SelectItem key={logro._id} value={logro._id}>
+                                                            {logro.nombre} ({logro.porcentaje}%)
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <p className="text-white/50 text-xs mt-1">Selecciona a qué categoría de calificación pertenece esta asignación</p>
+                                        </div>
+                                    )}
+
+                                    {logros.length === 0 && courseIdForLogros && !isLoadingLogros && (
+                                        <Alert className="mb-4 bg-amber-500/10 border-amber-500/50">
+                                            <AlertCircle className="h-4 w-4 text-amber-400" />
+                                            <AlertDescription className="text-amber-200">
+                                                Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a <Button variant="link" className="p-0 h-auto text-amber-300 underline" onClick={() => setLocation('/profesor/academia/calificacion/logros')}>Logros de Calificación</Button>
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+
                                             {/* Campos de Título, Descripción y Fecha */}
-                                            <div><Label htmlFor="titulo" className="text-white">Título</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Título de la tarea" /></div>
-                                            <div><Label htmlFor="descripcion" className="text-white">Descripción</Label><Textarea id="descripcion" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Descripción de la tarea" rows={4} /></div>
+                                            <div><Label htmlFor="titulo" className="text-white">Título</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Título de la asignación" /></div>
+                                            <div><Label htmlFor="descripcion" className="text-white">Descripción</Label><Textarea id="descripcion" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Descripción de la asignación" rows={4} /></div>
                                             <div><Label htmlFor="fechaEntrega" className="text-white">Fecha de Entrega</Label><Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="bg-white/5 border-white/10 text-white" /></div>
 
                                             {/* Editor de documentos solo para tipo "documento" */}
@@ -680,8 +730,8 @@ export default function CourseDetailPage() {
                                                 </div>
                                             )}
 
-                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0} className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90">
-                                                {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Tarea'}
+                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0 || (logros.length > 0 && !logroCalificacionId)} className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90">
+                                                {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
                                             </Button>
                                         </form>
                                     </>

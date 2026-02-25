@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Plus, Trash2, Edit2, ArrowLeft } from 'lucide-react';
+import { Calendar, Plus, Trash2, Edit2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/authContext';
+import { NavBackButton } from '@/components/nav-back-button';
 
 const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md';
 
@@ -54,11 +55,8 @@ export default function CalendarioEventos() {
 
   return (
     <div className="p-4 sm:p-6">
+      <NavBackButton to="/comunidad" label="Comunidad" />
       <div className="mb-6">
-        <Button variant="ghost" onClick={() => setLocation('/comunidad')} className="mb-4 text-white/70 hover:text-white min-h-[44px]">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Volver a Comunidad
-        </Button>
         <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-2">
           <Calendar className="w-8 h-8 sm:w-10 sm:h-10 text-[#00c8ff] shrink-0" />
           Calendario de Eventos

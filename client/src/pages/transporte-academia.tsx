@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -44,6 +45,7 @@ export default function TransporteAcademiaLayout() {
 
   return (
     <div className="p-6" data-testid="transporte-academia-layout">
+      <NavBackButton to="/transporte" label="Transporte" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Academia: Integración con Asistencia
       </h1>

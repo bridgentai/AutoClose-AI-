@@ -1,9 +1,10 @@
 import { Link } from "wouter";
-import { ShoppingBag, Package, Box, Settings } from "lucide-react";
+import { ShoppingBag, Package, Box, Settings, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -26,6 +27,11 @@ const navigationItems = [
     path: "/cafeteria/comunidad/configuracion",
     icon: Settings,
   },
+  {
+    title: "Calendario de Eventos",
+    path: "/comunidad/calendario",
+    icon: Calendar,
+  },
 ];
 
 export default function CafeteriaComunidadLayout() {
@@ -44,6 +50,7 @@ export default function CafeteriaComunidadLayout() {
 
   return (
     <div className="p-6" data-testid="cafeteria-comunidad-layout">
+      <NavBackButton to="/cafeteria" label="Cafetería" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Comunidad: Gestión de Productos
       </h1>

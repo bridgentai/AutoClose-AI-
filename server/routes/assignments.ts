@@ -226,7 +226,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 
     // Obtener todas las tareas que coinciden con los filtros
     let assignments = await Assignment.find(query)
-      .select('titulo descripcion contenidoDocumento curso courseId fechaEntrega profesorNombre profesorId submissions entregas')
+      .select('titulo descripcion contenidoDocumento curso courseId fechaEntrega profesorNombre profesorId submissions entregas logroCalificacionId')
       .sort({ fechaEntrega: 1 })
       .lean();
 

@@ -2,6 +2,7 @@ import { Briefcase, Users, AlertTriangle, ChevronRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 const resumenAcademico = {
   mensajesNuevos: 5,
@@ -98,6 +99,7 @@ const ComunicacionHome: React.FC = () => {
 
   return (
     <div data-testid="comunicacion-page">
+      <NavBackButton to="/dashboard" label="Dashboard" />
       <div className="mb-10">
         <h1 className="text-4xl font-extrabold tracking-tight text-white">Centro de Comunicacion</h1>
         <p className="text-lg text-white/70 mt-2">Selecciona tu area de interes para gestionar conversaciones academicas o comunitarias.</p>

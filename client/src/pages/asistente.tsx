@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocation } from 'wouter';
 import { apiRequest } from '@/lib/queryClient';
+import { NavBackButton } from '@/components/nav-back-button';
 
 const SECTION_LABELS: Record<string, string> = {
   'junior-school': 'Junior School',
@@ -196,6 +197,7 @@ export default function AsistentePage() {
         </div>
       </div>
 
+      <NavBackButton to="/dashboard" label="Dashboard" />
       {/* Cards estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Mensajes */}

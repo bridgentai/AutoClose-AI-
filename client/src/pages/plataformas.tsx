@@ -3,6 +3,7 @@ import { ExternalLink, Mail, Calendar, FileText, FolderOpen, Video, MessageCircl
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 const plataformas = [
   {
@@ -110,6 +111,7 @@ export default function PlataformasPage() {
   return (
     <div className="flex-1 overflow-auto p-8">
             <div className="max-w-7xl mx-auto">
+              <NavBackButton />
               <div className="mb-8">
                 <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
                   Herramientas Google Workspace

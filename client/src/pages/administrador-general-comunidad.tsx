@@ -1,9 +1,10 @@
 import { Link } from "wouter";
-import { Users, Shield, UserPlus, Settings } from "lucide-react";
+import { Users, Shield, UserPlus, Settings, Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -26,6 +27,11 @@ const navigationItems = [
     path: "/administrador-general/comunidad/permisos",
     icon: Settings,
   },
+  {
+    title: "Calendario de Eventos",
+    path: "/comunidad/calendario",
+    icon: Calendar,
+  },
 ];
 
 export default function AdministradorGeneralComunidadLayout() {
@@ -44,6 +50,7 @@ export default function AdministradorGeneralComunidadLayout() {
 
   return (
     <div className="p-6" data-testid="administrador-general-comunidad-layout">
+      <NavBackButton to="/administrador-general" label="Administrador General" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Comunidad: Gestión Completa de Usuarios
       </h1>

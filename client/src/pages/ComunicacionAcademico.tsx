@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/lib/authContext';
-import { ArrowLeft, Search, MessageCircle, Users, BookOpen, Clock } from 'lucide-react';
+import { Search, MessageCircle, Users, BookOpen, Clock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { NavBackButton } from '@/components/nav-back-button';
 
 interface AcademicGroup {
   materiaId: string;
@@ -116,16 +117,9 @@ const ComunicacionAcademico: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <NavBackButton to="/comunicacion" label="Comunicación" />
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setLocation('/comunicacion')}
-          className="text-white/70 hover:text-white hover:bg-white/10"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
         <div>
           <h1 className="text-4xl font-extrabold tracking-tight text-white font-['Poppins']">
             Comunicación Académica

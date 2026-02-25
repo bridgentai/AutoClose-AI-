@@ -3,6 +3,7 @@ import { ShoppingBag, Package, TrendingUp, Users, MessageSquare, Store } from 'l
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 export default function CafeteriaPage() {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ export default function CafeteriaPage() {
 
   return (
     <div data-testid="cafeteria-page">
+      <NavBackButton to="/dashboard" label="Dashboard" />
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
           Bienvenido, {user?.nombre?.split(' ')[0] || 'Administrador de Cafetería'}

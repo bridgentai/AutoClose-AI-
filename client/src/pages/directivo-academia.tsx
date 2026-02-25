@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -54,6 +55,7 @@ export default function DirectivoAcademiaLayout() {
 
   return (
     <div className="p-6" data-testid="directivo-academia-layout">
+      <NavBackButton to="/directivo" label="Vista Directivo" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Academia: Gestión Académica Global
       </h1>

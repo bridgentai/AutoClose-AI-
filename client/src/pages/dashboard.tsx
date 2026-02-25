@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Calendar } from '@/components/Calendar';
+import { CalendarGeneral } from '@/components/CalendarGeneral';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -91,7 +92,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
       }));
 
       // Llamar al nuevo endpoint del Chat AI Global
-      const response = await apiRequest<{ success: boolean; response: string; error?: string }>('POST', '/api/ai/chat', {
+      const response = await apiRequest<{ success: boolean; response: string; error?: string; executedActions?: string[]; actionData?: Record<string, any> }>('POST', '/api/ai/chat', {
         message: currentInput,
         contexto_extra: {
           rol,
@@ -106,6 +107,17 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 
       const aiMessage: Message = { emisor: 'ai', contenido: response.response, timestamp: new Date() };
       setMessages(prev => [...prev, aiMessage]);
+      
+      // Si se ejecutaron acciones, refrescar la página o mostrar notificación
+      if (response.executedActions && response.executedActions.length > 0) {
+        // Si se crearon logros de calificación, refrescar la página después de un breve delay
+        if (response.executedActions.includes('crear_logros_calificacion')) {
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
+        }
+      }
+      
       // Scroll después de agregar el mensaje de AI
       setTimeout(() => scrollToBottom(), 100);
     } catch (error: any) {
@@ -246,6 +258,14 @@ function EstudianteDashboard() {
   const RED_ALERT = 'text-red-400';
   const YELLOW_TROPHY = '#facc15';
 
+  // Query para obtener cursos del estudiante
+  const { data: courses = [], isLoading: isLoadingCourses } = useQuery<any[]>({
+    queryKey: ['studentCourses', user?.id],
+    queryFn: () => apiRequest('GET', '/api/users/me/courses'),
+    enabled: !!user?.id && user?.rol === 'estudiante',
+    staleTime: 0,
+  });
+
   // Query para obtener tareas del estudiante (todas; el calendario filtra por mes en cliente)
   const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
     queryKey: ['studentAssignments', user?.curso],
@@ -263,6 +283,31 @@ function EstudianteDashboard() {
       return d.getMonth() === m && d.getFullYear() === y;
     });
   }, [assignments]);
+
+  // Separar tareas por estado (misma lógica que student-tasks.tsx)
+  const submissions = (assignment: Assignment) => (assignment as any).submissions || (assignment as any).entregas || [];
+  const mySubmission = (assignment: Assignment) => submissions(assignment).find(
+    (e: any) => e.estudianteId === user?.id
+  );
+  
+  const tareasPorEntregar = useMemo(() => {
+    return assignments.filter(assignment => {
+      const estado = (assignment as any).estado || (mySubmission(assignment) 
+        ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
+        : 'pendiente');
+      const fechaEntrega = new Date(assignment.fechaEntrega);
+      return estado === 'pendiente' && fechaEntrega >= now;
+    });
+  }, [assignments, user?.id, now]);
+
+  const tareasCompletadas = useMemo(() => {
+    return assignments.filter(assignment => {
+      const estado = (assignment as any).estado || (mySubmission(assignment) 
+        ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
+        : 'pendiente');
+      return estado === 'calificada' || estado === 'entregada';
+    });
+  }, [assignments, user?.id]);
 
   // Notas del estudiante (misma fuente que Mis Notas): para contar materias perdidas (promedio < 65)
   const { data: notesData } = useQuery<{ materias: { promedio: number }[]; total: number }>({
@@ -293,8 +338,10 @@ function EstudianteDashboard() {
             <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">4</div>
-            <p className="text-xs text-white/60 mt-1">Materias este ano</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingCourses ? '—' : courses.length}
+            </div>
+            <p className="text-xs text-white/60 mt-1">Materias este año</p>
           </CardContent>
         </Card>
 
@@ -304,12 +351,24 @@ function EstudianteDashboard() {
           onClick={() => setLocation('/mi-aprendizaje/tareas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Tareas Pendientes</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">Tareas</CardTitle>
             <GraduationCap className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
-            <p className="text-xs text-white/60 mt-1">Tareas asignadas</p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/60">Completadas</span>
+                <span className="text-xl font-bold text-green-400 font-['Poppins']">
+                  {isLoadingAssignments ? '—' : tareasCompletadas.length}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/60">Pendientes</span>
+                <span className="text-xl font-bold text-yellow-400 font-['Poppins']">
+                  {isLoadingAssignments ? '—' : tareasPorEntregar.length}
+                </span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -507,11 +566,55 @@ function ProfesorDashboard() {
 }
 
 function DirectivoDashboard() {
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  // Obtener estadísticas reales del colegio
+  const { data: stats, isLoading: isLoadingStats } = useQuery<{ estudiantes: number; profesores: number; padres: number; directivos: number; cursos: number; materias: number }>({
+    queryKey: ['adminStats', user?.colegioId],
+    queryFn: () => apiRequest('GET', '/api/users/stats'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
+    staleTime: 0,
+  });
+
+  // Obtener eventos del calendario general para el directivo
+  const desde = useMemo(() => {
+    const firstDay = new Date(currentYear, currentMonth - 1, 1);
+    return firstDay.toISOString().slice(0, 10);
+  }, [currentYear, currentMonth]);
+
+  const hasta = useMemo(() => {
+    const lastDay = new Date(currentYear, currentMonth, 0);
+    return lastDay.toISOString().slice(0, 10);
+  }, [currentYear, currentMonth]);
+
+  const { data: calendarEvents = [], isLoading: isLoadingEvents } = useQuery<any[]>({
+    queryKey: ['directivoEvents', user?.colegioId, desde, hasta],
+    queryFn: () => apiRequest('GET', `/api/events?desde=${desde}&hasta=${hasta}`),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
+    staleTime: 0,
+  });
+
+  const eventsThisMonth = useMemo(() => {
+    const m = now.getMonth();
+    const y = now.getFullYear();
+    return calendarEvents.filter((e) => {
+      const d = new Date(e.fecha);
+      return d.getMonth() === m && d.getFullYear() === y;
+    });
+  }, [calendarEvents, now]);
+
+  const handleEventClick = (event: any) => {
+    // Navegar al calendario de eventos completo
+    setLocation('/comunidad/calendario');
+  };
 
   return (
-    <div className="flex flex-col gap-6 min-h-[calc(100vh-18rem)]">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-shrink-0">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
@@ -521,7 +624,9 @@ function DirectivoDashboard() {
             <CardTitle className="text-white text-sm text-expressive-subtitle">Profesores</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">24</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingStats ? '—' : (stats?.profesores ?? '—')}
+            </div>
           </CardContent>
         </Card>
 
@@ -534,39 +639,75 @@ function DirectivoDashboard() {
             <CardTitle className="text-white text-sm text-expressive-subtitle">Estudiantes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">680</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingStats ? '—' : (stats?.estudiantes ?? '—')}
+            </div>
           </CardContent>
         </Card>
 
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.3s' }}
-          onClick={() => setLocation('/courses')}
+          onClick={() => setLocation('/directivo/cursos')}
         >
           <CardHeader>
             <CardTitle className="text-white text-sm text-expressive-subtitle">Cursos Activos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">42</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingStats ? '—' : (stats?.cursos ?? '—')}
+            </div>
           </CardContent>
         </Card>
 
         <Card 
-          className={`${CARD_STYLE} reveal-scale gradient-overlay-blue hover-glow`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue hover-glow`}
           style={{ animationDelay: '0.4s' }}
+          onClick={() => setLocation('/directivo/cursos')}
         >
           <CardHeader>
-            <CardTitle className="text-white text-sm text-expressive-subtitle">Uso IA</CardTitle>
+            <CardTitle className="text-white text-sm text-expressive-subtitle">Materias</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">1.2k</div>
-            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Consultas/mes</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingStats ? '—' : (stats?.materias ?? '—')}
+            </div>
+            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Cursos / grupos</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex-1 min-h-0 reveal-fade" style={{ animationDelay: '0.5s' }}>
-        <AIChatBox rol="directivo" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue`}
+          style={{ animationDelay: '0.5s' }}
+          onClick={() => setLocation('/comunidad/calendario')}
+        >
+          <CardHeader>
+            <CardTitle className="text-white text-expressive">Calendario de Eventos</CardTitle>
+            <CardDescription className="text-white/60 text-expressive-subtitle">
+              {isLoadingEvents
+                ? 'Cargando eventos...'
+                : `${eventsThisMonth.length} ${eventsThisMonth.length === 1 ? 'evento programado' : 'eventos programados'} este mes`
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingEvents ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-white/60">Cargando calendario...</p>
+              </div>
+            ) : (
+              <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
+                <CalendarGeneral events={calendarEvents} onDayClick={handleEventClick} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="reveal-slide flex flex-col min-h-[500px]" style={{ animationDelay: '0.6s' }}>
+          <AIChatBox rol="directivo" />
+        </div>
       </div>
     </div>
   );

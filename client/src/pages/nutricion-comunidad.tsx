@@ -1,9 +1,10 @@
 import { Link } from "wouter";
-import { UtensilsCrossed, Calendar, Users, Apple } from "lucide-react";
+import { UtensilsCrossed, Calendar, Users, Apple, CalendarDays } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
@@ -26,6 +27,11 @@ const navigationItems = [
     path: "/nutricion/comunidad/dietas",
     icon: Apple,
   },
+  {
+    title: "Calendario de Eventos",
+    path: "/comunidad/calendario",
+    icon: CalendarDays,
+  },
 ];
 
 export default function NutricionComunidadLayout() {
@@ -44,6 +50,7 @@ export default function NutricionComunidadLayout() {
 
   return (
     <div className="p-6" data-testid="nutricion-comunidad-layout">
+      <NavBackButton to="/nutricion" label="Nutrición" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Comunidad: Planificación de Menús
       </h1>

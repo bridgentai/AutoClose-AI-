@@ -14,6 +14,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { NavBackButton } from '@/components/nav-back-button';
 
 interface Profesor {
   _id: string;
@@ -122,6 +123,7 @@ export default function DirectivoPage() {
 
   return (
     <div data-testid="directivo-page">
+      <NavBackButton to="/dashboard" label="Dashboard" />
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">

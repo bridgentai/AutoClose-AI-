@@ -351,6 +351,43 @@ function getAllFunctions(): AIFunction[] {
       allowedRoles: ['profesor']
     },
     {
+      name: 'crear_logros_calificacion',
+      description: 'Crea o configura los logros de calificación (criterios de evaluación) para una materia. Los logros definen los porcentajes de cada tipo de evaluación (tareas, exámenes, proyectos, etc.) y deben sumar 100%. Puedes crear múltiples logros en una sola llamada. Si ya existen logros, puedes reemplazarlos o agregar nuevos. IMPORTANTE: Cuando el usuario dice "crea los logros para [materia] de esta manera: tareas 30%, proyectos 30%, exámenes 40%", debes crear los logros correspondientes. El courseId puede ser el ID de la materia o el nombre de la materia (ej: "Física 11H").',
+      parameters: {
+        type: 'object',
+        properties: {
+          courseId: {
+            type: 'string',
+            description: 'ID de la materia (course) o nombre de la materia (ej: "Física 11H", "Matemáticas 10A")'
+          },
+          logros: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                nombre: {
+                  type: 'string',
+                  description: 'Nombre del logro (ej: "Tareas", "Exámenes", "Proyectos", "Participación")'
+                },
+                porcentaje: {
+                  type: 'number',
+                  description: 'Porcentaje del logro (debe ser un número entre 0 y 100)'
+                }
+              },
+              required: ['nombre', 'porcentaje']
+            },
+            description: 'Lista de logros a crear. Los porcentajes deben sumar 100% en total.'
+          },
+          reemplazar: {
+            type: 'boolean',
+            description: 'Si es true, elimina los logros existentes antes de crear los nuevos. Si es false, agrega a los existentes (por defecto: false)'
+          }
+        },
+        required: ['courseId', 'logros']
+      },
+      allowedRoles: ['profesor']
+    },
+    {
       name: 'crear_permiso',
       description: `⚠️ FUNCIÓN DISPONIBLE PARA PADRES - Crea un permiso de salida/transporte para un estudiante. Esta función permite autorizar que el estudiante salga del colegio usando un medio de transporte diferente al habitual. DEBES usar esta función cuando el usuario solicite: "permiso de salida", "necesito hacer un permiso", "permiso para mi hijo", "permiso de transporte", o cualquier variación similar.
 

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { NavBackButton } from '@/components/nav-back-button';
 
 const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md';
 
@@ -98,6 +99,7 @@ export default function TesoreriaPage() {
 
   return (
     <div data-testid="tesoreria-page" className="p-4 sm:p-6">
+      <NavBackButton to="/dashboard" label="Dashboard" />
       <div className="mb-6 sm:mb-8">
         <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 font-['Poppins']">
           Bienvenido, {user?.nombre?.split(' ')[0] || 'Tesorero'}
