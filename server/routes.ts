@@ -32,6 +32,8 @@ import gradeEventsRoutes from "./routes/gradeEvents";
 import gradingSchemaRoutes from "./routes/gradingSchema";
 import auditRoutes from "./routes/audit";
 import reportsRoutes from "./routes/reports";
+import assignmentMaterialsRoutes from "./routes/assignmentMaterials";
+import integrationsRoutes from "./routes/integrations";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Conectar a MongoDB
@@ -72,6 +74,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/grading-schemas', gradingSchemaRoutes);
   app.use('/api/audit', auditRoutes);
   app.use('/api/reports', reportsRoutes);
+  app.use('/api/assignment-materials', assignmentMaterialsRoutes);
+  app.use('/api/integrations', integrationsRoutes);
 
   // Seed grupos fijos al iniciar
   await seedGroups();

@@ -4,6 +4,7 @@ export { Material } from './Material';
 export { ChatSession } from './ChatSession';
 export { InstitutionConfig } from './InstitutionConfig';
 export { Assignment, type IAssignment, type ISubmission, type IAttachment } from './Assignment';
+export { AssignmentMaterial, type IAssignmentMaterial } from './AssignmentMaterial';
 export { Group } from './Group';
 export { Section } from './Section';
 export { GroupStudent } from './GroupStudent';

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,6 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DocumentEditor } from '@/components/document-editor';
 
 // =========================================================
 // 1. INTERFACES
@@ -150,8 +149,7 @@ export default function CourseDetailPage() {
 
     // Estados del Formulario
     const [showAssignmentForm, setShowAssignmentForm] = useState(false);
-    const [assignmentType, setAssignmentType] = useState<'recordatorio' | 'documento' | null>(null);
-    const [documentContent, setDocumentContent] = useState('');
+    const [assignmentType, setAssignmentType] = useState<'recordatorio' | 'assignment' | null>(null);
     const [showStudentsDialog, setShowStudentsDialog] = useState(false);
     const [formData, setFormData] = useState({
         titulo: '',
@@ -160,6 +158,10 @@ export default function CourseDetailPage() {
         courseId: '', // ID de la materia
     });
     const [logroCalificacionId, setLogroCalificacionId] = useState('');
+    const [newMaterialTitle, setNewMaterialTitle] = useState('');
+    const [assignmentMaterials, setAssignmentMaterials] = useState<{ type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[]>([]);
+    const [materialLinkInput, setMaterialLinkInput] = useState('');
+    const [creatingGdoc, setCreatingGdoc] = useState(false);
 
     // Obtener mes y año actuales
     const now = new Date();
@@ -246,40 +248,70 @@ export default function CourseDetailPage() {
         if (!showAssignmentForm) {
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setAssignmentType(null);
-            setDocumentContent('');
             setLogroCalificacionId('');
+            setNewMaterialTitle('');
+            setAssignmentMaterials([]);
+            setMaterialLinkInput('');
         }
     }, [showAssignmentForm]);
 
-    // Mutation (Crear Asignación)
+    // Abrir formulario de nueva asignación si viene desde tabla de notas (?openAssignmentForm=1&logroId=...)
+    useEffect(() => {
+        if (!cursoId || !isProfessor) return;
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        if (params.get('openAssignmentForm') === '1') {
+            setShowAssignmentForm(true);
+            const logroId = params.get('logroId');
+            if (logroId) setLogroCalificacionId(logroId);
+            // Limpiar query para no reabrir al recargar
+            const url = new URL(window.location.href);
+            url.searchParams.delete('openAssignmentForm');
+            url.searchParams.delete('logroId');
+            window.history.replaceState({}, '', url.pathname + (url.search || ''));
+        }
+    }, [cursoId, isProfessor]);
+
+    // Mutation (Crear Asignación; opcional: material vinculado + materiales adjuntos)
     const createAssignmentMutation = useMutation({
-        mutationFn: async (data: typeof formData) => {
-            if (!data.courseId) {
-                throw new Error('Debes seleccionar una materia para esta asignación');
+        mutationFn: async (payload: { data: typeof formData; newMaterialTitle?: string; materials?: { type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[] }) => {
+            const { data, newMaterialTitle: materialTitle, materials = [] } = payload;
+            if (!data.courseId) throw new Error('Debes seleccionar una materia');
+            if (assignmentType === 'assignment' && logros.length > 0 && !logroCalificacionId) {
+                throw new Error('Debes seleccionar el logro de calificación para esta asignación');
             }
-            if (logros.length > 0 && !logroCalificacionId) {
-                throw new Error('Debes seleccionar el tipo de logro de calificación para esta asignación');
-            }
-            // Aquí enviamos el ID del grupo (cursoId) como el campo 'curso' y el ID de la materia como 'courseId'
-            return await apiRequest('POST', '/api/assignments', {
+            const type = assignmentType === 'reminder' ? 'reminder' : 'assignment';
+            const created = await apiRequest<{ _id: string }>('POST', '/api/assignments', {
                 titulo: data.titulo,
                 descripcion: data.descripcion,
-                contenidoDocumento: assignmentType === 'documento' ? documentContent : undefined,
-                curso: cursoId, 
+                curso: cursoId,
                 courseId: data.courseId,
                 fechaEntrega: data.fechaEntrega,
-                profesorId: user?.id,
-                profesorNombre: user?.nombre,
-                colegioId: user?.colegioId || 'default_colegio',
-                logroCalificacionId: logroCalificacionId || undefined,
+                logroCalificacionId: assignmentType === 'assignment' ? (logroCalificacionId || undefined) : undefined,
+                type,
+                isGradable: type === 'assignment',
             });
+            if (materialTitle?.trim()) {
+                try {
+                    await apiRequest('POST', '/api/materials', { assignmentId: created._id, titulo: materialTitle.trim() });
+                } catch (_) {}
+            }
+            for (const m of materials) {
+                try {
+                    await apiRequest('POST', '/api/assignment-materials', { assignmentId: created._id, type: m.type, url: m.url, fileName: m.fileName });
+                } catch (_) {}
+            }
+            return created;
         },
         onSuccess: () => {
             toast({ title: '¡Asignación creada!', description: 'La asignación ha sido asignada al curso exitosamente.' });
             queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
             queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
+            queryClient.invalidateQueries({ queryKey: ['materials'] });
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setLogroCalificacionId('');
+            setNewMaterialTitle('');
+            setAssignmentMaterials([]);
+            setMaterialLinkInput('');
             setShowAssignmentForm(false);
         },
         onError: (error: any) => {
@@ -289,7 +321,28 @@ export default function CourseDetailPage() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        createAssignmentMutation.mutate(formData);
+        createAssignmentMutation.mutate({ data: formData, newMaterialTitle, materials: assignmentMaterials });
+    };
+
+    const handleAddMaterialLink = () => {
+        const url = materialLinkInput.trim();
+        if (!url) return;
+        const type = url.includes('docs.google.com') ? 'gdoc' : 'link';
+        setAssignmentMaterials((prev) => [...prev, { type, url, fileName: url.split('/').pop() || undefined }]);
+        setMaterialLinkInput('');
+    };
+
+    const handleCreateGoogleDoc = async () => {
+        setCreatingGdoc(true);
+        try {
+            const res = await apiRequest<{ url: string; documentId?: string }>('POST', '/api/integrations/google/create-doc', { title: formData.titulo || 'Documento' });
+            setAssignmentMaterials((prev) => [...prev, { type: 'gdoc', url: res.url, fileName: 'Documento Google' }]);
+            toast({ title: 'Documento creado', description: 'Se ha añadido el enlace a los materiales.' });
+        } catch (err: unknown) {
+            toast({ title: 'Error', description: (err as { message?: string })?.message || 'No se pudo crear el documento.', variant: 'destructive' });
+        } finally {
+            setCreatingGdoc(false);
+        }
     };
 
     const handleDayClick = (assignment: Assignment) => {
@@ -341,12 +394,12 @@ export default function CourseDetailPage() {
                     </p>
                 </div>
 
-                {/* 2 Cartas Centradas */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-4xl mx-auto">
+                {/* 3 Tarjetas: Estudiantes, Tareas, Materiales */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 max-w-5xl mx-auto">
                     {/* Carta 1: Estudiantes */}
                     <Card 
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
-                        onClick={() => setShowStudentsDialog(true)}
+                        onClick={() => setLocation(`/course-detail/${cursoId}/estudiantes`)}
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#1e3cff] via-[#002366] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#1e3cff]/30">
@@ -357,28 +410,13 @@ export default function CourseDetailPage() {
                                 {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} registrados
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="text-center pt-0">
-                            <Button
-                                variant="outline"
-                                className="border-[#1e3cff]/50 text-[#1e3cff] hover:bg-[#1e3cff]/20 hover:border-[#1e3cff] w-full font-semibold"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowStudentsDialog(true);
-                                }}
-                            >
-                                <Users className="w-4 h-4 mr-2" />
-                                Ver Lista Completa
-                            </Button>
-                        </CardContent>
+                        <CardContent className="text-center pt-0" />
                     </Card>
 
                     {/* Carta 2: Tareas */}
                     <Card 
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-orange-500/20"
-                        onClick={() => {
-                            // Navegar a la página de tareas del grupo
-                            setLocation(`/profesor/cursos/${cursoId}/tareas`);
-                        }}
+                        onClick={() => setLocation(`/profesor/cursos/${cursoId}/tareas`)}
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#002366] via-[#003d7a] to-[#1e3cff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#002366]/40">
@@ -389,19 +427,24 @@ export default function CourseDetailPage() {
                                 {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} asignadas
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="text-center pt-0">
-                            <Button
-                                variant="outline"
-                                className="border-orange-500/50 text-orange-400 hover:bg-orange-500/20 hover:border-orange-500 w-full font-semibold"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setLocation(`/profesor/cursos/${cursoId}/tareas`);
-                                }}
-                            >
-                                <ClipboardList className="w-4 h-4 mr-2" />
-                                Corregir Tareas
-                            </Button>
-                        </CardContent>
+                        <CardContent className="text-center pt-0" />
+                    </Card>
+
+                    {/* Carta 3: Materiales */}
+                    <Card 
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl"
+                        onClick={() => setLocation(`/course-detail/${cursoId}/materiales`)}
+                    >
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#003d7a] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg">
+                                <FileText className="w-10 h-10 text-white" />
+                            </div>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Materiales</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                Ver y gestionar materiales del curso
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
                     </Card>
                 </div>
 
@@ -593,9 +636,8 @@ export default function CourseDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 {!assignmentType ? (
-                                    // Selección de tipo de asignación
                                     <div className="space-y-4">
-                                        <p className="text-white/70 mb-4">Selecciona el tipo de asignación que deseas crear:</p>
+                                        <p className="text-white/70 mb-4">Selecciona el tipo de tarea:</p>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <Button
                                                 type="button"
@@ -604,16 +646,16 @@ export default function CourseDetailPage() {
                                             >
                                                 <Bell className="w-8 h-8 text-[#00c8ff]" />
                                                 <span className="text-white font-semibold">Recordatorio</span>
-                                                <span className="text-white/60 text-sm">Asignación simple con título y descripción</span>
+                                                <span className="text-white/60 text-sm">No entregable, sin nota. Puede tener adjuntos.</span>
                                             </Button>
                                             <Button
                                                 type="button"
-                                                onClick={() => setAssignmentType('documento')}
+                                                onClick={() => setAssignmentType('assignment')}
                                                 className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#1e3cff]/60 transition-all"
                                             >
-                                                <FileText className="w-8 h-8 text-[#00c8ff]" />
-                                                <span className="text-white font-semibold">Documento</span>
-                                                <span className="text-white/60 text-sm">Asignación con editor de documentos completo</span>
+                                                <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
+                                                <span className="text-white font-semibold">Asignación</span>
+                                                <span className="text-white/60 text-sm">Entregable, puede generar nota. Requiere logro.</span>
                                             </Button>
                                         </div>
                                     </div>
@@ -623,7 +665,7 @@ export default function CourseDetailPage() {
                                         <div className="flex items-center justify-between mb-4">
                                             <div className="flex items-center gap-2">
                                                 <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40">
-                                                    {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Documento'}
+                                                    {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Asignación'}
                                                 </Badge>
                                             </div>
                                             <Button
@@ -680,14 +722,14 @@ export default function CourseDetailPage() {
                                         </div>
                                     )}
 
-                                    {/* Selector de Logro de Calificación */}
-                                    {logros.length > 0 && (
+                                    {/* Selector de Logro (obligatorio solo para Asignación entregable) */}
+                                    {logros.length > 0 && assignmentType === 'assignment' && (
                                         <div>
-                                            <Label htmlFor="logro" className="text-white">Tipo de Logro de Calificación *</Label>
+                                            <Label htmlFor="logro" className="text-white">Logro de Calificación *</Label>
                                             <Select
                                                 value={logroCalificacionId}
                                                 onValueChange={setLogroCalificacionId}
-                                                required
+                                                required={assignmentType === 'assignment'}
                                             >
                                                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                                                     <SelectValue placeholder="Selecciona el tipo de logro (ej: Tareas, Exámenes, Proyectos)" />
@@ -713,24 +755,48 @@ export default function CourseDetailPage() {
                                         </Alert>
                                     )}
 
-                                            {/* Campos de Título, Descripción y Fecha */}
-                                            <div><Label htmlFor="titulo" className="text-white">Título</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Título de la asignación" /></div>
-                                            <div><Label htmlFor="descripcion" className="text-white">Descripción</Label><Textarea id="descripcion" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Descripción de la asignación" rows={4} /></div>
+                                            <div><Label htmlFor="titulo" className="text-white">Nombre</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Nombre de la tarea" /></div>
+                                            <div><Label htmlFor="instrucciones" className="text-white">Instrucciones</Label><Textarea id="instrucciones" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Instrucciones para el estudiante" rows={4} /></div>
                                             <div><Label htmlFor="fechaEntrega" className="text-white">Fecha de Entrega</Label><Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="bg-white/5 border-white/10 text-white" /></div>
+                                            <div>
+                                                <Label htmlFor="newMaterialTitle" className="text-white">Crear material nuevo (opcional)</Label>
+                                                <Input id="newMaterialTitle" value={newMaterialTitle} onChange={(e) => setNewMaterialTitle(e.target.value)} className="bg-white/5 border-white/10 text-white" placeholder="Título del material para vincular a esta tarea" />
+                                                <p className="text-white/50 text-xs mt-1">Se creará un material en Materiales y se vinculará a esta asignación</p>
+                                            </div>
 
-                                            {/* Editor de documentos solo para tipo "documento" */}
-                                            {assignmentType === 'documento' && (
-                                                <div>
-                                                    <Label className="text-white mb-2 block">Contenido del Documento</Label>
-                                                    <DocumentEditor
-                                                        content={documentContent}
-                                                        onChange={setDocumentContent}
-                                                        readOnly={false}
+                                            <div className="space-y-3">
+                                                <h3 className="text-sm font-semibold text-white">Materiales</h3>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        value={materialLinkInput}
+                                                        onChange={(e) => setMaterialLinkInput(e.target.value)}
+                                                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddMaterialLink())}
+                                                        className="bg-white/5 border-white/10 text-white flex-1"
+                                                        placeholder="URL (PDF, DOCX, enlace, Google Docs…)"
                                                     />
+                                                    <Button type="button" variant="outline" size="sm" className="border-white/20 text-white shrink-0" onClick={handleAddMaterialLink}>
+                                                        Añadir enlace
+                                                    </Button>
                                                 </div>
-                                            )}
+                                                <Button type="button" variant="outline" size="sm" className="w-full border-white/20 text-white" onClick={handleCreateGoogleDoc} disabled={creatingGdoc}>
+                                                    <FileUp className="w-4 h-4 mr-2" />
+                                                    {creatingGdoc ? 'Creando…' : 'Crear Documento en Google'}
+                                                </Button>
+                                                {assignmentMaterials.length > 0 && (
+                                                    <ul className="space-y-1.5 mt-2">
+                                                        {assignmentMaterials.map((m, i) => (
+                                                            <li key={i} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-white/5 border border-white/10 text-white text-sm">
+                                                                <span className="truncate">{m.fileName || m.url}</span>
+                                                                <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:text-white shrink-0 h-7 w-7 p-0" onClick={() => setAssignmentMaterials((prev) => prev.filter((_, j) => j !== i))}>
+                                                                    <X className="w-4 h-4" />
+                                                                </Button>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
 
-                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0 || (logros.length > 0 && !logroCalificacionId)} className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90">
+                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0 || (assignmentType === 'assignment' && logros.length > 0 && !logroCalificacionId)} className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90">
                                                 {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
                                             </Button>
                                         </form>

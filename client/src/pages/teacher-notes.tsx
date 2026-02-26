@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation, useRoute } from 'wouter';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { 
   BookOpen, 
   Users, 
@@ -92,6 +94,8 @@ const mockStudents: Student[] = [
   }
 ];
 
+const PASSED_THRESHOLD = 65;
+
 const mockStudentDetail: StudentDetail = {
   _id: '1',
   nombre: 'Juan Pérez',
@@ -133,20 +137,53 @@ const mockStudentDetail: StudentDetail = {
 // COMPONENTE PRINCIPAL
 // =========================================================
 
+const fetchSubjectsForGroup = async (groupId: string) => apiRequest('GET', `/api/courses/for-group/${groupId}`);
+const fetchGradeTableAssignments = async (groupId: string, courseId: string) =>
+  apiRequest('GET', `/api/assignments?groupId=${encodeURIComponent(groupId)}&courseId=${courseId}`);
+const fetchStudentsByGroup = async (groupId: string) => {
+  const res = await apiRequest('GET', `/api/groups/${groupId.toUpperCase().trim()}/students`);
+  return Array.isArray(res) ? res : [];
+};
+
 export default function TeacherNotesPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  
-  // Rutas dinámicas
+  const queryClient = useQueryClient();
   const [, paramsCourse] = useRoute('/profesor/cursos/:cursoId/notas');
   const [, paramsStudent] = useRoute('/profesor/cursos/:cursoId/estudiantes/:estudianteId/notas');
-  
   const cursoId = paramsCourse?.cursoId || paramsStudent?.cursoId || '';
   const estudianteId = paramsStudent?.estudianteId || null;
-  
+  const displayGroupId = cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId) ? cursoId : (cursoId || '').toUpperCase().trim();
+
+  const { data: subjectsForGroup = [] } = useQuery({ queryKey: ['subjectsForGroup', cursoId], queryFn: () => fetchSubjectsForGroup(cursoId), enabled: !!cursoId });
+  const firstSubjectId = subjectsForGroup[0]?._id;
+  const { data: assignmentsForTable = [] } = useQuery({
+    queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
+    queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
+    enabled: !!cursoId && !!firstSubjectId,
+  });
+  const { data: students = [] } = useQuery({
+    queryKey: ['students', cursoId],
+    queryFn: () => fetchStudentsByGroup(cursoId),
+    enabled: !!cursoId,
+  });
+  const { data: logrosData } = useQuery({
+    queryKey: ['/api/logros-calificacion', firstSubjectId],
+    queryFn: () => apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(firstSubjectId || '')}`),
+    enabled: !!firstSubjectId,
+  });
+  const logros = logrosData?.logros ?? [];
+
+  const updateGradeMutation = useMutation({
+    mutationFn: async ({ assignmentId, estudianteId: sid, calificacion }: { assignmentId: string; estudianteId: string; calificacion: number }) =>
+      apiRequest('PUT', `/api/assignments/${assignmentId}/grade`, { estudianteId: sid, calificacion: Math.min(100, Math.max(0, calificacion)), manualOverride: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, firstSubjectId] });
+      queryClient.invalidateQueries({ queryKey: ['students', cursoId] });
+    },
+  });
+
   const [showAddNoteForm, setShowAddNoteForm] = useState(false);
-  const [students] = useState<Student[]>(mockStudents);
-  const [studentDetail] = useState<StudentDetail | null>(mockStudentDetail);
 
   const [formData, setFormData] = useState({
     categoria: '',
@@ -175,241 +212,175 @@ export default function TeacherNotesPage() {
     setShowAddNoteForm(false);
   };
 
-  // Si no hay cursoId, redirigir a cursos del módulo de academia
   useEffect(() => {
-    if (!cursoId) {
-      setLocation('/profesor/academia/cursos');
-    }
+    if (!cursoId) setLocation('/profesor/academia/cursos');
   }, [cursoId, setLocation]);
 
-  if (!cursoId) {
-    return null;
-  }
+  if (!cursoId) return null;
 
-  // Vista de notas individual del estudiante
-  if (estudianteId && studentDetail) {
+  const currentStudent = estudianteId ? (students as { _id: string; nombre: string; email?: string }[]).find(s => s._id === estudianteId) : null;
+  const assignmentsByLogro = useMemo(() => {
+    const grouped: Record<string, { logro: { _id: string; nombre: string; porcentaje: number }; assignments: typeof assignmentsForTable }> = {};
+    const list = (logros as { _id: string; nombre: string; porcentaje: number; orden?: number }[]).sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+    list.forEach(l => { grouped[l._id] = { logro: l, assignments: [] }; });
+    const sinLogro: typeof assignmentsForTable = [];
+    (assignmentsForTable as { _id: string; titulo: string; submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[]; logroCalificacionId?: string }[]).forEach(a => {
+      const lid = a.logroCalificacionId as string | undefined;
+      if (lid && grouped[lid]) grouped[lid].assignments.push(a);
+      else sinLogro.push(a);
+    });
+    if (sinLogro.length) grouped['sin-logro'] = { logro: { _id: 'sin-logro', nombre: 'Sin categoría', porcentaje: 0 }, assignments: sinLogro };
+    return grouped;
+  }, [assignmentsForTable, logros]);
+
+  const getNotaForStudent = (assignment: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }, sid: string) => {
+    const subs = assignment.submissions || assignment.entregas || [];
+    const s = subs.find((x: { estudianteId: string }) => String(x.estudianteId) === String(sid));
+    const cal = (s as { calificacion?: number })?.calificacion;
+    return cal != null && !isNaN(cal) ? cal : null;
+  };
+  const promedioPonderado = useMemo(() => {
+    if (!estudianteId || !currentStudent) return null;
+    let totalP = 0, totalPorc = 0;
+    Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
+      if (logro._id === 'sin-logro') return;
+      const notas: number[] = [];
+      assignments.forEach(a => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
+      if (notas.length) {
+        const prom = notas.reduce((s, n) => s + n, 0) / notas.length;
+        totalP += (prom * logro.porcentaje) / 100;
+        totalPorc += logro.porcentaje;
+      }
+    });
+    return totalPorc > 0 ? Math.round(totalP * (100 / totalPorc)) : null;
+  }, [estudianteId, currentStudent, assignmentsByLogro]);
+
+  // Vista de notas individual del estudiante (misma fuente que tabla, editable)
+  if (estudianteId && currentStudent) {
+    const subjectName = (subjectsForGroup as { nombre?: string }[])[0]?.nombre || 'Materia';
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          {/* Header */}
           <div className="mb-8">
-            <NavBackButton to={`/profesor/cursos/${cursoId}/notas`} label="Estudiantes" />
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
-                  <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-xl sm:text-2xl">
-                    {studentDetail.nombre.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">
-                    {studentDetail.nombre}
-                  </h1>
-                  <p className="text-white/60 text-sm sm:text-base truncate">{studentDetail.email}</p>
-                </div>
+            <NavBackButton to={`/course/${cursoId}/grades`} label="Tabla de notas" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
+              <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
+                <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-xl">
+                  {currentStudent.nombre.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] break-words">{currentStudent.nombre}</h1>
+                {currentStudent.email && <p className="text-white/60 text-sm truncate">{currentStudent.email}</p>}
               </div>
-              <Dialog open={showAddNoteForm} onOpenChange={setShowAddNoteForm}>
-                <Button 
-                  className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
-                  onClick={() => setShowAddNoteForm(true)}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Agregar Nota
-                </Button>
-                <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Agregar Nueva Nota</DialogTitle>
-                    <DialogDescription className="text-white/60">
-                      Registra una nueva calificación para {studentDetail.nombre}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                      <Label htmlFor="categoria" className="text-white">Categoría *</Label>
-                      <Select
-                        value={formData.categoria}
-                        onValueChange={(value) => setFormData({ ...formData, categoria: value })}
-                        required
-                      >
-                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                          <SelectValue placeholder="Selecciona la categoría" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="examenes">Exámenes</SelectItem>
-                          <SelectItem value="tareas">Tareas</SelectItem>
-                          <SelectItem value="proyectos">Proyectos</SelectItem>
-                          <SelectItem value="participacion">Participación</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="actividad" className="text-white">Nombre de Actividad *</Label>
-                      <Input
-                        id="actividad"
-                        value={formData.actividad}
-                        onChange={(e) => setFormData({ ...formData, actividad: e.target.value })}
-                        required
-                        className="bg-white/5 border-white/10 text-white"
-                        placeholder="Ej: Examen Parcial 1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="fecha" className="text-white">Fecha *</Label>
-                      <Input
-                        id="fecha"
-                        type="date"
-                        value={formData.fecha}
-                        onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                        required
-                        className="bg-white/5 border-white/10 text-white"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="nota" className="text-white">Nota (0 - 100) *</Label>
-                      <Input
-        id="nota"
-        type="number"
-        min="0"
-        max="100"
-                        step="0.1"
-                        value={formData.nota}
-                        onChange={(e) => setFormData({ ...formData, nota: e.target.value })}
-                        required
-                        className="bg-white/5 border-white/10 text-white"
-                        placeholder="4.5"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="comentario" className="text-white">Comentario</Label>
-                      <Textarea
-                        id="comentario"
-                        value={formData.comentario}
-                        onChange={(e) => setFormData({ ...formData, comentario: e.target.value })}
-                        className="bg-white/5 border-white/10 text-white"
-                        placeholder="Comentarios adicionales (opcional)"
-                        rows={3}
-                      />
-                    </div>
-                    <div className="flex gap-2 justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          resetForm();
-                          setShowAddNoteForm(false);
-                        }}
-                        className="border-white/10 text-white hover:bg-white/10"
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        type="submit"
-                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
-                      >
-                        Guardar Nota
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
             </div>
           </div>
-
-          {/* Materia del Estudiante */}
           <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
             <CardHeader>
-              <CardTitle className="text-white">{studentDetail.materiaNombre}</CardTitle>
+              <CardTitle className="text-white">{subjectName}</CardTitle>
+              <CardDescription className="text-white/60">Grupo {displayGroupId}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white font-semibold">Promedio Final</span>
-                    <span className="text-2xl font-bold text-white">{studentDetail.promedioFinal.toFixed(1)}</span>
-                  </div>
+                  <span className="text-white font-semibold">Promedio general</span>
+                  <span className="text-2xl font-bold text-white ml-2">{promedioPonderado != null ? promedioPonderado : '—'}</span>
+                  <span className="text-white/50">/ 100</span>
                 </div>
-                <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-white font-semibold">Estado</span>
-                    <Badge className={studentDetail.promedioFinal >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
-                      {studentDetail.promedioFinal >= 4.0 ? 'Aprobado' : 'En Proceso'}
-                    </Badge>
-                  </div>
+                <div className="p-4 bg-white/5 border border-white/10 rounded-lg flex items-center gap-2">
+                  <span className="text-white font-semibold">Estado</span>
+                  <span
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium text-white"
+                    style={{
+                      backgroundColor: promedioPonderado != null
+                        ? (promedioPonderado >= PASSED_THRESHOLD ? '#16A34A' : '#DC2626')
+                        : 'transparent',
+                      border: promedioPonderado == null ? '1px solid rgba(255,255,255,0.3)' : undefined,
+                    }}
+                  >
+                    {promedioPonderado != null
+                      ? (promedioPonderado >= PASSED_THRESHOLD ? 'Aprobado' : 'Reprobado')
+                      : 'Sin notas'}
+                  </span>
                 </div>
               </div>
             </CardContent>
           </Card>
-
-          {/* Notas por Categoría */}
           <div className="space-y-6">
-            {studentDetail.categorias.map((categoria, idx) => (
-              <Card key={idx} className="bg-white/5 border-white/10 backdrop-blur-md">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-white">{categoria.categoria}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">
-                        {categoria.promedio.toFixed(1)}
-                      </span>
-                      <span className="text-white/50">/ 100</span>
-                    </div>
-                  </div>
-                  <CardDescription className="text-white/60">
-                    Promedio de {categoria.notas.length} {categoria.notas.length === 1 ? 'actividad' : 'actividades'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {categoria.notas.map((nota, notaIdx) => (
-                      <div
-                        key={notaIdx}
-                        className="p-4 bg-white/5 border border-white/10 rounded-lg"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-white mb-1">{nota.actividad}</h4>
-                            <p className="text-sm text-white/60">
-                              {new Date(nota.fecha).toLocaleDateString('es-CO', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl font-bold text-white">
-                              {Math.round(nota.nota)}
-                            </span>
-                            <span className="text-white/50">/ 100</span>
-                          </div>
-                        </div>
-                        {nota.comentario && (
-                          <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                            <div className="flex items-start gap-2">
-                              <MessageSquare className="w-4 h-4 text-[#1e3cff] mt-0.5 flex-shrink-0" />
-                              <p className="text-sm text-white/80">{nota.comentario}</p>
+            {Object.values(assignmentsByLogro).map(({ logro, assignments }) => {
+              if (assignments.length === 0) return null;
+              const notas: number[] = [];
+              assignments.forEach(a => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
+              const promLogro = notas.length ? Math.round(notas.reduce((s, n) => s + n, 0) / notas.length) : null;
+              return (
+                <Card key={logro._id} className="bg-white/5 border-white/10 backdrop-blur-md">
+                  <CardHeader>
+                    <CardTitle className="text-white">{logro.nombre}</CardTitle>
+                    <CardDescription className="text-white/60">
+                      Promedio: {promLogro != null ? `${promLogro} / 100` : '—'} {logro.porcentaje > 0 && ` · ${logro.porcentaje}% del total`}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {assignments.map((a: { _id: string; titulo: string; fechaEntrega?: string }) => {
+                        const val = getNotaForStudent(a, estudianteId);
+                        return (
+                          <div key={a._id} className="p-4 bg-white/5 border border-white/10 rounded-lg flex items-center justify-between gap-4">
+                            <div>
+                              <h4 className="font-semibold text-white">{a.titulo}</h4>
+                              {a.fechaEntrega && <p className="text-sm text-white/60">{new Date(a.fechaEntrega).toLocaleDateString('es-CO')}</p>}
                             </div>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              defaultValue={val != null ? val : ''}
+                              className="w-20 text-center font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              onBlur={(e) => {
+                                const n = parseInt(e.target.value, 10);
+                                if (!isNaN(n) && n >= 0 && n <= 100) updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: n });
+                              }}
+                            />
                           </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </div>
     );
   }
 
-  // Vista principal: Lista de estudiantes del curso
-  const promedioGeneral = students.reduce((acc, s) => acc + s.promedio, 0) / students.length;
-  
-  // Datos para la gráfica de promedios por estudiante
-  const chartData = students.map(s => ({
+  const studentPromedios = useMemo(() => {
+    const map: Record<string, number> = {};
+    (students as { _id: string }[]).forEach(s => {
+      let totalP = 0, totalPorc = 0;
+      Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
+        if (logro._id === 'sin-logro') return;
+        const notas: number[] = [];
+        assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => {
+          const n = getNotaForStudent(a, s._id);
+          if (n != null) notas.push(n);
+        });
+        if (notas.length) {
+          totalP += (notas.reduce((sum, n) => sum + n, 0) / notas.length) * (logro.porcentaje / 100);
+          totalPorc += logro.porcentaje;
+        }
+      });
+      map[s._id] = totalPorc > 0 ? Math.round(totalP * (100 / totalPorc)) : 0;
+    });
+    return map;
+  }, [students, assignmentsByLogro]);
+  const promedioGeneral = (students as { _id: string }[]).length
+    ? (students as { _id: string }[]).reduce((acc, s) => acc + (studentPromedios[s._id] ?? 0), 0) / (students as { _id: string }[]).length
+    : 0;
+  const chartData = (students as { _id: string; nombre: string }[]).map(s => ({
     nombre: s.nombre.split(' ')[0],
-    promedio: s.promedio
+    promedio: studentPromedios[s._id] ?? 0
   }));
 
   const chartConfig = {
@@ -432,7 +403,7 @@ export default function TeacherNotesPage() {
       <div className="max-w-7xl mx-auto w-full">
         {/* Header */}
         <div className="mb-8">
-          <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+          <NavBackButton to={`/course-detail/${cursoId}`} label={`Grupo ${displayGroupId}`} />
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">
@@ -566,60 +537,46 @@ export default function TeacherNotesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {students.map((student) => (
+                {(students as { _id: string; nombre: string; email?: string }[]).map((student) => {
+                  const prom = studentPromedios[student._id] ?? 0;
+                  return (
                   <TableRow key={student._id} className="border-white/10">
                     <TableCell className="text-white">
                       <div className="flex items-center gap-3">
                         <Avatar className="w-8 h-8">
                           <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-sm">
-                            {student.nombre.split(' ').map(n => n[0]).join('')}
+                            {student.nombre.split(' ').map((n: string) => n[0]).join('')}
                           </AvatarFallback>
                         </Avatar>
                         <div>
                           <div className="font-medium">{student.nombre}</div>
-                          <div className="text-sm text-white/60">{student.email}</div>
+                          <div className="text-sm text-white/60">{student.email ?? ''}</div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-white">
-                      <span className="text-lg font-semibold">{student.promedio.toFixed(1)}</span>
+                      <span className="text-lg font-semibold">{prom > 0 ? prom : '—'}</span>
                       <span className="text-white/50 text-sm ml-1">/ 100</span>
                     </TableCell>
-                    <TableCell className="text-white">
-                      <span className="font-medium">{student.ultimaNota.toFixed(1)}</span>
-                      <span className="text-white/50 text-sm ml-1">/ 100</span>
-                    </TableCell>
+                    <TableCell className="text-white">—</TableCell>
                     <TableCell>
-                      <Badge className={student.promedio >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : student.promedio >= 50 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'}>
-                        {student.promedio >= 4.0 ? 'Excelente' : student.promedio >= 3.0 ? 'Bueno' : 'Requiere Atención'}
+                      <Badge className={prom >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : prom >= 50 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'}>
+                        {prom >= 70 ? 'Excelente' : prom >= 50 ? 'Bueno' : 'Requiere atención'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2 flex-wrap">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-white/10 text-white hover:bg-white/10 text-xs md:text-sm"
-                          onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
-                        >
-                          <span className="hidden sm:inline">Ver Notas</span>
-                          <span className="sm:hidden">Ver</span>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
-                          onClick={() => {
-                            setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`);
-                            setShowAddNoteForm(true);
-                          }}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-white/10 text-white hover:bg-white/10 text-xs md:text-sm"
+                        onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
+                      >
+                        Ver Notas
+                      </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
               </div>
@@ -631,29 +588,25 @@ export default function TeacherNotesPage() {
         <div className="mb-8">
           <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 font-['Poppins']">Estudiantes del Curso</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {students.map((student) => (
-              <Card
-                key={student._id}
-                className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate"
-              >
+            {(students as { _id: string; nombre: string; email?: string; estado?: string }[]).map((student) => {
+              const prom = studentPromedios[student._id] ?? 0;
+              return (
+              <Card key={student._id} className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
                 <CardHeader className="p-6">
                   <div className="flex items-center gap-4 mb-4">
                     <Avatar className="w-16 h-16">
                       <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-lg">
-                        {student.nombre.split(' ').map(n => n[0]).join('')}
+                        {student.nombre.split(' ').map((n: string) => n[0]).join('')}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-white">{student.nombre}</h3>
-                      <p className="text-sm text-white/60">{student.email}</p>
+                      <p className="text-sm text-white/60">{student.email ?? ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 mb-4">
-                    <Badge className={student.estado === 'activo' ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'}>
-                      {student.estado}
-                    </Badge>
-                    <Badge className={student.promedio >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
-                      Promedio: {student.promedio.toFixed(1)}
+                    <Badge className={prom >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
+                      Promedio: {prom > 0 ? prom : '—'}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -665,20 +618,10 @@ export default function TeacherNotesPage() {
                   >
                     Ver Notas del Estudiante
                   </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
-                    onClick={() => {
-                      setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`);
-                      setShowAddNoteForm(true);
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Agregar Nota
-                  </Button>
                 </CardContent>
               </Card>
-            ))}
+            );
+            })}
           </div>
         </div>
       </div>

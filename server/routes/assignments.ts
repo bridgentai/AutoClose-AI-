@@ -112,7 +112,7 @@ router.get('/debug/profesor/:profesorId/:mes/:year', async (req, res) => {
 // POST /api/assignments - Crear nueva tarea (solo profesores)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos, logroCalificacionId } = req.body;
+    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos, logroCalificacionId, type, isGradable } = req.body;
 
     if (!titulo || !descripcion || !curso || !fechaEntrega) {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
@@ -148,6 +148,8 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       profesorId: normalizedUserId,
       colegioId: user.colegioId,
       logroCalificacionId: logroCalificacionId || undefined,
+      type: type === 'reminder' ? 'reminder' : 'assignment',
+      isGradable: type === 'reminder' ? false : (isGradable !== false),
     });
 
     if (!result.success) {
@@ -262,27 +264,26 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 // PUT /api/assignments/:id - Editar tarea (solo el profesor que la creó)
 router.put('/:id', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, contenidoDocumento, fechaEntrega, adjuntos } = req.body;
+    const { titulo, descripcion, contenidoDocumento, fechaEntrega, adjuntos, type, isGradable, logroCalificacionId } = req.body;
 
     const assignment = await Assignment.findById(req.params.id);
     if (!assignment) {
       return res.status(404).json({ message: 'Tarea no encontrada.' });
     }
 
-    // Normalizar userId
     const normalizedUserId = normalizeIdForQuery(req.userId || '');
-
-    // Verificar que el usuario es el profesor que creó la tarea
     if (assignment.profesorId.toString() !== normalizedUserId) {
       return res.status(403).json({ message: 'No tienes permiso para editar esta tarea.' });
     }
 
-    // Actualizar campos
     if (titulo) assignment.titulo = titulo;
     if (descripcion) assignment.descripcion = descripcion;
     if (contenidoDocumento !== undefined) assignment.contenidoDocumento = contenidoDocumento;
     if (fechaEntrega) assignment.fechaEntrega = new Date(fechaEntrega);
     if (adjuntos !== undefined) assignment.adjuntos = adjuntos;
+    if (type === 'reminder' || type === 'assignment') assignment.type = type;
+    if (typeof isGradable === 'boolean') assignment.isGradable = assignment.type === 'assignment' ? isGradable : false;
+    if (logroCalificacionId !== undefined) assignment.logroCalificacionId = logroCalificacionId ? new Types.ObjectId(logroCalificacionId) : undefined;
 
     await assignment.save();
 
@@ -372,7 +373,7 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
 // PUT /api/assignments/:id/grade - Calificar tarea (solo profesor creador)
 router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
   try {
-    const { estudianteId, calificacion, retroalimentacion, logro } = req.body;
+    const { estudianteId, calificacion, retroalimentacion, logro, manualOverride } = req.body;
 
     if (!estudianteId || calificacion === undefined) {
       return res.status(400).json({ message: 'Faltan campos obligatorios: estudianteId y calificacion.' });
@@ -501,24 +502,27 @@ router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
       estudianteId: normalizedEstudianteId,
     });
 
+    const logroId = assignment.logroCalificacionId;
     if (existingNota) {
-      // Actualizar nota existente
       existingNota.nota = calificacion;
-      if (logro) {
-        existingNota.logro = logro;
-      }
+      if (logro !== undefined) existingNota.logro = logro;
+      if (logroId) existingNota.logroId = logroId;
+      existingNota.manualOverride = !!manualOverride;
       existingNota.fecha = new Date();
+      existingNota.updatedAt = new Date();
       await existingNota.save();
       nota = existingNota;
     } else {
-      // Crear nueva nota
       const newNota = new Nota({
         tareaId: assignment._id,
         estudianteId: normalizedEstudianteId,
         profesorId: assignment.profesorId,
         nota: calificacion,
         logro: logro || undefined,
+        logroId: logroId || undefined,
+        manualOverride: !!manualOverride,
         fecha: new Date(),
+        updatedAt: new Date(),
       });
       await newNota.save();
       nota = newNota;

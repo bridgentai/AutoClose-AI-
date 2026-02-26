@@ -47,7 +47,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
   if (!CONSENT_EXEMPT_PATHS.includes(location) && consent && (!consent.consentimientoTerminos || !consent.consentimientoPrivacidad)) {
-    return null;
+    return (
+      <div className="flex items-center justify-center min-h-[200px] text-white/80">
+        <span className="text-sm">Redirigiendo a consentimiento…</span>
+      </div>
+    );
   }
 
   return <>{children}</>;

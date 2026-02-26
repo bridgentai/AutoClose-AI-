@@ -4,19 +4,29 @@ import { FileText, Link as LinkIcon, Video, Download, GraduationCap } from 'luci
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
 import { NavBackButton } from '@/components/nav-back-button';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+
+interface MaterialItem {
+  _id: string;
+  titulo: string;
+  tipo: string;
+  url: string;
+  descripcion?: string;
+  createdAt: string;
+  linkedAssignments?: string[];
+}
 
 export default function Materials() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const cursoIdFilter = urlParams.get('cursoId') || undefined;
 
-  const materials = [
-    { id: 1, titulo: 'Guía de Estudio - Cálculo Diferencial', tipo: 'pdf', curso: 'Matemáticas', fecha: '2025-01-10' },
-    { id: 2, titulo: 'Video Tutorial: Ecuaciones Diferenciales', tipo: 'video', curso: 'Matemáticas', fecha: '2025-01-09' },
-    { id: 3, titulo: 'Presentación: Leyes de Newton', tipo: 'documento', curso: 'Física', fecha: '2025-01-08' },
-    { id: 4, titulo: 'Enlace: Simulador de Física', tipo: 'enlace', curso: 'Física', fecha: '2025-01-07' },
-    { id: 5, titulo: 'Tabla Periódica Interactiva', tipo: 'enlace', curso: 'Química', fecha: '2025-01-06' },
-    { id: 6, titulo: 'Ejercicios Resueltos - Química Orgánica', tipo: 'pdf', curso: 'Química', fecha: '2025-01-05' },
-  ];
+  const { data: materials = [], isLoading } = useQuery<MaterialItem[]>({
+    queryKey: ['materials', cursoIdFilter],
+    queryFn: () => apiRequest('GET', cursoIdFilter ? `/api/materials?cursoId=${encodeURIComponent(cursoIdFilter)}` : '/api/materials'),
+  });
 
   const getIcon = (tipo: string) => {
     switch (tipo) {
@@ -66,34 +76,46 @@ export default function Materials() {
           </div>
 
           <div className="grid grid-cols-1 gap-4">
-            {materials.map((material) => (
-              <Card key={material.id} className="backdrop-blur-md hover-elevate transition-all cursor-pointer bg-white/5 border-white/10">
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-[#002366] to-[#1e3cff]">
-                        {getIcon(material.tipo)}
-                      </div>
-                      
-                      <div className="flex-1">
-                        <h3 className="text-white font-medium mb-1">{material.titulo}</h3>
-                        <div className="flex items-center gap-4 text-sm text-white/60 flex-wrap">
-                          <span>{material.curso}</span>
-                          <span>•</span>
-                          <span>{new Date(material.fecha).toLocaleDateString('es-CO')}</span>
-                          <span>•</span>
-                          <span className="capitalize">{material.tipo}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button className="p-2 rounded-lg transition-colors hover:bg-white/5 text-white/70 hover:text-white">
-                      <Download className="w-5 h-5" />
-                    </button>
-                  </div>
+            {isLoading ? (
+              <p className="text-white/60">Cargando materiales...</p>
+            ) : materials.length === 0 ? (
+              <Card className="bg-white/5 border-white/10">
+                <CardContent className="p-8 text-center text-white/60">
+                  No hay materiales. {user?.rol === 'profesor' && 'Sube un material para compartir con tus estudiantes.'}
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              materials.map((material) => (
+                <Card key={material._id} className="backdrop-blur-md hover-elevate transition-all bg-white/5 border-white/10">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white bg-gradient-to-br from-[#002366] to-[#1e3cff]">
+                          {getIcon(material.tipo)}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-white font-medium mb-1">{material.titulo}</h3>
+                          <div className="flex items-center gap-4 text-sm text-white/60 flex-wrap">
+                            <span>{new Date(material.createdAt).toLocaleDateString('es-CO')}</span>
+                            <span>•</span>
+                            <span className="capitalize">{material.tipo}</span>
+                            {material.linkedAssignments?.length ? (
+                              <span>• Vinculado a {material.linkedAssignments.length} tarea(s)</span>
+                            ) : null}
+                          </div>
+                          {material.descripcion && <p className="text-sm text-white/50 mt-1">{material.descripcion}</p>}
+                        </div>
+                      </div>
+                      {material.url && (
+                        <a href={material.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-white/5 text-white/70 hover:text-white">
+                          <Download className="w-5 h-5" />
+                        </a>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </div>
     </div>

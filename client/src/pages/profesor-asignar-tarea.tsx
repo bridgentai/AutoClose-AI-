@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef, Component } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Plus, X, Paperclip, Link2, FileText, Maximize2, Bell, Bold, Italic, Underline, List, Strikethrough, Upload, Youtube, Users, HelpCircle } from 'lucide-react';
+import { Plus, X, Paperclip, Link2, FileText, Maximize2, Bell, Bold, Italic, Underline, List, Strikethrough, Upload, Youtube, Users, HelpCircle, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,32 @@ interface Attachment {
   url: string;
 }
 
-export default function ProfesorAsignarTareaPage() {
+class AsignarTareaErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError = () => ({ hasError: true });
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6">
+          <NavBackButton to="/profesor/academia/tareas" label="Asignaciones" />
+          <div className="mt-6 p-6 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-200 flex flex-col gap-4">
+            <p className="font-medium flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              No se pudo cargar la página de crear asignación
+            </p>
+            <p className="text-sm text-white/80">Vuelve a intentar o contacta al administrador si el problema continúa.</p>
+            <Button onClick={() => this.setState({ hasError: false })} variant="outline" className="w-fit border-amber-500/50 text-amber-200 hover:bg-amber-500/20">
+              Reintentar
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function ProfesorAsignarTareaPageInner() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -57,13 +82,22 @@ export default function ProfesorAsignarTareaPage() {
   const [asignarA, setAsignarA] = useState('todos');
   const instruccionesRef = useRef<HTMLDivElement>(null);
 
-  const { data: professorGroupsRaw, isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
+  const { data: professorGroupsRaw, isLoading: isLoadingGroups, isError: errorGroups } = useQuery({
     queryKey: ['professorGroups'],
     queryFn: () => apiRequest('GET', '/api/professor/my-groups'),
     enabled: !!(user?.id ?? user?._id),
     staleTime: 0,
   });
-  const professorGroups = Array.isArray(professorGroupsRaw) ? professorGroupsRaw : [];
+  // Aceptar respuesta en formato array o envuelta en { groups } / { data }
+  const professorGroups: ProfessorGroupAssignment[] = (() => {
+    if (Array.isArray(professorGroupsRaw)) return professorGroupsRaw;
+    if (professorGroupsRaw && typeof professorGroupsRaw === 'object') {
+      const r = professorGroupsRaw as Record<string, unknown>;
+      if (Array.isArray(r.groups)) return r.groups as ProfessorGroupAssignment[];
+      if (Array.isArray(r.data)) return r.data as ProfessorGroupAssignment[];
+    }
+    return [];
+  })();
 
   const availableGroups = professorGroups.map(g => g?.groupId).filter(Boolean) as string[];
   const getSubjectsForGroup = (groupId: string) => {
@@ -223,6 +257,25 @@ export default function ProfesorAsignarTareaPage() {
           Crear Asignación
         </h2>
       </div>
+
+      {errorGroups && (
+        <div className="mb-6 p-4 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-200">
+          <p className="font-medium">No se pudieron cargar tus grupos.</p>
+          <p className="text-sm mt-1 text-white/80">Reintenta más tarde o contacta al administrador.</p>
+        </div>
+      )}
+
+      {!isLoadingGroups && !errorGroups && availableGroups.length === 0 && (
+        <div className="mb-6 p-6 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+          <p className="text-white font-medium flex items-center gap-2">
+            <Users className="w-5 h-5 text-[#00c8ff]" />
+            Sin grupos asignados
+          </p>
+          <p className="text-white/70 text-sm mt-2">
+            El administrador del colegio debe asignarte a uno o más cursos desde su panel (Usuarios → Cursos → Asignar profesor a cursos) para que puedas crear asignaciones.
+          </p>
+        </div>
+      )}
 
       <div className="force-white-bg rounded-lg shadow-xl overflow-hidden relative z-10" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10 }}>
             <form onSubmit={handleSubmit} className="flex gap-0" style={{ backgroundColor: '#ffffff' }}>
@@ -428,45 +481,47 @@ export default function ProfesorAsignarTareaPage() {
                 {/* Para */}
                 <div className="mb-6">
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">Para</Label>
-                  <Select
-                    value={formData.curso}
-                    onValueChange={(value) => {
-                    const subjects = getSubjectsForGroup(value);
-                    const materiaId = subjects.length === 1 ? subjects[0]._id : '';
-                    setFormData({ ...formData, curso: value, materiaId });
-                    setLogroCalificacionId('');
-                  }}
-                    disabled={isLoadingGroups || availableGroups.length === 0}
-                  >
-                    <SelectTrigger className="bg-white border-gray-300 text-gray-900">
-                      <SelectValue placeholder={
-                        isLoadingGroups ? "Cargando grupos..." :
-                        availableGroups.length === 0 ? "Sin grupos asignados" : 
-                        "Selecciona curso"
-                      } />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white">
-                      {availableGroups.map((grupo) => {
-                        const subjects = getSubjectsForGroup(grupo);
-                        const subjectNames = subjects.map(s => s.nombre).join(', ') || 'Sin materia asignada';
-                        return (
-                          <SelectItem key={grupo} value={grupo} className="text-gray-900">
-                            <div className="flex flex-col items-start py-1">
-                              <span className="font-semibold">{subjectNames}</span>
-                              <span className="text-xs text-gray-600">Grupo: {grupo}</span>
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
+                  {availableGroups.length > 0 ? (
+                    <Select
+                      value={formData.curso && availableGroups.includes(formData.curso) ? formData.curso : undefined}
+                      onValueChange={(value) => {
+                        const subjects = getSubjectsForGroup(value);
+                        const materiaId = subjects.length === 1 ? subjects[0]._id : '';
+                        setFormData(prev => ({ ...prev, curso: value, materiaId }));
+                        setLogroCalificacionId('');
+                      }}
+                      disabled={isLoadingGroups}
+                    >
+                      <SelectTrigger className="bg-white border-gray-300 text-gray-900">
+                        <SelectValue placeholder={isLoadingGroups ? "Cargando grupos..." : "Selecciona curso"} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white">
+                        {availableGroups.map((grupo) => {
+                          const subjects = getSubjectsForGroup(grupo);
+                          const subjectNames = subjects.map(s => s.nombre).join(', ') || 'Sin materia asignada';
+                          return (
+                            <SelectItem key={grupo} value={grupo} className="text-gray-900">
+                              <div className="flex flex-col items-start py-1">
+                                <span className="font-semibold">{subjectNames}</span>
+                                <span className="text-xs text-gray-600">Grupo: {grupo}</span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="h-9 rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-500 flex items-center">
+                      {isLoadingGroups ? "Cargando grupos..." : "Sin grupos asignados"}
+                    </div>
+                  )}
                 </div>
 
                 {getSubjectsForGroup(formData.curso).length > 1 && (
                   <div className="mb-6">
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">Materia</Label>
                     <Select
-                      value={formData.materiaId}
+                      value={getSubjectsForGroup(formData.curso).some(s => s._id === formData.materiaId) ? formData.materiaId : undefined}
                       onValueChange={(value) => setFormData({ ...formData, materiaId: value })}
                     >
                       <SelectTrigger className="bg-white border-gray-300 text-gray-900">
@@ -653,6 +708,14 @@ export default function ProfesorAsignarTareaPage() {
             </form>
           </div>
     </div>
+  );
+}
+
+export default function ProfesorAsignarTareaPage() {
+  return (
+    <AsignarTareaErrorBoundary>
+      <ProfesorAsignarTareaPageInner />
+    </AsignarTareaErrorBoundary>
   );
 }
 

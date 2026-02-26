@@ -47,6 +47,10 @@ export interface IAssignment {
   maxScore?: number;
   /** Whether forecast can adjust for future assignments in this category. */
   predictiveWeightAdjustmentAllowed?: boolean;
+  /** Tipo de tarea: "assignment" (entregable) o "reminder" (recordatorio no entregable) */
+  type?: 'assignment' | 'reminder';
+  /** Si la tarea es calificada (solo para type === "assignment") */
+  isGradable?: boolean;
   // Campo legacy para migración gradual
   entregas?: IEntrega[];
 }
@@ -94,6 +98,8 @@ const assignmentSchema = new Schema<IAssignment>({
   categoryId: { type: Schema.Types.ObjectId, ref: 'grading_categories' },
   maxScore: { type: Number, default: 100 },
   predictiveWeightAdjustmentAllowed: { type: Boolean, default: false },
+  type: { type: String, enum: ['assignment', 'reminder'], default: 'assignment' },
+  isGradable: { type: Boolean, default: true },
   // Campo legacy para migración gradual
   entregas: { type: [entregaSchema], default: [] },
 });

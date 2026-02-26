@@ -28,8 +28,9 @@ import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
 import Courses from "@/pages/courses";
 import CourseDetail from "@/pages/course-detail";
+import CourseStudentsPage from "@/pages/course-students";
+import CourseMaterialsPage from "@/pages/course-materials";
 import CourseGradesTable from "@/pages/course-grades-table";
-import CourseGradesInput from "@/pages/course-grades-input";
 import CourseAnalytics from "@/pages/course-analytics";
 import CalendarPage from "@/pages/calendar";
 import Materials from "@/pages/materials";
@@ -226,11 +227,14 @@ function AppRouter() {
             <Route path="/course/:cursoId">
               <AuthGuard><CourseDetail /></AuthGuard>
             </Route>
+            <Route path="/course-detail/:cursoId/estudiantes">
+              <AuthGuard><CourseStudentsPage /></AuthGuard>
+            </Route>
+            <Route path="/course-detail/:cursoId/materiales">
+              <AuthGuard><CourseMaterialsPage /></AuthGuard>
+            </Route>
             <Route path="/course-detail/:cursoId">
               <AuthGuard><CourseDetail /></AuthGuard>
-            </Route>
-            <Route path="/course/:cursoId/grades/input">
-              <AuthGuard><CourseGradesInput /></AuthGuard>
             </Route>
             <Route path="/course/:cursoId/analytics">
               <AuthGuard><CourseAnalytics /></AuthGuard>
@@ -391,10 +395,10 @@ function AppRouter() {
               <AuthGuard><GroupAssignmentPage /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/tareas/asignar">
-              <AuthGuard><ProfesorAsignarTareaPage /></AuthGuard>
+              <AuthGuard><Redirect to="/profesor/academia/cursos" /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/tareas/revision">
-              <AuthGuard><ProfesorRevisionTareasPage /></AuthGuard>
+              <AuthGuard><Redirect to="/profesor/academia/cursos" /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/tareas/calificacion/:cursoId">
               <AuthGuard><ProfesorPanelCalificacionPage /></AuthGuard>
@@ -403,7 +407,10 @@ function AppRouter() {
               <AuthGuard><ProfesorEditorDocumentoPage /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/tareas">
-              <AuthGuard><ProfesorTareasPage /></AuthGuard>
+              <AuthGuard><Redirect to="/profesor/academia/cursos" /></AuthGuard>
+            </Route>
+            <Route path="/profesor/academia/calificacion/logros">
+              <AuthGuard><ProfesorCalificacionLogrosPage /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/calificacion">
               <AuthGuard><ProfesorCalificacionLogrosPage /></AuthGuard>

@@ -17,10 +17,14 @@ export default function AsistenciaProfesor() {
   const [fecha, setFecha] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [registros, setRegistros] = useState<Record<string, 'presente' | 'ausente'>>({});
 
-  const { data: cursos = [] } = useQuery({
+  type ProfessorCourse = { _id: string; nombre: string; grupoIds?: string[] };
+  type ProfessorCoursesResponse = { courses: ProfessorCourse[]; total: number };
+
+  const { data: coursesResponse, isLoading: loadingCursos, isError: errorCursos } = useQuery({
     queryKey: ['/api/professor/courses'],
-    queryFn: () => apiRequest<{ _id: string; nombre: string; cursos: string[] }[]>('GET', '/api/professor/courses'),
+    queryFn: () => apiRequest<ProfessorCoursesResponse>('GET', '/api/professor/courses'),
   });
+  const cursos = coursesResponse?.courses ?? [];
 
   const { data: estudiantes = [], isLoading: loadingEstudiantes } = useQuery({
     queryKey: ['/api/attendance/curso', cursoId, 'estudiantes'],
@@ -92,13 +96,22 @@ export default function AsistenciaProfesor() {
             <select
               value={cursoId}
               onChange={(e) => setCursoId(e.target.value)}
-              className="w-full rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#00c8ff]"
+              disabled={loadingCursos}
+              className="w-full rounded-lg bg-white/10 border border-white/10 text-white px-3 py-2 focus:ring-2 focus:ring-[#00c8ff] disabled:opacity-60"
             >
-              <option value="">Seleccionar materia</option>
+              <option value="">
+                {loadingCursos ? 'Cargando materias...' : errorCursos ? 'Error al cargar' : 'Seleccionar materia'}
+              </option>
               {cursos.map((c) => (
                 <option key={c._id} value={c._id}>{c.nombre}</option>
               ))}
             </select>
+            {errorCursos && (
+              <p className="text-amber-400 text-sm">No se pudieron cargar las materias. Reintenta más tarde.</p>
+            )}
+            {!loadingCursos && !errorCursos && cursos.length === 0 && (
+              <p className="text-white/60 text-sm">No tienes materias asignadas.</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label className="text-white/80 flex items-center gap-2">

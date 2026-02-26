@@ -264,10 +264,14 @@ router.get('/courses', protect, async (req: AuthRequest, res) => {
       return res.status(401).json({ message: 'No autorizado.' });
     }
 
-    // Buscar todos los cursos donde el profesor está asignado (usando ObjectId para comparación correcta)
-    const courses = await Course.find({ 
-      profesorIds: new Types.ObjectId(profesorId),
-      colegioId 
+    const normalizedProfesorId = normalizeIdForQuery(profesorId);
+    // Buscar todos los cursos donde el profesor está asignado (acepta ObjectId o string)
+    const courses = await Course.find({
+      $or: [
+        { profesorIds: normalizedProfesorId },
+        { profesorIds: new Types.ObjectId(normalizedProfesorId) },
+      ],
+      colegioId,
     }).select('nombre descripcion cursos estudianteIds colorAcento icono createdAt');
 
     // Formatear la respuesta con información detallada

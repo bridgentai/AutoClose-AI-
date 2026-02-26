@@ -13,7 +13,11 @@ export interface CreateAssignmentParams {
   adjuntos?: string[];
   profesorId: string;
   colegioId: string;
-  logroCalificacionId?: string; // Tipo de logro (Tareas, Exámenes, etc.) para ponderar la nota
+  logroCalificacionId?: string; // Tipo de logro (Tareas, Exámenes, etc.) - obligatorio si type === 'assignment'
+  /** "assignment" (entregable) | "reminder" (recordatorio) */
+  type?: 'assignment' | 'reminder';
+  /** Si es calificada (solo para type === 'assignment') */
+  isGradable?: boolean;
 }
 
 export interface CreateAssignmentResult {
@@ -28,7 +32,7 @@ export interface CreateAssignmentResult {
  */
 export async function createAssignment(params: CreateAssignmentParams): Promise<CreateAssignmentResult> {
   try {
-    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos, profesorId, colegioId, logroCalificacionId } = params;
+    const { titulo, descripcion, contenidoDocumento, curso, courseId, fechaEntrega, adjuntos, profesorId, colegioId, logroCalificacionId, type = 'assignment', isGradable = true } = params;
 
     // Validar campos obligatorios
     if (!titulo || !descripcion || !curso || !fechaEntrega) {
@@ -99,9 +103,10 @@ export async function createAssignment(params: CreateAssignmentParams): Promise<
       };
     }
 
-    // Si la materia tiene logros configurados, se debe seleccionar uno obligatoriamente
+    // Si type === 'assignment' y la materia tiene logros, logro es obligatorio
     const logrosMateria = await LogroCalificacion.find({ courseId: normalizedCourseId, colegioId }).lean();
-    if (logrosMateria.length > 0 && !logroCalificacionId) {
+    const taskType = type === 'reminder' ? 'reminder' : 'assignment';
+    if (taskType === 'assignment' && logrosMateria.length > 0 && !logroCalificacionId) {
       return {
         success: false,
         error: 'Debes seleccionar el tipo de logro al que pertenece esta asignación.',
@@ -133,18 +138,19 @@ export async function createAssignment(params: CreateAssignmentParams): Promise<
       titulo,
       descripcion,
       contenidoDocumento: contenidoDocumento || undefined,
-      cursoId: normalizedCourseId, // Campo requerido en nueva estructura
-      materiaId: materiaId, // Campo requerido en nueva estructura
+      cursoId: normalizedCourseId,
+      materiaId: materiaId,
       profesorId: user._id,
       fechaEntrega: fechaEntrega instanceof Date ? fechaEntrega : new Date(fechaEntrega),
-      submissions: [], // Usar submissions en lugar de entregas
+      submissions: [],
       adjuntos: adjuntos || [],
       colegioId: user.colegioId,
-      // Campos adicionales para compatibilidad
-      curso: cursoNormalizado, // Usar curso normalizado para consistencia
+      curso: cursoNormalizado,
       courseId: normalizedCourseId,
       profesorNombre: user.nombre,
       logroCalificacionId: logroObjId,
+      type: taskType,
+      isGradable: taskType === 'assignment' ? !!isGradable : false,
     });
 
     await newAssignment.save();

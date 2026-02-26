@@ -6,7 +6,12 @@ interface INota {
   profesorId: Types.ObjectId;
   nota: number;
   logro?: string;
+  /** Ref al logro de calificación (para promedio ponderado) */
+  logroId?: Types.ObjectId;
+  /** Si la nota fue editada manualmente (sobrescribe valor automático) */
+  manualOverride?: boolean;
   fecha: Date;
+  updatedAt?: Date;
 }
 
 const notaSchema = new Schema<INota>({
@@ -15,7 +20,10 @@ const notaSchema = new Schema<INota>({
   profesorId: { type: Schema.Types.ObjectId, ref: 'usuarios', required: true },
   nota: { type: Number, required: true },
   logro: { type: String },
+  logroId: { type: Schema.Types.ObjectId, ref: 'logros_calificacion' },
+  manualOverride: { type: Boolean, default: false },
   fecha: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
 });
 
 // Índices para búsquedas rápidas

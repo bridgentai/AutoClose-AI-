@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, CheckSquare, Globe, ClipboardList, Percent } from "lucide-react";
+import { BookOpen, Globe, ClipboardList, Percent } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
@@ -7,31 +7,10 @@ import { useEffect } from "react";
 import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
-  {
-    title: "Cursos",
-    path: "/profesor/academia/cursos",
-    icon: BookOpen,
-  },
-  {
-    title: "Asignaciones",
-    path: "/profesor/academia/tareas",
-    icon: CheckSquare,
-  },
-  {
-    title: "Calificación",
-    path: "/profesor/academia/calificacion",
-    icon: Percent,
-  },
-  {
-    title: "Asistencia",
-    path: "/profesor/academia/asistencia",
-    icon: ClipboardList,
-  },
-  {
-    title: "Plataformas",
-    path: "/profesor/academia/plataformas",
-    icon: Globe,
-  },
+  { title: "Cursos", path: "/profesor/academia/cursos", icon: BookOpen },
+  { title: "Calificación", path: "/profesor/academia/calificacion", icon: Percent },
+  { title: "Asistencia", path: "/profesor/academia/asistencia", icon: ClipboardList },
+  { title: "Plataformas", path: "/profesor/academia/plataformas", icon: Globe },
 ];
 
 export default function ProfesorAcademiaLayout() {

@@ -1,486 +1,705 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Award, User, Plus, Settings, Percent } from 'lucide-react';
+import { Plus, Settings, Percent, Award, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useLocation, useRoute } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { motion, AnimatePresence } from 'framer-motion';
+import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // =========================================================
-// INTERFACES
+// TIPOS
 // =========================================================
 
 interface Submission {
-    estudianteId: string;
-    calificacion?: number;
+  estudianteId: string;
+  calificacion?: number;
 }
 
 interface Assignment {
-    _id: string;
-    titulo: string;
-    descripcion: string;
-    curso: string;
-    courseId?: string;
-    fechaEntrega: string;
-    profesorNombre: string;
-    submissions?: Submission[];
-    entregas?: Submission[];
-    logroCalificacionId?: string;
+  _id: string;
+  titulo: string;
+  descripcion: string;
+  curso: string;
+  courseId?: string;
+  fechaEntrega: string;
+  profesorNombre: string;
+  submissions?: Submission[];
+  entregas?: Submission[];
+  logroCalificacionId?: string;
 }
 
 interface LogroCalificacion {
-    _id: string;
-    nombre: string;
-    porcentaje: number;
-    orden?: number;
+  _id: string;
+  nombre: string;
+  porcentaje: number;
+  orden?: number;
 }
 
 interface LogrosResponse {
-    logros: LogroCalificacion[];
-    totalPorcentaje: number;
-    completo: boolean;
+  logros: LogroCalificacion[];
+  totalPorcentaje: number;
+  completo: boolean;
 }
 
 interface CourseSubject {
-    _id: string;
-    nombre: string;
-    descripcion?: string;
-    colorAcento?: string;
-    profesor?: {
-        nombre: string;
-    };
-    cursoAsignado?: string;
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+  colorAcento?: string;
+  profesor?: { nombre: string };
+  cursoAsignado?: string;
 }
 
 interface Student {
-    _id: string;
-    nombre: string;
-    estado: 'excelente' | 'bueno' | 'regular' | 'bajo';
-    email?: string;
+  _id: string;
+  nombre: string;
+  estado: 'excelente' | 'bueno' | 'regular' | 'bajo';
+  email?: string;
 }
 
+type TabId = string;
+
 // =========================================================
-// FETCHING DE DATOS
+// FETCHING
 // =========================================================
 
 const fetchSubjectsForGroup = async (groupId: string): Promise<CourseSubject[]> => {
-    return apiRequest('GET', `/api/courses/for-group/${groupId}`);
+  return apiRequest('GET', `/api/courses/for-group/${groupId}`);
 };
 
 const fetchGradeTableAssignments = async (groupId: string, courseId: string): Promise<Assignment[]> => {
-    return apiRequest('GET', `/api/assignments?groupId=${encodeURIComponent(groupId)}&courseId=${courseId}`);
+  return apiRequest('GET', `/api/assignments?groupId=${encodeURIComponent(groupId)}&courseId=${courseId}`);
 };
 
 const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
-    try {
-        const grupoIdNormalizado = groupId.toUpperCase().trim();
-        const response = await apiRequest('GET', `/api/groups/${grupoIdNormalizado}/students`);
-        const students = Array.isArray(response) ? response : [];
-        return students;
-    } catch (error) {
-        console.error('Error al obtener estudiantes:', error);
-        return [];
-    }
+  try {
+    const grupoIdNormalizado = groupId.toUpperCase().trim();
+    const response = await apiRequest('GET', `/api/groups/${grupoIdNormalizado}/students`);
+    return Array.isArray(response) ? response : [];
+  } catch {
+    return [];
+  }
 };
 
 // =========================================================
-// COMPONENTE PRINCIPAL
+// PREDICCIÓN (especificación exacta)
+// =========================================================
+
+function promedio(arr: number[]): number {
+  if (arr.length === 0) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+interface PrediccionResult {
+  prediccion: number;
+  tendencia: number;
+  sparklineData: { value: number }[];
+  notaActual: number;
+}
+
+function calcularPrediccion(
+  estudianteId: string,
+  assignmentsByLogro: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }>,
+  tabOrder: { id: string; label: string }[]
+): PrediccionResult {
+  const toScale5 = (v: number) => v / 20;
+
+  const tareasLogro = tabOrder.find((t) => t.label === 'Tareas') ?? tabOrder[0];
+  const examenesLogro = tabOrder.find((t) => t.label === 'Exámenes') ?? tabOrder[1];
+  const trabajosLogro = tabOrder.find((t) => t.label === 'Trabajos') ?? tabOrder[2];
+
+  const getGradesForLogro = (key: string | undefined): number[] => {
+    if (!key) return [];
+    const grupo = assignmentsByLogro[key];
+    if (!grupo) return [];
+    const grades: number[] = [];
+    grupo.assignments.forEach((a) => {
+      const subs = a.submissions || a.entregas || [];
+      const sub = subs.find(
+        (x: { estudianteId?: string }) =>
+          String(x.estudianteId) === estudianteId
+      );
+      const cal = (sub as { calificacion?: number })?.calificacion;
+      if (cal != null && !Number.isNaN(cal)) grades.push(toScale5(cal));
+    });
+    return grades;
+  };
+
+  const allAssignmentsWithDates = (Object.values(assignmentsByLogro) as { logro: LogroCalificacion; assignments: Assignment[] }[])
+    .flatMap((g) => g.assignments.map((a) => ({ ...a, fecha: a.fechaEntrega })))
+    .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
+  const orderedGrades: number[] = [];
+  allAssignmentsWithDates.forEach((a) => {
+    const subs = a.submissions || a.entregas || [];
+    const sub = subs.find((x: { estudianteId?: string }) => String(x.estudianteId) === estudianteId);
+    const cal = (sub as { calificacion?: number })?.calificacion;
+    if (cal != null && !Number.isNaN(cal)) orderedGrades.push(toScale5(cal));
+  });
+
+  const tareasProm = promedio(getGradesForLogro(tareasLogro?.id));
+  const examenesProm = promedio(getGradesForLogro(examenesLogro?.id));
+  const trabajosProm = promedio(getGradesForLogro(trabajosLogro?.id));
+
+  const notaActual =
+    tareasProm * 0.2 +
+    examenesProm * 0.4 +
+    trabajosProm * 0.3;
+
+  const primeras3 = orderedGrades.slice(0, 3);
+  const ultimas3 = orderedGrades.slice(-3);
+  const tendencia = promedio(ultimas3) - promedio(primeras3);
+  const prediccion = Math.max(0, Math.min(5, notaActual + tendencia * 0.3));
+
+  const sparklineData = orderedGrades.map((value) => ({ value }));
+
+  return {
+    prediccion: Math.round(prediccion * 10) / 10,
+    tendencia,
+    sparklineData: sparklineData.length > 0 ? sparklineData : [{ value: notaActual }],
+    notaActual,
+  };
+}
+
+// =========================================================
+// CELDA DE NOTA (mini card)
+// =========================================================
+
+function NoteCell({
+  value,
+  onSave,
+}: {
+  assignmentId: string;
+  estudianteId: string;
+  value: number | string;
+  onSave: (calificacion: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [local, setLocal] = useState(() => (value === '' ? '' : String(value)));
+  const prevValue = useRef(value);
+  if (prevValue.current !== value && !editing) {
+    prevValue.current = value;
+    setLocal(value === '' ? '' : String(value));
+  }
+  const handleBlur = () => {
+    setEditing(false);
+    const n = local === '' ? NaN : parseFloat(local);
+    if (!Number.isNaN(n) && n >= 0 && n <= 100) onSave(n);
+    else setLocal(value === '' ? '' : String(value));
+  };
+
+  const isEmpty = value === '' || value === undefined;
+
+  if (editing) {
+    return (
+      <div className="w-full flex items-center justify-center p-0">
+        <input
+          type="number"
+          min={0}
+          max={100}
+          value={local}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          autoFocus
+          className="w-full h-full min-h-[44px] text-center font-semibold rounded-xl bg-white/10 border border-white/20 text-[#E2E8F0] focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6] outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      role="button"
+      tabIndex={0}
+      onDoubleClick={() => setEditing(true)}
+      className="flex items-center justify-center w-full min-h-[44px] py-2.5 rounded-xl font-medium text-[#E2E8F0] cursor-text bg-white/5 border border-white/[0.07] transition-all duration-200 hover:border-[rgba(59,130,246,0.8)] hover:shadow-[0_0_10px_rgba(59,130,246,0.4)] hover:-translate-y-0.5"
+      whileHover={{ y: -2 }}
+    >
+      {isEmpty ? <span className="text-white/40">—</span> : <span>{String(value)}</span>}
+    </motion.div>
+  );
+}
+
+// =========================================================
+// AVATAR ESTUDIANTE
+// =========================================================
+
+function StudentAvatar({ nombre }: { nombre: string }) {
+  const initials = nombre
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+  return (
+    <div
+      className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
+      style={{
+        background: 'linear-gradient(145deg, #3B82F6, #1E40AF)',
+      }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+// =========================================================
+// CELDA PREDICCIÓN (sparkline + número + flecha)
+// =========================================================
+
+function PredictionCell({ result }: { result: PrediccionResult }) {
+  const { prediccion, tendencia, sparklineData } = result;
+  const strokeColor =
+    prediccion < 3 ? '#EF4444' : prediccion <= 4 ? '#FACC15' : '#3B82F6';
+  const TrendIcon = tendencia > 0 ? ChevronUp : tendencia < 0 ? ChevronDown : Minus;
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-1 py-1">
+      <motion.div
+        className="flex items-center gap-1"
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <motion.span
+          key={prediccion}
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-[20px] font-semibold tabular-nums text-[#E2E8F0]"
+        >
+          {prediccion > 0 ? prediccion.toFixed(1) : '—'}
+        </motion.span>
+        {prediccion > 0 && (
+          <TrendIcon
+            className="w-4 h-4 flex-shrink-0"
+            style={{ color: strokeColor }}
+          />
+        )}
+      </motion.div>
+      {sparklineData.length > 1 && (
+        <div className="w-full h-[30px] min-w-[80px]">
+          <ResponsiveContainer width="100%" height={30}>
+            <LineChart data={sparklineData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke={strokeColor}
+                strokeWidth={1.5}
+                dot={false}
+                isAnimationActive
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =========================================================
+// FILA ESTUDIANTE (grid)
+// =========================================================
+
+function StudentRow({
+  student,
+  assignments,
+  getGradeFor,
+  onSaveGrade,
+  predictionResult,
+  onStudentClick,
+  expandedStudentId,
+  onToggleExpand,
+}: {
+  student: Student;
+  assignments: Assignment[];
+  getGradeFor: (studentId: string, assignmentId: string) => number | string;
+  onSaveGrade: (assignmentId: string, estudianteId: string, calificacion: number) => void;
+  predictionResult: PrediccionResult;
+  onStudentClick: (studentId: string) => void;
+  expandedStudentId: string | null;
+  onToggleExpand: (id: string) => void;
+}) {
+  const isExpanded = expandedStudentId === student._id;
+
+  return (
+    <>
+      <motion.div
+        layout
+        className="grid items-center gap-2 min-h-[72px] py-2 border-b border-white/[0.05] transition-colors duration-200 hover:bg-white/[0.03] cursor-pointer"
+        style={{ gridTemplateColumns: `260px repeat(${assignments.length}, 120px) 180px` }}
+        onClick={() => onToggleExpand(student._id)}
+      >
+        <div className="flex items-center gap-3 pl-1">
+          <StudentAvatar nombre={student.nombre} />
+          <span className="font-medium text-[#E2E8F0] truncate">{student.nombre}</span>
+        </div>
+        {assignments.map((assignment) => (
+          <div key={assignment._id} className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <NoteCell
+              assignmentId={assignment._id}
+              estudianteId={student._id}
+              value={getGradeFor(student._id, assignment._id)}
+              onSave={(calificacion) => onSaveGrade(assignment._id, student._id, calificacion)}
+            />
+          </div>
+        ))}
+        <div className="flex items-center justify-center pr-2">
+          <PredictionCell result={predictionResult} />
+        </div>
+      </motion.div>
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden border-b border-white/[0.05]"
+          >
+            <div className="px-6 py-4 bg-white/[0.02] rounded-b-xl">
+              <p className="text-sm text-white/60">Panel de detalle con historial IA (placeholder)</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 text-[#3B82F6] hover:bg-white/5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStudentClick(student._id);
+                }}
+              >
+                Ver notas completas
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+// =========================================================
+// PÁGINA PRINCIPAL
 // =========================================================
 
 export default function CourseGradesTablePage() {
-    const [, params] = useRoute('/course/:cursoId/grades');
-    const cursoId = params?.cursoId || '';
-    const { user } = useAuth();
-    const [, setLocation] = useLocation();
+  const [, params] = useRoute('/course/:cursoId/grades');
+  const cursoId = params?.cursoId || '';
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<TabId>('');
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
-    const displayGroupId = cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
-        ? cursoId
-        : (cursoId || '').toUpperCase().trim();
+  const displayGroupId =
+    cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
+      ? cursoId
+      : (cursoId || '').toUpperCase().trim();
 
-    // Query 1: Materias del Profesor para este Grupo
-    const { data: subjectsForGroup = [], isLoading: isLoadingSubjects } = useQuery<CourseSubject[]>({
-        queryKey: ['subjectsForGroup', cursoId],
-        queryFn: () => fetchSubjectsForGroup(cursoId),
-        enabled: !!cursoId && user?.rol === 'profesor',
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
+  const { data: subjectsForGroup = [], isLoading: isLoadingSubjects } = useQuery<CourseSubject[]>({
+    queryKey: ['subjectsForGroup', cursoId],
+    queryFn: () => fetchSubjectsForGroup(cursoId),
+    enabled: !!cursoId && user?.rol === 'profesor',
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const { data: students = [], isLoading: isLoadingStudents } = useQuery<Student[]>({
+    queryKey: ['students', cursoId],
+    queryFn: () => fetchStudentsByGroup(cursoId),
+    enabled: !!cursoId && user?.rol === 'profesor',
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const firstSubjectId = subjectsForGroup[0]?._id;
+
+  const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
+    queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
+    queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
+    enabled: !!cursoId && !!firstSubjectId && user?.rol === 'profesor',
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+  });
+
+  const { data: logrosData, isLoading: isLoadingLogros } = useQuery<LogrosResponse>({
+    queryKey: ['/api/logros-calificacion', firstSubjectId],
+    queryFn: () =>
+      apiRequest<LogrosResponse>(
+        'GET',
+        `/api/logros-calificacion?courseId=${encodeURIComponent(firstSubjectId || '')}`
+      ),
+    enabled: !!firstSubjectId && user?.rol === 'profesor',
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  const assignmentsByLogro = useMemo(() => {
+    const logros = logrosData?.logros || [];
+    const logrosOrdenados = [...logros].sort((a, b) => {
+      const ordenA = a.orden ?? 999;
+      const ordenB = b.orden ?? 999;
+      if (ordenA !== ordenB) return ordenA - ordenB;
+      return a.nombre.localeCompare(b.nombre);
     });
-
-    // Query 2: Estudiantes del Grupo
-    const { data: students = [], isLoading: isLoadingStudents } = useQuery<Student[]>({
-        queryKey: ['students', cursoId],
-        queryFn: () => fetchStudentsByGroup(cursoId),
-        enabled: !!cursoId && user?.rol === 'profesor',
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
+    const grouped: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }> = {};
+    logrosOrdenados.forEach((logro) => {
+      grouped[logro._id] = { logro, assignments: [] };
     });
-
-    const firstSubjectId = subjectsForGroup[0]?._id;
-
-    // Query 3: Asignaciones para tabla de notas
-    const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
-        queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
-        queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
-        enabled: !!cursoId && !!firstSubjectId && user?.rol === 'profesor',
-        staleTime: 2 * 60 * 1000,
-        gcTime: 5 * 60 * 1000,
-    });
-
-    // Query 4: Logros de calificación para esta materia
-    const { data: logrosData, isLoading: isLoadingLogros } = useQuery<LogrosResponse>({
-        queryKey: ['/api/logros-calificacion', firstSubjectId],
-        queryFn: () =>
-            apiRequest<LogrosResponse>('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(firstSubjectId || '')}`),
-        enabled: !!firstSubjectId && user?.rol === 'profesor',
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
-    });
-
-    // Agrupar asignaciones por logro y ordenar
-    const assignmentsByLogro = useMemo(() => {
-        const logros = logrosData?.logros || [];
-        // Ordenar logros por su campo 'orden' o por nombre si no tienen orden
-        const logrosOrdenados = [...logros].sort((a, b) => {
-            const ordenA = a.orden ?? 999;
-            const ordenB = b.orden ?? 999;
-            if (ordenA !== ordenB) return ordenA - ordenB;
-            return a.nombre.localeCompare(b.nombre);
-        });
-        
-        const grouped: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }> = {};
-        
-        // Inicializar grupos por logro (en orden)
-        logrosOrdenados.forEach(logro => {
-            grouped[logro._id] = { logro, assignments: [] };
-        });
-        
-        // Agregar asignaciones sin logro a un grupo especial
-        const sinLogro: Assignment[] = [];
-        
-        assignmentsForTable.forEach(assignment => {
-            if (assignment.logroCalificacionId) {
-                // Normalizar IDs para comparación (pueden venir como string u ObjectId)
-                const assignmentLogroId = String(assignment.logroCalificacionId);
-                const matchingLogro = logrosOrdenados.find(logro => 
-                    String(logro._id) === assignmentLogroId
-                );
-                
-                if (matchingLogro && grouped[matchingLogro._id]) {
-                    grouped[matchingLogro._id].assignments.push(assignment);
-                } else {
-                    // Si no encuentra el logro, agregar a sin logro
-                    console.warn(`Asignación ${assignment._id} tiene logroCalificacionId ${assignmentLogroId} que no existe en los logros`);
-                    sinLogro.push(assignment);
-                }
-            } else {
-                sinLogro.push(assignment);
-            }
-        });
-        
-        // Si hay asignaciones sin logro, crear un grupo temporal al final
-        if (sinLogro.length > 0) {
-            grouped['sin-logro'] = {
-                logro: { _id: 'sin-logro', nombre: 'Sin categoría', porcentaje: 0, orden: 999 },
-                assignments: sinLogro
-            };
+    const sinLogro: Assignment[] = [];
+    assignmentsForTable.forEach((assignment) => {
+      if (assignment.logroCalificacionId) {
+        const assignmentLogroId = String(assignment.logroCalificacionId);
+        const matchingLogro = logrosOrdenados.find((l) => String(l._id) === assignmentLogroId);
+        if (matchingLogro && grouped[matchingLogro._id]) {
+          grouped[matchingLogro._id].assignments.push(assignment);
+        } else {
+          sinLogro.push(assignment);
         }
-        
-        return grouped;
-    }, [assignmentsForTable, logrosData]);
+      } else {
+        sinLogro.push(assignment);
+      }
+    });
+    if (sinLogro.length > 0) {
+      grouped['sin-logro'] = {
+        logro: { _id: 'sin-logro', nombre: 'Sin categoría', porcentaje: 0, orden: 999 },
+        assignments: sinLogro,
+      };
+    }
+    return grouped;
+  }, [assignmentsForTable, logrosData]);
 
-    // Calcular promedio ponderado por logros
-    const calcularPromedioPonderado = (studentId: string): number | string => {
-        const logros = logrosData?.logros || [];
-        if (logros.length === 0) {
-            // Si no hay logros configurados, calcular promedio simple
-            const subs = (a: Assignment) => a.submissions || a.entregas || [];
-            const notasValidas: number[] = [];
-            assignmentsForTable.forEach(a => {
-                const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
-                    x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
-                );
-                const cal = (s as { calificacion?: number })?.calificacion;
-                if (cal != null && !isNaN(cal)) notasValidas.push(cal);
-            });
-            return notasValidas.length > 0
-                ? Math.round(notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length)
-                : '-';
-        }
+  const TAB_VISTA_COMPLETA = '__completa__';
 
-        let totalPonderado = 0;
-        let totalPorcentaje = 0;
+  const tabOrder = useMemo(() => {
+    const entries = Object.entries(assignmentsByLogro);
+    return [
+      { id: TAB_VISTA_COMPLETA, label: 'Vista completa' },
+      ...entries.map(([id, { logro }]) => ({ id, label: logro.nombre })),
+    ];
+  }, [assignmentsByLogro]);
 
-        logros.forEach(logro => {
-            const assignmentsDelLogro = assignmentsByLogro[logro._id]?.assignments || [];
-            const subs = (a: Assignment) => a.submissions || a.entregas || [];
-            const notasDelLogro: number[] = [];
-            
-            assignmentsDelLogro.forEach(a => {
-                const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
-                    x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
-                );
-                const cal = (s as { calificacion?: number })?.calificacion;
-                if (cal != null && !isNaN(cal)) notasDelLogro.push(cal);
-            });
+  const logroEntriesForPrediction = useMemo(
+    () => Object.entries(assignmentsByLogro).map(([id, { logro }]) => ({ id, label: logro.nombre })),
+    [assignmentsByLogro]
+  );
 
-            if (notasDelLogro.length > 0) {
-                const promedioLogro = notasDelLogro.reduce((a, b) => a + b, 0) / notasDelLogro.length;
-                const ponderacion = (promedioLogro * logro.porcentaje) / 100;
-                totalPonderado += ponderacion;
-                totalPorcentaje += logro.porcentaje;
-            }
-        });
+  useEffect(() => {
+    if (tabOrder.length > 0 && !activeTab) setActiveTab(tabOrder[0].id);
+  }, [tabOrder, activeTab]);
 
-        if (totalPonderado === 0) return '-';
-        
-        // Si el total de porcentajes es menor a 100, ajustar
-        const factorAjuste = totalPorcentaje > 0 ? (100 / totalPorcentaje) : 1;
-        return Math.round(totalPonderado * factorAjuste);
-    };
+  const activeAssignments = useMemo(() => {
+    if (!activeTab) return [];
+    if (activeTab === TAB_VISTA_COMPLETA) {
+      return (Object.values(assignmentsByLogro) as { logro: LogroCalificacion; assignments: Assignment[] }[])
+        .flatMap((g) => g.assignments)
+        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime());
+    }
+    return assignmentsByLogro[activeTab]?.assignments ?? [];
+  }, [activeTab, assignmentsByLogro]);
 
-    // Redirigir si no es profesor
-    useEffect(() => {
-        if (user && user.rol !== 'profesor') {
-            setLocation('/courses');
-        }
-    }, [user, setLocation]);
+  const updateGradeMutation = useMutation({
+    mutationFn: async ({
+      assignmentId,
+      estudianteId,
+      calificacion,
+    }: {
+      assignmentId: string;
+      estudianteId: string;
+      calificacion: number;
+    }) => {
+      return apiRequest('PUT', `/api/assignments/${assignmentId}/grade`, {
+        estudianteId,
+        calificacion: Math.min(100, Math.max(0, calificacion)),
+        manualOverride: true,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, firstSubjectId] });
+      queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
+    },
+  });
 
-    const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
-    const subjects = subjectsForGroup;
-    const subjectName = subjects.length > 0 ? subjects[0].nombre : '';
-
-    return (
-        <div className="w-full min-h-[calc(100vh-8rem)]">
-            <div className="w-full mx-auto px-2 md:px-4 lg:px-6 py-4 md:py-6 lg:py-8">
-                {/* Botón de regreso */}
-                <div className="mb-6">
-                    <NavBackButton to={`/course-detail/${cursoId}`} label="Volver al curso" />
-                </div>
-
-                {/* Card principal con la tabla */}
-                <Card className="bg-white border-[#002366]/20 shadow-2xl">
-                    {/* Header con gradiente */}
-                    <CardHeader className="bg-gradient-to-r from-[#002366] to-[#003d7a] text-white rounded-t-lg px-6 py-6">
-                        <div className="flex items-start justify-between flex-wrap gap-4">
-                            <div className="flex-1 min-w-0">
-                                <CardTitle className="text-white flex items-center gap-3 text-2xl md:text-3xl font-bold font-['Poppins'] mb-2">
-                                    <Award className="w-6 h-6 md:w-7 md:h-7 text-[#ffd700] flex-shrink-0" />
-                                    <span>Tabla General de Notas</span>
-                                </CardTitle>
-                                <CardDescription className="text-white/90 text-sm md:text-base mt-2">
-                                    Las notas se sincronizan automáticamente al calificar entregas (Escala: 10-100)
-                                    {displayGroupId && ` - Grupo ${displayGroupId}`}
-                                    {subjectName && ` - ${subjectName}`}
-                                </CardDescription>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
-                                    onClick={() => setLocation(`/profesor/cursos/${cursoId}/notas`)}
-                                >
-                                    <Settings className="w-4 h-4 mr-2" />
-                                    Gestionar Notas
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
-                                    onClick={() => setLocation(`/course/${cursoId}/grades/input`)}
-                                >
-                                    Vista por categorías
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
-                                    onClick={() => setLocation(`/course/${cursoId}/analytics`)}
-                                >
-                                    Vista analítica
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-white/40 text-white hover:bg-white/20 hover:border-white/60 text-sm px-4 py-2"
-                                    onClick={() => setLocation('/profesor/academia/calificacion/logros')}
-                                >
-                                    <Percent className="w-4 h-4 mr-2" />
-                                    Logros de Calificación
-                                </Button>
-                            </div>
-                        </div>
-                    </CardHeader>
-
-                    {/* Contenido de la tabla */}
-                    <CardContent className="p-0">
-                        {loading ? (
-                            <div className="p-6 space-y-3">
-                                <Skeleton className="h-12 w-full bg-[#002366]/10" />
-                                <Skeleton className="h-12 w-full bg-[#002366]/10" />
-                                <Skeleton className="h-12 w-full bg-[#002366]/10" />
-                                <Skeleton className="h-12 w-full bg-[#002366]/10" />
-                            </div>
-                        ) : students.length > 0 ? (
-                            <div className="w-full rounded-xl border border-[#002366]/20 shadow-sm" style={{ overflowX: 'auto', maxWidth: '100%' }}>
-                                <div className="inline-block min-w-full align-middle">
-                                    <table className="border-collapse bg-white" style={{ width: '100%', minWidth: '800px' }}>
-                                        <thead>
-                                            {/* Fila de encabezados de logros (categorías) */}
-                                            {Object.keys(assignmentsByLogro).length > 0 && (
-                                                <tr className="bg-gradient-to-r from-[#1e3cff] to-[#002366] border-b-2 border-white/30">
-                                                    <th 
-                                                        rowSpan={2}
-                                                        className="sticky left-0 z-20 bg-[#1e3cff] px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 shadow-md min-w-[180px] max-w-[180px]"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <User className="w-4 h-4 text-white" />
-                                                            <span>Estudiante</span>
-                                                        </div>
-                                                    </th>
-                                                    {Object.values(assignmentsByLogro).map((grupo, grupoIdx) => {
-                                                        if (grupo.assignments.length === 0) return null;
-                                                        const colSpan = grupo.assignments.length;
-                                                        const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                        return (
-                                                            <th
-                                                                key={grupo.logro._id}
-                                                                colSpan={colSpan}
-                                                                className={`px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 ${
-                                                                    isSinCategoria ? 'bg-amber-600/80' : grupoIdx % 2 === 0 ? 'bg-[#1e3cff]' : 'bg-[#002366]'
-                                                                }`}
-                                                            >
-                                                                <div className="flex flex-col items-center justify-center gap-1">
-                                                                    <span className="font-bold">{grupo.logro.nombre.toUpperCase()}</span>
-                                                                    {grupo.logro.porcentaje > 0 && (
-                                                                        <span className="text-[10px] text-white/90 font-normal">
-                                                                            {grupo.logro.porcentaje}% del total
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            </th>
-                                                        );
-                                                    })}
-                                                    <th 
-                                                        rowSpan={2}
-                                                        className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider bg-[#1e3cff] min-w-[100px] max-w-[100px] border-l-2 border-white/30"
-                                                    >
-                                                        Promedio
-                                                    </th>
-                                                </tr>
-                                            )}
-                                            {/* Fila de encabezados de asignaciones individuales */}
-                                            <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
-                                                {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
-                                                    grupo.assignments.map((assignment, idx) => {
-                                                        const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                        return (
-                                                            <th
-                                                                key={assignment._id}
-                                                                className={`px-2 py-2 text-center text-[10px] font-bold text-white uppercase tracking-wider border-r border-white/20 min-w-[100px] max-w-[120px] ${
-                                                                    isSinCategoria 
-                                                                        ? 'bg-amber-500/60' 
-                                                                        : idx % 2 === 0
-                                                                        ? 'bg-[#002366]'
-                                                                        : 'bg-[#003d7a]'
-                                                                }`}
-                                                            >
-                                                                <span className="truncate block w-full mx-auto text-[9px] leading-tight px-1">
-                                                                    {assignment.titulo}
-                                                                </span>
-                                                            </th>
-                                                        );
-                                                    })
-                                                )}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {students.map((student, studentIdx) => {
-                                                const promedio = calcularPromedioPonderado(student._id);
-
-                                                return (
-                                                    <tr
-                                                        key={student._id}
-                                                        className={`border-b border-[#002366]/10 hover:bg-[#1e3cff]/5 transition-all ${
-                                                            studentIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
-                                                        }`}
-                                                    >
-                                                        <td className="sticky left-0 z-10 px-2 py-2 bg-inherit border-r border-[#002366]/20 shadow-sm min-w-[180px] max-w-[180px]">
-                                                            <div className="flex items-center gap-2">
-                                                                <Avatar className="w-7 h-7 flex-shrink-0">
-                                                                    <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-[10px] font-semibold">
-                                                                        {student.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                                                                    </AvatarFallback>
-                                                                </Avatar>
-                                                                <div className="min-w-0 flex-1">
-                                                                    <div className="font-semibold text-[#0a0a2a] text-xs truncate leading-tight">
-                                                                        {student.nombre}
-                                                                    </div>
-                                                                    {student.email && (
-                                                                        <div className="text-[9px] text-gray-500 truncate leading-tight">
-                                                                            {student.email}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                        {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
-                                                            grupo.assignments.map((assignment, actIdx) => {
-                                                                const subsA = assignment.submissions || assignment.entregas || [];
-                                                                const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
-                                                                    x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
-                                                                );
-                                                                const cal = (sub as { calificacion?: number })?.calificacion;
-                                                                const displayValue = cal != null && !isNaN(cal) ? String(cal) : '--';
-                                                                const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                                return (
-                                                                    <td
-                                                                        key={assignment._id}
-                                                                        className={`px-2 py-2 border-r-2 border-[#002366]/30 text-center text-xs font-medium min-w-[100px] max-w-[120px] ${
-                                                                            isSinCategoria
-                                                                                ? 'bg-amber-50 hover:bg-amber-100'
-                                                                                : actIdx % 2 === 0 
-                                                                                ? 'bg-white' 
-                                                                                : 'bg-[#002366]/5'
-                                                                        } hover:bg-[#1e3cff]/10 transition-colors`}
-                                                                    >
-                                                                        <span className={displayValue === '--' ? 'text-gray-400' : 'text-[#0a0a2a] font-semibold'}>
-                                                                            {displayValue}
-                                                                        </span>
-                                                                    </td>
-                                                                );
-                                                            })
-                                                        )}
-                                                        <td className="px-2 py-2 text-center border-l-2 border-[#002366]/20 bg-[#002366]/5 min-w-[100px] max-w-[100px]">
-                                                            <div className="flex items-center justify-center gap-1">
-                                                                <span className={`text-sm font-bold ${promedio === '-' ? 'text-gray-400' : 'text-[#0a0a2a]'}`}>
-                                                                    {promedio}
-                                                                </span>
-                                                                {promedio !== '-' && (
-                                                                    <span className="text-gray-500 text-[10px]">/ 100</span>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="text-center py-16">
-                                <Award className="w-20 h-20 text-[#002366]/40 mx-auto mb-4" />
-                                <p className="text-gray-500 text-lg">No hay estudiantes para mostrar notas</p>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            </div>
-        </div>
+  const getGradeFor = (studentId: string, assignmentId: string): number | string => {
+    const assignment = assignmentsForTable.find((a) => a._id === assignmentId);
+    if (!assignment) return '';
+    const subs = assignment.submissions || assignment.entregas || [];
+    const sub = subs.find(
+      (x: { estudianteId?: { toString?: () => string } }) =>
+        x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
     );
+    const cal = (sub as { calificacion?: number })?.calificacion;
+    return cal != null && !Number.isNaN(cal) ? cal : '';
+  };
+
+  const getPrediccionFor = (estudianteId: string) =>
+    calcularPrediccion(estudianteId, assignmentsByLogro, logroEntriesForPrediction);
+
+  const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
+
+  useEffect(() => {
+    if (user && user.rol !== 'profesor') setLocation('/courses');
+  }, [user, setLocation]);
+
+  const pageTitle = `${cursoId} – ${subjectsForGroup[0]?.nombre ?? 'Notas'}`;
+
+  return (
+    <div
+      className="min-h-screen w-full overflow-x-hidden relative"
+      style={{
+        background: 'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)',
+        fontFamily: 'Inter, system-ui, sans-serif',
+      }}
+    >
+      {/* Optional subtle noise texture */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+        }}
+      />
+      <div className="relative z-10 w-full max-w-[1600px] mx-auto px-4 py-6">
+        <div className="mb-4">
+          <NavBackButton to={`/course-detail/${cursoId}`} label="Volver al curso" />
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="rounded-[24px] p-8 w-full overflow-hidden"
+          style={{
+            background: 'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            boxShadow: '0 0 40px rgba(37,99,235,0.25)',
+          }}
+        >
+          <header className="mb-8">
+            <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-6" style={{ fontFamily: 'Inter' }}>
+              {pageTitle}
+            </h1>
+
+            <div className="flex flex-wrap gap-2 mb-6">
+              <Button
+                size="sm"
+                className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                onClick={() => setLocation(`/course-detail/${cursoId}?openAssignmentForm=1`)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nueva asignación
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-white/10 text-[#E2E8F0] hover:bg-white/5"
+                onClick={() => setLocation(`/profesor/cursos/${cursoId}/notas`)}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                Gestionar Notas
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-white/10 text-[#E2E8F0] hover:bg-white/5"
+                onClick={() => setLocation(`/course/${cursoId}/analytics`)}
+              >
+                Vista analítica
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-white/10 text-[#E2E8F0] hover:bg-white/5"
+                onClick={() => setLocation('/profesor/academia/calificacion/logros')}
+              >
+                <Percent className="h-4 w-4 mr-2" />
+                Logros de Calificación
+              </Button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex flex-wrap gap-2">
+              {tabOrder.map((tab) => (
+                <motion.button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
+                  style={
+                    activeTab === tab.id
+                      ? {
+                          background: 'linear-gradient(180deg, #3B82F6, #1D4ED8)',
+                          color: '#fff',
+                          boxShadow: '0 0 20px rgba(59,130,246,0.5)',
+                        }
+                      : {
+                          background: 'rgba(255,255,255,0.05)',
+                          color: '#E2E8F0',
+                        }
+                  }
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {tab.label}
+                </motion.button>
+              ))}
+            </div>
+          </header>
+
+          {loading ? (
+            <div className="space-y-3 py-8">
+              <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
+              <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
+              <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
+              <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
+            </div>
+          ) : students.length > 0 ? (
+            <div className="overflow-x-auto">
+              {/* Header row (grid) */}
+              <div
+                className="grid items-center gap-2 min-h-[56px] py-3 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-white/70 mb-0"
+                style={{ gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 180px` }}
+              >
+                <div className="pl-1">Estudiante</div>
+                {activeAssignments.map((a) => (
+                  <div key={a._id} className="text-center truncate px-1">
+                    {a.titulo}
+                  </div>
+                ))}
+                <div className="text-center pr-2">Predicción</div>
+              </div>
+
+              {students.map((student) => (
+                <StudentRow
+                  key={student._id}
+                  student={student}
+                  assignments={activeAssignments}
+                  getGradeFor={getGradeFor}
+                  onSaveGrade={(assignmentId, estudianteId, calificacion) =>
+                    updateGradeMutation.mutate({ assignmentId, estudianteId, calificacion })
+                  }
+                  predictionResult={getPrediccionFor(student._id)}
+                  onStudentClick={(studentId) =>
+                    setLocation(`/profesor/cursos/${cursoId}/estudiantes/${studentId}/notas`)
+                  }
+                  expandedStudentId={expandedStudentId}
+                  onToggleExpand={(id) => setExpandedStudentId((prev) => (prev === id ? null : id))}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <Award className="h-20 w-20 text-white/30 mx-auto mb-4" />
+              <p className="text-white/60 text-lg">No hay estudiantes para mostrar notas</p>
+            </div>
+          )}
+        </motion.div>
+      </div>
+    </div>
+  );
 }
