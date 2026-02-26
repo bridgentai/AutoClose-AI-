@@ -2,29 +2,40 @@ import express from 'express';
 import { protect, AuthRequest } from '../middleware/authMiddleware';
 import { generateAIResponseWithFunctions } from '../services/openai';
 import { normalizeIdForQuery } from '../utils/idGenerator';
-import { ChatSession } from '../models';
+import {
+  validateChatOwnership,
+  createChat,
+  getMessagesForContext,
+  addMessage,
+  touchChat,
+  HISTORY_MESSAGE_LIMIT,
+} from '../services/chatService';
+import { parseVisualIntent } from '../services/intentRouter';
+import {
+  handleTopStudent,
+  handleTasksOverview,
+  handleGradeTrendAnalysis,
+  handleNotesOverview,
+} from '../services/structuredHandlers';
 
 const router = express.Router();
 
 /**
  * GET /api/ai/health
- * Endpoint de prueba para verificar que la ruta esté funcionando
  */
 router.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     message: 'AI Chat endpoint está funcionando correctamente',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
 /**
  * GET /api/ai/debug-env
- * Endpoint de diagnóstico para verificar que el .env se está cargando
  */
 router.get('/debug-env', (req, res) => {
   const rawKey = process.env.OPENAI_API_KEY || '';
-  
   res.json({
     envLoaded: !!process.env.OPENAI_API_KEY,
     keyExists: rawKey.length > 0,
@@ -37,122 +48,116 @@ router.get('/debug-env', (req, res) => {
     startsWithSkproj: rawKey.startsWith('skproj'),
     isValidFormat: rawKey.startsWith('sk-') || rawKey.startsWith('skproj'),
     message: rawKey ? 'API key detectada en process.env' : 'API key NO detectada en process.env',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
 /**
  * POST /api/ai/chat
- * Endpoint principal para el Chat AI Global
- * Recibe mensajes del usuario y devuelve respuestas del AI con capacidad de ejecutar acciones
- * Gestiona sesiones de chat persistentes automáticamente
+ * Chat con memoria conversacional persistente en DB.
+ * Recibe: message, sessionId (opcional, mismo que chatId).
+ * Carga historial desde Message, construye [system, ...historial, newUserMessage], llama al modelo, guarda user + assistant en DB.
  */
 router.post('/chat', protect, async (req: AuthRequest, res) => {
-  console.log('[AI Chat] Petición recibida en /api/ai/chat');
   try {
-    const { message, sessionId, contexto_extra, conversationHistory } = req.body;
-    const { id: userId, colegioId, rol } = req.user!;
-    const normalizedUserId = normalizeIdForQuery(userId || '');
-    
-    console.log('[AI Chat] Usuario:', normalizedUserId, 'Rol:', rol, 'SessionId:', sessionId, 'Mensaje:', message?.substring(0, 50));
+    const { message, sessionId, chatId: bodyChatId, contexto_extra } = req.body;
+    const userId = req.user!.id;
+    const { colegioId, rol } = req.user!;
+    const normalizedUserId = normalizeIdForQuery(userId);
 
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({ 
+    const newUserMessage = typeof message === 'string' ? message.trim() : '';
+    if (!newUserMessage) {
+      return res.status(400).json({
         success: false,
         response: 'El campo "message" es obligatorio y debe ser una cadena de texto.',
-        error: 'El campo "message" es obligatorio y debe ser una cadena de texto.'
+        error: 'El campo "message" es obligatorio y debe ser una cadena de texto.',
       });
     }
 
-    let session;
-    
-    // Si hay sessionId, cargar sesión existente
-    if (sessionId) {
-      session = await ChatSession.findById(sessionId);
-      if (!session) {
-        console.log('[AI Chat] Sesión no encontrada, creando nueva sesión');
-        // Si la sesión no existe, crear una nueva
-        session = await ChatSession.create({
-          userId: normalizedUserId,
-          colegioId,
-          titulo: `Chat ${new Date().toLocaleDateString('es-CO')}`,
-          contexto: {
-            tipo: `${rol}_general`,
-          },
-          participantes: [normalizedUserId],
-          historial: []
+    const incomingChatId = bodyChatId || sessionId;
+    let chatId: string;
+
+    if (incomingChatId) {
+      const validation = await validateChatOwnership(incomingChatId, userId, rol);
+      if (validation.error) {
+        return res.status(validation.status ?? 403).json({
+          success: false,
+          response: validation.error,
+          error: validation.error,
         });
-        console.log('[AI Chat] Nueva sesión creada (sesión anterior no encontrada):', session._id.toString());
-      } else {
-        // Verificar permisos
-        const sessionUserId = session.userId?.toString();
-        if (sessionUserId !== normalizedUserId && rol !== 'directivo') {
-          return res.status(403).json({ 
-            success: false,
-            response: 'No tienes acceso a esta sesión de chat.',
-            error: 'No tienes acceso a esta sesión de chat.'
-          });
-        }
-        console.log('[AI Chat] Sesión existente cargada:', sessionId, 'con', session.historial?.length || 0, 'mensajes en historial');
       }
+      chatId = incomingChatId;
     } else {
-      // Crear nueva sesión automáticamente
-      session = await ChatSession.create({
-        userId: normalizedUserId,
-        colegioId,
-        titulo: `Chat ${new Date().toLocaleDateString('es-CO')}`,
-        contexto: {
-          tipo: `${rol}_general`,
-        },
-        participantes: [normalizedUserId],
-        historial: []
-      });
-      console.log('[AI Chat] Nueva sesión creada:', session._id.toString());
+      const { _id } = await createChat(userId, colegioId, rol);
+      chatId = _id.toString();
     }
 
-    // Construir historial de conversación para el AI ANTES de agregar el nuevo mensaje
-    // IMPORTANTE: Incluir TODOS los mensajes previos (sin límite) para mantener el contexto completo
-    // El historial debe incluir todos los mensajes de la sesión para que el AI tenga memoria completa
-    const historyMessages = session.historial && session.historial.length > 0
-      ? session.historial.map(msg => ({
-          role: msg.emisor === 'user' ? 'user' as const : 'assistant' as const,
-          content: msg.contenido
-        }))
-      : [];
-    
-    console.log('[AI Chat] Historial de conversación:', historyMessages.length, 'mensajes previos');
-    if (historyMessages.length > 0) {
-      console.log('[AI Chat] Todos los mensajes del historial:');
-      historyMessages.forEach((msg, idx) => {
-        const preview = msg.content.length > 100 ? msg.content.substring(0, 100) + '...' : msg.content;
-        console.log(`  [${idx + 1}] ${msg.role}: ${preview}`);
-      });
-      console.log('[AI Chat] ✅ El AI tiene acceso a TODO el historial de la conversación');
-    } else {
-      console.log('[AI Chat] ⚠️ No hay historial previo - esta es la primera conversación');
+    await addMessage(chatId, 'user', newUserMessage);
+
+    const visualIntent = rol === 'profesor' ? parseVisualIntent(newUserMessage) : { matched: false };
+    if (visualIntent.matched && visualIntent.intent) {
+      let structured: { type: string; content: string; data?: Record<string, unknown> };
+      switch (visualIntent.intent) {
+        case 'top_student_card':
+          structured = await handleTopStudent(normalizedUserId, visualIntent.params?.group, colegioId);
+          break;
+        case 'tasks_overview':
+          structured = await handleTasksOverview(normalizedUserId, visualIntent.params?.group, colegioId);
+          break;
+        case 'grade_trend_analysis':
+          structured = await handleGradeTrendAnalysis(normalizedUserId, colegioId, visualIntent.params?.period);
+          break;
+        case 'notes_overview':
+          structured = await handleNotesOverview(normalizedUserId, visualIntent.params?.group, colegioId);
+          break;
+        default:
+          structured = { type: 'text', content: '' };
+      }
+      if (structured.content) {
+        await addMessage(chatId, 'assistant', structured.content, {
+          type: structured.type,
+          ...(structured.data && { structuredData: structured.data }),
+        });
+        await touchChat(chatId);
+        return res.json({
+          success: true,
+          response: structured.content,
+          sessionId: chatId,
+          chatId,
+          userId: normalizedUserId,
+          role: rol,
+          timestamp: new Date().toISOString(),
+          structuredResponse:
+            structured.type !== 'text' && structured.data
+              ? { type: structured.type, data: structured.data }
+              : undefined,
+        });
+      }
     }
 
-    // Guardar mensaje del usuario en la sesión (después de construir el historial)
-    session.historial.push({
-      emisor: 'user',
-      contenido: message,
-      timestamp: new Date()
-    });
+    const historialMensajes = await getMessagesForContext(chatId, HISTORY_MESSAGE_LIMIT);
 
-    // Generar respuesta con Function Calling
+    const historialFormateado = historialMensajes.map((m) => ({
+      role: (m.role ?? 'user').toLowerCase() as 'user' | 'assistant',
+      content: m.content ?? '',
+    }));
+
+    const conversationHistory = historialFormateado.slice(0, -1);
+    const lastUserContent = historialFormateado.length > 0 ? historialFormateado[historialFormateado.length - 1].content : newUserMessage;
+
     let aiResponse: string;
-    let executedActions: string[] = []; // Track executed actions
-    let actionData: Record<string, any> | undefined = undefined;
+    let executedActions: string[] = [];
+    let actionData: Record<string, any> | undefined;
+
     try {
       const result = await generateAIResponseWithFunctions(
-        message,
+        lastUserContent,
         normalizedUserId,
         rol,
         colegioId,
-        historyMessages
+        conversationHistory
       );
-      
-      // Extract response and executed actions
+
       if (typeof result === 'string') {
         aiResponse = result;
       } else {
@@ -161,63 +166,49 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
         actionData = result.actionData;
       }
     } catch (error: any) {
-      console.error('[AI Chat] Error con Function Calling:', error.message);
-      throw error; // Re-lanzar para manejar en el catch general
+      console.error('[AI Chat] Error al generar respuesta:', error.message);
+      throw error;
     }
 
-    // Guardar respuesta del AI en la sesión
-    session.historial.push({
-      emisor: 'ai',
-      contenido: aiResponse,
-      timestamp: new Date()
-    });
-
-    // Guardar la sesión actualizada (marcar como modificada explícitamente)
-    session.markModified('historial');
-    await session.save();
-    
-    console.log('[AI Chat] Sesión guardada. Total de mensajes en historial:', session.historial.length);
-    if (executedActions.length > 0) {
-      console.log('[AI Chat] Acciones ejecutadas:', executedActions);
-    }
+    await addMessage(chatId, 'assistant', aiResponse);
+    await touchChat(chatId);
 
     res.json({
       success: true,
       response: aiResponse,
-      sessionId: session._id.toString(),
+      sessionId: chatId,
+      chatId,
       userId: normalizedUserId,
       role: rol,
       timestamp: new Date().toISOString(),
-      executedActions: executedActions, // Include executed actions
-      actionData: actionData, // Include action data
+      executedActions,
+      actionData,
     });
   } catch (error: any) {
     console.error('Error en /api/ai/chat:', error.message);
-    
-    // Manejar errores específicos
+
     if (error.message?.includes('OPENAI_API_KEY')) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
         response: 'El servicio de IA no está configurado correctamente. Por favor, contacta al administrador.',
-        error: 'El servicio de IA no está configurado correctamente. Por favor, contacta al administrador.'
+        error: 'El servicio de IA no está configurado correctamente. Por favor, contacta al administrador.',
       });
     }
 
     if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
-      return res.status(429).json({ 
+      return res.status(429).json({
         success: false,
         response: 'Se ha excedido el límite de uso del servicio de IA. Por favor, intenta más tarde.',
-        error: 'Se ha excedido el límite de uso del servicio de IA. Por favor, intenta más tarde.'
+        error: 'Se ha excedido el límite de uso del servicio de IA. Por favor, intenta más tarde.',
       });
     }
 
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       response: error.message || 'Error al procesar la solicitud del chat AI.',
-      error: error.message || 'Error al procesar la solicitud del chat AI.'
+      error: error.message || 'Error al procesar la solicitud del chat AI.',
     });
   }
 });
 
 export default router;
-

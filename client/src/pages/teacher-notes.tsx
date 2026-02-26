@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation, useRoute } from 'wouter';
+<<<<<<< HEAD
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { 
@@ -14,6 +15,9 @@ import {
   TrendingUp,
   BarChart3
 } from 'lucide-react';
+=======
+import { Plus, MessageSquare } from 'lucide-react';
+>>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,8 +29,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line } from 'recharts';
 
 // =========================================================
 // INTERFACES Y DATOS MOCK
@@ -355,6 +357,7 @@ export default function TeacherNotesPage() {
     );
   }
 
+<<<<<<< HEAD
   const studentPromedios = useMemo(() => {
     const map: Record<string, number> = {};
     (students as { _id: string }[]).forEach(s => {
@@ -397,6 +400,9 @@ export default function TeacherNotesPage() {
     { categoria: 'Proyectos', promedio: 88 },
     { categoria: 'Participación', promedio: 84 }
   ];
+=======
+  const promedioGeneral = students.reduce((acc, s) => acc + s.promedio, 0) / students.length;
+>>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
@@ -416,127 +422,42 @@ export default function TeacherNotesPage() {
           </div>
         </div>
 
-        {/* Gráfica General del Curso */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-[#1e3cff]" />
-                Promedios por Estudiante
-              </CardTitle>
-              <CardDescription className="text-white/60">
-                Promedio general del curso: <span className="text-white font-semibold">{promedioGeneral.toFixed(2)}</span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 md:p-6">
-              <div className="w-full overflow-x-auto">
-                <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
-                  <BarChart 
-                    data={chartData}
-                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis 
-                      dataKey="nombre" 
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                      interval={0}
-                    />
-                    <YAxis 
-                      domain={[0, 100]}
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      width={40}
-                    />
-                    <ChartTooltip 
-                      content={<ChartTooltipContent />}
-                      cursor={{ fill: 'rgba(159, 37, 184, 0.1)' }}
-                    />
-                    <Bar 
-                      dataKey="promedio" 
-                      fill="#1e3cff"
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ChartContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#1e3cff]" />
-                Promedios por Categoría
-              </CardTitle>
-              <CardDescription className="text-white/60">
-                Rendimiento general del curso por categoría
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 md:p-6">
-              <div className="w-full overflow-x-auto">
-                <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
-                  <BarChart 
-                    data={categoryData}
-                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis 
-                      dataKey="categoria" 
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                      interval={0}
-                    />
-                    <YAxis 
-                      domain={[0, 100]}
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      width={40}
-                    />
-                    <ChartTooltip 
-                      content={<ChartTooltipContent />}
-                      cursor={{ fill: 'rgba(159, 37, 184, 0.1)' }}
-                    />
-                    <Bar 
-                      dataKey="promedio" 
-                      fill="#1e3cff"
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ChartContainer>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Resumen numérico simple */}
+        <div className="flex flex-wrap items-center gap-4 mb-6 text-white/80 text-sm">
+          <span>
+            <strong className="text-white font-medium">{students.length}</strong> estudiantes
+          </span>
+          <span className="text-white/50">·</span>
+          <span>
+            Promedio del curso: <strong className="text-[#00c8ff]">{promedioGeneral.toFixed(1)}</strong>
+          </span>
         </div>
 
-        {/* Tabla General del Curso */}
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
-          <CardHeader>
-            <CardTitle className="text-white">Resumen General del Curso</CardTitle>
-            <CardDescription className="text-white/60">
-              Vista rápida del rendimiento de todos los estudiantes
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto -mx-4 md:mx-0">
-              <div className="inline-block min-w-full align-middle px-4 md:px-0">
-                <Table>
+        {/* Tabla de calificaciones — simple y clara */}
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
               <TableHeader>
-                <TableRow className="border-white/10">
-                  <TableHead className="text-white min-w-[200px]">Estudiante</TableHead>
-                  <TableHead className="text-white whitespace-nowrap">Promedio</TableHead>
-                  <TableHead className="text-white whitespace-nowrap">Última Nota</TableHead>
-                  <TableHead className="text-white whitespace-nowrap">Estado</TableHead>
-                  <TableHead className="text-white whitespace-nowrap">Acciones</TableHead>
+                <TableRow className="border-white/10 hover:bg-transparent">
+                  <TableHead className="text-white/70 font-medium text-xs uppercase tracking-wider py-4 pl-5">
+                    Estudiante
+                  </TableHead>
+                  <TableHead className="text-white/70 font-medium text-xs uppercase tracking-wider py-4 text-right w-24">
+                    Promedio
+                  </TableHead>
+                  <TableHead className="text-white/70 font-medium text-xs uppercase tracking-wider py-4 text-right w-28 hidden sm:table-cell">
+                    Última nota
+                  </TableHead>
+                  <TableHead className="text-white/70 font-medium text-xs uppercase tracking-wider py-4 text-center w-28 hidden md:table-cell">
+                    Estado
+                  </TableHead>
+                  <TableHead className="text-white/70 font-medium text-xs uppercase tracking-wider py-4 text-right w-32 pr-5">
+                    Acción
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+<<<<<<< HEAD
                 {(students as { _id: string; nombre: string; email?: string }[]).map((student) => {
                   const prom = studentPromedios[student._id] ?? 0;
                   return (
@@ -572,6 +493,52 @@ export default function TeacherNotesPage() {
                         onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
                       >
                         Ver Notas
+=======
+                {students.map((student, index) => (
+                  <TableRow
+                    key={student._id}
+                    className="border-white/5 hover:bg-white/5 transition-colors"
+                  >
+                    <TableCell className="py-3 pl-5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-medium text-white">
+                          {student.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="font-medium text-white">{student.nombre}</div>
+                          <div className="text-xs text-white/50 truncate max-w-[180px]">{student.email}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3 text-right">
+                      <span className="font-semibold text-white tabular-nums">{student.promedio.toFixed(1)}</span>
+                      <span className="text-white/40 text-sm ml-0.5">/100</span>
+                    </TableCell>
+                    <TableCell className="py-3 text-right hidden sm:table-cell text-white/80 tabular-nums">
+                      {student.ultimaNota.toFixed(1)}
+                    </TableCell>
+                    <TableCell className="py-3 text-center hidden md:table-cell">
+                      <span
+                        className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${
+                          student.promedio >= 70
+                            ? 'text-emerald-400/90 bg-emerald-500/10'
+                            : student.promedio >= 50
+                              ? 'text-amber-400/90 bg-amber-500/10'
+                              : 'text-red-400/90 bg-red-500/10'
+                        }`}
+                      >
+                        {student.promedio >= 70 ? 'Aprobado' : student.promedio >= 50 ? 'En proceso' : 'Bajo'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-3 pr-5 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-[#00c8ff] hover:text-[#00c8ff] hover:bg-[#00c8ff]/10 border-0 h-8 text-sm"
+                        onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
+                      >
+                        Ver notas
+>>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -579,6 +546,7 @@ export default function TeacherNotesPage() {
                 })}
               </TableBody>
             </Table>
+<<<<<<< HEAD
               </div>
             </div>
           </CardContent>
@@ -622,6 +590,8 @@ export default function TeacherNotesPage() {
               </Card>
             );
             })}
+=======
+>>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
           </div>
         </div>
       </div>

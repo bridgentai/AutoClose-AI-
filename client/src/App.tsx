@@ -162,7 +162,7 @@ function AppRouter() {
             <Route path="/dashboard">
               <AuthGuard><Dashboard /></AuthGuard>
             </Route>
-            <Route path="/chat">
+            <Route path="/chat/:chatId?">
               <AuthGuard><Chat /></AuthGuard>
             </Route>
 
