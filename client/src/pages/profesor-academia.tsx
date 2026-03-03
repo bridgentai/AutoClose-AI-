@@ -9,7 +9,7 @@ import { NavBackButton } from "@/components/nav-back-button";
 const navigationItems = [
   { title: "Cursos", path: "/profesor/academia/cursos", icon: BookOpen },
   { title: "Calificación", path: "/profesor/academia/calificacion", icon: Percent },
-  { title: "Asistencia", path: "/profesor/academia/asistencia", icon: ClipboardList },
+  { title: "Horario", path: "/profesor/academia/horario", icon: ClipboardList },
   { title: "Plataformas", path: "/profesor/academia/plataformas", icon: Globe },
 ];
 

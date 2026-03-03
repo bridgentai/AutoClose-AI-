@@ -1,26 +1,27 @@
 /**
- * AutoClose AI - Identidad Visual GLC
- * Azul rey (#002366) dominante | Blanco (#ffffff) | Amarillo (#ffd700) detalles mínimos
+ * AutoClose AI - Misma paleta que Tabla completa de notas (vista profesor)
+ * Fondo: radial #1E3A8A → #0F172A → #020617 | Panel: glass | Primario: #3B82F6 #2563EB
  */
 export const theme = {
   colors: {
-    deepDark: '#0a0a2a',       // Azul oscuro profundo (fondo)
-    royalBlue: '#002366',      // Azul rey institucional (dominante)
-    blueMedium: '#003d7a',     // Azul medio (contrastes)
-    electricBlue: '#1e3cff',   // Azul eléctrico (hover, acentos)
-    white: '#ffffff',          // Blanco (fondos, tipografía)
-    gold: '#ffd700',           // Amarillo (indicadores mínimos)
+    deepDark: '#020617',
+    midDark: '#0F172A',
+    blueRadial: '#1E3A8A',
+    primaryBlue: '#3B82F6',
+    primaryBlueHover: '#2563EB',
+    primaryBlueDark: '#1D4ED8',
+    avatarBlue: '#1E40AF',
+    textPrimary: '#E2E8F0',
+    white: '#ffffff',
   },
   gradients: {
-    background: 'linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)',
-    panelGlow: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15))',
-    buttonPrimary: 'linear-gradient(90deg, #002366, #1e3cff)',
+    background: 'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)',
+    panelGrades: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))',
+    buttonPrimary: 'linear-gradient(180deg, #3B82F6, #1D4ED8)',
   },
-  // Clases Tailwind para uso directo (sin template literals para JIT)
   classes: {
-    btnGradient: 'bg-gradient-to-r from-[#002366] to-[#1e3cff]',
-    btnGradientHover: 'hover:from-[#003d99] hover:to-[#2d4fff]',
-    textGradient: 'bg-gradient-to-r from-[#002366] via-[#1e3cff] to-[#00c8ff] bg-clip-text text-transparent',
-    cardGlow: 'shadow-[0_0_40px_rgba(30,60,255,0.15)]',
+    btnPrimary: 'bg-[#3B82F6] hover:bg-[#2563EB] text-white',
+    panelGrades: 'panel-grades',
+    cardGlow: 'shadow-[0_0_40px_rgba(37,99,235,0.25)]',
   },
 } as const;

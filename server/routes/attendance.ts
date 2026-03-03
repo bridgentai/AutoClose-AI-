@@ -46,6 +46,26 @@ router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'direc
   }
 });
 
+// GET /api/attendance/curso/:cursoId/fecha/:fecha/status - Indica si ya hay asistencia registrada
+router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+  try {
+    const { cursoId, fecha } = req.params;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const dayStart = startOfDay(new Date(fecha));
+    const dayEnd = endOfDay(new Date(fecha));
+    const count = await Asistencia.countDocuments({
+      cursoId: normalizeIdForQuery(cursoId),
+      colegioId,
+      fecha: { $gte: dayStart, $lte: dayEnd },
+    });
+    return res.json({ registrado: count > 0, total: count });
+  } catch (e: any) {
+    console.error(e);
+    return res.status(500).json({ message: 'Error al verificar estado.' });
+  }
+});
+
 // GET /api/attendance/curso/:cursoId/fecha/:fecha - Listar asistencia por curso y fecha (profesor/directivo)
 router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
   try {
@@ -108,12 +128,15 @@ router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-col
 // POST /api/attendance/bulk - Registrar asistencia en lote por curso/fecha (profesor/directivo)
 router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
   try {
-    const { cursoId, fecha, registros } = req.body as {
+    const { cursoId, fecha, horaBloque, grupoId, registros } = req.body as {
       cursoId: string;
       fecha: string;
-      registros: { estudianteId: string; estado: 'presente' | 'ausente' }[];
+      horaBloque?: string;
+      grupoId?: string;
+      registros: { estudianteId: string; estado: 'presente' | 'ausente'; puntualidad?: 'on_time' | 'late' }[];
     };
     const colegioId = req.user?.colegioId;
+    const userId = req.user?.id;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
     if (!cursoId || !fecha || !Array.isArray(registros)) {
@@ -121,18 +144,25 @@ router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general
     }
 
     const dateOnly = startOfDay(new Date(fecha));
-    const ops = registros.map((r) => ({
-      updateOne: {
-        filter: {
-          cursoId: normalizeIdForQuery(cursoId),
-          estudianteId: normalizeIdForQuery(r.estudianteId),
-          colegioId,
-          fecha: { $gte: dateOnly, $lte: endOfDay(dateOnly) },
+    const ops = registros.map((r) => {
+      const filter: Record<string, unknown> = {
+        cursoId: normalizeIdForQuery(cursoId),
+        estudianteId: normalizeIdForQuery(r.estudianteId),
+        colegioId,
+        fecha: { $gte: dateOnly, $lte: endOfDay(dateOnly) },
+      };
+      const update: Record<string, unknown> = { estado: r.estado, colegioId, recordedBy: userId };
+      if (r.puntualidad) update.puntualidad = r.puntualidad;
+      if (horaBloque) update.horaBloque = horaBloque;
+      if (grupoId) update.grupoId = grupoId;
+      return {
+        updateOne: {
+          filter,
+          update: { $set: update },
+          upsert: true,
         },
-        update: { $set: { estado: r.estado, colegioId } },
-        upsert: true,
-      },
-    }));
+      };
+    });
 
     const { Asistencia: AsistenciaModel } = await import('../models');
     await AsistenciaModel.bulkWrite(ops);

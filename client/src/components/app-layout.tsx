@@ -23,29 +23,22 @@ export function AppLayout({ children }: AppLayoutProps) {
         </span>
       </div>
 
-      {/* Gradiente animado - azul rey institucional con movimiento fluido */}
-      <div 
-        className="fixed inset-0 -z-10 animate-gradient-flow"
+      {/* Mismo fondo que Tabla completa de notas: radial #1E3A8A → #0F172A → #020617 */}
+      <div
+        className="fixed inset-0 -z-10"
         style={{
-          background: "linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)",
-          backgroundSize: "400% 400%",
-          backgroundPosition: "0% 50%",
+          background: "radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)",
         }}
       />
-      
-      {/* Orbes animados - contrastes sutiles de azul (no monocromático) */}
+      {/* Orbes sutiles misma paleta */}
       <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div 
-          className="absolute top-20 left-10 w-[28rem] h-[28rem] rounded-full blur-3xl opacity-30 animate-float-slow" 
-          style={{ backgroundColor: "#002366" }} 
+        <div
+          className="absolute top-20 left-10 w-[28rem] h-[28rem] rounded-full blur-3xl opacity-20 animate-float-slow"
+          style={{ backgroundColor: "#1E3A8A" }}
         />
-        <div 
-          className="absolute bottom-20 right-20 w-80 h-80 rounded-full blur-3xl opacity-25 animate-float-slow" 
-          style={{ backgroundColor: "#003d7a", animationDelay: "2s" }} 
-        />
-        <div 
-          className="absolute top-1/2 left-1/2 w-96 h-96 rounded-full blur-3xl opacity-20 animate-float-slow" 
-          style={{ backgroundColor: "#1e3cff", animationDelay: "4s" }} 
+        <div
+          className="absolute bottom-20 right-20 w-80 h-80 rounded-full blur-3xl opacity-15 animate-float-slow"
+          style={{ backgroundColor: "#3B82F6", animationDelay: "2s" }}
         />
       </div>
 

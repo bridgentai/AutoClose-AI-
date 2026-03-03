@@ -81,10 +81,11 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
-        "deep-dark": "#0a0a2a",
-        "royal-blue": "#002366",
-        "electric-blue": "#1e3cff",
-        "turquoise": "#00c8ff",
+        "deep-dark": "#020617",
+        "mid-dark": "#0F172A",
+        "blue-radial": "#1E3A8A",
+        "primary-blue": "#3B82F6",
+        "primary-blue-hover": "#2563EB",
         "gold-accent": "#ffd700",
       },
       fontFamily: {
@@ -126,8 +127,8 @@ export default {
           to: { opacity: "1", transform: "scale(1)" },
         },
         "pulse-glow": {
-          "0%, 100%": { opacity: "1", boxShadow: "0 0 20px rgba(30, 60, 255, 0.4)" },
-          "50%": { opacity: "0.9", boxShadow: "0 0 40px rgba(30, 60, 255, 0.6)" },
+          "0%, 100%": { opacity: "1", boxShadow: "0 0 20px rgba(59, 130, 246, 0.4)" },
+          "50%": { opacity: "0.9", boxShadow: "0 0 40px rgba(59, 130, 246, 0.5)" },
         },
         "gradient-flow": {
           "0%": { backgroundPosition: "0% 50%" },

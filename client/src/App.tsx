@@ -93,6 +93,9 @@ import ProfesorRevisionTareasPage from "@/pages/profesor-revision-tareas";
 import ProfesorPanelCalificacionPage from "@/pages/profesor-panel-calificacion";
 import ProfesorEditorDocumentoPage from "@/pages/profesor-editor-documento";
 import AsistenciaProfesor from "@/pages/asistencia-profesor";
+import HorarioGruposPage from "@/pages/horario-grupos";
+import HorarioEscolarPage from "@/pages/horario-escolar";
+import RegistroAsistenciaPage from "@/pages/registro-asistencia";
 
 // Nuevos roles
 import AdministradorGeneralPage from "@/pages/administrador-general";
@@ -423,6 +426,15 @@ function AppRouter() {
             </Route>
             <Route path="/profesor/academia/asistencia">
               <AuthGuard><AsistenciaProfesor /></AuthGuard>
+            </Route>
+            <Route path="/profesor/academia/horario">
+              <AuthGuard><HorarioGruposPage /></AuthGuard>
+            </Route>
+            <Route path="/course/:grupoId/horario">
+              <AuthGuard><HorarioEscolarPage /></AuthGuard>
+            </Route>
+            <Route path="/course/:grupoId/asistencia/registro">
+              <AuthGuard><RegistroAsistenciaPage /></AuthGuard>
             </Route>
 
             <Route path="/profesor/comunicacion">

@@ -375,12 +375,13 @@ router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
   try {
     const { estudianteId, calificacion, retroalimentacion, logro, manualOverride } = req.body;
 
-    if (!estudianteId || calificacion === undefined) {
-      return res.status(400).json({ message: 'Faltan campos obligatorios: estudianteId y calificacion.' });
+    if (!estudianteId) {
+      return res.status(400).json({ message: 'Falta estudianteId.' });
     }
 
-    // Validar rango de nota (0-100)
-    if (calificacion < 0 || calificacion > 100) {
+    // Permitir null/undefined para eliminar nota; si tiene valor, validar rango 0-100
+    const clearGrade = calificacion == null || calificacion === '';
+    if (!clearGrade && (calificacion < 0 || calificacion > 100)) {
       return res.status(400).json({ message: 'La calificación debe estar entre 0 y 100.' });
     }
 
@@ -407,39 +408,78 @@ router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Solo el profesor que creó la tarea puede calificarla.' });
     }
 
-    // Validar que el estudiante tiene una submission
-    if (!assignment.submissions || assignment.submissions.length === 0) {
-      return res.status(400).json({ message: 'No hay entregas para esta tarea.' });
-    }
-
     const normalizedEstudianteId = normalizeIdForQuery(estudianteId);
+    const subs = assignment.submissions || [];
     
     // Buscar la submission del estudiante
-    const submissionIndex = assignment.submissions.findIndex(
+    let submissionIndex = subs.findIndex(
       (s: ISubmission | any) => {
         const sId = s.estudianteId?.toString();
         return sId === normalizedEstudianteId || sId === estudianteId;
       }
     );
 
+    // Si no hay submission (tarea sin entrega virtual, exámenes presenciales, etc.), crear una para permitir la nota
     if (submissionIndex === -1) {
-      console.error('Submission no encontrada. estudianteId recibido:', estudianteId);
-      console.error('normalizedEstudianteId:', normalizedEstudianteId);
-      console.error('Submissions disponibles:', assignment.submissions.map((s: any) => ({
-        estudianteId: s.estudianteId?.toString(),
-        estudianteNombre: s.estudianteNombre
-      })));
-      return res.status(404).json({ message: 'No se encontró una entrega del estudiante para esta tarea.' });
+      if (clearGrade) {
+        return res.json(assignment);
+      }
+      const student = await User.findById(normalizedEstudianteId).select('nombre').lean();
+      const estudianteNombre = student?.nombre ?? 'Estudiante';
+      const newSubmission: any = {
+        estudianteId: normalizedEstudianteId,
+        estudianteNombre,
+        archivos: [],
+        fechaEntrega: new Date(),
+        calificacion,
+      };
+      await Assignment.findByIdAndUpdate(
+        assignment._id,
+        { $push: { submissions: newSubmission } },
+        { new: true, runValidators: false }
+      );
+      const updatedAssignment = await Assignment.findById(req.params.id).lean();
+      if (!clearGrade) {
+        const courseId = assignment.courseId ?? assignment.materiaId;
+        const categoryId = assignment.categoryId ?? assignment.logroCalificacionId;
+        const colegioId = assignment.colegioId;
+        if (courseId && categoryId && colegioId) {
+          const maxScore = assignment.maxScore ?? 100;
+          const normalizedScore = maxScore > 0 ? (calificacion / maxScore) * 100 : 0;
+          await GradeEvent.findOneAndUpdate(
+            {
+              studentId: normalizedEstudianteId,
+              courseId: new Types.ObjectId(courseId),
+              assignmentId: assignment._id,
+              colegioId,
+            },
+            {
+              $set: {
+                categoryId: new Types.ObjectId(categoryId),
+                score: calificacion,
+                maxScore,
+                normalizedScore: Math.round(normalizedScore * 100) / 100,
+                recordedAt: new Date(),
+                recordedBy: new Types.ObjectId(normalizedUserId),
+              },
+            },
+            { upsert: true }
+          );
+          enqueueRecalculateStudentCourse(
+            normalizedEstudianteId.toString(),
+            courseId.toString()
+          );
+        }
+      }
+      return res.json(updatedAssignment);
     }
 
-    // Actualizar la submission usando findByIdAndUpdate para evitar problemas de validación
-    const updateQuery: any = {
-      $set: {
-        [`submissions.${submissionIndex}.calificacion`]: calificacion,
-      }
-    };
+    const updateQuery: any = clearGrade
+      ? { $unset: { [`submissions.${submissionIndex}.calificacion`]: 1 } }
+      : { $set: { [`submissions.${submissionIndex}.calificacion`]: calificacion } };
 
     if (retroalimentacion) {
+      if (!updateQuery.$set) updateQuery.$set = {};
       updateQuery.$set[`submissions.${submissionIndex}.retroalimentacion`] = retroalimentacion;
     }
 
@@ -459,7 +499,7 @@ router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
     const courseId = assignment.courseId ?? assignment.materiaId;
     const categoryId = assignment.categoryId ?? assignment.logroCalificacionId;
     const colegioId = assignment.colegioId;
-    if (courseId && categoryId && colegioId) {
+    if (courseId && categoryId && colegioId && !clearGrade) {
       const maxScore = assignment.maxScore ?? 100;
       const normalizedScore = maxScore > 0 ? (calificacion / maxScore) * 100 : 0;
       await GradeEvent.findOneAndUpdate(

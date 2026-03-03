@@ -2,51 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
-/* AUTOCLOSE AI - FUTURISTA AZUL LUMINOSO */
-/* #0a0a2a | #002366 | #1e3cff | #ffffff | #00c8ff | #ffd700 */
+/* AUTOCLOSE AI - Misma paleta que Tabla completa de notas (vista profesor) */
+/* Fondo: radial #1E3A8A → #0F172A → #020617 | Panel: glass rgba(30,58,138,0.35) | Primario: #3B82F6 #2563EB */
 :root {
-  --deep-dark: #0a0a2a;
-  --royal-blue: #002366;
-  --electric-blue: #1e3cff;
-  --turquoise: #00c8ff;
-  --gold-accent: #ffd700;
+  --deep-dark: #020617;
+  --mid-dark: #0F172A;
+  --blue-radial: #1E3A8A;
+  --primary-blue: #3B82F6;
+  --primary-blue-hover: #2563EB;
+  --primary-blue-dark: #1D4ED8;
+  --avatar-blue: #1E40AF;
+  --text-primary: #E2E8F0;
   --panel-gray: #cfd8dc;
   --button-outline: rgba(255, 255, 255, .10);
   --badge-outline: rgba(255, 255, 255, .05);
   --opaque-button-border-intensity: 9;
   --elevate-1: rgba(255, 255, 255, .04);
   --elevate-2: rgba(255, 255, 255, .09);
-  --background: 240 40% 5%;
-  --foreground: 0 0% 100%;
-  --border: 231 60% 25%;
-  --card: 240 35% 10%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 231 50% 20%;
-  --sidebar: 240 50% 4%;
-  --sidebar-foreground: 0 0% 95%;
-  --sidebar-border: 231 40% 18%;
-  --sidebar-primary: 231 100% 56%;
+  --background: 222 47% 6%;
+  --foreground: 210 40% 98%;
+  --border: 215 20% 18%;
+  --card: 222 40% 9%;
+  --card-foreground: 210 40% 98%;
+  --card-border: 215 25% 16%;
+  --sidebar: 222 47% 4%;
+  --sidebar-foreground: 210 40% 95%;
+  --sidebar-border: 215 25% 14%;
+  --sidebar-primary: 217 91% 60%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 231 40% 18%;
-  --sidebar-accent-foreground: 0 0% 90%;
-  --sidebar-ring: 231 100% 56%;
-  --popover: 240 40% 12%;
-  --popover-foreground: 0 0% 95%;
-  --popover-border: 231 50% 22%;
-  --primary: 231 100% 56%;
+  --sidebar-accent: 215 30% 14%;
+  --sidebar-accent-foreground: 210 40% 90%;
+  --sidebar-ring: 217 91% 60%;
+  --popover: 222 40% 10%;
+  --popover-foreground: 210 40% 95%;
+  --popover-border: 215 25% 18%;
+  --primary: 217 91% 60%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 231 40% 18%;
-  --secondary-foreground: 0 0% 92%;
-  --muted: 231 35% 15%;
-  --muted-foreground: 0 0% 78%;
-  --accent: 195 100% 50%;
-  --accent-foreground: 0 0% 95%;
+  --secondary: 215 28% 14%;
+  --secondary-foreground: 210 40% 92%;
+  --muted: 215 25% 12%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 217 91% 60%;
+  --accent-foreground: 0 0% 100%;
   --destructive: 0 84% 48%;
   --destructive-foreground: 0 0% 100%;
-  --input: 231 35% 20%;
-  --ring: 231 100% 56%;
-  --chart-1: 231 100% 56%;
-  --chart-2: 195 100% 50%;
+  --input: 215 25% 18%;
+  --ring: 217 91% 60%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 199 89% 48%;
   --chart-3: 51 100% 50%;
   --chart-4: 35 91% 58%;
   --chart-5: 51 100% 55%;
@@ -179,18 +182,10 @@
 
   body {
     @apply font-sans antialiased text-foreground;
-    /* Gradiente azul institucional con movimiento fluido - identidad GLC */
-    background: linear-gradient(135deg,
-        #0a0a2a 0%,
-        #002366 25%,
-        #003d7a 50%,
-        #002366 75%,
-        #0a0a2a 100%);
-    background-position: 0% 50%;
-    background-size: 400% 400%;
+    /* Mismo fondo que Tabla completa de notas: radial #1E3A8A → #0F172A → #020617 */
+    background: radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%);
     min-height: 100vh;
     background-attachment: fixed;
-    animation: gradient-flow 12s ease-in-out infinite;
   }
 
 }
@@ -478,18 +473,18 @@
 
   .document-content a,
   .document-editor a {
-    color: #00c8ff;
+    color: #3B82F6;
     text-decoration: underline;
   }
 
   .document-content a:hover,
   .document-editor a:hover {
-    color: #1e3cff;
+    color: #2563EB;
   }
 
   .document-content blockquote,
   .document-editor blockquote {
-    border-left: 4px solid #1e3cff;
+    border-left: 4px solid #3B82F6;
     padding-left: 1rem;
     margin-left: 0;
     margin-bottom: 1rem;
@@ -536,14 +531,14 @@
   .document-content h1,
   .document-editor h1 {
     color: #ffffff;
-    border-bottom: 2px solid rgba(30, 60, 255, 0.5);
+    border-bottom: 2px solid rgba(59, 130, 246, 0.4);
     padding-bottom: 0.5rem;
   }
 
   .document-content h2,
   .document-editor h2 {
     color: #ffffff;
-    border-bottom: 1px solid rgba(30, 60, 255, 0.3);
+    border-bottom: 1px solid rgba(59, 130, 246, 0.25);
     padding-bottom: 0.25rem;
   }
 
@@ -567,7 +562,7 @@
 
   .document-content li::marker,
   .document-editor li::marker {
-    color: #1e3cff;
+    color: #3B82F6;
   }
 
   /* Scrollbar personalizado para el documento */
@@ -642,47 +637,52 @@
     box-shadow:
       0 4px 16px rgba(0, 0, 0, 0.3),
       0 0 0 1px rgba(255, 255, 255, 0.08),
-      inset 0 2px 0 rgba(255, 255, 255, 0.15),
-      0 0 40px rgba(30, 60, 255, 0.2);
+      inset 0 2px 0 rgba(255, 255, 255, 0.1),
+      0 0 40px rgba(37, 99, 235, 0.25);
   }
 
   .depth-3 {
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.4),
-      0 0 0 1px rgba(255, 255, 255, 0.1),
-      inset 0 4px 0 rgba(255, 255, 255, 0.2),
-      0 0 60px rgba(30, 60, 255, 0.3);
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      inset 0 4px 0 rgba(255, 255, 255, 0.1),
+      0 0 48px rgba(37, 99, 235, 0.3);
   }
 
-  /* Glassmorphism - Futurist Blue theme */
-  /* Paneles con glow - linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15)) */
-  .glass-enhanced {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.1));
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+  /* Panel mismo estilo que Tabla completa de notas (vista profesor) */
+  .panel-grades {
+    background: linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 0 30px rgba(30, 60, 255, 0.08);
+    box-shadow: 0 0 40px rgba(37, 99, 235, 0.25);
+  }
+
+  /* Glassmorphism - misma paleta tabla de notas (#3B82F6 = 59,130,246) */
+  .glass-enhanced {
+    background: linear-gradient(145deg, rgba(30, 58, 138, 0.25), rgba(15, 23, 42, 0.5));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 40px rgba(37, 99, 235, 0.2);
   }
 
   .glass-strong {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.15));
-    backdrop-filter: blur(32px) saturate(200%);
-    -webkit-backdrop-filter: blur(32px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 0 40px rgba(30, 60, 255, 0.12);
+    background: linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6));
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 48px rgba(37, 99, 235, 0.28);
   }
 
-  /* Hover con elevación y brillo azul eléctrico */
   .glass-hover {
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .glass-hover:hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.15));
-    box-shadow: 0 4px 32px rgba(30, 60, 255, 0.25);
+    box-shadow: 0 0 40px rgba(37, 99, 235, 0.3);
   }
 
-  /* Gradient Overlays - Royal Blue theme */
   .gradient-overlay-blue {
     position: relative;
   }
@@ -691,7 +691,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: var(--gradient-overlay-bg, linear-gradient(135deg, rgba(30, 60, 255, 0.15) 0%, rgba(0, 200, 255, 0.08) 100%));
+    background: var(--gradient-overlay-bg, linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(30, 58, 138, 0.08) 100%));
     border-radius: inherit;
     pointer-events: none;
     z-index: 0;
@@ -727,18 +727,16 @@
     transform: translateY(-4px) scale(1.02);
     box-shadow:
       0 12px 40px rgba(0, 0, 0, 0.4),
-      0 0 0 1px rgba(255, 255, 255, 0.1),
-      0 0 60px rgba(30, 60, 255, 0.35);
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      0 0 40px rgba(37, 99, 235, 0.3);
   }
 
   .hover-glow {
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
   }
 
   .hover-glow:hover {
-    box-shadow:
-      0 0 40px rgba(30, 60, 255, 0.4),
-      0 0 80px rgba(0, 200, 255, 0.2);
+    box-shadow: 0 0 40px rgba(37, 99, 235, 0.35);
     transform: scale(1.01);
   }
 
@@ -778,7 +776,7 @@
   /* Badge/Medal Styles - Blue/Gold accent */
   .badge-glow {
     position: relative;
-    box-shadow: 0 0 20px rgba(30, 60, 255, 0.4);
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.35);
   }
 
   .badge-glow::before {
@@ -787,7 +785,7 @@
     inset: -2px;
     border-radius: inherit;
     padding: 2px;
-    background: linear-gradient(135deg, #002366, #1e3cff, #00c8ff);
+    background: linear-gradient(135deg, #1D4ED8, #3B82F6);
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
@@ -818,7 +816,7 @@
     width: 200%;
     height: 200%;
     background: radial-gradient(circle,
-        rgba(30, 60, 255, 0.2) 0%,
+        rgba(59, 130, 246, 0.12) 0%,
         transparent 70%);
     animation: float 6s ease-in-out infinite;
     pointer-events: none;
@@ -843,7 +841,7 @@
   }
 
   .loader-blue-gradient {
-    background: linear-gradient(90deg, #002366 0%, #1e3cff 25%, #00c8ff 50%, #1e3cff 75%, #002366 100%);
+    background: linear-gradient(90deg, #0F172A 0%, #3B82F6 25%, #2563EB 50%, #3B82F6 75%, #0F172A 100%);
     background-size: 200% 100%;
     animation: loader-gradient-keyframes 1.5s ease infinite;
   }

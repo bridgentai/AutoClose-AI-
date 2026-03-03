@@ -8,12 +8,15 @@ import {
   PerformanceForecast,
   RiskAssessment,
 } from '../models';
+import { Assignment } from '../models/Assignment';
+import { LogroCalificacion } from '../models/LogroCalificacion';
 import { Group } from '../models/Group';
 import { protect, AuthRequest, checkAdminColegioOnly } from '../middleware/auth';
 import { Types } from 'mongoose';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import { logAdminAction } from '../services/auditLogger';
 import { runAcademicInsightEngine } from '../services/grading/intelligence/insightEngine';
+import { generateAcademicInsightsSummary } from '../services/openai';
 
 const router = express.Router();
 
@@ -328,6 +331,149 @@ router.get('/:id/insights', protect, async (req: AuthRequest, res) => {
   } catch (e: unknown) {
     console.error('Error GET insights:', e);
     return res.status(500).json({ message: 'Error al obtener insights.' });
+  }
+});
+
+// GET /api/courses/:id/analytics-summary?studentId= - Resumen analítico con IA (promedio, categorías, pronóstico, riesgo, texto IA)
+router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
+  try {
+    const courseId = req.params.id;
+    const studentId = req.query.studentId as string | undefined;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
+
+    const normalizedCourseId = normalizeIdForQuery(courseId);
+    const normalizedStudentId = normalizeIdForQuery(studentId);
+
+    const [course, student, logros, assignments, snapshot, forecast, risk] = await Promise.all([
+      Course.findOne({ _id: normalizedCourseId, colegioId }).select('nombre gradingSchemaId').lean(),
+      User.findById(normalizedStudentId).select('nombre').lean(),
+      LogroCalificacion.find({ courseId: normalizedCourseId, colegioId }).sort({ orden: 1 }).lean(),
+      Assignment.find({
+        courseId: normalizedCourseId,
+        colegioId,
+      })
+        .select('titulo logroCalificacionId submissions entregas')
+        .lean(),
+      PerformanceSnapshot.findOne({
+        courseId: normalizedCourseId,
+        studentId: normalizedStudentId,
+        colegioId,
+      })
+        .sort({ at: -1 })
+        .lean(),
+      PerformanceForecast.findOne({
+        courseId: normalizedCourseId,
+        studentId: normalizedStudentId,
+        colegioId,
+      }).lean(),
+      RiskAssessment.findOne({
+        courseId: normalizedCourseId,
+        studentId: normalizedStudentId,
+        colegioId,
+      })
+        .sort({ at: -1 })
+        .lean(),
+    ]);
+
+    const studentName = (student as { nombre?: string } | null)?.nombre ?? 'Estudiante';
+    const courseName = (course as { nombre?: string } | null)?.nombre ?? 'Materia';
+
+    type LogroLike = { _id: Types.ObjectId; nombre?: string; porcentaje?: number };
+    const byCategory: Array<{ categoryName: string; percentage: number; average: number; count: number }> = [];
+    let weightedSum = 0;
+    let weightSum = 0;
+
+    for (const logro of (logros || []) as LogroLike[]) {
+      const lid = String(logro._id);
+      const subs = (a: { submissions?: { estudianteId: unknown; calificacion?: number }[]; entregas?: { estudianteId: unknown; calificacion?: number }[] }) =>
+        a.submissions || (a as { entregas?: { estudianteId: unknown; calificacion?: number }[] }).entregas || [];
+      const notas: number[] = [];
+      for (const a of assignments || []) {
+        const assignment = a as { logroCalificacionId?: Types.ObjectId; submissions?: { estudianteId: unknown; calificacion?: number }[]; entregas?: { estudianteId: unknown; calificacion?: number }[] };
+        if (String(assignment.logroCalificacionId) !== lid) continue;
+        const sub = subs(assignment).find(
+          (s: { estudianteId: unknown }) => String(s.estudianteId) === normalizedStudentId
+        );
+        const cal = (sub as { calificacion?: number })?.calificacion;
+        if (cal != null && !Number.isNaN(cal)) notas.push(cal);
+      }
+      const pct = logro.porcentaje ?? 0;
+      const average = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : 0;
+      byCategory.push({
+        categoryName: logro.nombre ?? 'Sin nombre',
+        percentage: pct,
+        average,
+        count: notas.length,
+      });
+      if (pct > 0 && notas.length > 0) {
+        weightedSum += (average * pct) / 100;
+        weightSum += pct;
+      }
+    }
+
+    const simpleWeighted = weightSum > 0 ? (weightedSum * 100) / weightSum : null;
+    const finalWeighted = simpleWeighted != null ? Math.round(simpleWeighted * 100) / 100 : (snapshot as { weightedFinalAverage?: number } | null)?.weightedFinalAverage ?? null;
+
+    let engineInsights: string[] = [];
+    if (snapshot && forecast && risk) {
+      const { GradeEvent } = await import('../models');
+      const gradeEvents = await GradeEvent.find({
+        courseId: normalizedCourseId,
+        studentId: normalizedStudentId,
+        colegioId,
+      })
+        .sort({ recordedAt: 1 })
+        .lean();
+      const schemaId = (course as { gradingSchemaId?: Types.ObjectId })?.gradingSchemaId;
+      const categories = schemaId
+        ? await Category.find({ gradingSchemaId: schemaId, colegioId }).lean()
+        : [];
+      const result = runAcademicInsightEngine({
+        snapshot,
+        forecast,
+        risk,
+        categories: categories ?? [],
+        gradeEvents,
+      });
+      engineInsights = result.insights ?? [];
+    }
+
+    const aiContext = {
+      studentName,
+      courseName,
+      weightedAverage: finalWeighted,
+      byCategory,
+      forecast: forecast
+        ? {
+            projectedFinalGrade: (forecast as { projectedFinalGrade?: number }).projectedFinalGrade,
+            riskProbabilityPercent: (forecast as { riskProbabilityPercent?: number }).riskProbabilityPercent,
+          }
+        : null,
+      risk: risk
+        ? {
+            level: (risk as { level?: string }).level,
+            factors: (risk as { factors?: string[] }).factors ?? [],
+          }
+        : null,
+      engineInsights: engineInsights.length ? engineInsights : undefined,
+    };
+
+    const aiSummary = await generateAcademicInsightsSummary(aiContext);
+
+    return res.json({
+      weightedAverage: finalWeighted,
+      byCategory,
+      snapshot: snapshot ?? null,
+      forecast: forecast ?? null,
+      risk: risk ?? null,
+      aiSummary,
+      insights: engineInsights,
+    });
+  } catch (e: unknown) {
+    console.error('Error GET analytics-summary:', e);
+    return res.status(500).json({ message: 'Error al obtener resumen analítico.' });
   }
 });
 

@@ -541,3 +541,81 @@ FUNCIONES DISPONIBLES:
 
   return basePrompt + (roleSpecificPrompts[role] || '');
 }
+
+/** Context for AI-generated academic insights (Vista analítica) */
+export interface AcademicInsightsContext {
+  studentName: string;
+  courseName: string;
+  weightedAverage: number | null;
+  byCategory: Array<{ categoryName: string; percentage: number; average: number; count: number }>;
+  forecast?: { projectedFinalGrade: number; riskProbabilityPercent?: number } | null;
+  risk?: { level: string; factors: string[] } | null;
+  engineInsights?: string[];
+}
+
+/**
+ * Generates a short natural-language academic summary for the analytics view.
+ * Used when snapshot/forecast/risk exist or when we have grades from assignments+logros.
+ */
+export async function generateAcademicInsightsSummary(
+  context: AcademicInsightsContext
+): Promise<string> {
+  const openaiClient = getOpenAIClient();
+  if (!openaiClient) {
+    return 'Configura OPENAI_API_KEY en .env para ver el análisis con IA.';
+  }
+
+  const parts: string[] = [];
+  parts.push(`Estudiante: ${context.studentName}. Materia: ${context.courseName}.`);
+  if (context.weightedAverage != null) {
+    parts.push(`Promedio ponderado actual: ${context.weightedAverage.toFixed(1)}/100.`);
+  }
+  if (context.byCategory.length > 0) {
+    parts.push(
+      'Desglose por categoría: ' +
+        context.byCategory
+          .map(
+            (c) =>
+              `${c.categoryName} (${c.percentage}%): ${c.average.toFixed(1)}/100, ${c.count} nota(s)`
+          )
+          .join('; ') +
+        '.'
+    );
+  }
+  if (context.forecast?.projectedFinalGrade != null) {
+    parts.push(
+      `Proyección final: ${context.forecast.projectedFinalGrade.toFixed(1)}/100.` +
+        (context.forecast.riskProbabilityPercent != null
+          ? ` Probabilidad de riesgo: ${context.forecast.riskProbabilityPercent}%.`
+          : '')
+    );
+  }
+  if (context.risk?.level) {
+    parts.push(`Nivel de riesgo: ${context.risk.level}. Factores: ${(context.risk.factors || []).join(', ') || 'ninguno'}.`);
+  }
+  if (context.engineInsights?.length) {
+    parts.push(`Insights del sistema: ${context.engineInsights.join('. ')}`);
+  }
+
+  const dataBlock = parts.join('\n');
+  const systemPrompt = `Eres un asistente académico de un colegio. Genera un resumen breve y útil en español (Colombia) para el profesor, en 2 a 5 oraciones. Sé claro, constructivo y orientado a acciones. No inventes datos que no estén en el contexto. Si el rendimiento es bajo, sugiere brevemente áreas de mejora. Si es estable o alto, reconócelo.`;
+
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: `Contexto del estudiante y sus notas:\n${dataBlock}\n\nGenera el resumen e insights en prosa (solo texto, sin viñetas).`,
+        },
+      ],
+      max_tokens: 400,
+    });
+    return response.choices[0]?.message?.content?.trim() || 'No se pudo generar el resumen.';
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[OpenAI] generateAcademicInsightsSummary error:', msg);
+    return 'Error al generar el análisis con IA. Verifica OPENAI_API_KEY.';
+  }
+}

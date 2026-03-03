@@ -63,28 +63,25 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative"
-      style={{
-        background: 'linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)'
-      }}>
-      {/* Caobos en esquina - enlace a landing */}
+    <div
+      className="min-h-screen flex flex-col items-center justify-center p-6 relative"
+      style={{ background: 'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)' }}
+    >
       <button
         type="button"
         onClick={() => setLocation('/')}
-        className="absolute top-6 left-6 z-20 text-2xl font-bold text-white font-['Poppins'] tracking-tight hover:text-white/80 transition-colors"
+        className="absolute top-6 left-6 z-20 text-2xl font-bold text-[#E2E8F0] font-['Poppins'] tracking-tight hover:text-white transition-colors"
       >
         Caobos
       </button>
       <div className="w-full max-w-md relative z-10">
-        <div className="backdrop-blur-xl border border-white/10 rounded-3xl p-10 shadow-2xl"
-          style={{
-            background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15))',
-            boxShadow: '0 0 40px rgba(30, 60, 255, 0.25)'
-          }}>
-          <h2 className="text-3xl font-bold mb-2 text-[#1e3cff] font-['Poppins']">
+        <div
+          className="panel-grades rounded-3xl p-10 border border-white/10"
+        >
+          <h2 className="text-3xl font-bold mb-2 text-[#3B82F6] font-['Poppins']">
             Iniciar sesión
           </h2>
-          <p className="text-white/70 mb-8">Accede a AutoClose AI</p>
+          <p className="text-[#E2E8F0]/80 mb-8">Accede a AutoClose AI</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -126,7 +123,7 @@ export default function Login() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white font-semibold transition-all duration-200 hover:shadow-[0_0_30px_rgba(30,60,255,0.4)]"
+              className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-semibold transition-all duration-200 hover:shadow-[0_0_24px_rgba(59,130,246,0.45)]"
               data-testid="button-login"
             >
               {loading ? 'Iniciando sesión...' : 'Ingresar'}
@@ -152,7 +149,7 @@ export default function Login() {
               className="text-white/60 hover:text-white/90 text-sm transition-colors block w-full"
               data-testid="link-register"
             >
-              ¿No tienes cuenta? <span className="text-[#00c8ff] font-semibold">Regístrate</span>
+              ¿No tienes cuenta? <span className="text-[#3B82F6] font-semibold hover:text-[#2563EB]">Regístrate</span>
             </button>
             <button
               onClick={() => setLocation('/')}

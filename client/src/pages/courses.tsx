@@ -243,7 +243,7 @@ const groupColor = groupColorsMap.get(group.groupId) || '#002366';
 return (
 <Card
 key={group.groupId}
-className="relative bg-white/5 border border-white/10 backdrop-blur-md cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:bg-white/[0.07] overflow-hidden"
+className="relative flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:bg-white/[0.07] overflow-hidden"
 style={{
   boxShadow: '0 0 0 0px transparent',
   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -266,29 +266,46 @@ onClick={() => handleCourseClick(group.groupId, true)}
   }}
 />
 
-<CardHeader className="relative p-6 pb-4">
-<div className="flex items-center justify-between mb-4">
+<CardHeader className="relative flex-1 flex flex-col p-6 pb-2">
+<div className="flex items-center justify-between mb-4 min-h-[56px]">
 <div
-className="relative w-20 h-20 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg"
+className="relative w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-105"
 style={{ 
   backgroundColor: `${groupColor}20`, 
   borderColor: groupColor, 
   borderWidth: '2px',
-  boxShadow: `0 0 20px ${groupColor}30`,
-  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+  boxShadow: `0 0 16px ${groupColor}30`,
 }}
 >
-<Users className="w-10 h-10 transition-all duration-300" style={{ color: groupColor }} />
+<Users className="w-7 h-7" style={{ color: groupColor }} />
 </div>
-<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300" />
+<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300 flex-shrink-0" />
 </div>
 
-<CardTitle className="text-white text-3xl font-bold mb-3 font-['Poppins']">{groupDisplayName}</CardTitle>
-{/* Subtexto informativo */}
-<p className="text-sm text-white/60 font-['Inter'] font-medium">
+<CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{groupDisplayName}</CardTitle>
+<p className="text-sm text-white/60 font-['Inter'] line-clamp-2">
   <span className="text-white/70">Estudiantes:</span> {studentsCountMap.get(group.groupId) ?? group.totalStudents ?? 0}
 </p>
 </CardHeader>
+
+<CardContent className="p-6 pt-2 flex flex-col gap-2">
+<Button
+  variant="outline"
+  size="sm"
+  className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-[#3B82F6]/20 hover:border-[#3B82F6]/40"
+  onClick={(e) => { e.stopPropagation(); setLocation(`/course/${group.groupId}/horario`); }}
+>
+  Ver horario
+</Button>
+<Button
+  variant="outline"
+  size="sm"
+  className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
+  onClick={(e) => { e.stopPropagation(); handleCourseClick(group.groupId, true); }}
+>
+  Ver detalle
+</Button>
+</CardContent>
 </Card>
 );
 })}
@@ -314,54 +331,45 @@ return (
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 {courses.map((course, index) => {
 const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
-const displayColor =
-course.colorAcento ||
-GRADIENT_COLORS[index % GRADIENT_COLORS.length].split(' ')[0].replace('from-', '');
+const displayColor = course.colorAcento || generateColorFromId(course._id);
 
 return (
 <Card
 key={course._id}
-className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
-onClick={() => handleCourseClick(course._id)} // Envía el ID de la Materia
+className="flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md hover-elevate cursor-pointer group transition-all duration-300 hover:bg-white/[0.07]"
+onClick={() => handleCourseClick(course._id)}
 >
-<CardHeader className="p-4 md:p-6">
-<div className="flex items-center justify-between mb-4">
-<div
-className="w-16 h-16 rounded-2xl flex items-center justify-center"
-style={{ backgroundColor: displayColor }}
->
-<BookOpen className="w-8 h-8 text-white" />
+<CardHeader className="flex-1 flex flex-col p-6 pb-2">
+<div className="flex items-center justify-between mb-4 min-h-[56px]">
+<div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
+<BookOpen className="w-7 h-7 text-white" />
 </div>
-<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
+<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
 </div>
 
-<CardTitle className="text-white text-2xl font-bold">{course.nombre}</CardTitle>
-<CardDescription className="text-white/60 line-clamp-2">
+<CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{course.nombre}</CardTitle>
+<CardDescription className="text-white/60 line-clamp-2 flex-1">
 {course.descripcion || 'Sin descripción.'}
 </CardDescription>
-<p className="text-sm text-white/40 mt-1">Profesor: {primaryProfessor}</p>
-<p className="text-xs text-white/30">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
+<p className="text-sm text-white/50 mt-2 truncate">Profesor: {primaryProfessor}</p>
+<p className="text-xs text-white/40 truncate">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
 </CardHeader>
 
-<CardContent className="p-4 pt-0 md:p-6 md:pt-0 space-y-2">
+<CardContent className="p-6 pt-2 flex flex-col gap-2">
 <Button
 variant="outline"
-className="w-full border-white/10 text-white hover:bg-white/10"
-onClick={e => {
-e.stopPropagation();
-handleCourseClick(course._id);
-}}
+size="sm"
+className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
+onClick={e => { e.stopPropagation(); handleCourseClick(course._id); }}
 >
 {isDirectivo ? 'Ver Detalle' : 'Ingresar'}
 </Button>
 {!isDirectivo && (
 <Button
 variant="outline"
-className="w-full border-[#1e3cff]/40 text-[#00c8ff] hover:bg-[#1e3cff]/10"
-onClick={e => {
-e.stopPropagation();
-setLocation('/mi-aprendizaje/notas');
-}}
+size="sm"
+className="w-full rounded-[10px] border-[#3B82F6]/40 text-[#3B82F6] hover:bg-[#3B82F6]/20"
+onClick={e => { e.stopPropagation(); setLocation('/mi-aprendizaje/notas'); }}
 >
 <GraduationCap className="w-4 h-4 mr-2" />
 Ver Notas
@@ -389,42 +397,35 @@ Revisa las materias y el progreso de los estudiantes a tu cargo.
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 {courses.map((course, index) => {
 const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
-const displayColor =
-course.colorAcento ||
-GRADIENT_COLORS[index % GRADIENT_COLORS.length].split(' ')[0].replace('from-', '');
+const displayColor = course.colorAcento || generateColorFromId(course._id);
 
 return (
 <Card
 key={course._id}
-className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
+className="flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md hover-elevate cursor-pointer group transition-all duration-300 hover:bg-white/[0.07]"
 onClick={() => handleCourseClick(course._id)}
 >
-<CardHeader className="p-4 md:p-6">
-<div className="flex items-center justify-between mb-4">
-<div
-className="w-16 h-16 rounded-2xl flex items-center justify-center"
-style={{ backgroundColor: displayColor }}
->
-<ClipboardList className="w-8 h-8 text-white" />
+<CardHeader className="flex-1 flex flex-col p-6 pb-2">
+<div className="flex items-center justify-between mb-4 min-h-[56px]">
+<div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
+<ClipboardList className="w-7 h-7 text-white" />
 </div>
-<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors" />
+<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
 </div>
 
-<CardTitle className="text-white text-2xl font-bold">{course.nombre}</CardTitle>
-<CardDescription className="text-white/60 line-clamp-2">
+<CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{course.nombre}</CardTitle>
+<CardDescription className="text-white/60 line-clamp-2 flex-1">
 Materia en el grupo: {course.cursos?.join(', ') || 'N/A'}
 </CardDescription>
-<p className="text-sm text-white/40 mt-1">Profesor: {primaryProfessor}</p>
+<p className="text-sm text-white/50 mt-2 truncate">Profesor: {primaryProfessor}</p>
 </CardHeader>
 
-<CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+<CardContent className="p-6 pt-2 flex flex-col gap-2">
 <Button
 variant="outline"
-className="w-full border-white/10 text-white hover:bg-white/10"
-onClick={e => {
-e.stopPropagation();
-handleCourseClick(course._id);
-}}
+size="sm"
+className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
+onClick={e => { e.stopPropagation(); handleCourseClick(course._id); }}
 >
 Ver Progreso
 </Button>
