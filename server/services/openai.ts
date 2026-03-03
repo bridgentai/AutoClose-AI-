@@ -542,7 +542,14 @@ FUNCIONES DISPONIBLES:
   return basePrompt + (roleSpecificPrompts[role] || '');
 }
 
-/** Context for AI-generated academic insights (Vista analítica) */
+export type AcademicInsightRole =
+  | 'profesor'
+  | 'estudiante'
+  | 'padre'
+  | 'directivo'
+  | 'boletin';
+
+/** Context for AI-generated academic insights (Vista analítica multirrol) */
 export interface AcademicInsightsContext {
   studentName: string;
   courseName: string;
@@ -551,6 +558,22 @@ export interface AcademicInsightsContext {
   forecast?: { projectedFinalGrade: number; riskProbabilityPercent?: number } | null;
   risk?: { level: string; factors: string[] } | null;
   engineInsights?: string[];
+  /** Comparativa grupal básica (para percentil/ranking) */
+  groupComparison?: {
+    groupAverage: number | null;
+    percentile: number | null;
+    rank: number | null;
+    totalStudents: number;
+  };
+  /** Indicadores de compromiso (asistencia, puntualidad, tareas) en 0–1 */
+  commitment?: {
+    attendanceRate: number | null;
+    punctualityRate: number | null;
+    tasksCompletionRate: number | null;
+    commitmentIndex: number | null;
+  };
+  /** Rol objetivo de la narrativa generada */
+  role?: AcademicInsightRole;
 }
 
 /**
@@ -596,9 +619,53 @@ export async function generateAcademicInsightsSummary(
   if (context.engineInsights?.length) {
     parts.push(`Insights del sistema: ${context.engineInsights.join('. ')}`);
   }
+  if (context.groupComparison) {
+    const { groupAverage, percentile, rank, totalStudents } = context.groupComparison;
+    if (groupAverage != null) {
+      parts.push(`Promedio del grupo: ${groupAverage.toFixed(1)}/100.`);
+    }
+    if (percentile != null && rank != null && totalStudents > 0) {
+      parts.push(`Posición relativa: percentil ${percentile.toFixed(1)}, puesto ${rank} de ${totalStudents} estudiantes.`);
+    }
+  }
+  if (context.commitment) {
+    const { attendanceRate, punctualityRate, tasksCompletionRate, commitmentIndex } =
+      context.commitment;
+    const toPct = (v: number | null | undefined) =>
+      v != null ? `${Math.round(v * 100)}%` : undefined;
+    const pieces: string[] = [];
+    const att = toPct(attendanceRate);
+    const pun = toPct(punctualityRate);
+    const tasks = toPct(tasksCompletionRate);
+    if (att) pieces.push(`asistencia ${att}`);
+    if (pun) pieces.push(`puntualidad ${pun}`);
+    if (tasks) pieces.push(`entrega de tareas ${tasks}`);
+    if (pieces.length > 0) {
+      parts.push(
+        `Compromiso observado: ${pieces.join(', ')}${
+          commitmentIndex != null ? ` (índice global ${Math.round(commitmentIndex * 100)}%).` : '.'
+        }`
+      );
+    }
+  }
 
   const dataBlock = parts.join('\n');
-  const systemPrompt = `Eres un asistente académico de un colegio. Genera un resumen breve y útil en español (Colombia) para el profesor, en 2 a 5 oraciones. Sé claro, constructivo y orientado a acciones. No inventes datos que no estén en el contexto. Si el rendimiento es bajo, sugiere brevemente áreas de mejora. Si es estable o alto, reconócelo.`;
+  const role: AcademicInsightRole = context.role ?? 'profesor';
+
+  const promptsByRole: Record<AcademicInsightRole, string> = {
+    profesor:
+      'Eres un asistente académico para un profesor. Genera un resumen breve (2 a 5 oraciones) en español (Colombia), claro, técnico‑pedagógico y orientado a acciones concretas en clase.',
+    estudiante:
+      'Eres un tutor académico para un estudiante de colegio. Explica su situación en 2 a 5 oraciones, en lenguaje sencillo y motivador, resaltando fortalezas y una o dos recomendaciones claras para mejorar.',
+    padre:
+      'Eres un orientador académico que se comunica con familias. Resume en 2 a 5 oraciones la situación del estudiante en lenguaje muy claro, respetuoso y no técnico, destacando si requiere atención y qué pueden hacer en casa.',
+    directivo:
+      'Eres un asesor académico para directivos de un colegio. En 2 a 5 oraciones da una visión ejecutiva del rendimiento y riesgo del estudiante en esta materia, con foco en decisiones de seguimiento institucional.',
+    boletin:
+      'Eres un asesor académico que redacta un párrafo para un boletín institucional. En 3 a 6 oraciones describe de forma formal el desempeño del estudiante, sus fortalezas, aspectos a mejorar y recomendaciones para el próximo periodo.',
+  };
+
+  const systemPrompt = promptsByRole[role];
 
   try {
     const response = await openaiClient.chat.completions.create({

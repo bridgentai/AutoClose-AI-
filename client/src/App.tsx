@@ -79,6 +79,8 @@ import TeacherNotesPage from "@/pages/teacher-notes";
 import TeacherGroupTasksPage from "@/pages/teacher-group-tasks";
 import StudentProfilePage from "@/pages/student-profile";
 import BoletinInteligentePage from "@/pages/boletin-inteligente";
+import StudentCourseAnalyticsPage from "@/pages/student-course-analytics";
+import ParentCourseAnalyticsPage from "@/pages/parent-course-analytics";
 
 // Módulos del profesor
 import ProfesorAcademiaLayout from "@/pages/profesor-academia";
@@ -196,6 +198,9 @@ function AppRouter() {
             <Route path="/parent/notas/historial">
               <AuthGuard><ParentNotesHistorialPage /></AuthGuard>
             </Route>
+            <Route path="/parent/analytics/:studentId/:cursoId">
+              <AuthGuard><ParentCourseAnalyticsPage /></AuthGuard>
+            </Route>
             <Route path="/directivo">
               <AuthGuard><DirectivoPage /></AuthGuard>
             </Route>
@@ -257,6 +262,9 @@ function AppRouter() {
             </Route>
             <Route path="/mi-aprendizaje/calendario">
               <AuthGuard><CalendarPage /></AuthGuard>
+            </Route>
+            <Route path="/student/course/:cursoId/analytics">
+              <AuthGuard><StudentCourseAnalyticsPage /></AuthGuard>
             </Route>
             <Route path="/mi-aprendizaje/notas/historial">
               <AuthGuard><StudentNotesHistoryPage /></AuthGuard>

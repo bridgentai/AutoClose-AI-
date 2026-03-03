@@ -16,6 +16,7 @@ import { Types } from 'mongoose';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import { logAdminAction } from '../services/auditLogger';
 import { runAcademicInsightEngine } from '../services/grading/intelligence/insightEngine';
+import { computeStudentCourseIntelligence } from '../services/grading/intelligence/multiroleIntelligence';
 import { generateAcademicInsightsSummary } from '../services/openai';
 
 const router = express.Router();
@@ -230,6 +231,14 @@ router.get('/:id/forecast', protect, async (req: AuthRequest, res) => {
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
     if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
+    const roleParam = req.query.role as
+      | 'profesor'
+      | 'estudiante'
+      | 'padre'
+      | 'directivo'
+      | 'boletin'
+      | undefined;
+    const narrativeRole = roleParam ?? 'profesor';
     const forecast = await PerformanceForecast.findOne({
       courseId: normalizeIdForQuery(courseId),
       studentId: normalizeIdForQuery(studentId),
@@ -458,6 +467,7 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
           }
         : null,
       engineInsights: engineInsights.length ? engineInsights : undefined,
+      role: narrativeRole,
     };
 
     const aiSummary = await generateAcademicInsightsSummary(aiContext);
@@ -474,6 +484,32 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
   } catch (e: unknown) {
     console.error('Error GET analytics-summary:', e);
     return res.status(500).json({ message: 'Error al obtener resumen analítico.' });
+  }
+});
+
+// GET /api/courses/:id/intelligence?studentId=&role=
+// Inteligencia académica enriquecida para vistas multirrol (profesor, estudiante, padre, directivo)
+router.get('/:id/intelligence', protect, async (req: AuthRequest, res) => {
+  try {
+    const courseId = req.params.id;
+    const studentId = req.query.studentId as string | undefined;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
+
+    const normalizedCourseId = normalizeIdForQuery(courseId);
+    const normalizedStudentId = normalizeIdForQuery(studentId);
+
+    const intelligence = await computeStudentCourseIntelligence({
+      courseId: normalizedCourseId,
+      studentId: normalizedStudentId,
+      colegioId,
+    });
+
+    return res.json(intelligence);
+  } catch (e: unknown) {
+    console.error('Error GET intelligence:', e);
+    return res.status(500).json({ message: 'Error al obtener inteligencia académica.' });
   }
 });
 

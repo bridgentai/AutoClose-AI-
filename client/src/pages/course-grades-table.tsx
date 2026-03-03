@@ -107,8 +107,6 @@ function calcularPrediccion(
   assignmentsByLogro: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }>,
   tabOrder: { id: string; label: string }[]
 ): PrediccionResult {
-  const toScale5 = (v: number) => v / 20;
-
   const tareasLogro = tabOrder.find((t) => t.label === 'Tareas') ?? tabOrder[0];
   const examenesLogro = tabOrder.find((t) => t.label === 'Exámenes') ?? tabOrder[1];
   const trabajosLogro = tabOrder.find((t) => t.label === 'Trabajos') ?? tabOrder[2];
@@ -125,7 +123,7 @@ function calcularPrediccion(
           String(x.estudianteId) === estudianteId
       );
       const cal = (sub as { calificacion?: number })?.calificacion;
-      if (cal != null && !Number.isNaN(cal)) grades.push(toScale5(cal));
+      if (cal != null && !Number.isNaN(cal)) grades.push(cal);
     });
     return grades;
   };
@@ -139,7 +137,7 @@ function calcularPrediccion(
     const subs = a.submissions || a.entregas || [];
     const sub = subs.find((x: { estudianteId?: string }) => String(x.estudianteId) === estudianteId);
     const cal = (sub as { calificacion?: number })?.calificacion;
-    if (cal != null && !Number.isNaN(cal)) orderedGrades.push(toScale5(cal));
+    if (cal != null && !Number.isNaN(cal)) orderedGrades.push(cal);
   });
 
   const tareasProm = promedio(getGradesForLogro(tareasLogro?.id));
@@ -154,12 +152,12 @@ function calcularPrediccion(
   const primeras3 = orderedGrades.slice(0, 3);
   const ultimas3 = orderedGrades.slice(-3);
   const tendencia = promedio(ultimas3) - promedio(primeras3);
-  const prediccion = Math.max(0, Math.min(5, notaActual + tendencia * 0.3));
+  const prediccion = Math.max(0, Math.min(100, notaActual + tendencia * 0.3));
 
   const sparklineData = orderedGrades.map((value) => ({ value }));
 
   return {
-    prediccion: Math.round(prediccion * 10) / 10,
+    prediccion: Math.round(prediccion),
     tendencia,
     sparklineData: sparklineData.length > 0 ? sparklineData : [{ value: notaActual }],
     notaActual,
@@ -295,7 +293,7 @@ function StudentAvatar({ nombre }: { nombre: string }) {
 function PredictionCell({ result }: { result: PrediccionResult }) {
   const { prediccion, tendencia, sparklineData } = result;
   const strokeColor =
-    prediccion < 3 ? '#EF4444' : prediccion <= 4 ? '#FACC15' : '#3B82F6';
+    prediccion < 60 ? '#EF4444' : prediccion <= 80 ? '#FACC15' : '#3B82F6';
   const TrendIcon = tendencia > 0 ? ChevronUp : tendencia < 0 ? ChevronDown : Minus;
 
   return (
@@ -312,8 +310,9 @@ function PredictionCell({ result }: { result: PrediccionResult }) {
           animate={{ scale: 1, opacity: 1 }}
           className="text-[20px] font-semibold tabular-nums text-[#E2E8F0]"
         >
-          {prediccion > 0 ? prediccion.toFixed(1) : '—'}
+          {prediccion > 0 ? prediccion : '—'}
         </motion.span>
+        {prediccion > 0 && <span className="text-white/50 text-[10px]">/ 100</span>}
         {prediccion > 0 && (
           <TrendIcon
             className="w-4 h-4 flex-shrink-0"
@@ -371,7 +370,8 @@ function StudentRow({
       style={{ gridTemplateColumns: `260px repeat(${assignments.length}, 120px) 100px 180px` }}
     >
       <div
-        className="flex items-center gap-3 pl-1 cursor-pointer group"
+        className="flex items-center gap-3 pl-1 cursor-pointer group sticky left-0 z-10 pr-2 -ml-px backdrop-blur-md"
+        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
         onClick={() => onStudentClick(student._id)}
       >
         <StudentAvatar nombre={student.nombre} />
@@ -675,21 +675,21 @@ export default function CourseGradesTablePage() {
             </div>
           ) : students.length > 0 ? (
             <div
-              className="overflow-x-auto overflow-y-auto flex-1 min-h-0 -mx-4 sm:-mx-6 px-4 sm:px-6 relative"
+              className="overflow-x-auto overflow-y-auto flex-1 min-h-0 -mx-8 sm:-mx-16 px-4 sm:px-16 relative"
               style={{
-                maskImage: 'linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent)',
-                WebkitMaskImage: 'linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent)',
+                maskImage: 'linear-gradient(to right, black 260px, black calc(100% - 20px), transparent)',
+                WebkitMaskImage: 'linear-gradient(to right, black 260px, black calc(100% - 20px), transparent)',
               }}
             >
               {/* Header row: sticky, glass muy sutil para no crear bloque */}
               <div
-                className="sticky top-0 z-10 grid items-center gap-2 min-h-[56px] py-3 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
+                className="sticky top-0 z-20 grid items-center gap-2 min-h-[56px] py-3 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
                 style={{
                   gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
                   background: 'rgba(255,255,255,0.02)',
                 }}
               >
-                <div className="pl-1">Estudiante</div>
+                <div className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md" style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}>Estudiante</div>
                 {activeAssignments.map((a) => (
                   <div key={a._id} className="text-center truncate px-1">
                     {a.titulo}

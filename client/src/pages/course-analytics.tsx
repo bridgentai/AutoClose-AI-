@@ -4,12 +4,13 @@ import { useAuth } from '@/lib/authContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
-import { useCourseGrading, useAnalyticsSummary } from '@/hooks/useCourseGrading';
+import { useCourseGrading, useAnalyticsSummary, useCourseIntelligence } from '@/hooks/useCourseGrading';
 import { ForecastGraph } from '@/components/grading/ForecastGraph';
 import { StabilityGauge } from '@/components/grading/StabilityGauge';
 import { RiskIndicator } from '@/components/grading/RiskIndicator';
 import { InsightsBlock } from '@/components/grading/InsightsBlock';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -77,6 +78,14 @@ export default function CourseAnalyticsPage() {
   );
   const aiSummary = analyticsSummary?.aiSummary ?? '';
   const mergedInsights = (analyticsSummary?.insights?.length ? analyticsSummary.insights : insights?.insights) ?? [];
+
+  const { data: intelligence } = useCourseIntelligence(
+    firstSubjectId,
+    effectiveStudentId || undefined
+  );
+
+  const groupComparison = intelligence?.groupComparison;
+  const commitment = intelligence?.commitment;
 
   const categoryImpactBreakdown = useMemo(() => {
     if (snapshot?.categoryImpacts && categories.length) {
@@ -155,20 +164,57 @@ export default function CourseAnalyticsPage() {
           </div>
         ) : (
           <>
-            <div className="grid gap-6 md:grid-cols-2 mb-6">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)] mb-6">
               <Card className="panel-grades border-white/10 rounded-2xl overflow-hidden">
                 <CardHeader>
                   <CardTitle className="text-white/90 text-sm font-medium">
-                    Promedio ponderado
+                    Indicadores estratégicos
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-4xl font-bold text-white tabular-nums">
-                    {(analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage) != null
-                      ? (analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage)!.toFixed(1)
-                      : '—'}
-                  </p>
-                  <p className="text-white/50 text-sm mt-1">/ 100</p>
+                <CardContent className="grid gap-4 md:grid-cols-3 items-center">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-white/60 mb-1">
+                      Promedio ponderado
+                    </p>
+                    <p className="text-4xl font-bold text-white tabular-nums leading-none">
+                      {(analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage) != null
+                        ? (analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage)!.toFixed(1)
+                        : '—'}
+                    </p>
+                    <p className="text-white/50 text-xs mt-1">/ 100</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-white/60 mb-1">
+                      Percentil y ranking
+                    </p>
+                    <p className="text-lg font-semibold tabular-nums text-white">
+                      {groupComparison?.percentile != null
+                        ? `${groupComparison.percentile.toFixed(1)}ᵉ percentil`
+                        : '—'}
+                    </p>
+                    {groupComparison?.rank != null && groupComparison.totalStudents > 0 && (
+                      <p className="text-white/60 text-xs mt-1">
+                        Puesto {groupComparison.rank} de {groupComparison.totalStudents}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-white/60 mb-1">
+                      Índice de compromiso
+                    </p>
+                    <p className="text-2xl font-semibold tabular-nums text-white">
+                      {commitment?.commitmentIndex != null
+                        ? `${Math.round(commitment.commitmentIndex * 100)}%`
+                        : '—'}
+                    </p>
+                    <p className="text-white/60 text-xs mt-1">
+                      {commitment?.attendanceRate != null && commitment?.tasksCompletionRate != null
+                        ? `Asistencia ${Math.round(commitment.attendanceRate * 100)}% · Tareas ${
+                            Math.round(commitment.tasksCompletionRate * 100)
+                          }%`
+                        : 'Sin datos suficientes'}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
               <ForecastGraph
@@ -221,6 +267,15 @@ export default function CourseAnalyticsPage() {
                 aiSummary={analyticsSummaryLoading ? undefined : aiSummary || undefined}
                 isLoadingAi={analyticsSummaryLoading}
               />
+              <div className="mt-4 flex justify-end">
+                <Button
+                  variant="outline"
+                  className="rounded-xl border-white/30 bg-white/5 text-white hover:bg-white/10"
+                  type="button"
+                >
+                  Crear plan de intervención
+                </Button>
+              </div>
             </div>
           </>
         )}

@@ -59,6 +59,26 @@ export interface AnalyticsSummaryResponse {
   insights: string[];
 }
 
+export interface CourseIntelligenceResponse {
+  snapshot: PerformanceSnapshotResponse | null;
+  forecast: PerformanceForecastResponse | null;
+  risk: RiskAssessmentResponse | null;
+  groupComparison: {
+    groupAverage: number | null;
+    groupStdDev: number | null;
+    percentile: number | null;
+    rank: number | null;
+    totalStudents: number;
+  };
+  commitment: {
+    attendanceRate: number | null;
+    punctualityRate: number | null;
+    onTimeRate: number | null;
+    tasksCompletionRate: number | null;
+    commitmentIndex: number | null;
+  };
+}
+
 export function useGradingSchema(courseId: string | undefined) {
   return useQuery<GradingSchemaResponse>({
     queryKey: ['grading-schema', courseId],
@@ -122,6 +142,22 @@ export function useAnalyticsSummary(courseId: string | undefined, studentId: str
       apiRequest(
         'GET',
         `/api/courses/${courseId}/analytics-summary?studentId=${encodeURIComponent(studentId!)}`
+      ),
+    enabled: Boolean(courseId) && Boolean(studentId),
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useCourseIntelligence(
+  courseId: string | undefined,
+  studentId: string | undefined
+) {
+  return useQuery<CourseIntelligenceResponse>({
+    queryKey: ['course-intelligence', courseId, studentId],
+    queryFn: () =>
+      apiRequest(
+        'GET',
+        `/api/courses/${courseId}/intelligence?studentId=${encodeURIComponent(studentId!)}`
       ),
     enabled: Boolean(courseId) && Boolean(studentId),
     staleTime: 60 * 1000,
