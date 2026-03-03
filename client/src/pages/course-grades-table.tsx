@@ -551,7 +551,7 @@ export default function CourseGradesTablePage() {
     const subs = assignment.submissions || assignment.entregas || [];
     const sub = subs.find(
       (x: { estudianteId?: { toString?: () => string } }) =>
-        x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
+        x.estudianteId?.toString?.() === studentId || (x as { estudianteId?: string }).estudianteId === studentId
     );
     const cal = (sub as { calificacion?: number })?.calificacion;
     return cal != null && !Number.isNaN(cal) ? cal : '';
