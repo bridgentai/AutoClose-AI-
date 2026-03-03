@@ -1,23 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation, useRoute } from 'wouter';
-<<<<<<< HEAD
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { 
-  BookOpen, 
-  Users, 
-  Plus,
-  User,
-  Calendar,
-  FileText,
-  MessageSquare,
-  TrendingUp,
-  BarChart3
-} from 'lucide-react';
-=======
 import { Plus, MessageSquare } from 'lucide-react';
->>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -247,7 +233,7 @@ export default function TeacherNotesPage() {
     Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
       if (logro._id === 'sin-logro') return;
       const notas: number[] = [];
-      assignments.forEach(a => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
+      assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
       if (notas.length) {
         const prom = notas.reduce((s, n) => s + n, 0) / notas.length;
         totalP += (prom * logro.porcentaje) / 100;
@@ -312,7 +298,7 @@ export default function TeacherNotesPage() {
             {Object.values(assignmentsByLogro).map(({ logro, assignments }) => {
               if (assignments.length === 0) return null;
               const notas: number[] = [];
-              assignments.forEach(a => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
+              assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
               const promLogro = notas.length ? Math.round(notas.reduce((s, n) => s + n, 0) / notas.length) : null;
               return (
                 <Card key={logro._id} className="bg-white/5 border-white/10 backdrop-blur-md">
@@ -324,7 +310,7 @@ export default function TeacherNotesPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {assignments.map((a: { _id: string; titulo: string; fechaEntrega?: string }) => {
+                      {assignments.map((a: { _id: string; titulo: string; fechaEntrega?: string; submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => {
                         const val = getNotaForStudent(a, estudianteId);
                         return (
                           <div key={a._id} className="p-4 bg-white/5 border border-white/10 rounded-lg flex items-center justify-between gap-4">
@@ -357,52 +343,7 @@ export default function TeacherNotesPage() {
     );
   }
 
-<<<<<<< HEAD
-  const studentPromedios = useMemo(() => {
-    const map: Record<string, number> = {};
-    (students as { _id: string }[]).forEach(s => {
-      let totalP = 0, totalPorc = 0;
-      Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
-        if (logro._id === 'sin-logro') return;
-        const notas: number[] = [];
-        assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => {
-          const n = getNotaForStudent(a, s._id);
-          if (n != null) notas.push(n);
-        });
-        if (notas.length) {
-          totalP += (notas.reduce((sum, n) => sum + n, 0) / notas.length) * (logro.porcentaje / 100);
-          totalPorc += logro.porcentaje;
-        }
-      });
-      map[s._id] = totalPorc > 0 ? Math.round(totalP * (100 / totalPorc)) : 0;
-    });
-    return map;
-  }, [students, assignmentsByLogro]);
-  const promedioGeneral = (students as { _id: string }[]).length
-    ? (students as { _id: string }[]).reduce((acc, s) => acc + (studentPromedios[s._id] ?? 0), 0) / (students as { _id: string }[]).length
-    : 0;
-  const chartData = (students as { _id: string; nombre: string }[]).map(s => ({
-    nombre: s.nombre.split(' ')[0],
-    promedio: studentPromedios[s._id] ?? 0
-  }));
-
-  const chartConfig = {
-    promedio: {
-      label: 'Promedio',
-      color: '#1e3cff'
-    }
-  };
-
-  // Datos para gráfica por categoría (mock)
-  const categoryData = [
-    { categoria: 'Exámenes', promedio: 90 },
-    { categoria: 'Tareas', promedio: 86 },
-    { categoria: 'Proyectos', promedio: 88 },
-    { categoria: 'Participación', promedio: 84 }
-  ];
-=======
   const promedioGeneral = students.reduce((acc, s) => acc + s.promedio, 0) / students.length;
->>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
@@ -457,44 +398,7 @@ export default function TeacherNotesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-<<<<<<< HEAD
-                {(students as { _id: string; nombre: string; email?: string }[]).map((student) => {
-                  const prom = studentPromedios[student._id] ?? 0;
-                  return (
-                  <TableRow key={student._id} className="border-white/10">
-                    <TableCell className="text-white">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-8 h-8">
-                          <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-sm">
-                            {student.nombre.split(' ').map((n: string) => n[0]).join('')}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{student.nombre}</div>
-                          <div className="text-sm text-white/60">{student.email ?? ''}</div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-white">
-                      <span className="text-lg font-semibold">{prom > 0 ? prom : '—'}</span>
-                      <span className="text-white/50 text-sm ml-1">/ 100</span>
-                    </TableCell>
-                    <TableCell className="text-white">—</TableCell>
-                    <TableCell>
-                      <Badge className={prom >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : prom >= 50 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40'}>
-                        {prom >= 70 ? 'Excelente' : prom >= 50 ? 'Bueno' : 'Requiere atención'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-white/10 text-white hover:bg-white/10 text-xs md:text-sm"
-                        onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
-                      >
-                        Ver Notas
-=======
-                {students.map((student, index) => (
+                {students.map((student) => (
                   <TableRow
                     key={student._id}
                     className="border-white/5 hover:bg-white/5 transition-colors"
@@ -502,7 +406,7 @@ export default function TeacherNotesPage() {
                     <TableCell className="py-3 pl-5">
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-medium text-white">
-                          {student.nombre.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                          {student.nombre.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
                         </div>
                         <div>
                           <div className="font-medium text-white">{student.nombre}</div>
@@ -538,60 +442,12 @@ export default function TeacherNotesPage() {
                         onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
                       >
                         Ver notas
->>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
                       </Button>
                     </TableCell>
                   </TableRow>
-                  );
-                })}
+                ))}
               </TableBody>
             </Table>
-<<<<<<< HEAD
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Lista de Estudiantes (Cards) */}
-        <div className="mb-8">
-          <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 font-['Poppins']">Estudiantes del Curso</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {(students as { _id: string; nombre: string; email?: string; estado?: string }[]).map((student) => {
-              const prom = studentPromedios[student._id] ?? 0;
-              return (
-              <Card key={student._id} className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate">
-                <CardHeader className="p-6">
-                  <div className="flex items-center gap-4 mb-4">
-                    <Avatar className="w-16 h-16">
-                      <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-lg">
-                        {student.nombre.split(' ').map((n: string) => n[0]).join('')}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-white">{student.nombre}</h3>
-                      <p className="text-sm text-white/60">{student.email ?? ''}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <Badge className={prom >= 70 ? 'bg-green-500/20 text-green-400 border-green-500/40' : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40'}>
-                      Promedio: {prom > 0 ? prom : '—'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-6 pt-0 space-y-2">
-                  <Button
-                    variant="outline"
-                    className="w-full border-white/10 text-white hover:bg-white/10"
-                    onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
-                  >
-                    Ver Notas del Estudiante
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-            })}
-=======
->>>>>>> 717b4efb949cc427d0061622bb1f809890f7a5fe
           </div>
         </div>
       </div>
