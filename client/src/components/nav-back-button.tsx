@@ -214,7 +214,7 @@ export function NavBackButton({ to, label, className }: NavBackButtonProps) {
       onClick={() => setLocation(backPath)}
       className={cn(
         "flex items-center gap-2",
-        "text-white/70 hover:text-white",
+        "text-[#3B82F6] hover:text-[#2563EB]",
         "hover:bg-white/5",
         "transition-colors duration-200",
         "mb-4",

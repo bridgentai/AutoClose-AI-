@@ -47,16 +47,16 @@ export function AppSidebar() {
   const handleNavClick = (path: string) => setLocation(path);
 
   return (
-    <header className="w-full h-16 bg-black/40 backdrop-blur-xl border-b border-white/10 flex items-center justify-between px-6">
+    <header className="w-full h-16 panel-grades border-b border-white/10 flex items-center justify-between px-6">
 
-      {/* Logo + info */}
+      {/* Logo + info - mismo azul que tabla de notas */}
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavClick("/dashboard")}>
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.4)]" style={{ background: 'linear-gradient(145deg, #3B82F6, #1E40AF)' }}>
           <span className="text-white font-bold text-lg">AC</span>
         </div>
         <div>
-          <h2 className="text-white font-bold text-sm font-['Poppins']">AutoClose AI</h2>
-          <p className="text-xs text-white/50 capitalize">{user?.rol}</p>
+          <h2 className="text-[#E2E8F0] font-bold text-sm font-['Poppins']">AutoClose AI</h2>
+          <p className="text-xs text-white/60 capitalize">{user?.rol}</p>
         </div>
       </div>
 
@@ -71,12 +71,13 @@ export function AppSidebar() {
               key={item.path}
               onClick={() => handleNavClick(item.path)}
               className={`
-                flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-all
+                flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-all duration-200
                 ${isActive 
-                  ? "bg-[#002366] text-white" 
-                  : "text-white/70 hover:text-white hover:bg-white/5"
+                  ? "text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]" 
+                  : "text-[#E2E8F0]/80 hover:text-[#E2E8F0] hover:bg-white/5"
                 }
               `}
+              style={isActive ? { background: 'linear-gradient(180deg, #3B82F6, #1D4ED8)' } : undefined}
             >
               <Icon className="w-5 h-5" />
               {item.label}

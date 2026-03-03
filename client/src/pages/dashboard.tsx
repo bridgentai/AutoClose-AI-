@@ -43,8 +43,8 @@ interface Message {
   timestamp: Date;
 }
 
-const CARD_STYLE = `bg-white/5 border-white/10 backdrop-blur-md hover-elevate`;
-const GRADIENT_STYLE = 'from-[#002366] to-[#1e3cff]';
+const CARD_STYLE = `panel-grades border border-white/10 rounded-2xl hover-elevate`;
+const GRADIENT_STYLE = 'from-[#3B82F6] to-[#1D4ED8]';
 
 interface AIChatBoxProps {
   rol: string;

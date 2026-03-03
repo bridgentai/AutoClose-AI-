@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
@@ -17,10 +17,86 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useLocation, useRoute } from 'wouter';
 import { Calendar } from '@/components/Calendar';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+
+// =========================================================
+// 0. CELDA EDITABLE (preview table)
+// =========================================================
+
+function PreviewEditableNoteCell({
+    value,
+    isSinCategoria,
+    onSave,
+}: {
+    value: number | string;
+    isSinCategoria: boolean;
+    onSave: (calificacion: number | null) => void;
+}) {
+    const [editing, setEditing] = useState(false);
+    const [local, setLocal] = useState(() => (value === '' || value === '—' ? '' : String(value)));
+    const prevValue = useRef(value);
+    if (prevValue.current !== value && !editing) {
+        prevValue.current = value;
+        setLocal(value === '' || value === '—' ? '' : String(value));
+    }
+    const saveFromValue = (raw: string) => {
+        const trimmed = String(raw).trim();
+        setEditing(false);
+        if (trimmed === '' || trimmed === '—') {
+            onSave(null);
+            setLocal('');
+            return;
+        }
+        const n = parseFloat(trimmed);
+        if (!Number.isNaN(n) && n >= 0 && n <= 100) {
+            onSave(n);
+            setLocal(trimmed);
+        } else {
+            setLocal(value === '' || value === '—' ? '' : String(value));
+        }
+    };
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+        saveFromValue(e.target?.value ?? local);
+    };
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveFromValue(e.currentTarget.value ?? local);
+            e.currentTarget.blur();
+        }
+    };
+    const isEmpty = value === '' || value === '—' || value === undefined;
+    const baseClass = 'mx-auto max-w-[100px] rounded-[12px] px-2 py-2 text-center text-xs font-medium transition-all duration-200 cursor-text overflow-hidden';
+    const styleClass = isSinCategoria
+        ? 'bg-amber-500/10 border border-amber-500/20 text-amber-200/90 hover:bg-amber-500/15'
+        : 'bg-white/[0.03] border border-white/[0.06] text-[#E2E8F0] hover:bg-[rgba(59,130,246,0.15)] hover:border-[rgba(59,130,246,0.4)]';
+
+    if (editing) {
+        return (
+            <div className={`${baseClass} ${styleClass}`} onClick={(e) => e.stopPropagation()}>
+                <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={local}
+                    onChange={(e) => setLocal(e.target.value)}
+                    onBlur={handleBlur}
+                    onKeyDown={handleKeyDown}
+                    autoFocus
+                    className="w-full bg-transparent text-center outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+            </div>
+        );
+    }
+    return (
+        <div className={`${baseClass} ${styleClass}`} onClick={(e) => { e.stopPropagation(); setEditing(true); }}>
+            <span className={isEmpty ? 'text-white/40' : ''}>{isEmpty ? '—' : String(value)}</span>
+        </div>
+    );
+}
 
 // =========================================================
 // 1. INTERFACES
@@ -148,6 +224,7 @@ export default function CourseDetailPage() {
 
     const [, setLocation] = useLocation();
     const { toast } = useToast();
+    const queryClient = useQueryClient();
 
     // Redirigir si no es estudiante, profesor ni padre (padre ve solo lectura)
     useEffect(() => {
@@ -421,6 +498,23 @@ export default function CourseDetailPage() {
         },
     });
 
+    const updateGradeMutation = useMutation({
+        mutationFn: async ({ assignmentId, estudianteId, calificacion }: { assignmentId: string; estudianteId: string; calificacion: number | null }) => {
+            return apiRequest('PUT', `/api/assignments/${assignmentId}/grade`, {
+                estudianteId,
+                calificacion: calificacion != null ? Math.min(100, Math.max(0, Number(calificacion))) : null,
+                manualOverride: true,
+            });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, firstSubjectId] });
+            queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
+        },
+        onError: (err: Error) => {
+            toast({ title: 'Error', description: err.message || 'No se pudo actualizar la nota', variant: 'destructive' });
+        },
+    });
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         createAssignmentMutation.mutate({ data: formData, newMaterialTitle, materials: assignmentMaterials });
@@ -550,25 +644,34 @@ export default function CourseDetailPage() {
                     </Card>
                 </div>
 
-                {/* Tabla General de Notas (fondo blanco, columnas dinámicas desde tareas) */}
+                {/* Tabla General de Notas — integrada al fondo, glass sutil, sin corte */}
                 {firstSubjectId && (
-                    <Card className="bg-white border-[#002366]/20 shadow-lg mb-8">
-                        <CardHeader className="bg-gradient-to-r from-[#002366] to-[#003d7a] text-white rounded-t-lg">
-                            <div className="flex items-center justify-between flex-wrap gap-4">
+                    <section
+                        className="mb-8 rounded-[16px] overflow-hidden"
+                        style={{
+                            background: 'rgba(255,255,255,0.02)',
+                            backdropFilter: 'blur(12px)',
+                            WebkitBackdropFilter: 'blur(12px)',
+                            border: '1px solid rgba(255,255,255,0.06)',
+                        }}
+                    >
+                        {/* Header fluido: mismo fondo, sin bloque separado */}
+                        <div className="px-6 pt-6 pb-4">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div>
-                                    <CardTitle className="text-white flex items-center gap-2">
-                                        <Award className="w-5 h-5 text-[#ffd700]" />
+                                    <h3 className="text-[#E2E8F0] font-semibold flex items-center gap-2 text-lg mb-1">
+                                        <Award className="w-5 h-5 text-[#3B82F6]" />
                                         Tabla General de Notas
-                                    </CardTitle>
-                                    <CardDescription className="text-white/80">
-                                        Las columnas se actualizan al crear asignaciones. Las notas se sincronizan al calificar entregas (Escala: 10-100) - Grupo {displayGroupId}
-                                        {subjects.length > 0 && ` - ${subjects[0].nombre}`}
-                                    </CardDescription>
+                                    </h3>
+                                    <p className="text-white/60 text-sm">
+                                        Las columnas se actualizan al crear asignaciones. Las notas se sincronizan al calificar entregas (Escala: 10-100) — Grupo {displayGroupId}
+                                        {subjects.length > 0 && ` · ${subjects[0].nombre}`}
+                                    </p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                     <Button
                                         size="sm"
-                                        className="bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60"
+                                        className="rounded-[10px] bg-[#3B82F6] hover:bg-[#2563EB] text-white border-0"
                                         onClick={() => setShowAssignmentForm(true)}
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
@@ -577,7 +680,7 @@ export default function CourseDetailPage() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="border-white/40 text-white hover:bg-white/20 hover:border-white/60"
+                                        className="rounded-[10px] border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30"
                                         onClick={() => setLocation(`/course/${cursoId}/grades`)}
                                     >
                                         <Maximize2 className="w-4 h-4 mr-2" />
@@ -586,7 +689,7 @@ export default function CourseDetailPage() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="border-white/40 text-white hover:bg-white/20 hover:border-white/60"
+                                        className="rounded-[10px] border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30"
                                         onClick={() => setLocation('/materials')}
                                     >
                                         <FileText className="w-4 h-4 mr-2" />
@@ -594,152 +697,144 @@ export default function CourseDetailPage() {
                                     </Button>
                                 </div>
                             </div>
-                        </CardHeader>
-                        <CardContent>
+                        </div>
+                        <div className="px-4 pb-6 pt-0">
                             {isLoadingStudents || isLoadingGradeTable || isLoadingLogrosForTable ? (
-                                <div className="space-y-2">
-                                    <Skeleton className="h-12 w-full bg-[#002366]/10" />
-                                    <Skeleton className="h-12 w-full bg-[#002366]/10" />
-                                    <Skeleton className="h-12 w-full bg-[#002366]/10" />
+                                <div className="space-y-2 py-4">
+                                    <Skeleton className="h-12 w-full rounded-xl bg-white/10" />
+                                    <Skeleton className="h-12 w-full rounded-xl bg-white/10" />
+                                    <Skeleton className="h-12 w-full rounded-xl bg-white/10" />
                                 </div>
                             ) : students.length > 0 ? (
-                                <div className="overflow-x-auto -mx-4 md:mx-0 rounded-xl border border-[#002366]/20 shadow-sm">
-                                    <div className="inline-block min-w-full align-middle px-4 md:px-0" style={{ minWidth: '800px' }}>
-                                        <table className="min-w-full border-collapse bg-white">
+                                <div
+                                    className="overflow-x-auto rounded-[16px] relative"
+                                    style={{
+                                        maskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
+                                        WebkitMaskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
+                                    }}
+                                >
+                                    <div className="inline-block min-w-full align-middle py-2" style={{ minWidth: '800px' }}>
+                                        <table className="min-w-full border-collapse">
                                             <thead>
                                                 {Object.keys(assignmentsByLogro).length > 0 ? (
                                                     <>
-                                                        <tr className="bg-gradient-to-r from-[#1e3cff] to-[#002366] border-b-2 border-white/30">
-                                                            <th rowSpan={2} className="sticky left-0 z-20 bg-[#1e3cff] px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 shadow-md min-w-[180px] max-w-[180px]">
+                                                        <tr
+                                                            className="sticky top-0 z-10 border-b border-white/[0.08]"
+                                                            style={{ background: 'rgba(255,255,255,0.04)' }}
+                                                        >
+                                                            <th rowSpan={2} className="sticky left-0 z-20 px-3 py-3 text-left text-xs font-semibold text-white/90 uppercase tracking-wider min-w-[180px] max-w-[180px]" style={{ background: 'rgba(255,255,255,0.04)' }}>
                                                                 <div className="flex items-center gap-2">
-                                                                    <User className="w-4 h-4 text-white" />
+                                                                    <User className="w-4 h-4 text-white/80" />
                                                                     <span>Estudiante</span>
                                                                 </div>
                                                             </th>
-                                                            {Object.values(assignmentsByLogro).map((grupo, grupoIdx) => {
+                                                            {Object.values(assignmentsByLogro).map((grupo) => {
                                                                 const colSpan = grupo.assignments.length > 0 ? grupo.assignments.length : 1;
                                                                 const isSinCategoria = grupo.logro._id === 'sin-logro';
                                                                 return (
                                                                     <th
                                                                         key={grupo.logro._id}
                                                                         colSpan={colSpan}
-                                                                        className={`px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider border-r-2 border-white/30 ${
-                                                                            isSinCategoria ? 'bg-amber-600/80' : grupoIdx % 2 === 0 ? 'bg-[#1e3cff]' : 'bg-[#002366]'
-                                                                        }`}
+                                                                        className={`px-2 py-3 text-center text-xs font-semibold text-white/90 uppercase tracking-wider border-r border-white/[0.06] ${isSinCategoria ? 'text-amber-400/90' : ''}`}
                                                                     >
-                                                                        <div className="flex flex-col items-center justify-center gap-1">
-                                                                            <span className="font-bold">{grupo.logro.nombre.toUpperCase()}</span>
-                                                                            {grupo.logro.porcentaje > 0 && (
-                                                                                <span className="text-[10px] text-white/90 font-normal">{grupo.logro.porcentaje}% del total</span>
-                                                                            )}
-                                                                        </div>
+                                                                        <span>{grupo.logro.nombre.toUpperCase()}</span>
+                                                                        {grupo.logro.porcentaje > 0 && (
+                                                                            <span className="block text-[10px] text-white/60 font-normal mt-0.5">{grupo.logro.porcentaje}%</span>
+                                                                        )}
                                                                     </th>
                                                                 );
                                                             })}
-                                                            <th rowSpan={2} className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider bg-[#1e3cff] min-w-[100px] max-w-[100px] border-l-2 border-white/30">
+                                                            <th rowSpan={2} className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase tracking-wider min-w-[80px] max-w-[80px] border-l border-white/[0.06]">
                                                                 Promedio
                                                             </th>
+                                                            <th rowSpan={2} className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase tracking-wider min-w-[80px] max-w-[80px] border-l border-white/[0.06]">
+                                                                Predicción
+                                                            </th>
                                                         </tr>
-                                                        <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
+                                                        <tr className="border-b border-white/[0.08]" style={{ background: 'rgba(255,255,255,0.03)' }}>
                                                             {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
-                                                        grupo.assignments.length > 0
-                                                            ? grupo.assignments.map((assignment, idx) => {
-                                                                const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                                return (
-                                                                    <th
-                                                                        key={assignment._id}
-                                                                        className={`px-2 py-2 text-center text-[10px] font-bold text-white uppercase tracking-wider border-r border-white/20 min-w-[100px] max-w-[120px] ${
-                                                                            isSinCategoria ? 'bg-amber-500/60' : idx % 2 === 0 ? 'bg-[#002366]' : 'bg-[#003d7a]'
-                                                                        }`}
-                                                                    >
-                                                                        <span className="truncate block w-full mx-auto text-[9px] leading-tight px-1">{assignment.titulo}</span>
-                                                                    </th>
-                                                                );
-                                                            })
-                                                            : [(
-                                                                <th
-                                                                    key={`empty-${grupo.logro._id}`}
-                                                                    className={`px-2 py-2 text-center text-[10px] text-white/70 border-r border-white/20 min-w-[100px] max-w-[120px] ${grupoIdx % 2 === 0 ? 'bg-[#002366]' : 'bg-[#003d7a]'}`}
-                                                                >
-                                                                    —
-                                                                </th>
-                                                            )]
-                                                    )}
+                                                                grupo.assignments.length > 0
+                                                                    ? grupo.assignments.map((assignment) => (
+                                                                        <th
+                                                                            key={assignment._id}
+                                                                            className="px-2 py-2 text-center text-[10px] font-medium text-white/70 uppercase tracking-wider border-r border-white/[0.06] min-w-[100px] max-w-[120px]"
+                                                                        >
+                                                                            <span className="truncate block w-full text-[9px] leading-tight">{assignment.titulo}</span>
+                                                                        </th>
+                                                                    ))
+                                                                    : [(
+                                                                        <th key={`empty-${grupo.logro._id}`} className="px-2 py-2 text-center text-[10px] text-white/50 border-r border-white/[0.06] min-w-[100px]">—</th>
+                                                                    )]
+                                                            )}
                                                         </tr>
                                                     </>
                                                 ) : (
-                                                    <tr className="bg-gradient-to-r from-[#002366] to-[#003d7a] border-b-2 border-[#002366]">
-                                                        <th className="sticky left-0 z-20 bg-[#002366] px-3 py-3 text-left text-xs font-bold text-white border-r border-white/20 min-w-[200px] shadow-md">
-                                                            <div className="flex items-center gap-2">
-                                                                <User className="w-3.5 h-3.5 text-white" />
-                                                                <span>Estudiante</span>
-                                                            </div>
+                                                    <tr className="sticky top-0 z-10 border-b border-white/[0.08]" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                                                        <th className="sticky left-0 z-20 px-3 py-3 text-left text-xs font-semibold text-white/90 uppercase min-w-[180px]" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                                                            <div className="flex items-center gap-2"><User className="w-4 h-4 text-white/80" /><span>Estudiante</span></div>
                                                         </th>
-                                                        <th className="px-3 py-3 text-center text-xs font-bold text-white bg-[#002366] min-w-[100px] border-l-2 border-white/30">
-                                                            Promedio
-                                                        </th>
+                                                        <th className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase min-w-[80px]">Promedio</th>
+                                                        <th className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase min-w-[80px]">Predicción</th>
                                                     </tr>
                                                 )}
                                             </thead>
                                             <tbody>
-                                                {students.map((student, studentIdx) => {
+                                                {students.map((student) => {
                                                     const promedio = Object.keys(assignmentsByLogro).length > 0 ? calcularPromedioPonderado(student._id) : '-';
+                                                    const prediccion = typeof promedio === 'number' ? (promedio / 100 * 5).toFixed(1) : '—';
                                                     return (
-                                                        <tr
-                                                            key={student._id}
-                                                            className={`border-b border-[#002366]/10 hover:bg-[#1e3cff]/5 transition-all ${
-                                                                studentIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
-                                                            }`}
-                                                        >
-                                                            <td className="sticky left-0 z-10 px-2 py-2 bg-inherit border-r border-[#002366]/20 shadow-sm min-w-[180px] max-w-[180px]">
+                                                        <tr key={student._id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors duration-200">
+                                                            <td
+                                                                className="sticky left-0 z-10 px-3 py-2.5 min-w-[180px] max-w-[180px] cursor-pointer group"
+                                                                style={{ background: 'inherit' }}
+                                                                onClick={() => isProfessor && setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
+                                                            >
                                                                 <div className="flex items-center gap-2">
                                                                     <Avatar className="w-7 h-7 flex-shrink-0">
-                                                                        <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-[10px] font-semibold">
+                                                                        <AvatarFallback className="bg-gradient-to-r from-[#3B82F6] to-[#1D4ED8] text-white text-[10px] font-semibold">
                                                                             {student.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                                                                         </AvatarFallback>
                                                                     </Avatar>
                                                                     <div className="min-w-0 flex-1">
-                                                                        <div className="font-semibold text-[#0a0a2a] text-xs truncate leading-tight">{student.nombre}</div>
-                                                                        {student.email && (
-                                                                            <div className="text-[9px] text-gray-500 truncate leading-tight">{student.email}</div>
-                                                                        )}
+                                                                        <div className={`font-medium text-xs truncate ${isProfessor ? 'text-[#E2E8F0] group-hover:text-[#3B82F6] transition-colors' : 'text-[#E2E8F0]'}`}>{student.nombre}</div>
+                                                                        {student.email && <div className="text-[9px] text-white/50 truncate">{student.email}</div>}
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            {Object.keys(assignmentsByLogro).length > 0 && Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
+                                                            {Object.keys(assignmentsByLogro).length > 0 && Object.values(assignmentsByLogro).flatMap((grupo) =>
                                                                 grupo.assignments.length > 0
-                                                                    ? grupo.assignments.map((assignment, actIdx) => {
+                                                                    ? grupo.assignments.map((assignment) => {
                                                                         const subsA = assignment.submissions || assignment.entregas || [];
                                                                         const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
                                                                             x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
                                                                         );
                                                                         const cal = (sub as { calificacion?: number })?.calificacion;
-                                                                        const displayValue = cal != null && !isNaN(cal) ? String(cal) : '--';
+                                                                        const displayValue = cal != null && !isNaN(cal) ? cal : '—';
                                                                         const isSinCategoria = grupo.logro._id === 'sin-logro';
                                                                         return (
-                                                                            <td
-                                                                                key={assignment._id}
-                                                                                className={`px-2 py-2 border-r-2 border-[#002366]/30 text-center text-xs font-medium min-w-[100px] max-w-[120px] ${
-                                                                                    isSinCategoria ? 'bg-amber-50 hover:bg-amber-100' : actIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'
-                                                                                } hover:bg-[#1e3cff]/10 transition-colors`}
-                                                                            >
-                                                                                <span className={displayValue === '--' ? 'text-gray-400' : 'text-[#0a0a2a] font-semibold'}>{displayValue}</span>
+                                                                            <td key={assignment._id} className="px-2 py-2 align-middle">
+                                                                                <PreviewEditableNoteCell
+                                                                                    value={displayValue}
+                                                                                    isSinCategoria={!!isSinCategoria}
+                                                                                    onSave={(calif) => isProfessor && updateGradeMutation.mutate({ assignmentId: assignment._id, estudianteId: student._id, calificacion: calif })}
+                                                                                />
                                                                             </td>
                                                                         );
                                                                     })
                                                                     : [(
-                                                                        <td
-                                                                            key={`empty-${grupo.logro._id}-${student._id}`}
-                                                                            className={`px-2 py-2 border-r-2 border-[#002366]/30 text-center text-xs text-gray-400 min-w-[100px] max-w-[120px] ${grupoIdx % 2 === 0 ? 'bg-white' : 'bg-[#002366]/5'}`}
-                                                                        >
-                                                                            —
-                                                                        </td>
+                                                                        <td key={`empty-${grupo.logro._id}-${student._id}`} className="px-2 py-2 text-center text-xs text-white/40">—</td>
                                                                     )]
                                                             )}
-                                                            <td className="px-2 py-2 text-center border-l-2 border-[#002366]/20 bg-[#002366]/5 min-w-[100px] max-w-[100px]">
-                                                                <div className="flex items-center justify-center gap-1">
-                                                                    <span className={`text-sm font-bold ${promedio === '-' ? 'text-gray-400' : 'text-[#0a0a2a]'}`}>{promedio}</span>
-                                                                    {promedio !== '-' && <span className="text-gray-500 text-[10px]">/ 100</span>}
+                                                            <td className="px-3 py-2.5 text-center min-w-[80px]">
+                                                                <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 inline-block">
+                                                                    <span className={`text-sm font-semibold ${promedio === '-' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>{promedio}</span>
+                                                                    {promedio !== '-' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-3 py-2.5 text-center min-w-[80px]">
+                                                                <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 inline-block">
+                                                                    <span className={`text-sm font-semibold ${prediccion === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>{prediccion}</span>
+                                                                    {prediccion !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 5</span>}
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -750,13 +845,14 @@ export default function CourseDetailPage() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="text-center py-8">
-                                    <Award className="w-16 h-16 text-[#002366]/40 mx-auto mb-4" />
-                                    <p className="text-gray-500">No hay estudiantes para mostrar notas</p>
+                                <div className="text-center py-12">
+                                    <Award className="w-14 h-14 text-white/20 mx-auto mb-3" />
+                                    <p className="text-white/50 text-sm">No hay estudiantes para mostrar notas</p>
+                                    <p className="text-white/40 text-xs mt-1">Asigna estudiantes al grupo para ver la tabla</p>
                                 </div>
                             )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    </section>
                 )}
 
                 {/* Calendario */}

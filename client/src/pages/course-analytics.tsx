@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/authContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
-import { useCourseGrading } from '@/hooks/useCourseGrading';
+import { useCourseGrading, useAnalyticsSummary } from '@/hooks/useCourseGrading';
 import { ForecastGraph } from '@/components/grading/ForecastGraph';
 import { StabilityGauge } from '@/components/grading/StabilityGauge';
 import { RiskIndicator } from '@/components/grading/RiskIndicator';
@@ -71,14 +71,31 @@ export default function CourseAnalyticsPage() {
     isLoading: gradingLoading,
   } = useCourseGrading(firstSubjectId, effectiveStudentId || undefined);
 
+  const { data: analyticsSummary, isLoading: analyticsSummaryLoading } = useAnalyticsSummary(
+    firstSubjectId,
+    effectiveStudentId || undefined
+  );
+  const aiSummary = analyticsSummary?.aiSummary ?? '';
+  const mergedInsights = (analyticsSummary?.insights?.length ? analyticsSummary.insights : insights?.insights) ?? [];
+
   const categoryImpactBreakdown = useMemo(() => {
-    if (!snapshot?.categoryImpacts || !categories.length) return [];
-    return categories.map((cat) => ({
-      name: cat.nombre,
-      impact: snapshot.categoryImpacts[cat._id] ?? 0,
-      weight: cat.weight,
-    }));
-  }, [snapshot, categories]);
+    if (snapshot?.categoryImpacts && categories.length) {
+      return categories.map((cat) => ({
+        name: cat.nombre,
+        impact: snapshot.categoryImpacts[cat._id] ?? 0,
+        weight: cat.weight,
+      }));
+    }
+    if (analyticsSummary?.byCategory?.length) {
+      const total = analyticsSummary.weightedAverage ?? 1;
+      return analyticsSummary.byCategory.map((c) => ({
+        name: c.categoryName,
+        impact: (c.average * (c.percentage / 100)) || 0,
+        weight: c.percentage,
+      }));
+    }
+    return [];
+  }, [snapshot, categories, analyticsSummary]);
 
   const canAccess = user?.rol && allowedRoles.includes(user.rol);
   if (user && !canAccess) {
@@ -87,7 +104,7 @@ export default function CourseAnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a2a] text-white p-4 md:p-6">
+    <div className="min-h-screen p-4 md:p-6 text-[#E2E8F0]" style={{ background: 'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)' }}>
       <div className="max-w-5xl mx-auto">
         <div className="mb-6">
           <NavBackButton
@@ -96,7 +113,7 @@ export default function CourseAnalyticsPage() {
           />
         </div>
 
-        <Card className="bg-white/5 border-white/10 backdrop-blur-md rounded-2xl mb-6">
+        <Card className="panel-grades border-white/10 rounded-2xl mb-6">
           <CardHeader>
             <CardTitle className="text-white font-['Poppins']">
               Vista analítica · Inteligencia académica
@@ -128,8 +145,8 @@ export default function CourseAnalyticsPage() {
         </Card>
 
         {!firstSubjectId ? (
-          <Card className="bg-white/5 border-white/10 rounded-2xl p-6">
-            <p className="text-white/70">No hay materias para este grupo.</p>
+          <Card className="panel-grades border-white/10 rounded-2xl p-6">
+            <p className="text-[#E2E8F0]/80">No hay materias para este grupo.</p>
           </Card>
         ) : gradingLoading ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -139,7 +156,7 @@ export default function CourseAnalyticsPage() {
         ) : (
           <>
             <div className="grid gap-6 md:grid-cols-2 mb-6">
-              <Card className="bg-white/5 border-white/10 backdrop-blur-md rounded-2xl overflow-hidden">
+              <Card className="panel-grades border-white/10 rounded-2xl overflow-hidden">
                 <CardHeader>
                   <CardTitle className="text-white/90 text-sm font-medium">
                     Promedio ponderado
@@ -147,8 +164,8 @@ export default function CourseAnalyticsPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-4xl font-bold text-white tabular-nums">
-                    {snapshot?.weightedFinalAverage != null
-                      ? snapshot.weightedFinalAverage.toFixed(1)
+                    {(analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage) != null
+                      ? (analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage)!.toFixed(1)
                       : '—'}
                   </p>
                   <p className="text-white/50 text-sm mt-1">/ 100</p>
@@ -156,12 +173,12 @@ export default function CourseAnalyticsPage() {
               </Card>
               <ForecastGraph
                 forecast={forecast ?? null}
-                snapshotAverage={snapshot?.weightedFinalAverage}
+                snapshotAverage={analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage}
               />
             </div>
 
             {categoryImpactBreakdown.length > 0 && (
-              <Card className="bg-white/5 border-white/10 backdrop-blur-md rounded-2xl mb-6">
+              <Card className="panel-grades border-white/10 rounded-2xl mb-6">
                 <CardHeader>
                   <CardTitle className="text-white text-base font-['Poppins']">
                     Impacto por categoría
@@ -175,14 +192,14 @@ export default function CourseAnalyticsPage() {
                       </span>
                       <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-[#002366] to-[#1e3cff] rounded-full"
+                          className="h-full bg-gradient-to-r from-[#3B82F6] to-[#1D4ED8] rounded-full"
                           style={{
-                            width: `${Math.min(100, (item.impact / (snapshot?.weightedFinalAverage || 1)) * 100)}%`,
+                            width: `${Math.min(100, ((item.impact || 0) / ((analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage) || 1)) * 100)}%`,
                           }}
                         />
                       </div>
                       <span className="text-white/80 text-sm tabular-nums w-12 text-right">
-                        {item.impact.toFixed(1)} pts
+                        {typeof item.impact === 'number' ? item.impact.toFixed(1) : '0'} pts
                       </span>
                     </div>
                   ))}
@@ -199,7 +216,11 @@ export default function CourseAnalyticsPage() {
             </div>
 
             <div className="mt-6">
-              <InsightsBlock insights={insights} />
+              <InsightsBlock
+                insights={{ ...insights, insights: mergedInsights }}
+                aiSummary={analyticsSummaryLoading ? undefined : aiSummary || undefined}
+                isLoadingAi={analyticsSummaryLoading}
+              />
             </div>
           </>
         )}

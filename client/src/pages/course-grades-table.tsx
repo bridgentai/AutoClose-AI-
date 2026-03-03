@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { useLocation, useRoute } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/hooks/use-toast';
+import { motion } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -176,7 +177,7 @@ function NoteCell({
   assignmentId: string;
   estudianteId: string;
   value: number | string;
-  onSave: (calificacion: number) => void;
+  onSave: (calificacion: number | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [local, setLocal] = useState(() => (value === '' ? '' : String(value)));
@@ -185,28 +186,68 @@ function NoteCell({
     prevValue.current = value;
     setLocal(value === '' ? '' : String(value));
   }
-  const handleBlur = () => {
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     setEditing(false);
-    const n = local === '' ? NaN : parseFloat(local);
-    if (!Number.isNaN(n) && n >= 0 && n <= 100) onSave(n);
-    else setLocal(value === '' ? '' : String(value));
+    const raw = e.target?.value ?? local;
+    const trimmed = String(raw).trim();
+    if (trimmed === '') {
+      onSave(null);
+      setLocal('');
+      return;
+    }
+    const n = parseFloat(trimmed);
+    if (!Number.isNaN(n) && n >= 0 && n <= 100) {
+      onSave(n);
+      setLocal(trimmed);
+    } else {
+      setLocal(value === '' ? '' : String(value));
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const input = e.currentTarget;
+      const raw = input.value ?? local;
+      const trimmed = String(raw).trim();
+      setEditing(false);
+      if (trimmed === '') {
+        onSave(null);
+        setLocal('');
+      } else {
+        const n = parseFloat(trimmed);
+        if (!Number.isNaN(n) && n >= 0 && n <= 100) {
+          onSave(n);
+          setLocal(trimmed);
+        } else {
+          setLocal(value === '' ? '' : String(value));
+        }
+      }
+      input.blur();
+    }
+    if (e.key === 'Escape') {
+      setLocal(value === '' ? '' : String(value));
+      setEditing(false);
+      e.currentTarget.blur();
+    }
   };
 
   const isEmpty = value === '' || value === undefined;
 
   if (editing) {
     return (
-      <div className="w-full flex items-center justify-center p-0">
+      <div className="w-full flex items-center justify-center p-0 overflow-hidden rounded-[12px]" onClick={(e) => e.stopPropagation()}>
         <input
           type="number"
           min={0}
           max={100}
+          placeholder="—"
           value={local}
           onChange={(e) => setLocal(e.target.value)}
           onBlur={handleBlur}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          onKeyDown={handleKeyDown}
           autoFocus
-          className="w-full h-full min-h-[44px] text-center font-semibold rounded-xl bg-white/10 border border-white/20 text-[#E2E8F0] focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6] outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className="w-full h-full min-h-[44px] text-center font-semibold rounded-[12px] bg-white/[0.06] border border-white/[0.08] text-[#E2E8F0] focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6] outline-none transition-all duration-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
       </div>
     );
@@ -216,9 +257,8 @@ function NoteCell({
     <motion.div
       role="button"
       tabIndex={0}
-      onDoubleClick={() => setEditing(true)}
-      className="flex items-center justify-center w-full min-h-[44px] py-2.5 rounded-xl font-medium text-[#E2E8F0] cursor-text bg-white/5 border border-white/[0.07] transition-all duration-200 hover:border-[rgba(59,130,246,0.8)] hover:shadow-[0_0_10px_rgba(59,130,246,0.4)] hover:-translate-y-0.5"
-      whileHover={{ y: -2 }}
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      className="flex items-center justify-center w-full min-h-[44px] py-2.5 rounded-[12px] font-medium text-[#E2E8F0] cursor-text bg-white/[0.03] border border-white/[0.06] transition-all duration-200 hover:bg-[rgba(59,130,246,0.15)] hover:border-[rgba(59,130,246,0.4)] hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2)] overflow-hidden"
     >
       {isEmpty ? <span className="text-white/40">—</span> : <span>{String(value)}</span>}
     </motion.div>
@@ -309,76 +349,54 @@ function StudentRow({
   student,
   assignments,
   getGradeFor,
+  getPromedioFor,
   onSaveGrade,
   predictionResult,
   onStudentClick,
-  expandedStudentId,
-  onToggleExpand,
 }: {
   student: Student;
   assignments: Assignment[];
   getGradeFor: (studentId: string, assignmentId: string) => number | string;
-  onSaveGrade: (assignmentId: string, estudianteId: string, calificacion: number) => void;
+  getPromedioFor: (studentId: string) => number | string;
+  onSaveGrade: (assignmentId: string, estudianteId: string, calificacion: number | null) => void;
   predictionResult: PrediccionResult;
   onStudentClick: (studentId: string) => void;
-  expandedStudentId: string | null;
-  onToggleExpand: (id: string) => void;
 }) {
-  const isExpanded = expandedStudentId === student._id;
+  const promedio = getPromedioFor(student._id);
 
   return (
-    <>
-      <motion.div
-        layout
-        className="grid items-center gap-2 min-h-[72px] py-2 border-b border-white/[0.05] transition-colors duration-200 hover:bg-white/[0.03] cursor-pointer"
-        style={{ gridTemplateColumns: `260px repeat(${assignments.length}, 120px) 180px` }}
-        onClick={() => onToggleExpand(student._id)}
+    <motion.div
+      layout
+      className="grid items-center gap-2 min-h-[72px] py-2 border-b border-white/[0.04] transition-colors duration-200 hover:bg-white/[0.02]"
+      style={{ gridTemplateColumns: `260px repeat(${assignments.length}, 120px) 100px 180px` }}
+    >
+      <div
+        className="flex items-center gap-3 pl-1 cursor-pointer group"
+        onClick={() => onStudentClick(student._id)}
       >
-        <div className="flex items-center gap-3 pl-1">
-          <StudentAvatar nombre={student.nombre} />
-          <span className="font-medium text-[#E2E8F0] truncate">{student.nombre}</span>
+        <StudentAvatar nombre={student.nombre} />
+        <span className="font-medium text-[#E2E8F0] truncate group-hover:text-[#3B82F6] transition-colors">{student.nombre}</span>
+      </div>
+      {assignments.map((assignment) => (
+        <div key={assignment._id} className="flex items-center justify-center min-w-0 overflow-hidden bg-transparent">
+          <NoteCell
+            assignmentId={assignment._id}
+            estudianteId={student._id}
+            value={getGradeFor(student._id, assignment._id)}
+            onSave={(calificacion) => onSaveGrade(assignment._id, student._id, calificacion)}
+          />
         </div>
-        {assignments.map((assignment) => (
-          <div key={assignment._id} className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
-            <NoteCell
-              assignmentId={assignment._id}
-              estudianteId={student._id}
-              value={getGradeFor(student._id, assignment._id)}
-              onSave={(calificacion) => onSaveGrade(assignment._id, student._id, calificacion)}
-            />
-          </div>
-        ))}
-        <div className="flex items-center justify-center pr-2">
-          <PredictionCell result={predictionResult} />
+      ))}
+      <div className="flex items-center justify-center">
+        <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 min-w-[60px] text-center">
+          <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>{promedio}</span>
+          {promedio !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
         </div>
-      </motion.div>
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="overflow-hidden border-b border-white/[0.05]"
-          >
-            <div className="px-6 py-4 bg-white/[0.02] rounded-b-xl">
-              <p className="text-sm text-white/60">Panel de detalle con historial IA (placeholder)</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2 text-[#3B82F6] hover:bg-white/5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStudentClick(student._id);
-                }}
-              >
-                Ver notas completas
-              </Button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+      </div>
+      <div className="flex items-center justify-center pr-2">
+        <PredictionCell result={predictionResult} />
+      </div>
+    </motion.div>
   );
 }
 
@@ -392,8 +410,8 @@ export default function CourseGradesTablePage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabId>('');
-  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
   const displayGroupId =
     cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
@@ -510,17 +528,20 @@ export default function CourseGradesTablePage() {
     }: {
       assignmentId: string;
       estudianteId: string;
-      calificacion: number;
+      calificacion: number | null;
     }) => {
       return apiRequest('PUT', `/api/assignments/${assignmentId}/grade`, {
         estudianteId,
-        calificacion: Math.min(100, Math.max(0, calificacion)),
+        calificacion: calificacion != null ? Math.min(100, Math.max(0, Number(calificacion))) : null,
         manualOverride: true,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, firstSubjectId] });
       queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Error', description: err.message || 'No se pudo actualizar la nota', variant: 'destructive' });
     },
   });
 
@@ -539,6 +560,17 @@ export default function CourseGradesTablePage() {
   const getPrediccionFor = (estudianteId: string) =>
     calcularPrediccion(estudianteId, assignmentsByLogro, logroEntriesForPrediction);
 
+  const getPromedioFor = (estudianteId: string): number | string => {
+    const notas: number[] = [];
+    activeAssignments.forEach((a) => {
+      const v = getGradeFor(estudianteId, a._id);
+      if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
+    });
+    if (notas.length === 0) return '—';
+    const prom = Math.round(notas.reduce((s, n) => s + n, 0) / notas.length);
+    return prom;
+  };
+
   const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
 
   useEffect(() => {
@@ -549,21 +581,11 @@ export default function CourseGradesTablePage() {
 
   return (
     <div
-      className="min-h-screen w-full overflow-x-hidden relative"
-      style={{
-        background: 'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)',
-        fontFamily: 'Inter, system-ui, sans-serif',
-      }}
+      className="min-h-[calc(100vh-8rem)] w-full overflow-x-hidden relative flex flex-col"
+      style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
     >
-      {/* Optional subtle noise texture */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-        }}
-      />
-      <div className="relative z-10 w-full max-w-[1600px] mx-auto px-4 py-6">
-        <div className="mb-4">
+      <div className="relative z-10 w-full flex-1 flex flex-col min-h-0">
+        <div className="mb-4 flex-shrink-0">
           <NavBackButton to={`/course-detail/${cursoId}`} label="Volver al curso" />
         </div>
 
@@ -571,24 +593,17 @@ export default function CourseGradesTablePage() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="rounded-[24px] p-8 w-full overflow-hidden"
-          style={{
-            background: 'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255,255,255,0.08)',
-            boxShadow: '0 0 40px rgba(37,99,235,0.25)',
-          }}
+          className="w-full flex-1 flex flex-col min-h-0"
         >
-          <header className="mb-8">
-            <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-6" style={{ fontFamily: 'Inter' }}>
+          <header className="mb-6 flex-shrink-0">
+            <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-4" style={{ fontFamily: 'Inter' }}>
               {pageTitle}
             </h1>
 
-            <div className="flex flex-wrap gap-2 mb-6">
+            <div className="flex flex-wrap gap-2 mb-4">
               <Button
                 size="sm"
-                className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                className="rounded-[10px] bg-[#3B82F6] hover:bg-[#2563EB] text-white"
                 onClick={() => setLocation(`/course-detail/${cursoId}?openAssignmentForm=1`)}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -597,7 +612,7 @@ export default function CourseGradesTablePage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="border-white/10 text-[#E2E8F0] hover:bg-white/5"
+                className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
                 onClick={() => setLocation(`/profesor/cursos/${cursoId}/notas`)}
               >
                 <Settings className="h-4 w-4 mr-2" />
@@ -606,7 +621,7 @@ export default function CourseGradesTablePage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="border-white/10 text-[#E2E8F0] hover:bg-white/5"
+                className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
                 onClick={() => setLocation(`/course/${cursoId}/analytics`)}
               >
                 Vista analítica
@@ -614,7 +629,7 @@ export default function CourseGradesTablePage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="border-white/10 text-[#E2E8F0] hover:bg-white/5"
+                className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
                 onClick={() => setLocation('/profesor/academia/calificacion/logros')}
               >
                 <Percent className="h-4 w-4 mr-2" />
@@ -629,7 +644,7 @@ export default function CourseGradesTablePage() {
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
+                  className="px-4 py-2.5 rounded-[10px] text-sm font-medium transition-all duration-200"
                   style={
                     activeTab === tab.id
                       ? {
@@ -652,18 +667,27 @@ export default function CourseGradesTablePage() {
           </header>
 
           {loading ? (
-            <div className="space-y-3 py-8">
+            <div className="space-y-3 py-8 flex-1">
               <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
               <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
               <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
               <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
             </div>
           ) : students.length > 0 ? (
-            <div className="overflow-x-auto">
-              {/* Header row (grid) */}
+            <div
+              className="overflow-x-auto overflow-y-auto flex-1 min-h-0 -mx-4 sm:-mx-6 px-4 sm:px-6 relative"
+              style={{
+                maskImage: 'linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent)',
+                WebkitMaskImage: 'linear-gradient(to right, transparent, black 20px, black calc(100% - 20px), transparent)',
+              }}
+            >
+              {/* Header row: sticky, glass muy sutil para no crear bloque */}
               <div
-                className="grid items-center gap-2 min-h-[56px] py-3 border-b border-white/10 text-xs font-semibold uppercase tracking-wider text-white/70 mb-0"
-                style={{ gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 180px` }}
+                className="sticky top-0 z-10 grid items-center gap-2 min-h-[56px] py-3 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
+                style={{
+                  gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
+                  background: 'rgba(255,255,255,0.02)',
+                }}
               >
                 <div className="pl-1">Estudiante</div>
                 {activeAssignments.map((a) => (
@@ -671,6 +695,7 @@ export default function CourseGradesTablePage() {
                     {a.titulo}
                   </div>
                 ))}
+                <div className="text-center">Promedio</div>
                 <div className="text-center pr-2">Predicción</div>
               </div>
 
@@ -680,6 +705,7 @@ export default function CourseGradesTablePage() {
                   student={student}
                   assignments={activeAssignments}
                   getGradeFor={getGradeFor}
+                  getPromedioFor={getPromedioFor}
                   onSaveGrade={(assignmentId, estudianteId, calificacion) =>
                     updateGradeMutation.mutate({ assignmentId, estudianteId, calificacion })
                   }
@@ -687,13 +713,11 @@ export default function CourseGradesTablePage() {
                   onStudentClick={(studentId) =>
                     setLocation(`/profesor/cursos/${cursoId}/estudiantes/${studentId}/notas`)
                   }
-                  expandedStudentId={expandedStudentId}
-                  onToggleExpand={(id) => setExpandedStudentId((prev) => (prev === id ? null : id))}
                 />
               ))}
             </div>
           ) : (
-            <div className="text-center py-16">
+            <div className="text-center py-16 flex-1">
               <Award className="h-20 w-20 text-white/30 mx-auto mb-4" />
               <p className="text-white/60 text-lg">No hay estudiantes para mostrar notas</p>
             </div>

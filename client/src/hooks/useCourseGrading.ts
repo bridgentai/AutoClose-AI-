@@ -49,6 +49,16 @@ export interface InsightsResponse {
   recoveryPotentialScore?: number;
 }
 
+export interface AnalyticsSummaryResponse {
+  weightedAverage: number | null;
+  byCategory: Array<{ categoryName: string; percentage: number; average: number; count: number }>;
+  snapshot: unknown;
+  forecast: unknown;
+  risk: unknown;
+  aiSummary: string;
+  insights: string[];
+}
+
 export function useGradingSchema(courseId: string | undefined) {
   return useQuery<GradingSchemaResponse>({
     queryKey: ['grading-schema', courseId],
@@ -102,6 +112,19 @@ export function useInsights(courseId: string | undefined, studentId: string | un
         `/api/courses/${courseId}/insights?studentId=${encodeURIComponent(studentId!)}`
       ),
     enabled: Boolean(courseId) && Boolean(studentId),
+  });
+}
+
+export function useAnalyticsSummary(courseId: string | undefined, studentId: string | undefined) {
+  return useQuery<AnalyticsSummaryResponse>({
+    queryKey: ['analytics-summary', courseId, studentId],
+    queryFn: () =>
+      apiRequest(
+        'GET',
+        `/api/courses/${courseId}/analytics-summary?studentId=${encodeURIComponent(studentId!)}`
+      ),
+    enabled: Boolean(courseId) && Boolean(studentId),
+    staleTime: 60 * 1000,
   });
 }
 

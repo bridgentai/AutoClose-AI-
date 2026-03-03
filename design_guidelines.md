@@ -1,51 +1,44 @@
-# AutoClose AI – Identidad Visual GLC
+# AutoClose AI – Paleta: Tabla completa de notas (vista profesor)
 
-## 1. Paleta Oficial
+Toda la plataforma usa la misma paleta que la **Tabla completa de notas** desde la vista de profesor.
 
-| Rol | Color | Hex | Uso |
-|-----|-------|-----|-----|
-| **Dominante** | Azul rey institucional | `#002366` | Botones principales, headers, acentos clave |
-| **Fondos y tipografía** | Blanco | `#ffffff` | Fondos de paneles, texto principal |
-| **Detalles mínimos** | Amarillo | `#ffd700` | Indicadores, microinteracciones, badges |
+## 1. Colores
 
-### Variaciones de azul (contraste sutil, no monocromático)
+| Uso | Hex | Ejemplo |
+|-----|-----|--------|
+| **Fondo (página)** | Radial: `#1E3A8A` → `#0F172A` → `#020617` | `radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)` |
+| **Panel / card** | Glass | `linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))` + blur 20px + `border: 1px solid rgba(255,255,255,0.08)` + `box-shadow: 0 0 40px rgba(37,99,235,0.25)` |
+| **Botón primario / tab activo** | `#3B82F6` | "Nueva asignación", "Vista completa" |
+| **Hover primario** | `#2563EB` | Hover en botones y enlaces |
+| **Gradiente tab activo** | `#3B82F6` → `#1D4ED8` | Mismo que en la tabla de notas |
+| **Avatar / iconos destacados** | `#3B82F6` → `#1E40AF` | Círculos con iniciales |
+| **Texto principal** | `#E2E8F0` | Títulos, nombres, contenido |
+| **Texto secundario** | `white/70`, `white/60` | Descripciones |
+| **Bordes** | `rgba(255,255,255,0.08)` – `0.10` | Paneles, tablas |
 
-| Rol | Hex | Uso |
-|-----|-----|-----|
-| Azul oscuro profundo | `#0a0a2a` | Fondo base |
-| Azul medio | `#003d7a` | Gradientes, transiciones |
-| Azul eléctrico | `#1e3cff` | Hover, bordes activos, resaltados |
+## 2. Clase global `.panel-grades`
 
----
+Para repetir el estilo del panel de la tabla de notas en cualquier página:
 
-## 2. Gradientes
+```css
+.panel-grades {
+  background: linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6));
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 40px rgba(37, 99, 235, 0.25);
+}
+```
 
-- **Fondo principal:** `linear-gradient(135deg, #0a0a2a 0%, #002366 25%, #003d7a 50%, #002366 75%, #0a0a2a 100%)`
-- **Paneles:** `linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.15))`
-- **Botones:** `linear-gradient(90deg, #002366, #1e3cff)`
+## 3. Variables CSS (`:root`)
 
----
+- `--primary`: 217 91% 60% → `#3B82F6`
+- `--primary-blue`, `--primary-blue-hover`, `--primary-blue-dark`, `--text-primary`, etc. en `index.css`
 
-## 3. Tipografía
+## 4. Reglas
 
-- **Inter** — Cuerpo, formularios, UI
-- **Poppins** — Títulos, branding
-- Jerarquía clara, legible sobre fondo azul
-
----
-
-## 4. Movimiento y Animaciones
-
-- Gradiente de fondo con animación `gradient-flow` (12s)
-- Orbes flotantes con `float-slow` para profundidad
-- Transiciones 150–250ms en hover
-- Amarillo `#ffd700` solo en indicadores (notificaciones, puntos activos)
-
----
-
-## 5. Reglas
-
-- **NO usar morado, violeta, fucsia ni rosa**
-- **NO monocromático** — usar variaciones de azul + blanco + amarillo
-- Logo/escudo GLC en login, dashboard y certificados
-- Contraste AA garantizado (azul rey + blanco)
+- **Fondo global:** mismo radial que la tabla de notas (sin gradiente animado).
+- **Cards/paneles:** usar `.panel-grades` o `.glass-enhanced` (ya alineados a esta paleta).
+- **Botones primarios:** `#3B82F6`, hover `#2563EB`.
+- **Enlace "Volver a...":** `#3B82F6`, hover `#2563EB`.
+- **Tipografía:** `#E2E8F0` para texto principal; blanco para títulos fuertes.
+- Mantener esta paleta en dashboards, notas, analíticas, login, AI Dock, Command Palette y resto de módulos.
