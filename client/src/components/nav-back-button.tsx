@@ -183,7 +183,7 @@ export function NavBackButton({ to, label, className }: NavBackButtonProps) {
       "/mi-aprendizaje/notas": "Notas",
       "/mi-aprendizaje/materiales": "Materiales",
       "/mi-aprendizaje/cursos": "Cursos",
-      "/mi-aprendizaje/plataformas": "Plataformas",
+      "/mi-aprendizaje/horario": "Horario",
       "/mi-aprendizaje/calendario": "Calendario",
       "/mi-perfil": "Mi Perfil",
       "/comunidad": "Comunidad",

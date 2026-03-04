@@ -97,7 +97,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       // Otros roles
       { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
       { icon: FileCheck, label: "Permisos", path: "/permisos", roles: ["padre"] },
-      { icon: Users, label: "Asignación de Grupos", path: "/group-assignment", roles: ["directivo"] },
+      { icon: Users, label: "Asignación de Horarios", path: "/asignacion-horarios", roles: ["directivo"] },
       { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["directivo", "padre"] },
       { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
       { icon: User, label: "Mi Perfil", path: "/mi-perfil", roles: ["estudiante", "profesor", "directivo", "padre"] },

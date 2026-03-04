@@ -55,6 +55,7 @@ import DirectivoEstudianteNotasPage from "@/pages/directivo-estudiante-notas";
 import PlataformasPage from "@/pages/plataformas";
 
 import MiAprendizajeLayout from "@/pages/mi-aprendizaje";
+import MiAprendizajeHorarioPage from "@/pages/mi-aprendizaje-horario";
 
 import PerfilLayout from "@/pages/PerfilLayout";
 import InformacionPersonal from "@/pages/InformacionPersonal";
@@ -69,6 +70,9 @@ import CalendarioEventos from "@/pages/CalendarioEventos";
 import AvisosNoticias from "@/pages/AvisosNoticias";
 
 import GroupAssignmentPage from "@/pages/GroupAssignmentPage";
+import AsignacionHorariosPage from "@/pages/asignacion-horarios/index";
+import HorariosCursoPage from "@/pages/asignacion-horarios/horarios-curso";
+import HorariosProfesorPage from "@/pages/asignacion-horarios/horarios-profesor";
 
 import StudentNotesPage from "@/pages/student-notes";
 import StudentNotesHistoryPage from "@/pages/student-notes-history";
@@ -98,6 +102,7 @@ import AsistenciaProfesor from "@/pages/asistencia-profesor";
 import HorarioGruposPage from "@/pages/horario-grupos";
 import HorarioEscolarPage from "@/pages/horario-escolar";
 import RegistroAsistenciaPage from "@/pages/registro-asistencia";
+import AsistenciaSelectorPage from "@/pages/asistencia-selector";
 
 // Nuevos roles
 import AdministradorGeneralPage from "@/pages/administrador-general";
@@ -232,6 +237,15 @@ function AppRouter() {
             <Route path="/courses">
               <AuthGuard><Courses /></AuthGuard>
             </Route>
+            <Route path="/course/:grupoId/asistencia/registro">
+              <AuthGuard><RegistroAsistenciaPage /></AuthGuard>
+            </Route>
+            <Route path="/course/:grupoId/asistencia">
+              <AuthGuard><AsistenciaSelectorPage /></AuthGuard>
+            </Route>
+            <Route path="/course/:grupoId/horario">
+              <AuthGuard><HorarioEscolarPage /></AuthGuard>
+            </Route>
             <Route path="/course/:cursoId">
               <AuthGuard><CourseDetail /></AuthGuard>
             </Route>
@@ -257,8 +271,8 @@ function AppRouter() {
             <Route path="/mi-aprendizaje/materiales">
               <AuthGuard><Materials /></AuthGuard>
             </Route>
-            <Route path="/mi-aprendizaje/plataformas">
-              <AuthGuard><PlataformasPage /></AuthGuard>
+            <Route path="/mi-aprendizaje/horario">
+              <AuthGuard><MiAprendizajeHorarioPage /></AuthGuard>
             </Route>
             <Route path="/mi-aprendizaje/calendario">
               <AuthGuard><CalendarPage /></AuthGuard>
@@ -346,6 +360,15 @@ function AppRouter() {
 
             <Route path="/group-assignment">
               <AuthGuard><GroupAssignmentPage /></AuthGuard>
+            </Route>
+            <Route path="/asignacion-horarios/curso">
+              <AuthGuard><HorariosCursoPage /></AuthGuard>
+            </Route>
+            <Route path="/asignacion-horarios/profesor">
+              <AuthGuard><HorariosProfesorPage /></AuthGuard>
+            </Route>
+            <Route path="/asignacion-horarios">
+              <AuthGuard><AsignacionHorariosPage /></AuthGuard>
             </Route>
 
             <Route path="/materials">
@@ -437,12 +460,6 @@ function AppRouter() {
             </Route>
             <Route path="/profesor/academia/horario">
               <AuthGuard><HorarioGruposPage /></AuthGuard>
-            </Route>
-            <Route path="/course/:grupoId/horario">
-              <AuthGuard><HorarioEscolarPage /></AuthGuard>
-            </Route>
-            <Route path="/course/:grupoId/asistencia/registro">
-              <AuthGuard><RegistroAsistenciaPage /></AuthGuard>
             </Route>
 
             <Route path="/profesor/comunicacion">

@@ -279,11 +279,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       items: [
         { 
           icon: Sparkles, 
-          label: "Asignar Grupos", 
-          path: "/group-assignment", 
+          label: "Asignación de Horarios", 
+          path: "/asignacion-horarios", 
           shortcut: "⌘T",
-          keywords: ["crear", "tarea", "asignacion", "nueva", "grupos"],
-          roles: ["profesor", "directivo"]
+          keywords: ["horarios", "asignacion", "horario", "directivo", "plantilla"],
+          roles: ["directivo"]
         },
         { 
           icon: Calendar, 
@@ -329,9 +329,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         },
         { 
           icon: Globe, 
-          label: "Mi Aprendizaje - Plataformas", 
-          path: "/mi-aprendizaje/plataformas",
-          keywords: ["plataformas", "herramientas"],
+          label: "Mi Aprendizaje - Horario",
+          path: "/mi-aprendizaje/horario",
+          keywords: ["horario", "schedule", "materias", "clases"],
           roles: ["estudiante"]
         },
         { 

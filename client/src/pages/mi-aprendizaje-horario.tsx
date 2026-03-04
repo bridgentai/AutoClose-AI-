@@ -6,7 +6,7 @@ import { NavBackButton } from "@/components/nav-back-button";
 import { useAuth } from "@/lib/authContext";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Loader2, Clock, User } from "lucide-react";
+import { Loader2, Clock } from "lucide-react";
 
 const DIAS = [1, 2, 3, 4, 5, 6] as const;
 
@@ -38,62 +38,62 @@ function toId(val: string | { _id?: string; $oid?: string } | null | undefined):
   return String(val);
 }
 
-interface Group {
+interface Materia {
   _id: string;
   nombre: string;
+  profesorIds?: { nombre?: string }[];
 }
 
-export default function HorarioGruposPage() {
+export default function MiAprendizajeHorarioPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (user && user.rol !== "profesor") {
+    if (user && user.rol !== "estudiante") {
       setLocation("/dashboard");
     }
   }, [user, setLocation]);
 
   const { data: scheduleData, isLoading: loadingSchedule } = useQuery<{
-    profesorId?: string;
+    grupoNombre?: string;
     slots: Record<string, string>;
   }>({
-    queryKey: ["/api/schedule/my-professor", user?.id],
-    queryFn: () => apiRequest("GET", "/api/schedule/my-professor"),
-    enabled: !!user?.id && user?.rol === "profesor",
+    queryKey: ["/api/schedule/my-group", user?.id],
+    queryFn: () => apiRequest("GET", "/api/schedule/my-group"),
+    enabled: !!user?.id && user?.rol === "estudiante",
     staleTime: 0,
     refetchOnMount: "always",
   });
 
-  const { data: groups = [] } = useQuery<Group[]>({
-    queryKey: ["/api/groups/all"],
-    queryFn: () => apiRequest("GET", "/api/groups/all"),
-    enabled: !!user?.id && user?.rol === "profesor",
+  const { data: materias = [] } = useQuery<Materia[]>({
+    queryKey: ["/api/courses/all"],
+    queryFn: () => apiRequest("GET", "/api/courses"),
+    enabled: !!user?.id && user?.rol === "estudiante",
   });
 
-  if (!user || user.rol !== "profesor") {
+  if (!user || user.rol !== "estudiante") {
     return null;
   }
 
+  // Normalizar slots: valores pueden venir como string o { $oid } desde la API
   const rawSlots = scheduleData?.slots && typeof scheduleData.slots === "object" ? scheduleData.slots : {};
   const slots: Record<string, string> = {};
   for (const [k, v] of Object.entries(rawSlots)) {
     if (k && v != null) slots[k] = toId(v as string | { $oid?: string });
   }
+  const grupoNombre = scheduleData?.grupoNombre ?? user?.curso ?? "Mi curso";
 
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-[#E2E8F0] p-6">
-      <NavBackButton to="/profesor/academia" label="Academia" />
+      <NavBackButton to="/mi-aprendizaje" label="Mi Aprendizaje" />
       <div className="max-w-6xl mx-auto mt-4">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-            <Clock className="w-6 h-6 text-emerald-400" />
+          <div className="w-12 h-12 rounded-xl bg-[#1e3cff]/20 flex items-center justify-center">
+            <Clock className="w-6 h-6 text-[#3B82F6]" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white font-['Poppins']">Horario</h1>
-            <p className="text-[#E2E8F0]/80 text-sm flex items-center gap-1">
-              <User className="w-4 h-4" />
-              {user?.nombre ?? "Mi horario"} · Solo lectura
-            </p>
+            <p className="text-[#E2E8F0]/80 text-sm">Curso {grupoNombre} · Solo lectura</p>
           </div>
         </div>
 
@@ -106,13 +106,13 @@ export default function HorarioGruposPage() {
         >
           <div
             className="px-6 py-4 border-b border-white/10"
-            style={{ background: "linear-gradient(180deg, rgba(5,150,105,0.35), rgba(16,185,129,0.15))" }}
+            style={{ background: "linear-gradient(180deg, rgba(0,35,102,0.4), rgba(0,61,122,0.2))" }}
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <h2 className="text-lg font-bold text-white font-['Poppins']">Tu horario semanal</h2>
                 <p className="text-[#E2E8F0]/80 text-sm">
-                  Cuando el directivo confirme y guarde tu horario, se actualizará aquí.
+                  Cuando el directivo confirme el horario de tu curso, se actualizará aquí.
                 </p>
               </div>
               <p className="text-xs text-white/50">Día 1 a 6 · Última clase 14:25</p>
@@ -121,13 +121,13 @@ export default function HorarioGruposPage() {
 
           {loadingSchedule ? (
             <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+              <Loader2 className="w-8 h-8 animate-spin text-[#3B82F6]" />
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[800px] border-collapse">
                 <thead>
-                  <tr className="border-b border-white/10" style={{ background: "rgba(16,185,129,0.12)" }}>
+                  <tr className="border-b border-white/10" style={{ background: "rgba(59,130,246,0.12)" }}>
                     <th className="w-24 py-3 px-3 text-left text-xs font-semibold text-[#E2E8F0] uppercase tracking-wider border-r border-white/10">
                       Período
                     </th>
@@ -138,7 +138,7 @@ export default function HorarioGruposPage() {
                       <th
                         key={d}
                         className="min-w-[120px] py-3 px-3 text-center text-xs font-semibold text-[#E2E8F0] uppercase tracking-wider border-r border-white/10 last:border-r-0"
-                        style={{ background: "rgba(16,185,129,0.08)" }}
+                        style={{ background: "rgba(59,130,246,0.08)" }}
                       >
                         DÍA {d}
                       </th>
@@ -151,7 +151,7 @@ export default function HorarioGruposPage() {
                       key={per.num}
                       className={`border-b border-white/[0.06] ${idx % 2 === 1 ? "bg-white/[0.02]" : ""}`}
                     >
-                      <td className="py-2.5 px-3 text-sm font-semibold text-emerald-400 border-r border-white/10">
+                      <td className="py-2.5 px-3 text-sm font-semibold text-[#3B82F6] border-r border-white/10">
                         {per.num}
                       </td>
                       <td className="py-2.5 px-3 text-xs text-white/60 border-r border-white/10">
@@ -175,8 +175,8 @@ export default function HorarioGruposPage() {
                             </div>
                           ) : (
                             <CeldaLectura
-                              groups={groups}
-                              grupoId={slots[slotKey(dia, per.num)]}
+                              materias={materias}
+                              courseId={slots[slotKey(dia, per.num)]}
                             />
                           )}
                         </td>
@@ -192,7 +192,7 @@ export default function HorarioGruposPage() {
             className="px-6 py-4 border-t border-white/10"
             style={{ background: "rgba(0,0,0,0.15)" }}
           >
-            <p className="text-xs text-white/40">Academia · Horario · Plataforma AutoClose AI</p>
+            <p className="text-xs text-white/40">Mi Aprendizaje · Horario · Plataforma AutoClose AI</p>
           </div>
         </div>
       </div>
@@ -200,16 +200,24 @@ export default function HorarioGruposPage() {
   );
 }
 
-function CeldaLectura({ groups, grupoId }: { groups: Group[]; grupoId: string | undefined }) {
-  const idStr = toId(grupoId);
-  const group = groups.find((g) => toId(g._id) === idStr);
-  const nombre = group?.nombre ?? (idStr ? "—" : "—");
+function CeldaLectura({
+  materias,
+  courseId,
+}: {
+  materias: Materia[];
+  courseId: string | undefined;
+}) {
+  const idStr = toId(courseId);
+  const materia = materias.find((m) => toId(m._id) === idStr);
+  const nombre = materia?.nombre ?? "—";
+  const profesor = materia?.profesorIds?.[0]?.nombre ?? "";
 
   return (
     <div
-      className="min-h-[52px] rounded-lg border border-white/10 bg-white/[0.03] text-[#E2E8F0] text-xs p-2 flex items-center justify-center"
+      className="min-h-[52px] rounded-lg border border-white/10 bg-white/[0.03] text-[#E2E8F0] text-xs p-2"
     >
-      <span className="font-medium truncate">{nombre}</span>
+      <span className="block font-medium truncate">{nombre}</span>
+      {profesor ? <span className="block text-white/50 truncate">{profesor}</span> : null}
     </div>
   );
 }

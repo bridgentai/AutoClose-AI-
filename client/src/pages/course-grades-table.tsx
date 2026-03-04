@@ -389,7 +389,9 @@ function StudentRow({
       ))}
       <div className="flex items-center justify-center">
         <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 min-w-[60px] text-center">
-          <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>{promedio}</span>
+          <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>
+          {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
+        </span>
           {promedio !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
         </div>
       </div>
@@ -520,6 +522,15 @@ export default function CourseGradesTablePage() {
     return assignmentsByLogro[activeTab]?.assignments ?? [];
   }, [activeTab, assignmentsByLogro]);
 
+  /** Todas las asignaciones del curso, para calcular el promedio global (mismo valor en vista por categoría y vista completa). */
+  const allAssignmentsForPromedio = useMemo(
+    () =>
+      (Object.values(assignmentsByLogro) as { logro: LogroCalificacion; assignments: Assignment[] }[])
+        .flatMap((g) => g.assignments)
+        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()),
+    [assignmentsByLogro]
+  );
+
   const updateGradeMutation = useMutation({
     mutationFn: async ({
       assignmentId,
@@ -562,13 +573,13 @@ export default function CourseGradesTablePage() {
 
   const getPromedioFor = (estudianteId: string): number | string => {
     const notas: number[] = [];
-    activeAssignments.forEach((a) => {
+    allAssignmentsForPromedio.forEach((a) => {
       const v = getGradeFor(estudianteId, a._id);
       if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
     });
     if (notas.length === 0) return '—';
-    const prom = Math.round(notas.reduce((s, n) => s + n, 0) / notas.length);
-    return prom;
+    const sum = notas.reduce((s, n) => s + n, 0);
+    return Math.round((sum / notas.length) * 10) / 10;
   };
 
   const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
@@ -689,7 +700,12 @@ export default function CourseGradesTablePage() {
                   background: 'rgba(255,255,255,0.02)',
                 }}
               >
-                <div className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md" style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}>Estudiante</div>
+                <div
+                  className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
+                  style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
+                >
+                  Estudiante
+                </div>
                 {activeAssignments.map((a) => (
                   <div key={a._id} className="text-center truncate px-1">
                     {a.titulo}

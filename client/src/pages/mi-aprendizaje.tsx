@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, FileText, Globe, Calendar, GraduationCap, CheckSquare } from "lucide-react";
+import { BookOpen, FileText, Calendar, GraduationCap, CheckSquare, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
@@ -28,9 +28,9 @@ const navigationItems = [
     icon: FileText,
   },
   {
-    title: "Plataformas",
-    path: "/mi-aprendizaje/plataformas",
-    icon: Globe,
+    title: "Horario",
+    path: "/mi-aprendizaje/horario",
+    icon: Clock,
   },
   {
     title: "Calendario",

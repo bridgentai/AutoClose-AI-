@@ -232,7 +232,7 @@ return (
 <h2 className="text-3xl font-bold text-white font-['Poppins']">Mis Grupos Asignados</h2>
 </div>
 <p className="text-white/60 mb-8 font-['Inter']">
-Estos son los grupos (cursos) que el administrador del colegio te ha asignado. Haz clic en uno para ver detalle y tareas.
+Estos son los grupos (cursos) que el administrador del colegio te ha asignado. Haz clic en uno para entrar.
 </p>
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -287,25 +287,6 @@ style={{
   <span className="text-white/70">Estudiantes:</span> {studentsCountMap.get(group.groupId) ?? group.totalStudents ?? 0}
 </p>
 </CardHeader>
-
-<CardContent className="p-6 pt-2 flex flex-col gap-2">
-<Button
-  variant="outline"
-  size="sm"
-  className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-[#3B82F6]/20 hover:border-[#3B82F6]/40"
-  onClick={(e) => { e.stopPropagation(); setLocation(`/course/${group.groupId}/horario`); }}
->
-  Ver horario
-</Button>
-<Button
-  variant="outline"
-  size="sm"
-  className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
-  onClick={(e) => { e.stopPropagation(); handleCourseClick(group.groupId, true); }}
->
-  Ver detalle
-</Button>
-</CardContent>
 </Card>
 );
 })}

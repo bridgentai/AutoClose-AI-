@@ -125,7 +125,7 @@ export default function RegistroAsistenciaPage() {
 
 
   if (!courseId || !grupoId) {
-    setLocation(`/course/${grupoId}/horario`);
+    setLocation(`/course/${grupoId}/asistencia`);
     return null;
   }
 
@@ -133,7 +133,7 @@ export default function RegistroAsistenciaPage() {
     <div className="min-h-[calc(100vh-8rem)] w-full" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
       <div className="relative z-10 w-full flex flex-col min-h-0">
         <div className="mb-6">
-          <NavBackButton to={`/course/${grupoId}/horario`} label="Volver al Horario" />
+          <NavBackButton to={`/course/${grupoId}/asistencia`} label="Volver" />
         </div>
         <header className="mb-8">
           <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-2 flex items-center gap-2">
@@ -244,10 +244,10 @@ export default function RegistroAsistenciaPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => setLocation(`/course/${grupoId}/horario`)}
+              onClick={() => setLocation(`/course/${grupoId}/asistencia`)}
               className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
             >
-              Volver al Horario
+              Volver
             </Button>
           </div>
           </>

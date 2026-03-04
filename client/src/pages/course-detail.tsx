@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -364,45 +364,20 @@ export default function CourseDetailPage() {
         return grouped;
     }, [assignmentsForTable, logrosForTable]);
 
-    const calcularPromedioPonderado = (studentId: string): number | string => {
-        const logros = logrosForTable;
-        if (logros.length === 0) {
-            const subs = (a: Assignment) => a.submissions || a.entregas || [];
-            const notasValidas: number[] = [];
-            assignmentsForTable.forEach(a => {
-                const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
-                    x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
-                );
-                const cal = (s as { calificacion?: number })?.calificacion;
-                if (cal != null && !isNaN(cal)) notasValidas.push(cal);
-            });
-            return notasValidas.length > 0
-                ? Math.round(notasValidas.reduce((a, b) => a + b, 0) / notasValidas.length)
-                : '-';
-        }
-        let totalPonderado = 0;
-        let totalPorcentaje = 0;
-        logros.forEach(logro => {
-            const assignmentsDelLogro = assignmentsByLogro[logro._id]?.assignments || [];
-            const subs = (a: Assignment) => a.submissions || a.entregas || [];
-            const notasDelLogro: number[] = [];
-            assignmentsDelLogro.forEach(a => {
-                const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
-                    x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
-                );
-                const cal = (s as { calificacion?: number })?.calificacion;
-                if (cal != null && !isNaN(cal)) notasDelLogro.push(cal);
-            });
-            if (notasDelLogro.length > 0) {
-                const promedioLogro = notasDelLogro.reduce((a, b) => a + b, 0) / notasDelLogro.length;
-                const ponderacion = (promedioLogro * logro.porcentaje) / 100;
-                totalPonderado += ponderacion;
-                totalPorcentaje += logro.porcentaje;
-            }
+    /** Promedio simple sobre todas las asignaciones (mismo criterio que la tabla completa en /course/:id/grades). */
+    const getPromedioSimple = (studentId: string): number | string => {
+        const subs = (a: Assignment) => a.submissions || a.entregas || [];
+        const notas: number[] = [];
+        assignmentsForTable.forEach(a => {
+            const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
+                x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
+            );
+            const cal = (s as { calificacion?: number })?.calificacion;
+            if (cal != null && !isNaN(cal)) notas.push(cal);
         });
-        if (totalPonderado === 0) return '-';
-        const factorAjuste = totalPorcentaje > 0 ? (100 / totalPorcentaje) : 1;
-        return Math.round(totalPonderado * factorAjuste);
+        if (notas.length === 0) return '-';
+        const sum = notas.reduce((a, b) => a + b, 0);
+        return Math.round((sum / notas.length) * 10) / 10;
     };
 
     // Efecto para Profesor (Auto-seleccionar materia)
@@ -590,8 +565,8 @@ export default function CourseDetailPage() {
                     </p>
                 </div>
 
-                {/* 3 Tarjetas: Estudiantes, Tareas, Materiales */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 max-w-5xl mx-auto">
+                {/* 4 Tarjetas: Estudiantes, Tareas, Materiales, Asistencia */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 max-w-5xl mx-auto">
                     {/* Carta 1: Estudiantes */}
                     <Card 
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
@@ -638,6 +613,23 @@ export default function CourseDetailPage() {
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Materiales</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
                                 Ver y gestionar materiales del curso
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
+                    </Card>
+
+                    {/* Carta 4: Asistencia */}
+                    <Card 
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20"
+                        onClick={() => setLocation(`/course/${cursoId}/asistencia`)}
+                    >
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#059669] via-[#10B981] to-emerald-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
+                                <CheckCircle className="w-10 h-10 text-white" />
+                            </div>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Asistencia</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                Registrar asistencia del grupo
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="text-center pt-0" />
@@ -780,7 +772,7 @@ export default function CourseDetailPage() {
                                             </thead>
                                             <tbody>
                                                 {students.map((student) => {
-                                                    const promedio = Object.keys(assignmentsByLogro).length > 0 ? calcularPromedioPonderado(student._id) : '-';
+                                                    const promedio = getPromedioSimple(student._id);
                                                     const prediccion = typeof promedio === 'number' ? (promedio / 100 * 5).toFixed(1) : '—';
                                                     return (
                                                         <tr key={student._id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors duration-200">
@@ -827,7 +819,9 @@ export default function CourseDetailPage() {
                                                             )}
                                                             <td className="px-3 py-2.5 text-center min-w-[80px]">
                                                                 <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 inline-block">
-                                                                    <span className={`text-sm font-semibold ${promedio === '-' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>{promedio}</span>
+                                                                    <span className={`text-sm font-semibold ${promedio === '-' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>
+                                                                        {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
+                                                                    </span>
                                                                     {promedio !== '-' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
                                                                 </div>
                                                             </td>
