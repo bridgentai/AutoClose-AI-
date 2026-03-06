@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Clock, User, CheckCircle, XCircle, Timer } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface Student {
   _id: string;
@@ -86,11 +87,8 @@ export default function RegistroAsistenciaPage() {
     }) => apiRequest("POST", "/api/attendance/bulk", payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/curso", courseId, "fecha", fechaParam] });
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/grupo"] });
       queryClient.invalidateQueries({ queryKey: ["attendance-status"] });
-      toast({ title: "Asistencia guardada", description: "Los registros se han actualizado correctamente." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Error", description: err.message || "No se pudo guardar.", variant: "destructive" });
     },
   });
 
@@ -108,19 +106,40 @@ export default function RegistroAsistenciaPage() {
     }));
   };
 
-  const handleGuardar = () => {
+  const handleGuardar = async () => {
     const reg = Object.entries(registros).map(([estudianteId, r]) => ({
       estudianteId,
       estado: r.presencia,
       puntualidad: r.puntualidad,
     }));
-    bulkMutation.mutate({
-      cursoId,
-      fecha: fechaParam,
-      horaBloque: horaParam,
-      grupoId,
-      registros: reg,
-    });
+    if (reg.length === 0) {
+      toast({
+        title: "Sin datos",
+        description: "No hay estudiantes cargados. Espera a que cargue la lista o recarga la página.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await bulkMutation.mutateAsync({
+        cursoId: courseId,
+        fecha: fechaParam,
+        horaBloque: horaParam,
+        grupoId: grupoId || undefined,
+        registros: reg,
+      });
+      toast({
+        title: "Registro exitoso",
+        description: "La asistencia se guardó y se envió al reporte del directivo (Academia → Cursos → " + grupoDisplay + " → Asistencia).",
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "No se pudo guardar. Revisa la conexión o intenta de nuevo.";
+      toast({
+        title: "Error al guardar",
+        description: message,
+        variant: "destructive",
+      });
+    }
   };
 
 
@@ -234,13 +253,32 @@ export default function RegistroAsistenciaPage() {
             </div>
           </div>
 
+          {(bulkMutation.isError || bulkMutation.isSuccess) && (
+            <div
+              className={cn(
+                "mb-4 rounded-xl px-4 py-3 flex items-center gap-2",
+                bulkMutation.isSuccess ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-200" : "bg-red-500/20 border border-red-500/40 text-red-200"
+              )}
+            >
+              {bulkMutation.isSuccess ? (
+                <CheckCircle className="w-5 h-5 flex-shrink-0" />
+              ) : (
+                <XCircle className="w-5 h-5 flex-shrink-0" />
+              )}
+              <span className="text-sm font-medium">
+                {bulkMutation.isSuccess ? "Registro enviado correctamente. El directivo lo verá en el reporte de asistencia del curso." : (bulkMutation.error as Error)?.message || "Error al guardar."}
+              </span>
+            </div>
+          )}
+
           <div className="flex gap-4">
             <Button
+              type="button"
               onClick={handleGuardar}
               disabled={bulkMutation.isPending}
               className="rounded-[10px] bg-[#3B82F6] hover:bg-[#2563EB] text-white"
             >
-              {bulkMutation.isPending ? "Guardando…" : "Guardar asistencia"}
+              {bulkMutation.isPending ? "Guardando…" : "Guardar y enviar"}
             </Button>
             <Button
               variant="outline"

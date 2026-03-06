@@ -151,7 +151,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-white flex items-center gap-2 text-lg text-expressive">
           <Bot className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
-          Asistente AutoClose IA ({rol.toUpperCase()})
+          Asistente MindOS ({rol.toUpperCase()})
         </CardTitle>
         <CardDescription className="text-white/60 text-sm text-expressive-subtitle">
           Pide tareas, revisa pendientes o crea materiales.
@@ -729,7 +729,7 @@ function SuperAdminDashboard() {
   const [newSchool, setNewSchool] = useState({
     nombre: '',
     colegioId: '',
-    nombreIA: 'AutoClose AI',
+    nombreIA: 'MindOS',
     colorPrimario: '#002366',
     colorSecundario: '#1e3cff',
   });
@@ -776,7 +776,7 @@ function SuperAdminDashboard() {
       setNewSchool({
         nombre: '',
         colegioId: '',
-        nombreIA: 'AutoClose AI',
+        nombreIA: 'MindOS',
         colorPrimario: '#002366',
         colorSecundario: '#1e3cff',
       });

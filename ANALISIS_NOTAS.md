@@ -1,8 +1,8 @@
-# Análisis del Flujo de Manejo de Notas - AutoClose AI
+# Análisis del Flujo de Manejo de Notas - evoOS
 
 ## 📋 Resumen Ejecutivo
 
-Se realizó una revisión completa del sistema de manejo de notas en AutoClose AI. Se identificaron **8 problemas críticos** que impiden el funcionamiento completo del flujo de notas desde la asignación por el profesor hasta la visualización por el estudiante.
+Se realizó una revisión completa del sistema de manejo de notas en evoOS. Se identificaron **8 problemas críticos** que impiden el funcionamiento completo del flujo de notas desde la asignación por el profesor hasta la visualización por el estudiante.
 
 ---
 

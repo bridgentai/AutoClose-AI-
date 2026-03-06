@@ -1,5 +1,5 @@
 /**
- * AutoClose AI - Misma paleta que Tabla completa de notas (vista profesor)
+ * evoOS - Misma paleta que Tabla completa de notas (vista profesor)
  * Fondo: radial #1E3A8A → #0F172A → #020617 | Panel: glass | Primario: #3B82F6 #2563EB
  */
 export const theme = {

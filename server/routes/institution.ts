@@ -30,7 +30,7 @@ router.get('/config', protect, async (req: AuthRequest, res) => {
         colegioId,
         nombre: 'Colegio',
         logoUrl: '',
-        nombreIA: 'AutoClose AI',
+        nombreIA: 'MindOS',
         colorPrimario: '#9f25b8',
         colorSecundario: '#6a0dad',
       });

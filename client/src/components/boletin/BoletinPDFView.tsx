@@ -8,7 +8,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-// Design tokens AutoClose
+// Design tokens evoOS
 const BG = "#0F0F14";
 const CARD = "#171721";
 const BORDER = "#232334";

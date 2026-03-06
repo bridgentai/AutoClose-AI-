@@ -262,7 +262,7 @@ export default function HorariosProfesorPage() {
             className="px-6 py-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-4"
             style={{ background: "rgba(0,0,0,0.15)" }}
           >
-            <p className="text-xs text-white/40">Horarios Profesor · Plataforma AutoClose AI</p>
+            <p className="text-xs text-white/40">Horarios Profesor · MindOS</p>
             <Button
               onClick={handleConfirmar}
               disabled={!profesorIdStr || saveMutation.isPending}

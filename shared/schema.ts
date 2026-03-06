@@ -1,4 +1,4 @@
-// AutoClose AI - MongoDB Schemas with Mongoose
+// evoOS - MongoDB Schemas with Mongoose
 // Using TypeScript interfaces for type safety
 
 export interface User {

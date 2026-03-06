@@ -92,6 +92,57 @@ router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'dire
   }
 });
 
+// GET /api/attendance/grupo/:grupoId/fecha/:fecha - Asistencia del grupo en una fecha (directivo, reporte por curso)
+router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+  try {
+    const grupoParam = (req.params.grupoId || '').trim();
+    const fechaParam = req.params.fecha || '';
+    const colegioId = req.user?.colegioId;
+    if (!colegioId || !grupoParam || !fechaParam) {
+      return res.status(400).json({ message: 'Faltan grupoId o fecha.' });
+    }
+
+    const dayStart = startOfDay(new Date(fechaParam));
+    const dayEnd = endOfDay(new Date(fechaParam));
+
+    const isObjectId = /^[a-fA-F0-9]{24}$/.test(grupoParam);
+    let groupFilter: Record<string, unknown> = { colegioId };
+    if (isObjectId) {
+      groupFilter._id = normalizeIdForQuery(grupoParam);
+    } else {
+      groupFilter.nombre = new RegExp('^' + grupoParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+    }
+    const group = await Group.findOne(groupFilter).select('_id nombre').lean();
+    if (!group) {
+      return res.json([]);
+    }
+
+    const groupIdStr = String((group as any)._id);
+    const groupNombre = (group as any).nombre || '';
+    const grupoParamUpper = grupoParam.toUpperCase();
+
+    const list = await Asistencia.find({
+      colegioId,
+      fecha: { $gte: dayStart, $lte: dayEnd },
+      $or: [
+        { grupoId: grupoParam },
+        { grupoId: grupoParamUpper },
+        { grupoId: groupNombre },
+        { grupoId: groupIdStr },
+      ],
+    })
+      .populate('estudianteId', 'nombre correo curso')
+      .populate('cursoId', 'nombre')
+      .sort({ estudianteId: 1, horaBloque: 1 })
+      .lean();
+
+    return res.json(list);
+  } catch (e: any) {
+    console.error(e);
+    return res.status(500).json({ message: 'Error al listar asistencia del grupo.' });
+  }
+});
+
 // POST /api/attendance - Registrar o actualizar asistencia (profesor/directivo)
 router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
   try {
@@ -143,6 +194,19 @@ router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general
       return res.status(400).json({ message: 'Faltan cursoId, fecha o registros.' });
     }
 
+    let grupoIdToStore: string | undefined = grupoId ? String(grupoId).trim() : undefined;
+    if (grupoIdToStore) {
+      const isObjectId = /^[a-fA-F0-9]{24}$/.test(grupoIdToStore);
+      if (isObjectId) {
+        const course = await Course.findById(normalizeIdForQuery(grupoIdToStore)).select('cursos').lean();
+        if (course?.cursos?.length) {
+          grupoIdToStore = (course.cursos[0] as string).trim().toUpperCase();
+        }
+      } else {
+        grupoIdToStore = grupoIdToStore.toUpperCase();
+      }
+    }
+
     const dateOnly = startOfDay(new Date(fecha));
     const ops = registros.map((r) => {
       const filter: Record<string, unknown> = {
@@ -151,10 +215,17 @@ router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general
         colegioId,
         fecha: { $gte: dateOnly, $lte: endOfDay(dateOnly) },
       };
-      const update: Record<string, unknown> = { estado: r.estado, colegioId, recordedBy: userId };
+      const update: Record<string, unknown> = {
+        estado: r.estado,
+        colegioId,
+        recordedBy: userId,
+        fecha: dateOnly,
+        cursoId: normalizeIdForQuery(cursoId),
+        estudianteId: normalizeIdForQuery(r.estudianteId),
+      };
       if (r.puntualidad) update.puntualidad = r.puntualidad;
       if (horaBloque) update.horaBloque = horaBloque;
-      if (grupoId) update.grupoId = grupoId;
+      if (grupoIdToStore) update.grupoId = grupoIdToStore;
       return {
         updateOne: {
           filter,

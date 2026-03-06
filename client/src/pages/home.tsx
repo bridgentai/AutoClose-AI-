@@ -178,7 +178,7 @@ export default function Home() {
               </p>
 
               <p className="text-xl md:text-2xl text-white/70 mb-8 leading-relaxed text-left max-w-2xl">
-                AutoClose AI centraliza todo el ecosistema educativo de tu institución en una sola plataforma
+                MindOS centraliza todo el ecosistema educativo de tu institución en una sola plataforma
                 inteligente. Reemplaza herramientas dispersas con un asistente IA personalizado que conoce
                 tu currículo específico.
               </p>
@@ -456,8 +456,8 @@ export default function Home() {
           </h2>
           <p className="text-white/70 text-lg mb-10 max-w-2xl mx-auto">
             {isAuthenticated
-              ? "Comienza a explorar todas las funcionalidades de AutoClose AI"
-              : "Únete a AutoClose AI y lleva tu institución educativa al siguiente nivel"
+              ? "Comienza a explorar todas las funcionalidades de MindOS"
+              : "Únete a MindOS y lleva tu institución educativa al siguiente nivel"
             }
           </p>
           <Button
@@ -483,7 +483,7 @@ export default function Home() {
       <footer className="border-t border-white/10 py-8 px-4 sm:px-6 lg:px-8 w-full bg-black/40">
         <div className="w-full text-center">
           <p className="text-white/50 text-sm">
-            © 2025 AutoClose AI - Desarrollado por <span className="text-[#1e3cff] font-medium">Bridgent</span>
+            © 2025 MindOS - Desarrollado por <span className="text-[#1e3cff] font-medium">Bridgent</span>
           </p>
           <p className="text-white/40 text-xs mt-2">
             Plataforma educativa inteligente para instituciones académicas

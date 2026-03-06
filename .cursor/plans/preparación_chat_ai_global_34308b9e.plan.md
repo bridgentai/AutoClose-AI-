@@ -1,6 +1,6 @@
 ---
 name: Preparación Chat AI Global
-overview: Preparar toda la infraestructura de AutoClose AI para soportar un Chat AI Global que funcione como el CORAZÓN de la aplicación, automatizando TODAS las tareas manuales mediante lenguaje natural, personalizado estrictamente por rol y curso, con validaciones de seguridad y permisos muy específicas.
+overview: Preparar toda la infraestructura de evoOS para soportar un Chat AI Global que funcione como el CORAZÓN de la aplicación, automatizando TODAS las tareas manuales mediante lenguaje natural, personalizado estrictamente por rol y curso, con validaciones de seguridad y permisos muy específicas.
 todos:
   - id: fix-chatsession-cursoid
     content: Hacer cursoId opcional en ChatSession model y actualizar validación en chat routes para permitir chats globales sin cursoId (el chat global no requiere curso específico)
@@ -50,7 +50,7 @@ todos:
 
 ## Objetivo Principal
 
-Preparar toda la infraestructura de AutoClose AI para que el **Chat AI Global funcione como el CORAZÓN de la aplicación**, automatizando **TODAS las tareas manuales** mediante lenguaje natural. El chat debe ser:
+Preparar toda la infraestructura de evoOS para que el **Chat AI Global funcione como el CORAZÓN de la aplicación**, automatizando **TODAS las tareas manuales** mediante lenguaje natural. El chat debe ser:
 
 - **Personalizado estrictamente por rol y curso**: Cada usuario ve solo lo que puede ver según su rol
 - **Automático**: Todas las funciones manuales deben ejecutarse vía chat
@@ -300,7 +300,7 @@ flowchart TD
   - **Restricciones claras**: "NO puedes consultar notas de otros estudiantes", "Solo puedes ver información de tus cursos asignados"
 - Ejemplo para estudiante:
   ```
-  Eres AutoClose AI, asistente educativo. El usuario es un ESTUDIANTE del curso 9B.
+  Eres evoOS, asistente educativo. El usuario es un ESTUDIANTE del curso 9B.
   
   RESTRICCIONES ESTRICTAS:
   - Solo puedes consultar información del ESTUDIANTE ACTUAL

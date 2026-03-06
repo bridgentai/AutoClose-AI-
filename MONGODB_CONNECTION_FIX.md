@@ -64,7 +64,7 @@ mongosh "mongodb+srv://bridgentai_db_user:37hOQPv6mkF0UFBo@autoclosecluster.srcq
 Después de agregar tu IP, deberías ver en la consola:
 
 ```
-✅ MongoDB conectado exitosamente a AutoClose AI
+✅ MongoDB conectado exitosamente a evoOS
 📊 Base de datos: autoclose_ai
 ```
 

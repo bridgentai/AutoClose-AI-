@@ -49,6 +49,7 @@ import TeacherTasksSummaryPage from "@/pages/teacher-tasks-summary";
 import AssignmentDetailPage from "@/pages/assignment-detail";
 import DirectivoPage from "@/pages/directivo";
 import DirectivoCursosPage from "@/pages/directivo-cursos";
+import DirectivoCursoDetailPage from "@/pages/directivo-curso-detail";
 import DirectivoEstudiantesPage from "@/pages/directivo-estudiantes";
 import DirectivoCursoEstudiantesPage from "@/pages/directivo-curso-estudiantes";
 import DirectivoEstudianteNotasPage from "@/pages/directivo-estudiante-notas";
@@ -496,6 +497,9 @@ function AppRouter() {
             </Route>
             <Route path="/directivo/cursos/:grupoId/estudiantes/:estudianteId/notas">
               <AuthGuard><DirectivoEstudianteNotasPage /></AuthGuard>
+            </Route>
+            <Route path="/directivo/cursos/:grupoId">
+              <AuthGuard><DirectivoCursoDetailPage /></AuthGuard>
             </Route>
             <Route path="/directivo/comunicacion">
               <AuthGuard><DirectivoComunicacionLayout /></AuthGuard>

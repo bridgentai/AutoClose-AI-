@@ -1,6 +1,6 @@
 # Prueba piloto completa e informe de validación del MVP
 
-Este documento es la lista de comprobación para ejecutar la prueba piloto del MVP de AutoClose AI y generar el informe de validación.
+Este documento es la lista de comprobación para ejecutar la prueba piloto del MVP de evoOS y generar el informe de validación.
 
 ## Cómo ejecutar la prueba piloto
 

@@ -53,7 +53,7 @@ export function TopNavigation() {
 
   return (
     <header 
-      className="fixed top-0 left-0 right-0 z-50 h-16 bg-black/60 backdrop-blur-xl border-b border-white/10"
+      className="fixed top-0 left-0 right-0 z-50 h-16 bg-black/60 backdrop-blur-xl border-b border-white/10 relative"
       data-testid="top-navigation"
     >
       <div className="max-w-7xl mx-auto h-full flex items-center justify-between px-4 lg:px-6">
@@ -65,10 +65,10 @@ export function TopNavigation() {
           data-testid="link-logo"
         >
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#002366] to-[#1e3cff] flex items-center justify-center">
-            <span className="text-white font-bold text-lg">AC</span>
+            <span className="text-white font-bold text-lg">e</span>
           </div>
           <div className="hidden sm:block">
-            <h2 className="text-white font-bold text-sm font-['Poppins']">AutoClose AI</h2>
+            <h2 className="text-white font-bold text-sm font-['Poppins']">evoOS</h2>
             <p className="text-xs text-white/50 capitalize">{user?.rol}</p>
           </div>
         </div>
@@ -133,6 +133,10 @@ export function TopNavigation() {
           </Button>
         </div>
       </div>
+
+      <span className="absolute top-1 right-3 text-[10px] uppercase tracking-[0.18em] text-white/40 pointer-events-none">
+        evoOS
+      </span>
 
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (

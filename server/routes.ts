@@ -88,7 +88,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ 
       status: mongoConnected ? 'ok' : 'degraded',
       message: mongoConnected 
-        ? 'AutoClose AI Backend funcionando correctamente'
+        ? 'MindOS Backend funcionando correctamente'
         : 'Backend iniciado pero MongoDB no conectado',
       mongodb: {
         connected: mongoConnected,

@@ -1,6 +1,6 @@
-AutoClose AI – Project Vision & Architecture Guide (Updated)
+evoOS – Project Vision & Architecture Guide (Updated)
 1. Overview
-AutoClose AI es una plataforma educativa institucional diseñada para colegios en Colombia. No es solo un sistema de registro académico: es un sistema de gestión académica accionable, donde la IA es el centro operativo que conecta tareas, automatiza procesos y permite que cada rol (estudiante, profesor, directivo, padre) actúe de forma más eficiente.
+evoOS es una plataforma educativa institucional diseñada para colegios en Colombia. No es solo un sistema de registro académico: es un sistema de gestión académica accionable, donde la IA es el centro operativo que conecta tareas, automatiza procesos y permite que cada rol (estudiante, profesor, directivo, padre) actúe de forma más eficiente.
 
 El usuario puede:
 
@@ -56,7 +56,7 @@ Classroom (si aplica)
 
 Gmail
 
-Todo accesible desde AutoClose AI, sin cambiar de plataforma.
+Todo accesible desde evoOS, sin cambiar de plataforma.
 
 ✅ 2. Automatización total con IA
 La IA debe poder:
@@ -285,7 +285,7 @@ No duplicar funciones que ya existen en Google; se centralizan.
 Nada de estructuras viejas tipo Moodle/Canvas.
 
 10. Summary
-Este documento define la visión actualizada de AutoClose AI:
+Este documento define la visión actualizada de evoOS:
 
 IA como núcleo
 

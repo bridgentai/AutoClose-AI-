@@ -1,4 +1,4 @@
-# Persisted Information - AutoClose AI Project
+# Persisted Information - evoOS Project
 
 ## ⚠️ CONTEXTO FIJO OBLIGATORIO - Archivos de Referencia Principal
 
@@ -7,7 +7,7 @@
 ### 📋 PROJECT_GOLAS.md (OBLIGATORIO - Leer siempre)
 **PROJECT_GOLAS.md** es el archivo de referencia principal del proyecto y DEBE ser consultado SIEMPRE antes de realizar cualquier cambio. Este archivo contiene:
 
-- La visión completa y arquitectura de AutoClose AI
+- La visión completa y arquitectura de evoOS
 - Los objetivos principales del proyecto
 - La estructura del frontend (React + TypeScript) y backend (Express + MongoDB)
 - Los principios de desarrollo fundamentales
@@ -20,7 +20,7 @@
 **Este archivo define QUÉ es el proyecto y CÓMO debe funcionar técnicamente.**
 
 ### 🎨 design_guidelines.md (OBLIGATORIO - Leer siempre)
-**design_guidelines.md** contiene las guías de diseño completas del proyecto AutoClose AI y DEBE ser consultado SIEMPRE antes de realizar cualquier cambio visual o de UI. Este archivo incluye:
+**design_guidelines.md** contiene las guías de diseño completas del proyecto evoOS y DEBE ser consultado SIEMPRE antes de realizar cualquier cambio visual o de UI. Este archivo incluye:
 
 - Filosofía de diseño y principios centrales (AI-First, moderno, limpio)
 - Sistema de colores completo:
@@ -52,6 +52,6 @@
 
 ## Recordatorio Crítico
 
-Estos dos archivos (`PROJECT_GOLAS.md` y `design_guidelines.md`) son la fuente de verdad del proyecto AutoClose AI. Deben estar presentes en el contexto de cada petición sin necesidad de que el usuario los especifique explícitamente.
+Estos dos archivos (`PROJECT_GOLAS.md` y `design_guidelines.md`) son la fuente de verdad del proyecto evoOS. Deben estar presentes en el contexto de cada petición sin necesidad de que el usuario los especifique explícitamente.
 
 

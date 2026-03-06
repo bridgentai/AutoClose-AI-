@@ -1,4 +1,4 @@
-# AutoClose AI - Contexto Fijo del Proyecto
+# evoOS - Contexto Fijo del Proyecto
 
 ## ⚠️ REGLA CRÍTICA: Archivos de Referencia Obligatorios
 
@@ -7,7 +7,7 @@
 ### 📋 PROJECT_GOLAS.md (OBLIGATORIO)
 **SIEMPRE** lee y consulta `PROJECT_GOLAS.md` antes de realizar cualquier cambio en el proyecto. Este archivo contiene:
 
-- La visión y arquitectura completa de AutoClose AI
+- La visión y arquitectura completa de evoOS
 - Los objetivos principales del proyecto
 - La estructura del frontend y backend
 - Los principios de desarrollo

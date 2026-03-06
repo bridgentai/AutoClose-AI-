@@ -133,7 +133,7 @@ router.post('/schools', protect, requireSuperAdmin, async (req: AuthRequest, res
       colegioId,
       nombre,
       logoUrl: '', // Siempre vacío por ahora
-      nombreIA: nombreIA || 'AutoClose AI',
+      nombreIA: nombreIA || 'MindOS',
       colorPrimario: colorPrimario || '#9f25b8',
       colorSecundario: colorSecundario || '#6a0dad',
       parametros: {},

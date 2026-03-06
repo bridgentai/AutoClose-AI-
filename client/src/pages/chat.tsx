@@ -233,7 +233,7 @@ export default function Chat() {
             <NavBackButton to="/dashboard" label="Dashboard" />
             <div className="flex items-center gap-3 mt-4">
               <div>
-                <h1 className="text-2xl font-bold text-white font-['Poppins']">AutoClose AI</h1>
+                <h1 className="text-2xl font-bold text-white font-['Poppins']">MindOS</h1>
                 <p className="text-white/60 text-sm mt-1">Por donde empezamos?</p>
               </div>
             </div>

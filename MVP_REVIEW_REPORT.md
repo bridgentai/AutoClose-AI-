@@ -1,4 +1,4 @@
-# AutoClose MVP – Structured Review Report
+# evoOS MVP – Structured Review Report
 
 **Date:** February 9, 2025  
 **Scope:** Current codebase vs. baseline (Phidias/Alexia parity), roadmap, roles, and MVP readiness.

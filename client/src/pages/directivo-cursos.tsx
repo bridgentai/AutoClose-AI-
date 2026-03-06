@@ -44,7 +44,7 @@ export default function DirectivoCursosPage() {
           Cursos del colegio
         </h1>
         <p className="text-white/60 mt-1">
-          Selecciona un curso para ver los estudiantes y sus notas.
+          Selecciona un curso para ver asistencia, análisis y estudiantes.
         </p>
       </div>
 
@@ -52,7 +52,7 @@ export default function DirectivoCursosPage() {
         <CardHeader>
           <CardTitle className="text-white">Todos los cursos / grupos</CardTitle>
           <CardDescription className="text-white/60">
-            Información real de tu colegio. Haz clic en un curso para ver estudiantes y notas.
+            Información real de tu colegio. Haz clic en un curso para ver asistencia del día, análisis y lista de estudiantes.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -70,7 +70,7 @@ export default function DirectivoCursosPage() {
                 <button
                   key={g._id}
                   type="button"
-                  onClick={() => setLocation(`/directivo/cursos/${encodeURIComponent(g.nombre)}/estudiantes`)}
+                  onClick={() => setLocation(`/directivo/cursos/${encodeURIComponent(g.nombre)}`)}
                   className="flex items-center justify-between w-full p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-colors text-left"
                 >
                   <span className="flex items-center gap-3">

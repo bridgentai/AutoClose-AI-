@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BoletinPDFView } from "@/components/boletin/BoletinPDFView";
 
-// Design tokens AutoClose
+// Design tokens evoOS
 const BG = "#0F0F14";
 const CARD = "#171721";
 const BORDER = "#232334";

@@ -140,7 +140,7 @@ export async function connectDB(retries = 3) {
       throw lastError || new Error('No se pudo conectar después de múltiples intentos');
     }
     
-    console.log('✅ MongoDB conectado exitosamente a AutoClose AI');
+    console.log('✅ MongoDB conectado exitosamente a MindOS');
     console.log(`📊 Base de datos: ${mongoose.connection.db?.databaseName || 'autoclose_ai'}`);
     console.log(`🔗 Host: ${mongoose.connection.host || 'N/A'}`);
     console.log(`🔌 Puerto: ${mongoose.connection.port || 'N/A'}`);

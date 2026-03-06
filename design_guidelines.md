@@ -1,4 +1,4 @@
-# AutoClose AI – Paleta: Tabla completa de notas (vista profesor)
+# evoOS – Paleta: Tabla completa de notas (vista profesor)
 
 Toda la plataforma usa la misma paleta que la **Tabla completa de notas** desde la vista de profesor.
 

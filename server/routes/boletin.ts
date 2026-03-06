@@ -528,7 +528,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:0;background:#
 </style>
 </head><body>
 <div class="banner">
-  <h1>AutoClose AI</h1>
+  <h1>MindOS</h1>
   <div class="sub">BOLETÍN ACADÉMICO INTELIGENTE</div>
 </div>
 <div class="container">
@@ -579,7 +579,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:0;background:#
   </div>
 </div>
 <div class="wave"></div>
-<p class="print-hint">AutoClose AI · Use "Imprimir" (Ctrl+P) y "Guardar como PDF" para exportar.</p>
+<p class="print-hint">MindOS · Use "Imprimir" (Ctrl+P) y "Guardar como PDF" para exportar.</p>
 </body></html>`;
     } else {
       const rows = resumen.map(
@@ -591,7 +591,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;margin:0;padding:0;background:#
 <h1>${periodo}</h1>
 <p>${cursoNombre} · ${fecha}</p>
 <table><thead><tr><th>Estudiante</th><th>Promedio</th><th>Materias</th></tr></thead><tbody>${rows}</tbody></table>
-<p style="margin-top:2rem;color:#666;font-size:0.9rem">AutoClose AI · Use "Imprimir" y "Guardar como PDF" para exportar.</p>
+<p style="margin-top:2rem;color:#666;font-size:0.9rem">MindOS · Use "Imprimir" y "Guardar como PDF" para exportar.</p>
 </body></html>`;
     }
 

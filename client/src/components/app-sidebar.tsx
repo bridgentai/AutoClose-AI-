@@ -52,10 +52,10 @@ export function AppSidebar() {
       {/* Logo + info - mismo azul que tabla de notas */}
       <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavClick("/dashboard")}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.4)]" style={{ background: 'linear-gradient(145deg, #3B82F6, #1E40AF)' }}>
-          <span className="text-white font-bold text-lg">AC</span>
+          <span className="text-white font-bold text-lg">e</span>
         </div>
         <div>
-          <h2 className="text-[#E2E8F0] font-bold text-sm font-['Poppins']">AutoClose AI</h2>
+          <h2 className="text-[#E2E8F0] font-bold text-sm font-['Poppins']">evoOS</h2>
           <p className="text-xs text-white/60 capitalize">{user?.rol}</p>
         </div>
       </div>
