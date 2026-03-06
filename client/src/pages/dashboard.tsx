@@ -510,7 +510,7 @@ function ProfesorDashboard() {
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.2s' }}
-          onClick={() => setLocation('/profesor/academia/tareas')}
+          onClick={() => setLocation('/profesor/tareas-por-revisar')}
         >
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white text-expressive">

@@ -55,6 +55,7 @@ export default function TeacherCalendarPage() {
     titulo: '',
     descripcion: '',
     curso: '',
+    logroCalificacionId: '',
     fechaEntrega: '',
     horaEntrega: '23:59',
   });
@@ -99,35 +100,42 @@ export default function TeacherCalendarPage() {
     return group?.subjects || [];
   };
 
+  const courseIdForLogros = formData.curso ? getSubjectsForGroup(formData.curso)[0]?._id : '';
+  interface LogroItem {
+    _id: string;
+    nombre: string;
+    porcentaje?: number;
+  }
+  const { data: logrosData } = useQuery<{ logros: LogroItem[] }>({
+    queryKey: ['/api/logros-calificacion', courseIdForLogros],
+    queryFn: () =>
+      apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
+    enabled: !!courseIdForLogros,
+  });
+  const logros = logrosData?.logros ?? [];
+
   const createAssignmentMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('POST', '/api/assignments', data);
+      const res = await apiRequest<{ _id: string }>('POST', '/api/assignments', data);
+      return res;
     },
     onSuccess: () => {
-      toast({ title: 'Tarea creada exitosamente' });
+      toast({ title: 'Tarea creada', description: 'La tarea se creó correctamente y aparecerá en el calendario.' });
       setIsDialogOpen(false);
       resetForm();
-      
-      // Invalidar queries del profesor
-      queryClient.invalidateQueries({ queryKey: ['teacherAssignments'] });
+
+      // Invalidar y refetch explícito del calendario del profesor (misma clave que useQuery)
+      const queryKey = ['teacherAssignments', user?.id, currentMonth, currentYear];
+      queryClient.invalidateQueries({ queryKey });
       refetchAssignments();
-      
-      // CRÍTICO: Invalidar queries de estudiantes para que vean la tarea automáticamente
+
       queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      queryClient.invalidateQueries({ 
-        queryKey: ['/api/assignments/student'],
-        exact: false 
-      });
-      
-      // Invalidar queries de calendarios de estudiantes
-      queryClient.invalidateQueries({ 
-        queryKey: ['studentAssignments'],
-        exact: false 
-      });
+      queryClient.invalidateQueries({ queryKey: ['/api/assignments/student'], exact: false });
     },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.message || 'No se pudo crear la tarea', variant: 'destructive' });
+    onError: (error: Error) => {
+      const message = error?.message || 'No se pudo crear la tarea';
+      toast({ title: 'Error al crear la tarea', description: message, variant: 'destructive' });
     },
   });
 
@@ -136,6 +144,7 @@ export default function TeacherCalendarPage() {
       titulo: '',
       descripcion: '',
       curso: '',
+      logroCalificacionId: '',
       fechaEntrega: '',
       horaEntrega: '23:59',
     });
@@ -177,13 +186,28 @@ export default function TeacherCalendarPage() {
     const courseId = subjectsForGroup[0]._id;
     const fechaEntregaCompleta = new Date(`${formData.fechaEntrega}T${formData.horaEntrega}`);
 
+    if (logros.length > 0 && !formData.logroCalificacionId) {
+      toast({
+        title: 'Selecciona un logro',
+        description: 'Este curso tiene logros de calificación. Elige uno para asignar la tarea.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Backend espera adjuntos como string[] (URLs o JSON); convertir para no romper el esquema
+    const adjuntosPayload = adjuntos.map((a) =>
+      typeof a === 'string' ? a : JSON.stringify({ tipo: a.tipo, nombre: a.nombre, url: a.url })
+    );
+
     createAssignmentMutation.mutate({
       titulo: formData.titulo,
       descripcion: formData.descripcion,
       curso: formData.curso,
       courseId,
       fechaEntrega: fechaEntregaCompleta.toISOString(),
-      adjuntos,
+      adjuntos: adjuntosPayload,
+      logroCalificacionId: formData.logroCalificacionId || undefined,
     });
   };
 
@@ -316,7 +340,7 @@ export default function TeacherCalendarPage() {
               <Label>Curso/Materia *</Label>
               <Select
                 value={formData.curso}
-                onValueChange={(value) => setFormData({ ...formData, curso: value })}
+                onValueChange={(value) => setFormData({ ...formData, curso: value, logroCalificacionId: '' })}
                 disabled={isLoadingGroups || availableGroups.length === 0}
               >
                 <SelectTrigger className="bg-white/5 border-white/10 text-white h-auto py-2" data-testid="select-curso">
@@ -356,6 +380,34 @@ export default function TeacherCalendarPage() {
                 </p>
               )}
             </div>
+
+            {formData.curso && (
+              <div className="space-y-2">
+                <Label className="text-white/90">Logro de calificación</Label>
+                {logros.length === 0 ? (
+                  <p className="text-sm text-white/60">
+                    No hay logros definidos para este curso. Puedes crear la tarea sin asignar a un logro.
+                  </p>
+                ) : (
+                  <Select
+                    value={formData.logroCalificacionId}
+                    onValueChange={(value) => setFormData({ ...formData, logroCalificacionId: value })}
+                  >
+                    <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-logro">
+                      <SelectValue placeholder="Selecciona el logro para esta tarea" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0a0a2a] border-white/10">
+                      {logros.map((logro) => (
+                        <SelectItem key={logro._id} value={logro._id} className="text-white hover:bg-white/10">
+                          {logro.nombre}
+                          {logro.porcentaje != null ? ` (${logro.porcentaje}%)` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
