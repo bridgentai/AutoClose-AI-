@@ -23,6 +23,9 @@ export default function ProfesorRedactarMensaje() {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const fromComunicacion = location.startsWith('/comunicacion');
+  const fromAsistente = location.startsWith('/asistente/comunicacion');
+  const backTo = fromAsistente ? '/asistente/comunicacion' : fromComunicacion ? '/comunicacion' : '/profesor/comunicacion';
+  const successTo = fromAsistente ? '/asistente/comunicacion/bandeja' : fromComunicacion ? '/comunicacion' : '/profesor/comunicacion/bandeja';
   const [destinatarioId, setDestinatarioId] = useState('');
   const [asunto, setAsunto] = useState('');
   const [mensaje, setMensaje] = useState('');
@@ -40,7 +43,7 @@ export default function ProfesorRedactarMensaje() {
       setDestinatarioId('');
       setAsunto('');
       setMensaje('');
-      setLocation(fromComunicacion ? '/comunicacion' : '/profesor/comunicacion/bandeja');
+      setLocation(successTo);
     },
   });
 
@@ -55,7 +58,7 @@ export default function ProfesorRedactarMensaje() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <NavBackButton to={fromComunicacion ? '/comunicacion' : '/profesor/comunicacion'} label="Comunicación" />
+        <NavBackButton to={backTo} label="Comunicación" />
         <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4 flex items-center gap-2">
           <Send className="w-8 h-8 text-[#00c8ff]" />
           Redactar Mensaje
@@ -109,7 +112,7 @@ export default function ProfesorRedactarMensaje() {
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
-              onClick={() => setLocation(fromComunicacion ? '/comunicacion' : '/profesor/comunicacion')}
+              onClick={() => setLocation(backTo)}
               className="border-white/10 text-white hover:bg-white/10"
             >
               Cancelar

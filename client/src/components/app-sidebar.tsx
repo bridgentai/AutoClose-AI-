@@ -1,8 +1,8 @@
 "use client";
 
 import { 
-  Home, MessageSquare, BookOpen, GraduationCap, Settings, 
-  LogOut, User, Calendar, Users, Globe 
+  Home, MessageSquare, Send, BookOpen, GraduationCap, Settings, 
+  LogOut, User, Calendar, Users, Globe, Mail, FileCheck 
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -20,10 +20,15 @@ export function AppSidebar() {
 
   const menuItems = [
     { icon: Home, label: "Dashboard", path: "/dashboard", roles: ["estudiante", "profesor", "directivo", "padre"] },
+    { icon: Home, label: "Inicio", path: "/asistente", roles: ["asistente"] },
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
     { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["estudiante"] },
+    { icon: Send, label: "Evo Send", path: "/evo-send", roles: ["estudiante", "profesor", "directivo", "asistente", "admin-general-colegio"] },
+
+    { icon: Mail, label: "Comunicación padres", path: "/asistente/comunicacion", roles: ["asistente"] },
+    { icon: FileCheck, label: "Permisos de salida", path: "/permisos", roles: ["asistente"] },
 
     { icon: Calendar, label: "Comunidad", path: "/comunidad", roles: ["estudiante", "profesor", "directivo", "padre"] },
 

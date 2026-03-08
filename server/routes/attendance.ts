@@ -15,8 +15,8 @@ function restrictTo(...roles: string[]) {
   };
 }
 
-// GET /api/attendance/curso/:cursoId/estudiantes - Listar estudiantes del curso (para tomar asistencia)
-router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+// GET /api/attendance/curso/:cursoId/estudiantes - Listar estudiantes del curso (para tomar asistencia o reportes)
+router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const { cursoId } = req.params;
     const colegioId = req.user?.colegioId;
@@ -47,7 +47,7 @@ router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'direc
 });
 
 // GET /api/attendance/curso/:cursoId/fecha/:fecha/status - Indica si ya hay asistencia registrada
-router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, fecha } = req.params;
     const colegioId = req.user?.colegioId;
@@ -66,8 +66,8 @@ router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor'
   }
 });
 
-// GET /api/attendance/curso/:cursoId/fecha/:fecha - Listar asistencia por curso y fecha (profesor/directivo)
-router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+// GET /api/attendance/curso/:cursoId/fecha/:fecha - Listar asistencia por curso y fecha (profesor/directivo/asistente)
+router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, fecha } = req.params;
     const colegioId = req.user?.colegioId;
@@ -92,8 +92,8 @@ router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'dire
   }
 });
 
-// GET /api/attendance/grupo/:grupoId/fecha/:fecha - Asistencia del grupo en una fecha (directivo, reporte por curso)
-router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+// GET /api/attendance/grupo/:grupoId/fecha/:fecha - Asistencia del grupo en una fecha (directivo/asistente, reporte)
+router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const grupoParam = (req.params.grupoId || '').trim();
     const fechaParam = req.params.fecha || '';
@@ -269,6 +269,7 @@ router.get('/estudiante/:estudianteId', protect, async (req: AuthRequest, res) =
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
+      rol === 'asistente' ||
       normalizedUser === normalizedEstudiante ||
       (rol === 'padre' && (await canParentViewStudent(normalizedUser, normalizedEstudiante)));
 
@@ -324,6 +325,7 @@ router.get('/resumen/estudiante/:estudianteId', protect, async (req: AuthRequest
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
+      rol === 'asistente' ||
       normalizedUser === normalizedEstudiante ||
       (rol === 'padre' && (await canParentViewStudent(normalizedUser, normalizedEstudiante)));
 

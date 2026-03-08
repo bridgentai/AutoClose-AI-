@@ -16,6 +16,8 @@ export { Examen } from './Examen';
 export { Asistencia } from './Asistencia';
 export { Mensaje } from './Mensaje';
 export { Conversacion } from './Conversacion';
+export { EvoThread, type IEvoThread, type EvoThreadType } from './EvoThread';
+export { EvoMessage, type IEvoMessage, type EvoMessageContentType, type EvoMessagePrioridad } from './EvoMessage';
 export { Boletin } from './Boletin';
 export { Notificacion } from './Notificacion';
 export { Evento } from './Evento';

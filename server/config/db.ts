@@ -1,3 +1,4 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
 // IMPORTANTE: Importar ENV asegura que .env se carga primero (env.ts carga dotenv)
 import { ENV } from './env';
@@ -32,6 +33,12 @@ export async function connectDB(retries = 3) {
   try {
     console.log('🔄 Intentando conectar a MongoDB...');
     console.log(`📍 URI: ${MONGO_URI.substring(0, 50)}...`);
+
+    // Si la red bloquea la resolución SRV (querySrv ECONNREFUSED), usar DNS público
+    if (ENV.MONGODB_USE_PUBLIC_DNS && cleanURI.startsWith('mongodb+srv://')) {
+      dns.setServers(['1.1.1.1', '8.8.8.8']);
+      console.log('🌐 Usando DNS público (1.1.1.1, 8.8.8.8) para resolución SRV');
+    }
     
     // Extraer información de la URI para diagnóstico
     try {
@@ -132,6 +139,22 @@ export async function connectDB(retries = 3) {
             await mongoose.connection.close().catch(() => {});
           }
         }
+      }
+    }
+
+    // Si falló con querySrv ECONNREFUSED y hay URI directa, intentar con ella (evita DNS SRV)
+    const directUri = ENV.MONGODB_URI_DIRECT?.trim();
+    const isQuerySrvRefused = lastError?.message?.includes('querySrv') && (lastError?.code === 'ECONNREFUSED' || lastError?.message?.includes('ECONNREFUSED'));
+    if ((!mongoose.connection.readyState || mongoose.connection.readyState === 0) && directUri && directUri.startsWith('mongodb://') && isQuerySrvRefused) {
+      console.log('🔄 Fallo en resolución SRV; intentando con URI directa (MONGODB_URI_DIRECT)...');
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.connection.close().catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      try {
+        await mongoose.connect(directUri.replace(/^["']|["']$/g, '').trim(), connectionOptions);
+      } catch (directError: any) {
+        throw directError;
       }
     }
 
@@ -286,6 +309,17 @@ export async function connectDB(retries = 3) {
                             s.error?.code === 'ECONNRESET' ||
                             s.error?.code === 'ECONNREFUSED'
                           ));
+    
+    // querySrv ECONNREFUSED = la resolución DNS del SRV de Atlas falla (red/DNS bloquean)
+    if (error.message?.includes('querySrv') && (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED'))) {
+      console.error('\n🔍 ERROR: querySrv ECONNREFUSED (resolución DNS SRV bloqueada)');
+      console.error('   La red o el DNS no permiten resolver _mongodb._tcp.<cluster>.mongodb.net');
+      console.error('');
+      console.error('   PRUEBA EN .env (una o ambas):');
+      console.error('   1. MONGODB_USE_PUBLIC_DNS=true   → usa DNS 1.1.1.1 / 8.8.8.8 para resolver SRV');
+      console.error('   2. MONGODB_URI_DIRECT=mongodb://usuario:pass@host:27017/autoclose_ai?ssl=true');
+      console.error('      → Obtén el host en Atlas: Connect → Drivers → ver "Direct connection"');
+    }
     
     if (hasECONNRESET) {
       console.error('\n🔌 ERROR: ECONNRESET / ECONNREFUSED DETECTADO');

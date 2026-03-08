@@ -167,6 +167,27 @@ export async function buildDirectivoContext(
 }
 
 /**
+ * Construye el contexto específico para un asistente.
+ * Recibe reportes de asistencia (como directivo), puede crear permisos de salida y escribir a padres.
+ */
+export async function buildAsistenteContext(
+  userId: string,
+  colegioId: string
+): Promise<RoleContext> {
+  return {
+    role: 'asistente',
+    permisos: [
+      'crear_permiso',
+      'consultar_asistencia',
+      'consultar_reportes_asistencia',
+      'consultar_calendario',
+      'consultar_notificaciones',
+      'escribir_a_padres'
+    ]
+  };
+}
+
+/**
  * Construye el contexto según el rol del usuario
  */
 export async function buildRoleContext(
@@ -183,6 +204,8 @@ export async function buildRoleContext(
       return await buildParentContext(userId, colegioId);
     case 'directivo':
       return await buildDirectivoContext(userId, colegioId);
+    case 'asistente':
+      return await buildAsistenteContext(userId, colegioId);
     default:
       return {
         role,

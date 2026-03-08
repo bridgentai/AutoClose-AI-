@@ -292,23 +292,30 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
     rol = rol.trim().toLowerCase();
     // Aceptar plural o singular: estudiantes→estudiante, profesores→profesor, padres→padre, directivos→directivo
     const rolMap: Record<string, string> = {
+      estudiante: 'estudiante',
       estudiantes: 'estudiante',
+      profesor: 'profesor',
       profesores: 'profesor',
+      padre: 'padre',
       padres: 'padre',
+      directivo: 'directivo',
       directivos: 'directivo',
+      asistente: 'asistente',
+      asistentes: 'asistente',
     };
     const rolNormalizado = rolMap[rol] || rol;
 
-    const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo'];
+    const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo', 'asistente'];
     if (!rolesPermitidos.includes(rolNormalizado)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
     }
 
+    const selectFields = rolNormalizado === 'profesor' ? 'nombre email curso estado createdAt userId codigoUnico telefono celular materias' : 'nombre email curso estado createdAt userId codigoUnico telefono celular';
     const usuarios = await User.find({
       colegioId: user.colegioId,
       rol: rolNormalizado
     })
-    .select(rolNormalizado === 'profesor' ? 'nombre email curso estado createdAt userId codigoUnico telefono celular materias' : 'nombre email curso estado createdAt userId codigoUnico telefono celular')
+    .select(selectFields)
     .sort({ nombre: 1 })
     .lean();
 
@@ -356,11 +363,12 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
     const estadoFilter = onlyActive ? { estado: 'active' } : {};
 
     // Contar usuarios por rol (opcional: solo activos)
-    const [estudiantes, profesores, padres, directivos] = await Promise.all([
+    const [estudiantes, profesores, padres, directivos, asistentes] = await Promise.all([
       User.countDocuments({ colegioId, rol: 'estudiante', ...estadoFilter }),
       User.countDocuments({ colegioId, rol: 'profesor', ...estadoFilter }),
       User.countDocuments({ colegioId, rol: 'padre', ...estadoFilter }),
       User.countDocuments({ colegioId, rol: 'directivo', ...estadoFilter }),
+      User.countDocuments({ colegioId, rol: 'asistente', ...estadoFilter }),
     ]);
 
     const { Group } = await import('../models/Group');
@@ -397,6 +405,7 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
       profesores,
       padres,
       directivos,
+      asistentes,
       cursos,
       materias,
       asistenciaResumen,
@@ -435,8 +444,8 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, email, rol' });
     }
 
-    // Validar rol
-    const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo'];
+    // Validar rol (admin general crea también asistentes)
+    const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo', 'asistente'];
     if (!rolesPermitidos.includes(rol)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
     }

@@ -5,6 +5,7 @@ import type { IAssignment, ISubmission } from '../models/Assignment';
 import { protect, AuthRequest } from '../middleware/auth';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import { createAssignment as createAssignmentService } from '../services/assignmentService';
+import { notifyAssignmentCreated } from '../services/evoSendService';
 import { enqueueRecalculateStudentCourse } from '../services/grading/recalculation';
 
 const router = express.Router();
@@ -158,6 +159,17 @@ router.post('/', protect, async (req: AuthRequest, res) => {
                         result.error?.includes('obligatorio') ? 400 : 500;
       return res.status(statusCode).json({ message: result.error });
     }
+
+    const assignment = result.assignment!;
+    await notifyAssignmentCreated({
+      assignmentId: assignment._id.toString(),
+      courseId: assignment.cursoId?.toString() || assignment.courseId?.toString() || '',
+      colegioId: user.colegioId,
+      profesorId: normalizedUserId,
+      titulo: assignment.titulo,
+      fechaEntrega: assignment.fechaEntrega,
+      curso: assignment.curso,
+    }).catch((err) => console.error('Evo Send: no se pudo notificar asignación', err));
 
     return res.status(201).json(result.assignment);
   } catch (err: any) {

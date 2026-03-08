@@ -13,6 +13,10 @@ if (result.error) {
 
 export const ENV = {
   MONGO_URI: process.env.MONGO_URI || '',
+  /** URI directa (mongodb://host:27017/...) para evitar resolución SRV cuando la red bloquea DNS. Opcional. */
+  MONGODB_URI_DIRECT: process.env.MONGODB_URI_DIRECT || '',
+  /** Si es "true", usa DNS público (1.1.1.1, 8.8.8.8) para resolver mongodb+srv. Útil si querySrv ECONNREFUSED. */
+  MONGODB_USE_PUBLIC_DNS: process.env.MONGODB_USE_PUBLIC_DNS === 'true',
   JWT_SECRET: process.env.JWT_SECRET || '',
   DATABASE_URL: process.env.DATABASE_URL || '',
   NODE_ENV: process.env.NODE_ENV || 'development',

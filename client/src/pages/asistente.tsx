@@ -436,9 +436,16 @@ export default function AsistentePage() {
               <Button 
                 variant="outline" 
                 className="w-full border-white/10 text-white hover:bg-white/10 mt-2"
-                onClick={() => setLocation('/chat')}
+                onClick={() => setLocation('/asistente/comunicacion/bandeja')}
               >
-                Ver Todos los Mensajes
+                Bandeja de entrada
+              </Button>
+              <Button 
+                className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 mt-2"
+                onClick={() => setLocation('/asistente/comunicacion/redactar')}
+              >
+                <Send className="w-4 h-4 mr-2 inline" />
+                Escribir a padres
               </Button>
             </div>
           </CardContent>

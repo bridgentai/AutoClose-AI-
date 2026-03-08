@@ -86,6 +86,7 @@ interface Stats {
   profesores: number;
   padres: number;
   directivos: number;
+  asistentes?: number;
   cursos: number;
   materias: number;
   asistenciaResumen?: { totalRegistros: number; presentes: number; porcentajePromedio: number };
@@ -99,7 +100,7 @@ export function AdminGeneralColegioDashboard() {
   const { colorPrimario, colorSecundario } = useInstitutionColors();
   
   const [activeSection, setActiveSection] = useState<'dashboard' | 'usuarios' | 'cursos' | 'materias' | 'asignaciones' | 'carga-masiva' | 'ia' | 'auditoria' | 'config'>('dashboard');
-  const [activeTab, setActiveTab] = useState<'estudiantes' | 'profesores' | 'padres' | 'directivos'>('estudiantes');
+  const [activeTab, setActiveTab] = useState<'estudiantes' | 'profesores' | 'padres' | 'directivos' | 'asistentes'>('estudiantes');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Limpiar búsqueda cuando cambia el tab
@@ -109,7 +110,7 @@ export function AdminGeneralColegioDashboard() {
   
   // Estados para diálogos
   const [createUserOpen, setCreateUserOpen] = useState(false);
-  const [createUserType, setCreateUserType] = useState<'estudiante' | 'profesor' | 'padre' | 'directivo' | 'curso'>('estudiante');
+  const [createUserType, setCreateUserType] = useState<'estudiante' | 'profesor' | 'padre' | 'directivo' | 'asistente' | 'curso'>('estudiante');
   const [editUserOpen, setEditUserOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [relacionOpen, setRelacionOpen] = useState(false);
@@ -155,6 +156,7 @@ export function AdminGeneralColegioDashboard() {
     profesores: 'profesor',
     padres: 'padre',
     directivos: 'directivo',
+    asistentes: 'asistente',
   };
   const rolForApi = tabToRol[activeTab] || activeTab;
 
@@ -627,9 +629,27 @@ export function AdminGeneralColegioDashboard() {
           </CardContent>
         </Card>
 
+        <Card 
+          className={`${CARD_STYLE} cursor-pointer hover:bg-white/10 transition-colors`}
+          onClick={() => {
+            setActiveSection('usuarios');
+            setActiveTab('asistentes');
+          }}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white">📋 Asistentes</CardTitle>
+            <UserCog className="w-5 h-5" style={{ color: colorPrimario }} />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {statsLoading ? '...' : stats?.asistentes || 0}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className={`${CARD_STYLE}`}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">📋 Asistencia (mes)</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">📊 Asistencia (mes)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
@@ -718,6 +738,19 @@ export function AdminGeneralColegioDashboard() {
             </Button>
             <Button
               onClick={() => {
+                setCreateUserType('asistente');
+                setCreateUserOpen(true);
+              }}
+              className="h-20 flex flex-col gap-2"
+              style={{
+                background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+              }}
+            >
+              <UserPlus className="w-6 h-6" />
+              <span>Crear Asistente</span>
+            </Button>
+            <Button
+              onClick={() => {
                 setCreateUserType('curso');
                 setNewCourse({ curso: '', seccion: '', directorGrupo: '' });
                 setCreateUserOpen(true);
@@ -764,7 +797,7 @@ export function AdminGeneralColegioDashboard() {
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-            <TabsList className="grid w-full grid-cols-4 bg-white/5">
+            <TabsList className="grid w-full grid-cols-5 bg-white/5">
               <TabsTrigger value="estudiantes" className="text-white data-[state=active]:bg-white/10">
                 Estudiantes
               </TabsTrigger>
@@ -777,6 +810,9 @@ export function AdminGeneralColegioDashboard() {
               <TabsTrigger value="directivos" className="text-white data-[state=active]:bg-white/10">
                 Directivas
               </TabsTrigger>
+              <TabsTrigger value="asistentes" className="text-white data-[state=active]:bg-white/10">
+                Asistentes
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value={activeTab} className="mt-6">
@@ -785,7 +821,7 @@ export function AdminGeneralColegioDashboard() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/40" />
                   <Input
                     type="text"
-                    placeholder={`Buscar ${activeTab === 'estudiantes' ? 'estudiantes' : activeTab === 'profesores' ? 'profesores' : activeTab === 'padres' ? 'padres' : 'directivos'} por nombre, email${activeTab === 'estudiantes' ? ' o curso' : ''}...`}
+                    placeholder={`Buscar ${activeTab === 'estudiantes' ? 'estudiantes' : activeTab === 'profesores' ? 'profesores' : activeTab === 'padres' ? 'padres' : activeTab === 'directivos' ? 'directivos' : 'asistentes'} por nombre, email${activeTab === 'estudiantes' ? ' o curso' : ''}...`}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="bg-white/5 border-white/10 text-white pl-10 placeholder:text-white/40"
@@ -1512,9 +1548,9 @@ export function AdminGeneralColegioDashboard() {
       >
         <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Crear {createUserType === 'curso' ? 'Curso' : createUserType === 'estudiante' ? 'Estudiante' : createUserType === 'profesor' ? 'Profesor' : createUserType === 'directivo' ? 'Directiva' : 'Padre'}</DialogTitle>
+            <DialogTitle>Crear {createUserType === 'curso' ? 'Curso' : createUserType === 'estudiante' ? 'Estudiante' : createUserType === 'profesor' ? 'Profesor' : createUserType === 'directivo' ? 'Directiva' : createUserType === 'asistente' ? 'Asistente' : 'Padre'}</DialogTitle>
             <DialogDescription className="text-white/60">
-              Completa los datos para crear un nuevo {createUserType === 'curso' ? 'curso' : createUserType === 'directivo' ? 'miembro de directiva' : 'usuario'}
+              Completa los datos para crear un nuevo {createUserType === 'curso' ? 'curso' : createUserType === 'directivo' ? 'miembro de directiva' : createUserType === 'asistente' ? 'asistente' : 'usuario'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

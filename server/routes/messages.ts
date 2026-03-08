@@ -90,13 +90,13 @@ router.post('/conversations', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'Faltan destinatarioId, asunto o texto.' });
     }
 
-    const allowed = ['profesor', 'directivo', 'admin-general-colegio'];
-    if (!allowed.includes(rol)) return res.status(403).json({ message: 'Solo profesor o directivo pueden iniciar conversación.' });
+    const allowed = ['profesor', 'directivo', 'admin-general-colegio', 'asistente'];
+    if (!allowed.includes(rol)) return res.status(403).json({ message: 'Solo profesor, directivo o asistente pueden iniciar conversación con padres.' });
 
     const dest = await User.findById(normalizeIdForQuery(destinatarioId)).select('rol').lean();
     if (!dest || dest.rol !== 'padre') return res.status(400).json({ message: 'El destinatario debe ser un padre.' });
 
-    const tipo = rol === 'profesor' ? 'profesor-padre' : 'directivo-padre';
+    const tipo = rol === 'profesor' ? 'profesor-padre' : rol === 'asistente' ? 'asistente-padre' : 'directivo-padre';
 
     const conversacion = await Conversacion.create({
       colegioId,

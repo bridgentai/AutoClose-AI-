@@ -26,6 +26,7 @@ import eventsRoutes from "./routes/events";
 import notificationsRoutes from "./routes/notifications";
 import treasuryRoutes from "./routes/treasury";
 import messagesRoutes from "./routes/messages";
+import evoSendRoutes from "./routes/evoSend";
 import boletinRoutes from "./routes/boletin";
 import logrosCalificacionRoutes from "./routes/logrosCalificacion";
 import gradeEventsRoutes from "./routes/gradeEvents";
@@ -69,6 +70,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/treasury', treasuryRoutes);
   app.use('/api/messages', messagesRoutes);
+  app.use('/api/evo-send', evoSendRoutes);
   app.use('/api/boletin', boletinRoutes);
   app.use('/api/logros-calificacion', logrosCalificacionRoutes);
   app.use('/api/grade-events', gradeEventsRoutes);
@@ -99,6 +101,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+
+  const { setupEvoSocket } = await import('./socket');
+  setupEvoSocket(httpServer);
 
   return httpServer;
 }

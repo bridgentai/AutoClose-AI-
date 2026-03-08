@@ -65,6 +65,7 @@ import FichaMedica from "@/pages/FichaMedica";
 import ComunicacionHome from "@/pages/ComunicacionHome";
 import ComunicacionAcademico from "@/pages/ComunicacionAcademico";
 import BandejaDeEntrada from "@/pages/BandejaDeEntrada";
+import EvoSendPage from "@/pages/evo-send";
 
 import ComunidadLayout from "@/pages/ComunidadLayout";
 import CalendarioEventos from "@/pages/CalendarioEventos";
@@ -146,6 +147,7 @@ import CafeteriaComunicacionLayout from "@/pages/cafeteria-comunicacion";
 
 // Asistente
 import AsistentePage from "@/pages/asistente";
+import AsistenteComunicacionLayout from "@/pages/asistente-comunicacion";
 
 // Super Admin
 import SuperAdminPage from "@/pages/super-admin";
@@ -228,6 +230,15 @@ function AppRouter() {
             </Route>
             <Route path="/asistente">
               <AuthGuard><AsistentePage /></AuthGuard>
+            </Route>
+            <Route path="/asistente/comunicacion">
+              <AuthGuard><AsistenteComunicacionLayout /></AuthGuard>
+            </Route>
+            <Route path="/asistente/comunicacion/bandeja">
+              <AuthGuard><BandejaDeEntrada /></AuthGuard>
+            </Route>
+            <Route path="/asistente/comunicacion/redactar">
+              <AuthGuard><ProfesorRedactarMensaje /></AuthGuard>
             </Route>
             <Route path="/super-admin">
               <AuthGuard><SuperAdminPage /></AuthGuard>
@@ -323,6 +334,9 @@ function AppRouter() {
             </Route>
             <Route path="/comunicacion/redactar">
               <AuthGuard><ProfesorRedactarMensaje /></AuthGuard>
+            </Route>
+            <Route path="/evo-send">
+              <AuthGuard><EvoSendPage /></AuthGuard>
             </Route>
 
             <Route path="/comunidad">

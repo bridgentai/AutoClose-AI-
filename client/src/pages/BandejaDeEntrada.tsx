@@ -30,7 +30,10 @@ interface MensajeItem {
 
 export default function BandejaDeEntrada() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const fromAsistente = location.startsWith('/asistente/comunicacion');
+  const backTo = fromAsistente ? '/asistente/comunicacion' : '/comunicacion';
+  const redactarPath = fromAsistente ? '/asistente/comunicacion/redactar' : '/comunicacion/redactar';
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -74,7 +77,7 @@ export default function BandejaDeEntrada() {
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <NavBackButton to="/comunicacion" label="Comunicación" />
+        <NavBackButton to={backTo} label="Comunicación" />
         <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Bandeja de Entrada</h1>
         <p className="text-white/60 text-sm sm:text-base">Comunicaciones con el colegio y profesores</p>
       </div>
@@ -85,7 +88,7 @@ export default function BandejaDeEntrada() {
             <div className="p-4 border-b border-white/10">
               <Button
                 className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 min-h-[44px]"
-                onClick={() => setLocation('/comunicacion/redactar')}
+                onClick={() => setLocation(redactarPath)}
               >
                 <Send className="w-4 h-4 mr-2" />
                 Nuevo Mensaje
