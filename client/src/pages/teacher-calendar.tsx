@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Calendar as CalendarIcon, Plus, X, Paperclip, Link2, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -70,22 +70,18 @@ export default function TeacherCalendarPage() {
   const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
 
   const { data: assignments = [], refetch: refetchAssignments } = useQuery<Assignment[]>({
-    queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
-    queryFn: async () => {
-      console.log('Fetching assignments for professor:', user?.id, currentMonth, currentYear);
-      const result = await apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
-      console.log('Assignments received:', result);
-      // Debug: Verificar si courseId está presente
-      if (result && Array.isArray(result)) {
-        result.forEach((assignment: Assignment) => {
-          console.log(`Assignment: ${assignment.titulo}, curso: ${assignment.curso}, courseId: ${assignment.courseId}`);
-        });
-      }
-      return result;
-    },
-    enabled: !!user?.id,
-    staleTime: 0,
+    queryKey: ['teacherAssignments', user?.id],
+    queryFn: () => apiRequest<Assignment[]>('GET', '/api/assignments'),
+    enabled: !!user?.id && user?.rol === 'profesor',
+    staleTime: 60 * 1000,
   });
+
+  const assignmentsThisMonth = useMemo(() => {
+    return assignments.filter((a) => {
+      const d = new Date(a.fechaEntrega);
+      return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+    });
+  }, [assignments, currentMonth, currentYear]);
 
   const { data: professorGroups = [], isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
     queryKey: ['professorGroups'],
@@ -207,6 +203,7 @@ export default function TeacherCalendarPage() {
       courseId,
       fechaEntrega: fechaEntregaCompleta.toISOString(),
       adjuntos: adjuntosPayload,
+      categoryId: formData.logroCalificacionId || undefined,
       logroCalificacionId: formData.logroCalificacionId || undefined,
     });
   };
@@ -245,20 +242,20 @@ export default function TeacherCalendarPage() {
                     </Button>
                   </div>
                   <CardDescription className="text-white/60">
-                    {assignments.length} {assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes
+                    {assignments.length} tarea{assignments.length !== 1 ? 's' : ''} en total (todos tus cursos). Clic en un día o en una tarea para abrirla.
                   </CardDescription>
                   {/* Barra de progreso mensual */}
-                  {assignments.length > 0 && (
+                  {assignmentsThisMonth.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-white/10">
                       <div className="flex items-center justify-between text-sm mb-2">
                         <span className="text-white/70">Progreso del mes</span>
-                        <span className="text-white font-medium">{assignments.length} tareas</span>
+                        <span className="text-white font-medium">{assignmentsThisMonth.length} tareas este mes</span>
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-[#002366] to-[#1e3cff] transition-all duration-300"
                           style={{ 
-                            width: `${Math.min(100, (assignments.length / Math.max(1, daysInMonth)) * 100)}%` 
+                            width: `${Math.min(100, (assignmentsThisMonth.length / Math.max(1, daysInMonth)) * 100)}%` 
                           }}
                         />
                       </div>
@@ -282,7 +279,7 @@ export default function TeacherCalendarPage() {
                     <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
                       <div>
                         <p className="text-white font-medium mb-1">
-                          {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} este mes
+                          {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} en total
                         </p>
                         <p className="text-sm text-white/60">
                           Ver resumen detallado y organizado

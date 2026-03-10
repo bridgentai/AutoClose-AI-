@@ -1,43 +1,31 @@
 import express from 'express';
 import { protect } from '../middleware/auth';
 import { AuthRequest } from '../middleware/auth';
-import { InstitutionConfig } from '../models';
+import { findInstitutionById } from '../repositories/institutionRepository.js';
 
 const router = express.Router();
 
-/**
- * GET /api/institution/config
- * Obtiene la configuración del colegio del usuario autenticado
- * Accesible para cualquier usuario autenticado (para obtener colores y configuración de su colegio)
- */
 router.get('/config', protect, async (req: AuthRequest, res) => {
   try {
     const colegioId = req.user?.colegioId;
-    
+
     if (!colegioId) {
-      return res.status(400).json({ 
-        message: 'Usuario no tiene un colegio asignado.' 
+      return res.status(400).json({
+        message: 'Usuario no tiene un colegio asignado.',
       });
     }
 
-    const config = await InstitutionConfig.findOne({ colegioId })
-      .select('colegioId nombre logoUrl nombreIA colorPrimario colorSecundario')
-      .lean();
-
-    if (!config) {
-      // Si no existe configuración, devolver valores por defecto
-      return res.json({
-        colegioId,
-        nombre: 'Colegio',
-        logoUrl: '',
-        nombreIA: 'MindOS',
-        colorPrimario: '#9f25b8',
-        colorSecundario: '#6a0dad',
-      });
-    }
-
-    res.json(config);
-  } catch (error: any) {
+    const row = await findInstitutionById(colegioId);
+    const settings = (row?.settings ?? {}) as Record<string, unknown>;
+    return res.json({
+      colegioId: row?.id ?? colegioId,
+      nombre: row?.name ?? 'Colegio',
+      logoUrl: (settings.logoUrl as string) ?? '',
+      nombreIA: (settings.nombreIA as string) ?? 'MindOS',
+      colorPrimario: (settings.colorPrimario as string) ?? '#9f25b8',
+      colorSecundario: (settings.colorSecundario as string) ?? '#6a0dad',
+    });
+  } catch (error: unknown) {
     console.error('Error al obtener configuración del colegio:', error);
     res.status(500).json({ message: 'Error al obtener la configuración del colegio.' });
   }

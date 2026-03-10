@@ -52,7 +52,7 @@ export default function ProfesorTareasPorRevisarPage() {
       }}
     >
       <div className="max-w-4xl mx-auto">
-        <NavBackButton to="/dashboard" label="Volver al dashboard" />
+        <NavBackButton to="/dashboard" label="Dashboard" />
 
         <div className="mt-6 flex items-center gap-3">
           <ClipboardList className="w-8 h-8 text-[#ffd700]" />
@@ -114,11 +114,7 @@ export default function ProfesorTareasPorRevisarPage() {
                     <button
                       key={a._id}
                       type="button"
-                      onClick={() =>
-                        setLocation(
-                          `/profesor/academia/tareas/calificacion/${a.courseId || a.curso}`
-                        )
-                      }
+                      onClick={() => setLocation(`/assignment/${a._id}?tab=entregas`)}
                       className="w-full flex items-center gap-3 p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all text-left"
                     >
                       <div className="flex-1 min-w-0">

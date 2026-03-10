@@ -1,80 +1,75 @@
 import express from 'express';
-import { Group } from '../models/Group';
-import { Section } from '../models/Section';
-import { GroupStudent } from '../models/GroupStudent';
-import { User } from '../models/User';
-import { Assignment } from '../models/Assignment';
+import {
+  findGroupById,
+  findGroupByNameAndInstitution,
+  findGroupByNameAndInstitutionCaseInsensitive,
+  findGroupsByInstitution,
+  createGroup,
+} from '../repositories/groupRepository.js';
+import {
+  findSectionById,
+  findSectionsByInstitution,
+  findSectionByInstitutionAndName,
+} from '../repositories/sectionRepository.js';
+import {
+  findEnrollmentsByGroup,
+  findEnrollment,
+  createEnrollment,
+} from '../repositories/enrollmentRepository.js';
+import { findUserById, findUsersByInstitution, updateUser } from '../repositories/userRepository.js';
+import { findGradesByGroup } from '../repositories/gradeRepository.js';
+import { findActiveAcademicPeriodForInstitution } from '../repositories/academicPeriodRepository.js';
 import { protect, AuthRequest } from '../middleware/auth';
-import { Types } from 'mongoose';
-import { normalizeIdForQuery } from '../utils/idGenerator';
-import { logAdminAction } from '../services/auditLogger';
+import { logAdminAction } from '../services/auditLogger.js';
 
 const router = express.Router();
 
-// Grupos fijos predefinidos
-const GRUPOS_FIJOS = [
-  { _id: '9A', nombre: '9A' },
-  { _id: '9B', nombre: '9B' },
-  { _id: '10A', nombre: '10A' },
-  { _id: '10B', nombre: '10B' },
-  { _id: '11C', nombre: '11C' },
-  { _id: '11D', nombre: '11D' },
-  { _id: '11H', nombre: '11H' },
-  { _id: '12C', nombre: '12C' },
-  { _id: '12D', nombre: '12D' },
-  { _id: '12H', nombre: '12H' },
-];
+const LEGACY_SECTION_NAMES: Record<string, string> = {
+  'junior-school': 'Junior School',
+  'middle-school': 'Middle School',
+  'high-school': 'High School',
+};
 
-// Seed: Crear grupos fijos si no existen
-export async function seedGroups(colegioId: string = 'COLEGIO_DEMO_2025') {
-  try {
-    // Verificar si MongoDB está conectado antes de intentar el seed
-    const { mongoose } = await import('../config/db');
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⏭️  Saltando seed de grupos: MongoDB no está conectado');
-      return;
-    }
-    
-    for (const grupo of GRUPOS_FIJOS) {
-      await Group.findOneAndUpdate(
-        { nombre: grupo.nombre, colegioId },
-        { 
-          nombre: grupo.nombre,
-          descripcion: `Grupo ${grupo.nombre}`,
-          colegioId 
-        },
-        { upsert: true, new: true }
-      );
-    }
-    console.log('✅ Grupos fijos creados/actualizados');
-  } catch (error) {
-    console.error('❌ Error al crear grupos fijos:', error);
+async function resolveSectionId(
+  institutionId: string,
+  sectionId?: string | null,
+  legacySeccion?: string | null
+): Promise<string | null> {
+  if (sectionId) {
+    const section = await findSectionById(sectionId);
+    if (section && section.institution_id === institutionId) return section.id;
   }
+  if (legacySeccion && LEGACY_SECTION_NAMES[legacySeccion]) {
+    const name = LEGACY_SECTION_NAMES[legacySeccion];
+    const section = await findSectionByInstitutionAndName(institutionId, name);
+    if (section) return section.id;
+  }
+  const sections = await findSectionsByInstitution(institutionId);
+  return sections[0]?.id ?? null;
 }
 
-// =========================================================================
-// POST /api/groups/create - Crear grupo/curso (solo para admin-general-colegio)
-// IMPORTANTE: Esta ruta debe estar ANTES de las rutas con parámetros dinámicos
+function calcularEstado(promedio?: number): 'excelente' | 'bueno' | 'regular' | 'bajo' {
+  if (!promedio || promedio === 0) return 'regular';
+  if (promedio >= 4.5) return 'excelente';
+  if (promedio >= 4.0) return 'bueno';
+  if (promedio >= 3.5) return 'regular';
+  return 'bajo';
+}
+
+// POST /api/groups/create
 router.post('/create', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId).select('rol colegioId');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    // Solo admin-general-colegio o school_admin puede crear grupos (directivo no puede)
-    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin') {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'admin-general-colegio' && user.role !== 'school_admin') {
       return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear grupos' });
     }
 
     const { nombre, seccion, directorGrupoId, sectionId } = req.body;
-
-    // nombre es obligatorio; seccion es opcional si se envía sectionId (módulo Secciones)
-    if (!nombre) {
-      return res.status(400).json({ message: 'Falta el nombre del curso/grupo.' });
-    }
+    if (!nombre) return res.status(400).json({ message: 'Falta el nombre del curso/grupo.' });
     const useLegacySeccion = seccion != null && seccion !== '';
     if (useLegacySeccion) {
       const seccionesValidas = ['junior-school', 'middle-school', 'high-school'];
@@ -86,428 +81,306 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'Indica la sección (junior-school, middle-school, high-school) o la sección del módulo (sectionId).' });
     }
 
-    // Director de grupo opcional: los cursos pueden crearse primero y asignar director después
     if (directorGrupoId) {
-      const directorGrupo = await User.findById(normalizeIdForQuery(directorGrupoId)).select('rol colegioId');
-      if (!directorGrupo) {
-        return res.status(404).json({ message: 'Director de grupo no encontrado' });
-      }
-      if (directorGrupo.rol !== 'profesor') {
-        return res.status(400).json({ message: 'El director de grupo debe ser un profesor' });
-      }
-      if (directorGrupo.colegioId !== user.colegioId) {
-        return res.status(403).json({ message: 'El director de grupo debe pertenecer al mismo colegio' });
-      }
+      const director = await findUserById(directorGrupoId);
+      if (!director) return res.status(404).json({ message: 'Director de grupo no encontrado' });
+      if (director.role !== 'profesor') return res.status(400).json({ message: 'El director de grupo debe ser un profesor' });
+      if (director.institution_id !== colegioId) return res.status(403).json({ message: 'El director de grupo debe pertenecer al mismo colegio' });
     }
 
-    // nombre = curso completo (ej: "7A", "8B", "11H")
-    const nombreCompleto = nombre.toString().toUpperCase().trim();
+    const nombreCompleto = String(nombre).toUpperCase().trim();
+    const existente = await findGroupByNameAndInstitutionCaseInsensitive(colegioId, nombreCompleto);
+    if (existente) return res.status(400).json({ message: `El grupo ${nombreCompleto} ya existe` });
 
-    // Verificar si el grupo ya existe
-    const grupoExistente = await Group.findOne({ 
-      nombre: nombreCompleto, 
-      colegioId: user.colegioId 
-    });
-
-    if (grupoExistente) {
-      return res.status(400).json({ message: `El grupo ${nombreCompleto} ya existe` });
+    const resolvedSectionId = await resolveSectionId(colegioId, sectionId, useLegacySeccion ? seccion : null);
+    if (!resolvedSectionId) {
+      return res.status(400).json({ message: 'No se encontró una sección válida. Crea una sección desde el módulo Secciones.' });
     }
 
-    // Validar sectionId si se envía (módulo Secciones)
-    let sectionIdNormalized = null;
-    if (sectionId) {
-      const section = await Section.findOne({ _id: normalizeIdForQuery(sectionId), colegioId: user.colegioId });
-      if (!section) {
-        return res.status(400).json({ message: 'La sección indicada no existe o no pertenece al colegio.' });
-      }
-      sectionIdNormalized = section._id;
-    }
-
-    // Crear el grupo
-    const nuevoGrupo = await Group.create({
-      nombre: nombreCompleto,
-      descripcion: `Grupo ${nombreCompleto}`,
-      colegioId: user.colegioId,
-      ...(useLegacySeccion && { seccion }),
-      ...(sectionIdNormalized && { sectionId: sectionIdNormalized }),
+    const nuevoGrupo = await createGroup({
+      institution_id: colegioId,
+      section_id: resolvedSectionId,
+      name: nombreCompleto,
+      description: `Grupo ${nombreCompleto}`,
     });
 
     await logAdminAction({
-      userId: normalizedUserId,
-      role: user.rol,
+      userId,
+      role: user.role,
       action: 'create_group',
       entityType: 'group',
-      entityId: nuevoGrupo._id,
-      colegioId: user.colegioId,
-      requestData: { nombre: nombreCompleto, seccion: useLegacySeccion ? seccion : undefined, sectionId: sectionIdNormalized },
-    });
+      entityId: nuevoGrupo.id,
+      colegioId,
+      requestData: { nombre: nombreCompleto, seccion: useLegacySeccion ? seccion : undefined, sectionId: resolvedSectionId },
+    }).catch(() => {});
 
     res.status(201).json({
       message: 'Grupo creado exitosamente',
       grupo: {
-        _id: nuevoGrupo._id,
-        nombre: nuevoGrupo.nombre,
-        descripcion: nuevoGrupo.descripcion,
-        colegioId: nuevoGrupo.colegioId,
-        seccion: nuevoGrupo.seccion,
-        sectionId: (nuevoGrupo as any).sectionId,
+        _id: nuevoGrupo.id,
+        id: nuevoGrupo.id,
+        nombre: nuevoGrupo.name,
+        descripcion: nuevoGrupo.description,
+        colegioId: nuevoGrupo.institution_id,
+        sectionId: nuevoGrupo.section_id,
       },
     });
-  } catch (error: any) {
-    console.error('Error al crear grupo:', error.message);
+  } catch (error: unknown) {
+    console.error('Error al crear grupo:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al crear el grupo.' });
   }
 });
 
-// =========================================================================
-// POST /api/groups/assign-student - Asignar estudiante a curso/grupo existente (solo admin-general-colegio)
-// =========================================================================
+// POST /api/groups/assign-student
 router.post('/assign-student', protect, async (req: AuthRequest, res) => {
   try {
-    const uid = normalizeIdForQuery(req.userId || '');
-    const admin = await User.findById(uid).select('rol colegioId').lean();
-    if (!admin || (admin.rol !== 'admin-general-colegio' && admin.rol !== 'school_admin')) {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(403).json({ message: 'No autorizado' });
+    const admin = await findUserById(userId);
+    if (!admin || (admin.role !== 'admin-general-colegio' && admin.role !== 'school_admin')) {
       return res.status(403).json({ message: 'Solo administradores generales del colegio pueden asignar estudiantes a cursos.' });
     }
 
     const { grupoId, estudianteId } = req.body;
-    const colegioId = admin.colegioId;
-
-    if (!grupoId || !estudianteId) {
-      return res.status(400).json({ message: 'Faltan grupoId y estudianteId.' });
-    }
+    if (!grupoId || !estudianteId) return res.status(400).json({ message: 'Faltan grupoId y estudianteId.' });
 
     const grupoNombre = String(grupoId).toUpperCase().trim();
-    const grupo = await Group.findOne({ nombre: grupoNombre, colegioId });
+    const grupo = await findGroupByNameAndInstitution(colegioId, grupoNombre);
     if (!grupo) {
       return res.status(404).json({ message: `El curso/grupo ${grupoNombre} no existe. Créalo primero desde Crear Curso.` });
     }
 
-    const estudiante = await User.findById(normalizeIdForQuery(estudianteId)).select('rol colegioId curso').lean();
-    if (!estudiante || estudiante.rol !== 'estudiante') {
-      return res.status(404).json({ message: 'Estudiante no encontrado.' });
-    }
-    if (estudiante.colegioId !== colegioId) {
+    const estudiante = await findUserById(estudianteId);
+    if (!estudiante || estudiante.role !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    if (estudiante.institution_id !== colegioId) {
       return res.status(403).json({ message: 'El estudiante debe pertenecer al mismo colegio.' });
     }
 
-    const existente = await GroupStudent.findOne({
-      grupoId: grupo._id,
-      estudianteId: normalizeIdForQuery(estudianteId),
+    const period = await findActiveAcademicPeriodForInstitution(colegioId);
+    const existente = await findEnrollment(estudianteId, grupo.id, period?.id ?? null);
+    if (existente) return res.status(400).json({ message: 'El estudiante ya está asignado a este curso.' });
+
+    await createEnrollment({
+      student_id: estudianteId,
+      group_id: grupo.id,
+      academic_period_id: period?.id ?? null,
     });
-    if (existente) {
-      return res.status(400).json({ message: 'El estudiante ya está asignado a este curso.' });
+
+    // Si el grupo es un grado real (ej: "11H"), también enrollar en sus grupos-materia
+    const esGradoReal = /^\d+[A-Za-z]+$/.test(grupo.name);
+    if (esGradoReal) {
+      const todosGrupos = await findGroupsByInstitution(colegioId);
+      const gruposMateria = todosGrupos.filter(
+        (g) => /^[^\d]/.test(g.name) && g.name.endsWith(' ' + grupo.name)
+      );
+      for (const gm of gruposMateria) {
+        try {
+          await createEnrollment({
+            student_id: estudianteId,
+            group_id: gm.id,
+            academic_period_id: period?.id ?? null,
+          });
+        } catch (_) {}
+      }
     }
-
-    await GroupStudent.create({
-      grupoId: grupo._id,
-      estudianteId: normalizeIdForQuery(estudianteId),
-      colegioId,
-    });
-
-    await User.findByIdAndUpdate(normalizeIdForQuery(estudianteId), {
-      $set: { curso: grupoNombre },
-    });
-
-    const { Course } = await import('../models/Course');
-    const estudianteObjId = new Types.ObjectId(normalizeIdForQuery(estudianteId));
-    await Course.updateMany(
-      { cursos: grupoNombre, colegioId, estudianteIds: { $ne: estudianteObjId } },
-      { $addToSet: { estudianteIds: estudianteObjId, estudiantes: estudianteObjId } }
-    );
+    // Mantener config.curso solo con el grado real para compatibilidad (no es fuente de verdad)
+    await updateUser(estudianteId, { config: { ...estudiante.config, curso: grupoNombre } });
 
     await logAdminAction({
-      userId: uid,
-      role: admin.rol,
+      userId,
+      role: admin.role,
       action: 'assign_student',
       entityType: 'group',
-      entityId: grupo._id,
+      entityId: grupo.id,
       colegioId,
       requestData: { grupoId: grupoNombre, estudianteId },
-    });
+    }).catch(() => {});
 
     res.status(201).json({
       message: 'Estudiante asignado al curso correctamente.',
       grupoId: grupoNombre,
       estudianteId,
     });
-  } catch (e: any) {
-    if (e.code === 11000) {
-      return res.status(400).json({ message: 'El estudiante ya está asignado a este curso.' });
-    }
-    console.error('Error al asignar estudiante a curso:', e.message);
+  } catch (e: unknown) {
+    const err = e as { code?: string };
+    if (err.code === '23505') return res.status(400).json({ message: 'El estudiante ya está asignado a este curso.' });
+    console.error('Error al asignar estudiante a curso:', (e as Error).message);
     res.status(500).json({ message: 'Error al asignar estudiante al curso.' });
   }
 });
 
-// GET /api/groups/all - Obtener todos los grupos
+// GET /api/groups/all
 router.get('/all', protect, async (req: AuthRequest, res) => {
   try {
-    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
-    
-    // Buscar grupos del colegio
-    let groups = await Group.find({ colegioId }).select('_id nombre').lean();
-    
-    // Si no hay grupos, intentar crearlos
-    if (groups.length === 0) {
-      await seedGroups(colegioId);
-      groups = await Group.find({ colegioId }).select('_id nombre').lean();
-    }
-    
-    res.json(groups);
-  } catch (error) {
-    console.error('Error al obtener grupos:', error);
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const groups = await findGroupsByInstitution(colegioId);
+    res.json(groups.map((g) => ({ _id: g.id, id: g.id, nombre: g.name })));
+  } catch (error: unknown) {
+    console.error('Error al obtener grupos:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
-// IMPORTANTE: Las rutas específicas deben ir ANTES de las rutas genéricas
-// Función auxiliar para calcular el estado basado en el promedio
-const calcularEstado = (promedio?: number): 'excelente' | 'bueno' | 'regular' | 'bajo' => {
-  if (!promedio || promedio === 0) return 'regular';
-  if (promedio >= 4.5) return 'excelente';
-  if (promedio >= 4.0) return 'bueno';
-  if (promedio >= 3.5) return 'regular';
-  return 'bajo';
-};
-
-// GET /api/groups/:groupId/students - Obtener estudiantes de un grupo (incluye GroupStudent + User.curso para evitar "dos grupos")
+// GET /api/groups/:groupId/students
 router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
   try {
     const { groupId } = req.params;
-    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
 
-    // Normalizar groupId a mayúsculas
-    const grupoIdNormalizado = groupId.toUpperCase().trim();
-    console.log(`[GROUPS] Buscando estudiantes para grupo: ${grupoIdNormalizado}, colegio: ${colegioId}`);
-
-    // Buscar el grupo primero para obtener su ObjectId
-    const grupo = await Group.findOne({ nombre: grupoIdNormalizado, colegioId });
-    if (!grupo) {
+    const group = groupId.length === 36 && groupId.includes('-')
+      ? await findGroupById(groupId)
+      : await findGroupByNameAndInstitution(colegioId, groupId.toUpperCase().trim());
+    if (!group || group.institution_id !== colegioId) {
       return res.status(404).json({ message: 'Grupo no encontrado.' });
     }
 
-    // 1) Estudiantes en GroupStudent
-    const groupStudents = await GroupStudent.find({
-      grupoId: grupo._id,
-      colegioId
-    })
-    .populate('estudianteId', 'nombre curso')
-    .select('estudianteId createdAt')
-    .lean();
+    const enrollments = await findEnrollmentsByGroup(group.id);
+    const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
+    const allInstitution = await findUsersByInstitution(colegioId);
+    const byId = new Map(allInstitution.filter((u) => studentIds.includes(u.id)).map((u) => [u.id, u]));
 
-    const idsEnGroupStudent = new Set(
-      groupStudents.filter(gs => gs.estudianteId).map(gs => (gs.estudianteId as any)._id.toString())
-    );
-
-    // 2) Incluir también estudiantes con User.curso = este grupo (no solo GroupStudent) para que directivo vea todos y pueda crear boletines
-    const usuariosConCurso = await User.find({
-      rol: 'estudiante',
-      colegioId,
-      $or: [
-        { curso: grupoIdNormalizado },
-        { curso: groupId.trim() },
-        { curso: (groupId as string).toLowerCase() },
-      ],
-    }).select('_id nombre').lean();
-
-    const estudiantesUnificados = new Map<string, { _id: string; nombre: string }>();
-    groupStudents.forEach(gs => {
-      const est = gs.estudianteId as any;
-      if (est?._id) {
-        const id = est._id.toString();
-        estudiantesUnificados.set(id, { _id: id, nombre: est.nombre || 'Estudiante' });
-      }
-    });
-    usuariosConCurso.forEach(u => {
-      const id = (u as any)._id.toString();
-      if (!estudiantesUnificados.has(id)) {
-        estudiantesUnificados.set(id, { _id: id, nombre: (u as any).nombre || 'Estudiante' });
-      }
-    });
-
-    const todosLosIds = [...estudiantesUnificados.values()];
-
-    // Calcular promedios y estados desde las calificaciones de tareas
-    const assignments = await Assignment.find({
-      curso: grupoIdNormalizado,
-      colegioId
-    })
-    .select('entregas')
-    .lean();
-
+    const grades = await findGradesByGroup(group.id);
     const promediosPorEstudiante: Record<string, { suma: number; cantidad: number }> = {};
-    assignments.forEach(assignment => {
-      if (assignment.entregas && Array.isArray(assignment.entregas)) {
-        assignment.entregas.forEach((entrega: any) => {
-          if (entrega.calificacion && entrega.calificacion > 0) {
-            const estudianteId = entrega.estudianteId?.toString();
-            if (estudianteId) {
-              if (!promediosPorEstudiante[estudianteId]) {
-                promediosPorEstudiante[estudianteId] = { suma: 0, cantidad: 0 };
-              }
-              promediosPorEstudiante[estudianteId].suma += entrega.calificacion;
-              promediosPorEstudiante[estudianteId].cantidad += 1;
-            }
-          }
-        });
+    grades.forEach((g) => {
+      const uid = g.user_id;
+      if (!promediosPorEstudiante[uid]) promediosPorEstudiante[uid] = { suma: 0, cantidad: 0 };
+      if (g.max_score > 0) {
+        const norm = g.normalized_score ?? g.score / g.max_score;
+        promediosPorEstudiante[uid].suma += norm * 5;
+        promediosPorEstudiante[uid].cantidad += 1;
       }
     });
 
-    const students = todosLosIds.map(({ _id: estudianteId, nombre }) => {
+    const students = Array.from(byId.entries()).map(([estudianteId, u]) => {
       const promedioData = promediosPorEstudiante[estudianteId];
-      const promedio = promedioData && promedioData.cantidad > 0
-        ? promedioData.suma / promedioData.cantidad
-        : undefined;
-      const estado = calcularEstado(promedio);
-      return { _id: estudianteId, nombre, estado };
+      const promedio =
+        promedioData && promedioData.cantidad > 0 ? promedioData.suma / promedioData.cantidad : undefined;
+      return { _id: estudianteId, nombre: u.full_name || 'Estudiante', estado: calcularEstado(promedio) };
     });
 
-    console.log(`[GROUPS] Retornando ${students.length} estudiantes para ${grupoIdNormalizado} (GroupStudent: ${idsEnGroupStudent.size}, User.curso: ${estudiantesUnificados.size})`);
     res.json(students);
-  } catch (error) {
-    console.error('Error al obtener estudiantes del grupo:', error);
+  } catch (error: unknown) {
+    console.error('Error al obtener estudiantes del grupo:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
-// POST /api/groups/:groupId/sync-students - Sincronizar estudiantes existentes de un grupo
-// Este endpoint sincroniza todos los estudiantes que tienen el curso asignado en User pero no están en GroupStudent
+// POST /api/groups/:groupId/sync-students
 router.post('/:groupId/sync-students', protect, async (req: AuthRequest, res) => {
   try {
     const { groupId } = req.params;
-    const colegioId = req.user?.colegioId || 'COLEGIO_DEMO_2025';
-    const grupoIdNormalizado = groupId.toUpperCase().trim();
-    
-    console.log(`[SYNC] Iniciando sincronización para grupo: ${grupoIdNormalizado}, colegio: ${colegioId}`);
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const grupoIdNorm = groupId.toUpperCase().trim();
 
-    // Buscar todos los estudiantes que tienen este curso asignado en User
-    // Buscar tanto con mayúsculas como con el formato original
-    const estudiantesEnUser = await User.find({
-      rol: 'estudiante',
-      $or: [
-        { curso: grupoIdNormalizado },
-        { curso: groupId }, // También buscar con el formato original
-        { curso: groupId.toLowerCase() }, // Y en minúsculas
-      ],
-      colegioId
-    }).select('_id nombre email curso').lean();
+    const group = await findGroupByNameAndInstitution(colegioId, grupoIdNorm);
+    if (!group) return res.status(404).json({ message: 'Grupo no encontrado.' });
 
-    console.log(`[SYNC] Encontrados ${estudiantesEnUser.length} estudiantes en User con curso relacionado a ${grupoIdNormalizado}`);
-
-    // Buscar el grupo primero para obtener su ObjectId
-    const grupo = await Group.findOne({ nombre: grupoIdNormalizado, colegioId });
-    if (!grupo) {
-      return res.status(404).json({ message: 'Grupo no encontrado.' });
-    }
-
-    // Buscar estudiantes que ya están en GroupStudent usando ObjectId
-    const estudiantesEnGroupStudent = await GroupStudent.find({
-      grupoId: grupo._id,
-      colegioId
-    }).select('estudianteId').lean();
-
-    const idsExistentes = new Set(
-      estudiantesEnGroupStudent.map(gs => gs.estudianteId.toString())
+    const allUsers = await findUsersByInstitution(colegioId);
+    const estudiantesEnUser = allUsers.filter(
+      (u) =>
+        u.role === 'estudiante' &&
+        ((u.config as { curso?: string })?.curso?.toUpperCase() === grupoIdNorm ||
+          (u.config as { curso?: string })?.curso === groupId)
     );
-
-    console.log(`[SYNC] Ya existen ${idsExistentes.size} estudiantes en GroupStudent para ${grupoIdNormalizado}`);
-
-    // Filtrar estudiantes que no están en GroupStudent
-    const estudiantesASincronizar = estudiantesEnUser.filter(
-      estudiante => !idsExistentes.has(estudiante._id.toString())
-    );
-
-    console.log(`[SYNC] Estudiantes a sincronizar: ${estudiantesASincronizar.length}`);
-
-    // Si no hay estudiantes para sincronizar
-    if (estudiantesASincronizar.length === 0) {
-      return res.json({
-        message: 'Todos los estudiantes ya están sincronizados',
-        grupoId: grupoIdNormalizado,
-        estudiantesSincronizados: 0,
-        totalEstudiantes: estudiantesEnUser.length
-      });
-    }
-
-    // Crear registros en GroupStudent usando ObjectId del grupo
-    try {
-      const nuevosRegistros = await GroupStudent.insertMany(
-        estudiantesASincronizar.map(estudiante => ({
-          grupoId: grupo!._id, // Usar ObjectId del grupo
-          estudianteId: estudiante._id,
-          colegioId
-        })),
-        { ordered: false } // Continuar aunque haya duplicados
-      );
-
-      console.log(`[SYNC] ✅ Sincronizados ${nuevosRegistros.length} estudiantes para ${grupoIdNormalizado}`);
-
-      res.json({
-        message: 'Sincronización completada',
-        grupoId: grupoIdNormalizado,
-        estudiantesSincronizados: nuevosRegistros.length,
-        totalEstudiantes: estudiantesEnUser.length
-      });
-    } catch (insertError: any) {
-      // Si hay errores de duplicado, contar los insertados
-      if (insertError.code === 11000 || insertError.writeErrors) {
-        const sincronizados = insertError.insertedIds?.length || 0;
-        console.log(`[SYNC] ⚠️ Sincronización parcial: ${sincronizados} estudiantes sincronizados`);
-        return res.json({
-          message: 'Sincronización completada con algunos duplicados',
-          grupoId: grupoIdNormalizado,
-          estudiantesSincronizados: sincronizados,
-          totalEstudiantes: estudiantesEnUser.length
+    const enrollments = await findEnrollmentsByGroup(group.id);
+    const idsExistentes = new Set(enrollments.map((e) => e.student_id));
+    const period = await findActiveAcademicPeriodForInstitution(colegioId);
+    let sincronizados = 0;
+    for (const u of estudiantesEnUser) {
+      if (idsExistentes.has(u.id)) continue;
+      try {
+        await createEnrollment({
+          student_id: u.id,
+          group_id: group.id,
+          academic_period_id: period?.id ?? null,
         });
+        await updateUser(u.id, { config: { ...u.config, curso: group.name } });
+        sincronizados++;
+      } catch (_) {}
+    }
+    // Si el grupo es grado real, también sincronizar grupos-materia para cada estudiante
+    const esGradoReal = /^\d+[A-Za-z]+$/.test(group.name);
+    if (esGradoReal) {
+      const todosGrupos = await findGroupsByInstitution(colegioId);
+      const gruposMateria = todosGrupos.filter(
+        (g) => /^[^\d]/.test(g.name) && g.name.endsWith(' ' + group.name)
+      );
+      for (const u of estudiantesEnUser) {
+        for (const gm of gruposMateria) {
+          try {
+            await createEnrollment({
+              student_id: u.id,
+              group_id: gm.id,
+              academic_period_id: period?.id ?? null,
+            });
+          } catch (_) {}
+        }
       }
-      throw insertError;
     }
-  } catch (error: any) {
-    console.error('[SYNC] ❌ Error al sincronizar estudiantes:', error);
-    res.status(500).json({ 
-      message: 'Error interno del servidor.',
-      error: error.message 
-    });
-  }
-});
 
-// GET /api/groups/lookup/:objectId - Buscar grupo por ObjectId (utilidad para debugging)
-router.get('/lookup/:objectId', protect, async (req: AuthRequest, res) => {
-  try {
-    const { objectId } = req.params;
-    const group = await Group.findById(objectId);
-    if (!group) {
-      return res.status(404).json({ 
-        message: 'Grupo no encontrado.',
-        objectId,
-        suggestion: 'Este ObjectId no corresponde a ningún grupo en la base de datos.'
-      });
-    }
     res.json({
-      objectId: group._id.toString(),
-      nombre: group.nombre,
-      descripcion: group.descripcion,
-      colegioId: group.colegioId,
-      createdAt: group.createdAt,
-      message: `Este ObjectId corresponde al grupo: ${group.nombre}`
+      message: sincronizados === 0 ? 'Todos los estudiantes ya están sincronizados' : 'Sincronización completada',
+      grupoId: grupoIdNorm,
+      estudiantesSincronizados: sincronizados,
+      totalEstudiantes: estudiantesEnUser.length,
     });
-  } catch (error) {
-    console.error('Error al buscar grupo:', error);
+  } catch (error: unknown) {
+    console.error('Error al sincronizar estudiantes:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
-// GET /api/groups/:id - Obtener un grupo por ID (DEBE IR AL FINAL)
+// GET /api/groups/lookup/:objectId
+router.get('/lookup/:objectId', protect, async (req: AuthRequest, res) => {
+  try {
+    const { objectId } = req.params;
+    const group = await findGroupById(objectId);
+    if (!group) {
+      return res.status(404).json({
+        message: 'Grupo no encontrado.',
+        objectId,
+        suggestion: 'Este ID no corresponde a ningún grupo en la base de datos.',
+      });
+    }
+    res.json({
+      objectId: group.id,
+      nombre: group.name,
+      descripcion: group.description,
+      colegioId: group.institution_id,
+      createdAt: group.created_at,
+      message: `Este ID corresponde al grupo: ${group.name}`,
+    });
+  } catch (error: unknown) {
+    console.error('Error al buscar grupo:', (error as Error).message);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// GET /api/groups/:id
 router.get('/:id', protect, async (req: AuthRequest, res) => {
   try {
-    const group = await Group.findById(req.params.id);
-    if (!group) {
-      return res.status(404).json({ message: 'Grupo no encontrado.' });
-    }
-    res.json(group);
-  } catch (error) {
-    console.error('Error al obtener grupo:', error);
+    const { id } = req.params;
+    const colegioId = req.user?.colegioId;
+    const group =
+      id.length === 36 && id.includes('-')
+        ? await findGroupById(id)
+        : await findGroupByNameAndInstitution(colegioId || '', id.toUpperCase().trim());
+    if (!group) return res.status(404).json({ message: 'Grupo no encontrado.' });
+    if (colegioId && group.institution_id !== colegioId) return res.status(404).json({ message: 'Grupo no encontrado.' });
+    res.json({
+      _id: group.id,
+      id: group.id,
+      nombre: group.name,
+      descripcion: group.description,
+      colegioId: group.institution_id,
+      sectionId: group.section_id,
+    });
+  } catch (error: unknown) {
+    console.error('Error al obtener grupo:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });

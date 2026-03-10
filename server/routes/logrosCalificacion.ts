@@ -1,212 +1,182 @@
 import express from 'express';
-import { LogroCalificacion, Course } from '../models';
-import { protect, AuthRequest } from '../middleware/auth';
-import { normalizeIdForQuery } from '../utils/idGenerator';
+import { protect, AuthRequest } from '../middleware/auth.js';
+import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
+import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
+import {
+  findGradingCategoriesBySchema,
+  findGradingCategoryById,
+} from '../repositories/gradingCategoryRepository.js';
+import { queryPg } from '../config/db-pg.js';
 
 const router = express.Router();
 
-// GET /api/logros-calificacion?courseId=xxx - Listar logros de una materia (solo profesor asignado)
+function toLogroFormat(row: { id: string; name: string; weight: number; sort_order: number }) {
+  return {
+    _id: row.id,
+    nombre: row.name,
+    porcentaje: Number(row.weight),
+    orden: row.sort_order,
+  };
+}
+
+async function getOrCreateSchemaForCourse(
+  courseId: string,
+  userId: string,
+  colegioId: string
+): Promise<{ id: string; group_id: string; institution_id: string } | null> {
+  const gs = await findGroupSubjectById(courseId);
+  if (!gs || gs.teacher_id !== userId) return null;
+
+  const existing = await findGradingSchemaByGroup(gs.group_id, gs.institution_id);
+  if (existing) return existing;
+
+  const r = await queryPg(
+    'INSERT INTO grading_schemas (group_id, institution_id, name, version, is_active) VALUES ($1, $2, $3, 1, true) RETURNING id, group_id, institution_id',
+    [gs.group_id, gs.institution_id, null]
+  );
+  return r.rows[0] ?? null;
+}
+
+// GET /api/logros-calificacion?courseId=...
 router.get('/', protect, async (req: AuthRequest, res) => {
   try {
     const courseId = req.query.courseId as string;
-    const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
-    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!courseId) return res.status(400).json({ message: 'courseId es requerido.' });
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
-    if (!courseId) {
-      return res.status(400).json({ message: 'courseId es requerido.' });
-    }
+    const gs = await findGroupSubjectById(courseId);
+    if (!gs) return res.json({ logros: [], totalPorcentaje: 0, completo: false });
 
-    const normalizedCourseId = normalizeIdForQuery(courseId);
-    const course = await Course.findOne({
-      _id: normalizedCourseId,
-      profesorIds: normalizeIdForQuery(userId),
-      colegioId,
-    }).lean();
+    const schema = await findGradingSchemaByGroup(gs.group_id, gs.institution_id);
+    if (!schema) return res.json({ logros: [], totalPorcentaje: 0, completo: false });
 
-    if (!course) {
-      return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
-    }
+    const categories = await findGradingCategoriesBySchema(schema.id);
+    const logros = categories.map(toLogroFormat);
+    const totalPorcentaje = categories.reduce((s, c) => s + Number(c.weight), 0);
+    const completo = Math.abs(totalPorcentaje - 100) < 0.01;
 
-    const logros = await LogroCalificacion.find({
-      courseId: normalizedCourseId,
-      colegioId,
-    })
-      .sort({ orden: 1, createdAt: 1 })
-      .lean();
-
-    const totalPorcentaje = logros.reduce((sum, l) => sum + (l.porcentaje || 0), 0);
-
-    return res.json({
-      logros,
-      totalPorcentaje,
-      completo: Math.abs(totalPorcentaje - 100) < 0.01,
-    });
+    return res.json({ logros, totalPorcentaje, completo });
   } catch (e: unknown) {
     console.error('Error al listar logros:', e);
     return res.status(500).json({ message: 'Error al listar logros de calificación.' });
   }
 });
 
-// POST /api/logros-calificacion - Crear logro (solo profesor asignado)
+// POST /api/logros-calificacion
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { nombre, porcentaje, courseId, orden } = req.body;
+    const { nombre, porcentaje, courseId } = req.body;
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
-
-    if (!nombre || porcentaje == null || !courseId) {
-      return res.status(400).json({ message: 'nombre, porcentaje y courseId son requeridos.' });
+    if (!courseId) return res.status(400).json({ message: 'courseId es requerido.' });
+    if (!nombre || typeof nombre !== 'string' || !nombre.trim()) {
+      return res.status(400).json({ message: 'nombre es requerido.' });
+    }
+    const weight = typeof porcentaje === 'number' ? porcentaje : parseFloat(String(porcentaje ?? 0));
+    if (Number.isNaN(weight) || weight < 0 || weight > 100) {
+      return res.status(400).json({ message: 'porcentaje debe estar entre 0 y 100.' });
     }
 
-    const pct = parseFloat(String(porcentaje));
-    if (isNaN(pct) || pct < 0 || pct > 100) {
-      return res.status(400).json({ message: 'El porcentaje debe estar entre 0 y 100.' });
-    }
+    const schema = await getOrCreateSchemaForCourse(courseId, userId, colegioId);
+    if (!schema) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
 
-    const normalizedCourseId = normalizeIdForQuery(courseId);
-    const course = await Course.findOne({
-      _id: normalizedCourseId,
-      profesorIds: normalizeIdForQuery(userId),
-      colegioId,
-    }).lean();
+    const categories = await findGradingCategoriesBySchema(schema.id);
+    const nextSortOrder = categories.length > 0
+      ? Math.max(...categories.map((c) => c.sort_order)) + 1
+      : 0;
 
-    if (!course) {
-      return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
-    }
+    const r = await queryPg(
+      `INSERT INTO grading_categories (grading_schema_id, institution_id, name, weight, sort_order, evaluation_type, risk_impact_multiplier)
+       VALUES ($1, $2, $3, $4, $5, 'summative', 1) RETURNING *`,
+      [schema.id, schema.institution_id, nombre.trim(), weight, nextSortOrder]
+    );
+    const row = r.rows[0];
+    if (!row) return res.status(500).json({ message: 'Error al crear logro.' });
 
-    const existentes = await LogroCalificacion.find({
-      courseId: normalizedCourseId,
-      colegioId,
-    }).lean();
-
-    const totalActual = existentes.reduce((sum, l) => sum + (l.porcentaje || 0), 0);
-    const nuevoTotal = totalActual + pct;
-
-    if (nuevoTotal > 100.01) {
-      return res.status(400).json({
-        message: `Los logros deben sumar 100%. Actual: ${totalActual.toFixed(0)}%, nuevo total sería ${nuevoTotal.toFixed(0)}%.`,
-        totalActual: Math.round(totalActual),
-        disponible: Math.round(100 - totalActual),
-      });
-    }
-
-    const logro = await LogroCalificacion.create({
-      nombre: String(nombre).trim(),
-      porcentaje: pct,
-      courseId: normalizedCourseId,
-      profesorId: userId,
-      colegioId,
-      orden: orden != null ? parseInt(String(orden), 10) : existentes.length,
-    });
-
-    return res.status(201).json(logro);
+    return res.status(201).json(toLogroFormat(row));
   } catch (e: unknown) {
     console.error('Error al crear logro:', e);
     return res.status(500).json({ message: 'Error al crear logro de calificación.' });
   }
 });
 
-// PUT /api/logros-calificacion/:id - Actualizar logro
+// GET /api/logros-calificacion/:id
+router.get('/:id', protect, async (req: AuthRequest, res) => {
+  try {
+    const { id } = req.params;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+
+    const cat = await findGradingCategoryById(id);
+    if (!cat || cat.institution_id !== colegioId) {
+      return res.status(404).json({ message: 'Logro no encontrado.' });
+    }
+    return res.json(toLogroFormat(cat));
+  } catch (e: unknown) {
+    console.error('Error al obtener logro:', e);
+    return res.status(500).json({ message: 'Error al obtener logro.' });
+  }
+});
+
+// PUT /api/logros-calificacion/:id
 router.put('/:id', protect, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    const { nombre, porcentaje, orden } = req.body;
-    const userId = req.user?.id;
+    const { nombre, porcentaje } = req.body;
     const colegioId = req.user?.colegioId;
-    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const logro = await LogroCalificacion.findOne({
-      _id: normalizeIdForQuery(id),
-      colegioId,
-    }).lean();
-
-    if (!logro) {
+    const cat = await findGradingCategoryById(id);
+    if (!cat || cat.institution_id !== colegioId) {
       return res.status(404).json({ message: 'Logro no encontrado.' });
     }
 
-    const course = await Course.findOne({
-      _id: logro.courseId,
-      profesorIds: normalizeIdForQuery(userId),
-      colegioId,
-    }).lean();
-
-    if (!course) {
-      return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+    if (nombre !== undefined) {
+      sets.push(`name = $${i++}`);
+      values.push(String(nombre).trim());
     }
-
-    const updates: Record<string, unknown> = {};
-    if (nombre !== undefined) updates.nombre = String(nombre).trim();
-    if (orden !== undefined) updates.orden = parseInt(String(orden), 10);
-
-    if (porcentaje != null) {
-      const pct = parseFloat(String(porcentaje));
-      if (isNaN(pct) || pct < 0 || pct > 100) {
-        return res.status(400).json({ message: 'El porcentaje debe estar entre 0 y 100.' });
+    if (porcentaje !== undefined) {
+      const weight = typeof porcentaje === 'number' ? porcentaje : parseFloat(String(porcentaje));
+      if (Number.isNaN(weight) || weight < 0 || weight > 100) {
+        return res.status(400).json({ message: 'porcentaje debe estar entre 0 y 100.' });
       }
-      updates.porcentaje = pct;
+      sets.push(`weight = $${i++}`);
+      values.push(weight);
     }
+    if (sets.length === 0) return res.json(toLogroFormat(cat));
 
-    const existentes = await LogroCalificacion.find({
-      courseId: logro.courseId,
-      colegioId,
-      _id: { $ne: logro._id },
-    }).lean();
-
-    const totalOtros = existentes.reduce((sum, l) => sum + (l.porcentaje || 0), 0);
-    const nuevoPct = updates.porcentaje ?? logro.porcentaje;
-    const nuevoTotal = totalOtros + (nuevoPct as number);
-
-    if (nuevoTotal > 100.01) {
-      return res.status(400).json({
-        message: `Los logros deben sumar 100%. El nuevo total sería ${nuevoTotal.toFixed(0)}%.`,
-      });
-    }
-
-    const updated = await LogroCalificacion.findByIdAndUpdate(
-      normalizeIdForQuery(id),
-      { $set: updates },
-      { new: true }
-    ).lean();
-
-    return res.json(updated);
+    values.push(id);
+    const r = await queryPg(
+      `UPDATE grading_categories SET ${sets.join(', ')}, updated_at = now() WHERE id = $${i} RETURNING *`,
+      values
+    );
+    const row = r.rows[0];
+    return row ? res.json(toLogroFormat(row)) : res.json(toLogroFormat(cat));
   } catch (e: unknown) {
     console.error('Error al actualizar logro:', e);
     return res.status(500).json({ message: 'Error al actualizar logro.' });
   }
 });
 
-// DELETE /api/logros-calificacion/:id - Eliminar logro
+// DELETE /api/logros-calificacion/:id
 router.delete('/:id', protect, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
-    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const logro = await LogroCalificacion.findOne({
-      _id: normalizeIdForQuery(id),
-      colegioId,
-    }).lean();
-
-    if (!logro) {
+    const cat = await findGradingCategoryById(id);
+    if (!cat || cat.institution_id !== colegioId) {
       return res.status(404).json({ message: 'Logro no encontrado.' });
     }
 
-    const course = await Course.findOne({
-      _id: logro.courseId,
-      profesorIds: normalizeIdForQuery(userId),
-      colegioId,
-    }).lean();
-
-    if (!course) {
-      return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
-    }
-
-    await LogroCalificacion.findByIdAndDelete(normalizeIdForQuery(id));
-
-    return res.json({ message: 'Logro eliminado.' });
+    await queryPg('DELETE FROM grading_categories WHERE id = $1', [id]);
+    return res.json({ success: true });
   } catch (e: unknown) {
     console.error('Error al eliminar logro:', e);
     return res.status(500).json({ message: 'Error al eliminar logro.' });

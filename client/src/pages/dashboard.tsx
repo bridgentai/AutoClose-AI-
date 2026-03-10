@@ -17,7 +17,7 @@ import {
 import { Calendar } from '@/components/Calendar';
 import { CalendarGeneral } from '@/components/CalendarGeneral';
 import { useLocation } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useInstitutionColors } from '@/hooks/useInstitutionColors';
 import { AdminGeneralColegioDashboard } from './admin-general-colegio-dashboard';
@@ -309,17 +309,86 @@ function EstudianteDashboard() {
     });
   }, [assignments, user?.id]);
 
-  // Notas del estudiante (misma fuente que Mis Notas): para contar materias perdidas (promedio < 65)
-  const { data: notesData } = useQuery<{ materias: { promedio: number }[]; total: number }>({
+  // Notas del estudiante (misma fuente que Mis Notas): para contar materias perdidas (promedio ponderado < 65)
+  const { data: notesData } = useQuery<{
+    materias: {
+      _id: string;
+      nombre: string;
+      groupSubjectId?: string | null;
+      promedio: number;
+      notas: { nota: number; gradingCategoryId?: string; fecha?: string }[];
+    }[];
+    total: number;
+  }>({
     queryKey: ['studentNotes', user?.id],
     queryFn: () => apiRequest('GET', '/api/student/notes'),
     enabled: !!user?.id && user?.rol === 'estudiante',
     staleTime: 0,
   });
-  const materiasPerdidas = useMemo(
-    () => (notesData?.materias ?? []).filter((m) => m.promedio < 65).length,
+
+  const { data: rankingData } = useQuery<{
+    puesto: number;
+    total: number;
+    promedio: number;
+    grado: string | null;
+  }>({
+    queryKey: ['studentRanking', user?.id],
+    queryFn: () => apiRequest('GET', '/api/student/ranking'),
+    enabled: !!user?.id && user?.rol === 'estudiante',
+    staleTime: 60 * 1000,
+  });
+
+  const groupSubjectIds = useMemo(
+    () => [...new Set((notesData?.materias ?? []).map((m) => m.groupSubjectId).filter(Boolean))] as string[],
     [notesData?.materias]
   );
+  const logrosQueries = useQueries({
+    queries: groupSubjectIds.map((gsId) => ({
+      queryKey: ['/api/logros-calificacion', gsId] as const,
+      queryFn: () =>
+        apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(gsId)}`) as Promise<{
+          logros: { _id: string; nombre: string; porcentaje: number; orden?: number }[];
+        }>,
+      enabled: !!gsId,
+    })),
+  });
+  const logrosByGsId = useMemo(() => {
+    const map: Record<string, { _id: string; porcentaje: number; orden?: number }[]> = {};
+    groupSubjectIds.forEach((id, i) => {
+      const logros = logrosQueries[i]?.data?.logros;
+      if (logros?.length) map[id] = logros;
+    });
+    return map;
+  }, [groupSubjectIds, logrosQueries]);
+
+  // Mismo criterio que Mis Notas: promedio ponderado por logros; reprobada = promedio < 65
+  const materiasPerdidas = useMemo(() => {
+    const materias = notesData?.materias ?? [];
+    return materias.filter((m) => {
+      const logros = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
+      const notas = m.notas ?? [];
+      const totalPct = (logros ?? []).reduce((s, l) => s + (l.porcentaje ?? 0), 0);
+      const hasWeightedLogros = totalPct > 0 && (logros ?? []).length > 0;
+      let promedioFinal: number;
+      if (hasWeightedLogros && logros!.length > 0) {
+        const logrosOrdenados = [...logros!].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+        let weightedSum = 0;
+        for (const logro of logrosOrdenados) {
+          const notasEnCategoria = notas.filter((n) => String(n.gradingCategoryId ?? '') === String(logro._id));
+          const promCat =
+            notasEnCategoria.length > 0
+              ? notasEnCategoria.reduce((s, x) => s + (x.nota ?? 0), 0) / notasEnCategoria.length
+              : 0;
+          weightedSum += promCat * ((logro.porcentaje ?? 0) / 100);
+        }
+        promedioFinal = weightedSum;
+      } else {
+        promedioFinal =
+          notas.length > 0 ? notas.reduce((s, x) => s + (x.nota ?? 0), 0) / notas.length : m.promedio ?? 0;
+      }
+      return promedioFinal < 65;
+    }).length;
+  }, [notesData?.materias, logrosByGsId]);
 
   const handleDayClick = (assignment: Assignment) => {
     setLocation(`/assignment/${assignment._id}`);
@@ -399,8 +468,24 @@ function EstudianteDashboard() {
             <Trophy className="w-5 h-5 text-[#facc15] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-[#facc15] font-['Poppins']">#5</div>
-            <p className="text-xs text-white/60 mt-1">De 32 estudiantes</p>
+            {rankingData === undefined ? (
+              <>
+                <div className="text-3xl font-bold text-[#facc15] font-['Poppins']">—</div>
+                <p className="text-xs text-white/60 mt-1">Cargando...</p>
+              </>
+            ) : rankingData.total < 2 || rankingData.puesto === 0 ? (
+              <>
+                <div className="text-lg font-semibold text-white/80 font-['Poppins']">Sin datos suficientes</div>
+                <p className="text-xs text-white/60 mt-1">
+                  {rankingData.grado ? `Grado ${rankingData.grado}` : 'Menos de 2 estudiantes con notas'}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-3xl font-bold text-[#facc15] font-['Poppins']">#{rankingData.puesto}</div>
+                <p className="text-xs text-white/60 mt-1">De {rankingData.total} estudiantes</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -456,15 +541,20 @@ function ProfesorDashboard() {
     staleTime: 0,
   });
 
-  // Query para obtener tareas del profesor (calendario)
+  // Query para obtener todas las tareas del profesor (todos sus cursos) para el calendario
   const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
-    queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
-    queryFn: async () => {
-      return apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
-    },
-    enabled: !!user?.id,
-    staleTime: 0,
+    queryKey: ['teacherAssignments', user?.id],
+    queryFn: () => apiRequest<Assignment[]>('GET', '/api/assignments'),
+    enabled: !!user?.id && user?.rol === 'profesor',
+    staleTime: 60 * 1000,
   });
+
+  const assignmentsThisMonth = useMemo(() => {
+    return assignments.filter((a) => {
+      const d = new Date(a.fechaEntrega);
+      return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+    });
+  }, [assignments, currentMonth, currentYear]);
 
   // Query para tareas por revisar (estado entregada / por calificar)
   const { data: pendingReview = [], isLoading: isLoadingPending } = useQuery<Assignment[]>({
@@ -540,8 +630,7 @@ function ProfesorDashboard() {
             <CardDescription className="text-white/60 text-expressive-subtitle">
               {isLoadingAssignments
                 ? 'Cargando tareas...'
-                : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
-              }
+                : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes (${assignments.length} en total)`}
             </CardDescription>
           </CardHeader>
           <CardContent>

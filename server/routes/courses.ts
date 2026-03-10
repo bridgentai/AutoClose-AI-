@@ -1,1000 +1,465 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Response, NextFunction } from 'express';
+import { protect, AuthRequest, checkAdminColegioOnly } from '../middleware/auth.js';
+import { logAdminAction } from '../services/auditLogger.js';
+import { findUserById } from '../repositories/userRepository.js';
+import { findGroupById, findGroupByNameAndInstitution, findGroupsByInstitution } from '../repositories/groupRepository.js';
+import { getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
 import {
-  Course,
-  User,
-  GradingSchemaModel,
-  Category,
-  PerformanceSnapshot,
-  PerformanceForecast,
-  RiskAssessment,
-} from '../models';
-import { Assignment } from '../models/Assignment';
-import { LogroCalificacion } from '../models/LogroCalificacion';
-import { Group } from '../models/Group';
-import { protect, AuthRequest, checkAdminColegioOnly } from '../middleware/auth';
-import { Types } from 'mongoose';
-import { normalizeIdForQuery } from '../utils/idGenerator';
-import { logAdminAction } from '../services/auditLogger';
-import { runAcademicInsightEngine } from '../services/grading/intelligence/insightEngine';
-import { computeStudentCourseIntelligence } from '../services/grading/intelligence/multiroleIntelligence';
-import { generateAcademicInsightsSummary } from '../services/openai';
+  findSubjectById,
+  findSubjectsByInstitution,
+  findSubjectByNameAndInstitution,
+  createSubject,
+  updateSubject,
+} from '../repositories/subjectRepository.js';
+import {
+  findGroupSubjectsByGroup,
+  findGroupSubjectsByGroupWithDetails,
+  findGroupSubjectsByTeacher,
+  findGroupSubjectsByTeacherWithDetails,
+  findGroupSubjectById,
+  createGroupSubject,
+} from '../repositories/groupSubjectRepository.js';
+import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
+import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
+import { findUsersByIds } from '../repositories/userRepository.js';
+import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
+import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
 
 const router = express.Router();
 
-// Middleware de autorización para Directivo (Reutilizable)
 const checkIsDirectivo = (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user && req.user.rol === 'directivo') {
-        next();
-    } else {
-        res.status(403).json({ message: 'Acceso denegado. Solo Directivos pueden realizar esta acción.' });
-    }
+  if (req.user?.rol === 'directivo') next();
+  else res.status(403).json({ message: 'Acceso denegado. Solo Directivos pueden realizar esta acción.' });
 };
 
-// Directivo o Admin General del Colegio o school_admin (asignar profesores/estudiantes a cursos)
 const checkIsDirectivoOrAdminColegio = (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.user && (req.user.rol === 'directivo' || req.user.rol === 'admin-general-colegio' || req.user.rol === 'school_admin')) {
-        next();
-    } else {
-        res.status(403).json({ message: 'Acceso denegado. Solo Directivos o Administradores del Colegio pueden realizar esta acción.' });
-    }
+  if (req.user && (req.user.rol === 'directivo' || req.user.rol === 'admin-general-colegio' || req.user.rol === 'school_admin')) next();
+  else res.status(403).json({ message: 'Acceso denegado. Solo Directivos o Administradores del Colegio pueden realizar esta acción.' });
 };
 
-
-// =========================================================================
-// RUTA ACTUALIZADA (ADAPTADA AL ARRAY profesorIds)
-// GET /api/courses - Obtener cursos según el rol
-router.get('/', protect, async (req: AuthRequest, res) => {
-try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId);
-if (!user) {
-return res.status(404).json({ message: 'Usuario no encontrado' });
+function toCourseResponse(gs: { id: string; subject_id: string; group_id: string; teacher_id: string; institution_id: string; created_at: string }, subject: { id: string; name: string; description: string | null } | null, teacher: { id: string; full_name: string; email: string } | null, groupName?: string) {
+  return {
+    _id: gs.id,
+    id: gs.id,
+    nombre: subject?.name ?? '',
+    descripcion: subject?.description ?? '',
+    colorAcento: '',
+    icono: '',
+    cursos: groupName ? [groupName] : [],
+    profesorIds: teacher ? [{ _id: teacher.id, nombre: teacher.full_name, email: teacher.email }] : [],
+    colegioId: gs.institution_id,
+  };
 }
 
-// Filtrar cursos según el rol del usuario
-let query: any = { colegioId: user.colegioId };
-
-// Si es profesor, solo mostrar cursos donde él está en la lista de profesores asignados
-if (user.rol === 'profesor') {
-query.profesorIds = user._id; // <--- ADAPTACIÓN a profesorIds (array)
-}
-// Si es estudiante, el filtro se hará mejor en la ruta específica (GET /api/users/me/courses)
-
-const courses = await Course.find(query)
-.populate('profesorIds', 'nombre email') // <--- ADAPTACIÓN a profesorIds (array)
-.sort({ nombre: 1 });
-
-res.json(courses);
-} catch (error: any) {
-console.error('Error al obtener cursos:', error.message);
-res.status(500).json({ message: 'Error en el servidor al cargar los cursos.' });
-}
+// Rutas con path fijo primero (antes de /:id)
+// GET /api/courses/for-group/:grupo
+router.get('/for-group/:grupo', protect, async (req: AuthRequest, res) => {
+  try {
+    const { grupo } = req.params;
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'profesor') return res.status(403).json({ message: 'Solo los profesores pueden acceder a esta ruta' });
+    const group = await findGroupByNameAndInstitution(colegioId, grupo.toUpperCase().trim());
+    if (!group) return res.json([]);
+    const list = await findGroupSubjectsByGroupWithDetails(group.id, colegioId);
+    const byTeacher = list.filter((gs) => gs.teacher_id === userId);
+    const courses = byTeacher.map((gs) =>
+      toCourseResponse(gs, { id: gs.subject_id, name: gs.subject_name, description: gs.subject_description }, { id: gs.teacher_id, full_name: gs.teacher_name, email: gs.teacher_email }, gs.group_name)
+    );
+    res.json(courses);
+  } catch (error: unknown) {
+    console.error('Error al obtener materias para grupo:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor.' });
+  }
 });
 
-// =========================================================================
-// GET /api/courses/:id/details - Obtener detalles de una materia por ID
-// Solo accesible para estudiantes del curso asignado a la materia
-// IMPORTANTE: Esta ruta debe estar ANTES de otras rutas que usen :id para evitar conflictos
+// GET /api/courses/by-name
+router.get('/by-name', protect, async (req: AuthRequest, res) => {
+  const name = (req.query.name || req.query.nombre) as string;
+  if (!name || typeof name !== 'string') return res.status(400).json({ message: 'El parámetro de nombre es obligatorio.' });
+  try {
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const subject = await findSubjectByNameAndInstitution(colegioId, name);
+    if (!subject) return res.status(404).json({ message: 'Materia no encontrada con ese nombre en este colegio.' });
+    res.json({ _id: subject.id, nombre: subject.name, id: subject.id });
+  } catch (error: unknown) {
+    console.error('Error al buscar materia por nombre:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// GET /api/courses/academic-groups
+router.get('/academic-groups', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    type GsDetails = Awaited<ReturnType<typeof findGroupSubjectsByGroupWithDetails>>[number];
+    let gsList: GsDetails[] = [];
+    if (user.role === 'estudiante') {
+      let curso = (user.config as { curso?: string })?.curso;
+      if (!curso) curso = await getFirstGroupNameForStudent(userId) ?? undefined;
+      let group = curso ? await findGroupByNameAndInstitution(colegioId, curso.toUpperCase().trim()) : null;
+      if (!group) group = await getFirstGroupForStudent(userId, colegioId);
+      if (group) gsList = await findGroupSubjectsByGroupWithDetails(group.id, colegioId);
+    } else if (user.role === 'profesor') {
+      gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    } else {
+      const groups = await findGroupsByInstitution(colegioId);
+      for (const g of groups) gsList.push(...(await findGroupSubjectsByGroupWithDetails(g.id, colegioId)));
+    }
+    const bySubject = new Map<string, { materiaId: string; materiaNombre: string; materiaDescripcion: string | null; profesores: { _id: string; nombre: string; email: string }[]; estudiantes: { _id: string; nombre: string; email: string }[]; cursos: string[] }>();
+    for (const gs of gsList) {
+      const sid = gs.subject_id;
+      if (!bySubject.has(sid)) {
+        bySubject.set(sid, { materiaId: sid, materiaNombre: gs.subject_name, materiaDescripcion: gs.subject_description, profesores: [], estudiantes: [], cursos: [] });
+      }
+      const row = bySubject.get(sid)!;
+      if (!row.profesores.some((p) => p._id === gs.teacher_id)) row.profesores.push({ _id: gs.teacher_id, nombre: gs.teacher_name, email: gs.teacher_email });
+      if (!row.cursos.includes(gs.group_name)) row.cursos.push(gs.group_name);
+      const enrollments = await findEnrollmentsByGroup(gs.group_id);
+      const studentIds = enrollments.map((e) => e.student_id);
+      if (studentIds.length) {
+        const users = await findUsersByIds(studentIds);
+        users.forEach((u) => { if (!row.estudiantes.some((e) => e._id === u.id)) row.estudiantes.push({ _id: u.id, nombre: u.full_name, email: u.email }); });
+      }
+    }
+    res.json(Array.from(bySubject.values()));
+  } catch (error: unknown) {
+    console.error('Error al obtener grupos académicos:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor al obtener grupos académicos.' });
+  }
+});
+
+// GET /api/courses - Listar cursos según rol
+router.get('/', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+
+    type GsDetails = Awaited<ReturnType<typeof findGroupSubjectsByTeacherWithDetails>>[number];
+    let list: GsDetails[] = [];
+    if (user.role === 'profesor') {
+      list = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    } else {
+      const groups = await findGroupsByInstitution(colegioId);
+      for (const g of groups) list.push(...(await findGroupSubjectsByGroupWithDetails(g.id, colegioId)));
+    }
+    const courses = list.map((gs) =>
+      toCourseResponse(gs, { id: gs.subject_id, name: gs.subject_name, description: gs.subject_description }, { id: gs.teacher_id, full_name: gs.teacher_name, email: gs.teacher_email }, gs.group_name)
+    );
+    res.json(courses);
+  } catch (error: unknown) {
+    console.error('Error al cargar cursos:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor al cargar los cursos.' });
+  }
+});
+
+// GET /api/courses/:id/details
 router.get('/:id/details', protect, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    console.log(`[DEBUG] GET /api/courses/${id}/details - Usuario: ${req.userId}`);
-    
-    // Optimizar: solo seleccionar campos necesarios del usuario
-    const user = await User.findById(req.userId).select('rol curso colegioId').lean();
-
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'estudiante' && user.role !== 'padre') {
+      return res.status(403).json({ message: 'Solo estudiantes y padres pueden acceder a los detalles de materias desde esta ruta' });
     }
 
-    if (user.rol !== 'estudiante' && user.rol !== 'padre') {
-      return res.status(403).json({ 
-        message: 'Solo estudiantes y padres pueden acceder a los detalles de materias desde esta ruta' 
-      });
-    }
-
-    const course = await Course.findById(id)
-      .populate('profesorIds', 'nombre email')
-      .select('nombre descripcion colorAcento icono cursos profesorIds colegioId')
-      .lean();
-
-    if (!course) {
-      return res.status(404).json({ message: 'Materia no encontrada' });
-    }
-
-    if (course.colegioId !== user.colegioId) {
-      return res.status(403).json({ 
-        message: 'No tienes acceso a esta materia. La materia pertenece a otro colegio.' 
-      });
-    }
-
-    if (!course.cursos || !Array.isArray(course.cursos) || course.cursos.length === 0) {
-      return res.status(403).json({ 
-        message: 'Esta materia no está asignada a ningún curso.' 
-      });
-    }
+    const gs = await findGroupSubjectById(id);
+    const subject = gs ? await findSubjectById(gs.subject_id) : await findSubjectById(id);
+    if (!subject) return res.status(404).json({ message: 'Materia no encontrada' });
+    if (subject.institution_id !== colegioId) return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
 
     let cursoPermitido = false;
-    if (user.rol === 'estudiante') {
-      if (!user.curso) {
-        return res.status(403).json({ message: 'No tienes un curso asignado. Contacta al administrador.' });
+    if (user.role === 'estudiante') {
+      const courseGroups = await getAllCourseGroupsForStudent(userId, colegioId);
+      if (gs) {
+        cursoPermitido = courseGroups.some((g) => g.id === gs.group_id);
+      } else {
+        const allGs = (await Promise.all(
+          courseGroups.map((g) => findGroupSubjectsByGroup(g.id))
+        )).flat();
+        cursoPermitido = allGs.some((x) => x.subject_id === id);
       }
-      cursoPermitido = course.cursos.includes(user.curso);
-    } else if (user.rol === 'padre') {
-      const { Vinculacion } = await import('../models');
-      const vinculaciones = await Vinculacion.find({
-        padreId: req.userId,
-        colegioId: user.colegioId,
-      }).populate('estudianteId', 'curso').lean();
-      const cursosHijos = (vinculaciones as any[])
-        .map((v) => v.estudianteId?.curso)
-        .filter(Boolean)
-        .map((c: string) => (c || '').toUpperCase().trim());
-      cursoPermitido = course.cursos.some((c: string) => cursosHijos.includes((c || '').toUpperCase().trim()));
-    }
-    if (!cursoPermitido) {
-      return res.status(403).json({ 
-        message: 'No tienes acceso a esta materia.' 
-      });
-    }
-
-    const cursoAsignado = user.rol === 'estudiante'
-      ? user.curso
-      : (user.rol === 'padre' && course.cursos && course.cursos.length > 0 ? course.cursos[0] : undefined);
-
-    const response = {
-      _id: course._id,
-      nombre: course.nombre,
-      descripcion: course.descripcion,
-      colorAcento: course.colorAcento,
-      icono: course.icono,
-      cursos: course.cursos,
-      cursoAsignado,
-      profesor: course.profesorIds && course.profesorIds.length > 0 
-        ? {
-            _id: (course.profesorIds[0] as any)._id,
-            nombre: (course.profesorIds[0] as any).nombre,
-            email: (course.profesorIds[0] as any).email
+    } else if (user.role === 'padre') {
+      const links = await findGuardianStudentsByGuardian(userId);
+      for (const link of links) {
+        const hijoGroups = await getAllCourseGroupsForStudent(link.student_id, colegioId);
+        if (gs) {
+          if (hijoGroups.some((g) => g.id === gs.group_id)) {
+            cursoPermitido = true;
+            break;
           }
-        : null,
-      profesorIds: course.profesorIds
-    };
+        } else {
+          const allGs = (await Promise.all(
+            hijoGroups.map((g) => findGroupSubjectsByGroup(g.id))
+          )).flat();
+          if (allGs.some((x) => x.subject_id === id)) {
+            cursoPermitido = true;
+            break;
+          }
+        }
+      }
+    }
+    if (!cursoPermitido) return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
 
-    res.json(response);
-  } catch (error: any) {
-    console.error('Error al obtener materia:', error.message);
+    const teacher = gs ? await findUserById(gs.teacher_id) : null;
+    const cursoAsignado = user.role === 'estudiante' ? (await getFirstGroupNameForStudent(userId)) ?? undefined : undefined;
+    res.json({
+      _id: subject.id,
+      nombre: subject.name,
+      descripcion: subject.description,
+      colorAcento: '',
+      icono: '',
+      cursos: gs ? [(await findGroupById(gs.group_id))?.name].filter(Boolean) : [],
+      cursoAsignado,
+      profesor: teacher ? { _id: teacher.id, nombre: teacher.full_name, email: teacher.email } : null,
+      profesorIds: teacher ? [{ _id: teacher.id, nombre: teacher.full_name, email: teacher.email }] : [],
+    });
+  } catch (error: unknown) {
+    console.error('Error al obtener materia:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al obtener la materia.' });
   }
 });
 
-// =========================================================================
-// Grading engine: schema, snapshots, forecast, risk, insights (by courseId)
 // GET /api/courses/:id/grading-schema
 router.get('/:id/grading-schema', protect, async (req: AuthRequest, res) => {
   try {
     const courseId = req.params.id;
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    const course = await Course.findOne({
-      _id: normalizeIdForQuery(courseId),
-      colegioId,
-    }).lean();
-    if (!course) return res.status(404).json({ message: 'Curso no encontrado.' });
-    const schema = course.gradingSchemaId
-      ? await GradingSchemaModel.findOne({
-          _id: course.gradingSchemaId,
-          colegioId,
-        }).lean()
-      : null;
+    const gs = await findGroupSubjectById(courseId);
+    const groupId = gs?.group_id ?? courseId;
+    const schema = await findGradingSchemaByGroup(groupId, gs?.institution_id);
     if (!schema) return res.json({ schema: null, categories: [] });
-    const categories = await Category.find({
-      gradingSchemaId: schema._id,
-      colegioId,
-    })
-      .sort({ orden: 1 })
-      .lean();
-    return res.json({ schema, categories });
+    const categories = await findGradingCategoriesBySchema(schema.id);
+    return res.json({
+      schema: { _id: schema.id, ...schema },
+      categories: categories.map((c) => ({ _id: c.id, ...c })),
+    });
   } catch (e: unknown) {
     console.error('Error GET grading-schema:', e);
     return res.status(500).json({ message: 'Error al obtener esquema de calificación.' });
   }
 });
 
-// GET /api/courses/:id/snapshots?studentId=
-router.get('/:id/snapshots', protect, async (req: AuthRequest, res) => {
-  try {
-    const courseId = req.params.id;
-    const studentId = req.query.studentId as string | undefined;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    const query: Record<string, unknown> = {
-      courseId: normalizeIdForQuery(courseId),
-      colegioId,
-    };
-    if (studentId) query.studentId = normalizeIdForQuery(studentId);
-    const snapshots = await PerformanceSnapshot.find(query)
-      .sort({ at: -1 })
-      .limit(studentId ? 20 : 50)
-      .lean();
-    return res.json(snapshots);
-  } catch (e: unknown) {
-    console.error('Error GET snapshots:', e);
-    return res.status(500).json({ message: 'Error al obtener snapshots.' });
-  }
-});
+// GET /api/courses/:id/snapshots | forecast | risk | insights | analytics-summary | intelligence - stubs
+router.get('/:id/snapshots', protect, async (_req, res) => res.json([]));
+router.get('/:id/forecast', protect, async (_req, res) => res.json({ forecast: [] }));
+router.get('/:id/risk', protect, async (_req, res) => res.json({ risks: [] }));
+router.get('/:id/insights', protect, async (_req, res) => res.json({ insights: [] }));
+router.get('/:id/analytics-summary', protect, async (_req, res) => res.json({ summary: null }));
+router.get('/:id/intelligence', protect, async (_req, res) => res.json({ intelligence: null }));
 
-// GET /api/courses/:id/forecast?studentId=
-router.get('/:id/forecast', protect, async (req: AuthRequest, res) => {
-  try {
-    const courseId = req.params.id;
-    const studentId = req.query.studentId as string | undefined;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
-    const roleParam = req.query.role as
-      | 'profesor'
-      | 'estudiante'
-      | 'padre'
-      | 'directivo'
-      | 'boletin'
-      | undefined;
-    const narrativeRole = roleParam ?? 'profesor';
-    const forecast = await PerformanceForecast.findOne({
-      courseId: normalizeIdForQuery(courseId),
-      studentId: normalizeIdForQuery(studentId),
-      colegioId,
-    }).lean();
-    return res.json(forecast ?? null);
-  } catch (e: unknown) {
-    console.error('Error GET forecast:', e);
-    return res.status(500).json({ message: 'Error al obtener pronóstico.' });
-  }
-});
-
-// GET /api/courses/:id/risk?studentId=
-router.get('/:id/risk', protect, async (req: AuthRequest, res) => {
-  try {
-    const courseId = req.params.id;
-    const studentId = req.query.studentId as string | undefined;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
-    const risk = await RiskAssessment.findOne({
-      courseId: normalizeIdForQuery(courseId),
-      studentId: normalizeIdForQuery(studentId),
-      colegioId,
-    })
-      .sort({ at: -1 })
-      .lean();
-    return res.json(risk ?? null);
-  } catch (e: unknown) {
-    console.error('Error GET risk:', e);
-    return res.status(500).json({ message: 'Error al obtener riesgo.' });
-  }
-});
-
-// GET /api/courses/:id/insights?studentId=
-router.get('/:id/insights', protect, async (req: AuthRequest, res) => {
-  try {
-    const courseId = req.params.id;
-    const studentId = req.query.studentId as string | undefined;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
-    const course = await Course.findOne({
-      _id: normalizeIdForQuery(courseId),
-      colegioId,
-    })
-      .select('gradingSchemaId')
-      .lean();
-    const schemaId = course?.gradingSchemaId;
-    const [snapshot, forecast, risk, categories] = await Promise.all([
-      PerformanceSnapshot.findOne({
-        courseId: normalizeIdForQuery(courseId),
-        studentId: normalizeIdForQuery(studentId),
-        colegioId,
-      })
-        .sort({ at: -1 })
-        .lean(),
-      PerformanceForecast.findOne({
-        courseId: normalizeIdForQuery(courseId),
-        studentId: normalizeIdForQuery(studentId),
-        colegioId,
-      }).lean(),
-      RiskAssessment.findOne({
-        courseId: normalizeIdForQuery(courseId),
-        studentId: normalizeIdForQuery(studentId),
-        colegioId,
-      })
-        .sort({ at: -1 })
-        .lean(),
-      schemaId
-        ? Category.find({ gradingSchemaId: schemaId, colegioId }).lean()
-        : Promise.resolve([]),
-    ]);
-    const { GradeEvent } = await import('../models');
-    const gradeEvents = await GradeEvent.find({
-      courseId: normalizeIdForQuery(courseId),
-      studentId: normalizeIdForQuery(studentId),
-      colegioId,
-    })
-      .sort({ recordedAt: 1 })
-      .lean();
-    const insightResult =
-      snapshot && forecast && risk
-        ? runAcademicInsightEngine({
-            snapshot,
-            forecast,
-            risk,
-            categories: categories ?? [],
-            gradeEvents,
-          })
-        : null;
-    return res.json(
-      insightResult ?? {
-        insights: [],
-        academicStabilityIndex: undefined,
-        recoveryPotentialScore: undefined,
-      }
-    );
-  } catch (e: unknown) {
-    console.error('Error GET insights:', e);
-    return res.status(500).json({ message: 'Error al obtener insights.' });
-  }
-});
-
-// GET /api/courses/:id/analytics-summary?studentId= - Resumen analítico con IA (promedio, categorías, pronóstico, riesgo, texto IA)
-router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
-  try {
-    const courseId = req.params.id;
-    const studentId = req.query.studentId as string | undefined;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
-
-    const normalizedCourseId = normalizeIdForQuery(courseId);
-    const normalizedStudentId = normalizeIdForQuery(studentId);
-
-    const [course, student, logros, assignments, snapshot, forecast, risk] = await Promise.all([
-      Course.findOne({ _id: normalizedCourseId, colegioId }).select('nombre gradingSchemaId').lean(),
-      User.findById(normalizedStudentId).select('nombre').lean(),
-      LogroCalificacion.find({ courseId: normalizedCourseId, colegioId }).sort({ orden: 1 }).lean(),
-      Assignment.find({
-        courseId: normalizedCourseId,
-        colegioId,
-      })
-        .select('titulo logroCalificacionId submissions entregas')
-        .lean(),
-      PerformanceSnapshot.findOne({
-        courseId: normalizedCourseId,
-        studentId: normalizedStudentId,
-        colegioId,
-      })
-        .sort({ at: -1 })
-        .lean(),
-      PerformanceForecast.findOne({
-        courseId: normalizedCourseId,
-        studentId: normalizedStudentId,
-        colegioId,
-      }).lean(),
-      RiskAssessment.findOne({
-        courseId: normalizedCourseId,
-        studentId: normalizedStudentId,
-        colegioId,
-      })
-        .sort({ at: -1 })
-        .lean(),
-    ]);
-
-    const studentName = (student as { nombre?: string } | null)?.nombre ?? 'Estudiante';
-    const courseName = (course as { nombre?: string } | null)?.nombre ?? 'Materia';
-
-    type LogroLike = { _id: Types.ObjectId; nombre?: string; porcentaje?: number };
-    const byCategory: Array<{ categoryName: string; percentage: number; average: number; count: number }> = [];
-    let weightedSum = 0;
-    let weightSum = 0;
-
-    for (const logro of (logros || []) as LogroLike[]) {
-      const lid = String(logro._id);
-      const subs = (a: { submissions?: { estudianteId: unknown; calificacion?: number }[]; entregas?: { estudianteId: unknown; calificacion?: number }[] }) =>
-        a.submissions || (a as { entregas?: { estudianteId: unknown; calificacion?: number }[] }).entregas || [];
-      const notas: number[] = [];
-      for (const a of assignments || []) {
-        const assignment = a as { logroCalificacionId?: Types.ObjectId; submissions?: { estudianteId: unknown; calificacion?: number }[]; entregas?: { estudianteId: unknown; calificacion?: number }[] };
-        if (String(assignment.logroCalificacionId) !== lid) continue;
-        const sub = subs(assignment).find(
-          (s: { estudianteId: unknown }) => String(s.estudianteId) === normalizedStudentId
-        );
-        const cal = (sub as { calificacion?: number })?.calificacion;
-        if (cal != null && !Number.isNaN(cal)) notas.push(cal);
-      }
-      const pct = logro.porcentaje ?? 0;
-      const average = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : 0;
-      byCategory.push({
-        categoryName: logro.nombre ?? 'Sin nombre',
-        percentage: pct,
-        average,
-        count: notas.length,
-      });
-      if (pct > 0 && notas.length > 0) {
-        weightedSum += (average * pct) / 100;
-        weightSum += pct;
-      }
-    }
-
-    const simpleWeighted = weightSum > 0 ? (weightedSum * 100) / weightSum : null;
-    const finalWeighted = simpleWeighted != null ? Math.round(simpleWeighted * 100) / 100 : (snapshot as { weightedFinalAverage?: number } | null)?.weightedFinalAverage ?? null;
-
-    let engineInsights: string[] = [];
-    if (snapshot && forecast && risk) {
-      const { GradeEvent } = await import('../models');
-      const gradeEvents = await GradeEvent.find({
-        courseId: normalizedCourseId,
-        studentId: normalizedStudentId,
-        colegioId,
-      })
-        .sort({ recordedAt: 1 })
-        .lean();
-      const schemaId = (course as { gradingSchemaId?: Types.ObjectId })?.gradingSchemaId;
-      const categories = schemaId
-        ? await Category.find({ gradingSchemaId: schemaId, colegioId }).lean()
-        : [];
-      const result = runAcademicInsightEngine({
-        snapshot,
-        forecast,
-        risk,
-        categories: categories ?? [],
-        gradeEvents,
-      });
-      engineInsights = result.insights ?? [];
-    }
-
-    const aiContext = {
-      studentName,
-      courseName,
-      weightedAverage: finalWeighted,
-      byCategory,
-      forecast: forecast
-        ? {
-            projectedFinalGrade: (forecast as { projectedFinalGrade?: number }).projectedFinalGrade,
-            riskProbabilityPercent: (forecast as { riskProbabilityPercent?: number }).riskProbabilityPercent,
-          }
-        : null,
-      risk: risk
-        ? {
-            level: (risk as { level?: string }).level,
-            factors: (risk as { factors?: string[] }).factors ?? [],
-          }
-        : null,
-      engineInsights: engineInsights.length ? engineInsights : undefined,
-      role: narrativeRole,
-    };
-
-    const aiSummary = await generateAcademicInsightsSummary(aiContext);
-
-    return res.json({
-      weightedAverage: finalWeighted,
-      byCategory,
-      snapshot: snapshot ?? null,
-      forecast: forecast ?? null,
-      risk: risk ?? null,
-      aiSummary,
-      insights: engineInsights,
-    });
-  } catch (e: unknown) {
-    console.error('Error GET analytics-summary:', e);
-    return res.status(500).json({ message: 'Error al obtener resumen analítico.' });
-  }
-});
-
-// GET /api/courses/:id/intelligence?studentId=&role=
-// Inteligencia académica enriquecida para vistas multirrol (profesor, estudiante, padre, directivo)
-router.get('/:id/intelligence', protect, async (req: AuthRequest, res) => {
-  try {
-    const courseId = req.params.id;
-    const studentId = req.query.studentId as string | undefined;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    if (!studentId) return res.status(400).json({ message: 'studentId es requerido.' });
-
-    const normalizedCourseId = normalizeIdForQuery(courseId);
-    const normalizedStudentId = normalizeIdForQuery(studentId);
-
-    const intelligence = await computeStudentCourseIntelligence({
-      courseId: normalizedCourseId,
-      studentId: normalizedStudentId,
-      colegioId,
-    });
-
-    return res.json(intelligence);
-  } catch (e: unknown) {
-    console.error('Error GET intelligence:', e);
-    return res.status(500).json({ message: 'Error al obtener inteligencia académica.' });
-  }
-});
-
-// =========================================================================
-// RUTA ACTUALIZADA (ADAPTADA AL ARRAY profesorIds)
-// GET /api/courses/for-group/:grupo - Obtener materias del profesor para un grupo específico
-router.get('/for-group/:grupo', protect, async (req: AuthRequest, res) => {
-try {
-const { grupo } = req.params;
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId);
-
-if (!user) {
-return res.status(404).json({ message: 'Usuario no encontrado' });
-}
-
-if (user.rol !== 'profesor') {
-return res.status(403).json({ message: 'Solo los profesores pueden acceder a esta ruta' });
-}
-
-// Buscar todas las materias del profesor que incluyan este grupo
-const courses = await Course.find({
-profesorIds: user._id, // <--- ADAPTACIÓN a profesorIds (array)
-cursos: grupo,
-colegioId: user.colegioId
-}).sort({ nombre: 1 });
-
-res.json(courses);
-} catch (error: any) {
-console.error('Error al obtener materias para grupo:', error.message);
-res.status(500).json({ message: 'Error en el servidor.' });
-}
-});
-
-// =========================================================================
-// RUTA ACTUALIZADA (ADAPTADA AL ARRAY profesorIds)
-// POST /api/courses - Crear curso (profesor/directivo)
+// POST /api/courses - Crear curso (subject + group_subjects)
 router.post('/', protect, async (req: AuthRequest, res) => {
-const { nombre, descripcion, cursos, colorAcento, icono } = req.body;
-
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId);
-if (!user) {
-return res.status(404).json({ message: 'Usuario no encontrado' });
-}
-
-if (user.rol !== 'profesor' && user.rol !== 'directivo') {
-return res.status(403).json({ message: 'Solo profesores y directivos pueden crear cursos' });
-}
-
-try {
-// Inicializar el array de profesores con el ID del creador (profesor o directivo)
-// Nota: req.userId es un string, pero Mongoose lo maneja al compararlo con ObjectId
-const profesorIds: (string | Types.ObjectId)[] = user.rol === 'profesor' ? [user._id as Types.ObjectId] : []; 
-
-// Buscar o crear la materia correspondiente
-const { Materia } = await import('../models/Materia');
-let materia = await Materia.findOne({ nombre });
-if (!materia) {
-  // Crear materia si no existe
-  materia = await Materia.create({
-    nombre,
-    descripcion: descripcion || `Materia ${nombre}`,
-    area: 'General', // Valor por defecto
-  });
-}
-
-const nuevoCurso = await Course.create({
-  nombre,
-  materiaId: materia._id, // Campo requerido en nueva estructura
-  profesorId: user.rol === 'profesor' ? user._id : undefined, // Campo requerido
-  estudiantes: [], // Campo requerido
-  // Campos adicionales para compatibilidad
-  colegioId: user.colegioId,
-  descripcion,
-  profesorIds: profesorIds,
-  cursos: Array.isArray(cursos) ? cursos : [],
-  estudianteIds: [],
-  colorAcento: colorAcento || '#9f25b8',
-  icono,
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'profesor' && user.role !== 'directivo') {
+      return res.status(403).json({ message: 'Solo profesores y directivos pueden crear cursos' });
+    }
+    const { nombre, descripcion, cursos, colorAcento, icono } = req.body;
+    const name = String(nombre || '').trim();
+    if (!name) return res.status(400).json({ message: 'Falta el nombre del curso.' });
+    let subject = await findSubjectByNameAndInstitution(colegioId, name);
+    if (!subject) subject = await createSubject({ institution_id: colegioId, name, description: descripcion || `Materia ${name}` });
+    const groupNames = Array.isArray(cursos) ? cursos.map((c: string) => String(c).toUpperCase().trim()) : [];
+    const teacherId = user.role === 'profesor' ? userId : userId;
+    for (const gName of groupNames) {
+      const group = await findGroupByNameAndInstitution(colegioId, gName);
+      if (group) {
+        try {
+          await createGroupSubject({
+            institution_id: colegioId,
+            group_id: group.id,
+            subject_id: subject.id,
+            teacher_id: teacherId,
+          });
+        } catch (_) {}
+      }
+    }
+    if (user.role === 'profesor') {
+      const materias = (user.config as { materias?: string[] })?.materias ?? [];
+      if (!materias.includes(name)) await import('../repositories/userRepository.js').then(({ updateUser }) => updateUser(userId, { config: { ...user.config, materias: [...materias, name] } }));
+    }
+    res.status(201).json({
+      _id: subject.id,
+      nombre: subject.name,
+      descripcion: subject.description,
+      colorAcento: colorAcento || '',
+      icono: icono || '',
+      cursos: groupNames,
+      colegioId,
+    });
+  } catch (error: unknown) {
+    console.error('Error al crear curso:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor al crear el curso.' });
+  }
 });
 
-// Si el creador es profesor, añadir el *NOMBRE* del curso a su lista de materias (mantiene la estructura actual)
-if (user.rol === 'profesor') {
-    // Si la lista de materias en el usuario es de STRINGS (nombres), añadimos el nombre.
-    // Si la lista fuera de IDs, añadiríamos nuevoCurso._id. Mantenemos el nombre por tu modelo de User.ts.
-    await User.findByIdAndUpdate(user._id, { $addToSet: { materias: nuevoCurso.nombre } }); 
-}
-
-res.status(201).json(nuevoCurso);
-} catch (error: any) {
-console.error('Error al crear curso:', error.message);
-res.status(500).json({ message: 'Error en el servidor al crear el curso.' });
-}
-});
-
-// =========================================================================
-// POST /api/courses/assign-professor-to-groups - Asignar profesor a uno o más grupos (cursos)
-// Flujo admin: la materia viene del profesor; se crea/actualiza Course con nombre = materia del profesor.
-// Body: { professorId: string, groupNames: string[] } (ej. groupNames: ["11A", "11B"])
-// =========================================================================
+// POST /api/courses/assign-professor-to-groups
 router.post('/assign-professor-to-groups', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
   try {
     const colegioId = req.user?.colegioId;
-    if (!colegioId) {
-      return res.status(400).json({ message: 'Colegio no definido.' });
-    }
+    if (!colegioId) return res.status(400).json({ message: 'Colegio no definido.' });
     const { professorId, groupNames } = req.body as { professorId?: string; groupNames?: string[] };
     if (!professorId || !Array.isArray(groupNames) || groupNames.length === 0) {
       return res.status(400).json({ message: 'Se requiere professorId y groupNames (array de nombres de curso/grupo).' });
     }
-
-    const professor = await User.findById(normalizeIdForQuery(professorId)).select('rol colegioId materias nombre').lean();
-    if (!professor || professor.rol !== 'profesor') {
-      return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
-    }
-    if (professor.colegioId !== colegioId) {
-      return res.status(403).json({ message: 'El profesor debe pertenecer a tu colegio.' });
-    }
-
-    const materiaNombre = Array.isArray(professor.materias) && professor.materias.length > 0
-      ? String(professor.materias[0]).trim()
-      : '';
-    if (!materiaNombre) {
-      return res.status(400).json({ message: 'El profesor debe tener al menos una materia asignada. Edita el profesor y asígnale una materia.' });
-    }
-
+    const professor = await findUserById(professorId);
+    if (!professor || professor.role !== 'profesor') return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
+    if (professor.institution_id !== colegioId) return res.status(403).json({ message: 'El profesor debe pertenecer a tu colegio.' });
+    const materias = (professor.config as { materias?: string[] })?.materias;
+    const materiaNombre = Array.isArray(materias) && materias.length > 0 ? String(materias[0]).trim() : '';
+    if (!materiaNombre) return res.status(400).json({ message: 'El profesor debe tener al menos una materia asignada.' });
     const normalizedGroups = groupNames.map((g: string) => String(g).toUpperCase().trim()).filter(Boolean);
-    for (const nombreGrupo of normalizedGroups) {
-      const grupo = await Group.findOne({ nombre: nombreGrupo, colegioId }).lean();
-      if (!grupo) {
-        return res.status(400).json({ message: `El curso/grupo "${nombreGrupo}" no existe. Créalo primero en la sección Cursos.` });
-      }
+    let subject = await findSubjectByNameAndInstitution(colegioId, materiaNombre);
+    if (!subject) subject = await createSubject({ institution_id: colegioId, name: materiaNombre, description: `Materia ${materiaNombre}` });
+    for (const gName of normalizedGroups) {
+      const group = await findGroupByNameAndInstitution(colegioId, gName);
+      if (!group) return res.status(400).json({ message: `El curso/grupo "${gName}" no existe. Créalo primero.` });
+      try {
+        await createGroupSubject({ institution_id: colegioId, group_id: group.id, subject_id: subject.id, teacher_id: professorId });
+      } catch (_) {}
     }
-
-    const profesorObjId = new Types.ObjectId(normalizeIdForQuery(professorId));
-    let course = await Course.findOne({ nombre: materiaNombre, colegioId }).lean();
-    if (!course) {
-      course = await Course.create({
-        nombre: materiaNombre,
-        colegioId,
-        profesorIds: [profesorObjId],
-        profesorId: profesorObjId,
-        cursos: normalizedGroups,
-        estudiantes: [],
-        estudianteIds: [],
-      }) as any;
-    } else {
-      await Course.findByIdAndUpdate(course._id, {
-        $addToSet: {
-          profesorIds: profesorObjId,
-          cursos: { $each: normalizedGroups },
-        },
-        $set: { profesorId: course.profesorId || profesorObjId },
-      });
-    }
-
     await logAdminAction({
-      userId: normalizeIdForQuery(req.userId || ''),
-      role: req.user?.rol || 'admin-general-colegio',
+      userId: req.user!.id!,
+      role: req.user?.rol ?? 'admin-general-colegio',
       action: 'assign_professor_to_groups',
       entityType: 'course',
-      entityId: course._id,
+      entityId: subject.id,
       colegioId,
       requestData: { professorId, groupNames: normalizedGroups, materiaNombre },
-    });
-
+    }).catch(() => {});
     return res.status(200).json({
       message: `Profesor asignado a los cursos ${normalizedGroups.join(', ')} para la materia ${materiaNombre}.`,
-      course: await Course.findById(course._id).populate('profesorIds', 'nombre email').lean(),
+      course: { _id: subject.id, nombre: subject.name, cursos: normalizedGroups },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error en assign-professor-to-groups:', error);
     res.status(500).json({ message: 'Error al asignar profesor a los cursos.' });
   }
 });
 
-// =========================================================================
-// RUTA ACTUALIZADA: PUT /api/courses/assign-professor (NUEVA RUTA DE ASIGNACIÓN)
-// Función: Asigna un profesor a un curso (materia) existente por ID. Solo para Directivos.
+// PUT /api/courses/assign-professor
 router.put('/assign-professor', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
-try {
-const { courseId, professorId } = req.body;
-
-if (!courseId || !professorId) {
-return res.status(400).json({ message: 'Se requiere el ID del curso y el ID del profesor.' });
-}
-
-// 1. Encontrar y actualizar el Curso (añadir el profesor al array)
-const course = await Course.findByIdAndUpdate(
-courseId,
-{ $addToSet: { profesorIds: professorId } },
-{ new: true }
-);
-
-if (!course) {
-return res.status(404).json({ message: 'Curso no encontrado.' });
-}
-
-// 2. Encontrar y actualizar el Profesor (añadir el curso *NOMBRE* a su lista de materias)
-const professor = await User.findByIdAndUpdate(
-professorId,
-{ $addToSet: { materias: course.nombre } }, // Se añade el NOMBRE del curso
-{ new: true }
-);
-
-if (!professor || professor.rol !== 'profesor') {
-// Revertir el cambio en el curso si el profesor no se encuentra o no es profesor
-await Course.findByIdAndUpdate(courseId, { $pull: { profesorIds: professorId } });
-return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
-}
-
-await logAdminAction({
-  userId: normalizeIdForQuery(req.userId || ''),
-  role: req.user?.rol || 'admin-general-colegio',
-  action: 'assign_professor',
-  entityType: 'course',
-  entityId: course._id,
-  colegioId: req.user?.colegioId || course.colegioId,
-  requestData: { courseId, professorId, courseName: course.nombre },
-});
-
-res.status(200).json({ 
-message: `Profesor ${professor.nombre} asignado correctamente al curso ${course.nombre}.`,
-course,
-professor
-});
-
-} catch (error) {
-console.error('Error al asignar profesor:', error);
-res.status(500).json({ message: 'Error interno del servidor al procesar la asignación.' });
-}
-});
-
-// =========================================================================
-// RUTA ACTUALIZADA: PUT /api/courses/enroll-students (NUEVA RUTA DE INSCRIPCIÓN)
-// Función: Inscribe una lista de estudiantes a un curso y viceversa. Solo para Directivos.
-router.put('/enroll-students', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
-try {
-const { courseId, studentIds } = req.body; // studentIds debe ser un array
-
-if (!courseId || !Array.isArray(studentIds) || studentIds.length === 0) {
-return res.status(400).json({ message: 'Se requiere el ID del curso y una lista de IDs de estudiantes.' });
-}
-
-// 1. Encontrar y actualizar el Curso (añadir todos los estudiantes al array)
-const course = await Course.findByIdAndUpdate(
-courseId,
-{ $addToSet: { estudianteIds: { $each: studentIds } } },
-{ new: true }
-);
-
-if (!course) {
-return res.status(404).json({ message: 'Curso no encontrado.' });
-}
-
-// 2. Encontrar y actualizar los Estudiantes (añadir el curso *NOMBRE* a su lista de materias)
-// Usamos updateMany para eficiencia en la base de datos
-await User.updateMany(
-{ _id: { $in: studentIds }, rol: 'estudiante' },
-{ $addToSet: { materias: course.nombre } } // Se añade el NOMBRE del curso
-);
-
-await logAdminAction({
-  userId: normalizeIdForQuery(req.userId || ''),
-  role: req.user?.rol || 'admin-general-colegio',
-  action: 'enroll_students',
-  entityType: 'course',
-  entityId: course._id,
-  colegioId: req.user?.colegioId || course.colegioId,
-  requestData: { courseId, studentIds, courseName: course.nombre },
-});
-
-res.status(200).json({ 
-message: `Se inscribieron ${studentIds.length} estudiantes al curso ${course.nombre}.`,
-course
-});
-
-} catch (error) {
-console.error('Error al inscribir estudiantes:', error);
-res.status(500).json({ message: 'Error interno del servidor al procesar la inscripción.' });
-}
-});
-
-// =========================================================================
-// NUEVA RUTA: GET Materia por Nombre (Para el Frontend de Asignaciones)
-// GET /api/courses/by-name?name=Matemáticas
-// =========================================================================
-router.get('/by-name', protect, async (req: AuthRequest, res) => {
-    // Acepta tanto 'name' como 'nombre' como parámetro
-    const name = req.query.name || req.query.nombre;
-
-    if (!name || typeof name !== 'string') {
-        return res.status(400).json({ message: 'El parámetro de nombre es obligatorio.' });
-    }
-
-    try {
-        // Buscamos el curso (materia) exacto por nombre y colegio
-        const course = await Course.findOne({ 
-            nombre: name,
-            colegioId: req.user?.colegioId // Aseguramos que solo busque en el colegio del usuario
-        }).select('_id nombre cursos'); 
-
-        if (!course) {
-            return res.status(404).json({ message: 'Materia no encontrada con ese nombre en este colegio.' });
-        }
-
-        res.json(course);
-
-    } catch (error) {
-        console.error('Error al buscar materia por nombre:', error);
-        res.status(500).json({ message: 'Error interno del servidor al buscar la materia.' });
-    }
-});
-
-
-// =========================================================================
-// NUEVA RUTA: GET /api/courses/academic-groups - Obtener grupos académicos para comunicación
-// Devuelve materias agrupadas con sus estudiantes y profesores
-// =========================================================================
-router.get('/academic-groups', protect, async (req: AuthRequest, res) => {
   try {
-    const user = await User.findById(req.userId).select('rol curso colegioId');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    let courses: any[] = [];
-
-    // Para estudiantes: obtener materias de su curso
-    if (user.rol === 'estudiante') {
-      if (!user.curso) {
-        return res.status(200).json([]);
-      }
-
-      const grupoIdNormalizado = (user.curso as string).toUpperCase().trim();
-      
-      courses = await Course.find({
-        $or: [
-          { cursos: grupoIdNormalizado },
-          { cursos: { $regex: new RegExp(`^${grupoIdNormalizado}$`, 'i') } }
-        ],
-        colegioId: user.colegioId
-      })
-      .populate('profesorIds', 'nombre email')
-      .populate('profesorId', 'nombre email')
-      .populate('estudianteIds', 'nombre email')
-      .populate('estudiantes', 'nombre email')
-      .populate('materiaId', 'nombre descripcion')
-      .lean();
-    }
-    // Para profesores: obtener materias donde es profesor
-    else if (user.rol === 'profesor') {
-      courses = await Course.find({
-        profesorIds: user._id,
-        colegioId: user.colegioId
-      })
-      .populate('profesorIds', 'nombre email')
-      .populate('profesorId', 'nombre email')
-      .populate('estudianteIds', 'nombre email')
-      .populate('estudiantes', 'nombre email')
-      .populate('materiaId', 'nombre descripcion')
-      .lean();
-    }
-    // Para otros roles: obtener todas las materias del colegio
-    else {
-      courses = await Course.find({
-        colegioId: user.colegioId
-      })
-      .populate('profesorIds', 'nombre email')
-      .populate('profesorId', 'nombre email')
-      .populate('estudianteIds', 'nombre email')
-      .populate('estudiantes', 'nombre email')
-      .populate('materiaId', 'nombre descripcion')
-      .lean();
-    }
-
-    // Agrupar por materiaId y formatear respuesta
-    const groupsMap = new Map();
-
-    courses.forEach((course: any) => {
-      const materiaId = course.materiaId?._id?.toString() || course._id.toString();
-      
-      if (!groupsMap.has(materiaId)) {
-        groupsMap.set(materiaId, {
-          materiaId: materiaId,
-          materiaNombre: course.materiaId?.nombre || course.nombre,
-          materiaDescripcion: course.materiaId?.descripcion || course.descripcion,
-          profesores: [],
-          estudiantes: [],
-          cursos: [],
-          ultimoMensaje: null,
-          mensajesSinLeer: 0
-        });
-      }
-
-      const group = groupsMap.get(materiaId);
-
-      // Agregar profesores únicos (de profesorIds array)
-      if (course.profesorIds && Array.isArray(course.profesorIds)) {
-        course.profesorIds.forEach((prof: any) => {
-          if (prof && !group.profesores.find((p: any) => p._id === prof._id?.toString())) {
-            group.profesores.push({
-              _id: prof._id?.toString(),
-              nombre: prof.nombre,
-              email: prof.email
-            });
-          }
-        });
-      }
-      // También agregar profesorId individual si existe
-      if (course.profesorId && !group.profesores.find((p: any) => p._id === course.profesorId._id?.toString())) {
-        group.profesores.push({
-          _id: course.profesorId._id?.toString(),
-          nombre: course.profesorId.nombre,
-          email: course.profesorId.email
-        });
-      }
-
-      // Agregar estudiantes únicos (de estudianteIds array)
-      if (course.estudianteIds && Array.isArray(course.estudianteIds)) {
-        course.estudianteIds.forEach((est: any) => {
-          if (est && !group.estudiantes.find((e: any) => e._id === est._id?.toString())) {
-            group.estudiantes.push({
-              _id: est._id?.toString(),
-              nombre: est.nombre,
-              email: est.email
-            });
-          }
-        });
-      }
-      // También agregar estudiantes del array estudiantes si existe
-      if (course.estudiantes && Array.isArray(course.estudiantes)) {
-        course.estudiantes.forEach((est: any) => {
-          if (est && !group.estudiantes.find((e: any) => e._id === est._id?.toString())) {
-            group.estudiantes.push({
-              _id: est._id?.toString(),
-              nombre: est.nombre,
-              email: est.email
-            });
-          }
-        });
-      }
-
-      // Agregar cursos únicos
-      if (course.cursos && Array.isArray(course.cursos)) {
-        course.cursos.forEach((curso: string) => {
-          if (curso && !group.cursos.includes(curso)) {
-            group.cursos.push(curso);
-          }
-        });
-      }
-    });
-
-    // Convertir map a array
-    const groups = Array.from(groupsMap.values());
-
-    res.json(groups);
-  } catch (error: any) {
-    console.error('Error al obtener grupos académicos:', error.message);
-    res.status(500).json({ message: 'Error en el servidor al obtener grupos académicos.' });
+    const { courseId, professorId } = req.body;
+    if (!courseId || !professorId) return res.status(400).json({ message: 'Se requiere el ID del curso y el ID del profesor.' });
+    const gs = await findGroupSubjectById(courseId);
+    if (!gs) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const professor = await findUserById(professorId);
+    if (!professor || professor.role !== 'profesor') return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
+    const { queryPg } = await import('../config/db-pg.js');
+    await queryPg('UPDATE group_subjects SET teacher_id = $1 WHERE id = $2 RETURNING 1', [professorId, courseId]);
+    const subject = await findSubjectById(gs.subject_id);
+    await logAdminAction({
+      userId: req.user!.id!,
+      role: req.user?.rol ?? 'admin-general-colegio',
+      action: 'assign_professor',
+      entityType: 'course',
+      entityId: courseId,
+      colegioId: gs.institution_id,
+      requestData: { courseId, professorId, courseName: subject?.name },
+    }).catch(() => {});
+    res.status(200).json({ message: `Profesor asignado correctamente al curso ${subject?.name}.`, course: { _id: gs.id }, professor: { _id: professor.id, nombre: professor.full_name } });
+  } catch (error: unknown) {
+    console.error('Error al asignar profesor:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
-// =========================================================================
-// OTRAS RUTAS (Se mantienen, pero se pueden refactorizar)
-// PUT /api/courses/:id - Actualizar curso
+// PUT /api/courses/enroll-students - En PG la inscripción es por grupo (enrollments), no por "curso" Mongo
+router.put('/enroll-students', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
+  try {
+    const { courseId, studentIds } = req.body;
+    if (!courseId || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ message: 'Se requiere el ID del curso y una lista de IDs de estudiantes.' });
+    }
+    const gs = await findGroupSubjectById(courseId);
+    if (!gs) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const { createEnrollment } = await import('../repositories/enrollmentRepository.js');
+    const { findActiveAcademicPeriodForInstitution } = await import('../repositories/academicPeriodRepository.js');
+    const period = await findActiveAcademicPeriodForInstitution(gs.institution_id);
+    const group = await findGroupById(gs.group_id);
+    for (const sid of studentIds) {
+      try {
+        await createEnrollment({ student_id: sid, group_id: gs.group_id, academic_period_id: period?.id ?? null });
+      } catch (_) {}
+    }
+    await logAdminAction({
+      userId: req.user!.id!,
+      role: req.user?.rol ?? 'admin-general-colegio',
+      action: 'enroll_students',
+      entityType: 'course',
+      entityId: courseId,
+      colegioId: gs.institution_id,
+      requestData: { courseId, studentIds },
+    }).catch(() => {});
+    res.status(200).json({
+      message: `Estudiantes inscritos en el curso ${group?.name ?? courseId}.`,
+      course: { _id: courseId },
+      studentIds,
+    });
+  } catch (error: unknown) {
+    console.error('Error al inscribir estudiantes:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// PUT /api/courses/:id
 router.put('/:id', protect, async (req: AuthRequest, res) => {
-// ... (El código de actualización se mantiene igual)
-// ...
+  try {
+    const { id } = req.params;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const subject = await findSubjectById(id);
+    if (!subject || subject.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const { nombre, descripcion } = req.body;
+    const updated = await updateSubject(id, colegioId, { name: nombre ?? subject.name, description: descripcion ?? subject.description });
+    res.json(updated ?? subject);
+  } catch (error: unknown) {
+    console.error('Error al actualizar curso:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 });
 
-// POST /api/courses/assign - Asignar grupos a profesor (solo directivos)
-// Recomiendo ELIMINAR O REFACTORIZAR esta ruta y usar las nuevas de PUT (assign-professor, enroll-students).
-router.post('/assign', protect, async (req: AuthRequest, res) => {
-// ... (El código existente se mantiene, pero tiene inconsistencias con los nuevos modelos)
-// ...
+// POST /api/courses/assign - stub
+router.post('/assign', protect, checkIsDirectivoOrAdminColegio, async (req: AuthRequest, res) => {
+  res.status(200).json({ message: 'Usa POST /assign-professor-to-groups o PUT /assign-professor.' });
 });
 
-// DELETE /api/courses/:id - Eliminar curso
+// DELETE /api/courses/:id - No borramos subject si hay group_subjects; solo para compatibilidad
 router.delete('/:id', protect, async (req: AuthRequest, res) => {
-// ... (El código de eliminación se mantiene igual)
-// ...
+  try {
+    const { id } = req.params;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const subject = await findSubjectById(id);
+    if (!subject || subject.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const { queryPg } = await import('../config/db-pg.js');
+    await queryPg('DELETE FROM group_subjects WHERE subject_id = $1 AND institution_id = $2', [id, colegioId]);
+    res.json({ message: 'Curso eliminado.', _id: id });
+  } catch (error: unknown) {
+    console.error('Error al eliminar curso:', error);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 });
-
 
 export default router;

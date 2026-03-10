@@ -39,7 +39,7 @@ import Setup from "@/pages/setup";
 import NotFound from "@/pages/not-found";
 import PermisosPage from "@/pages/permisos";
 import NotificacionesPage from "@/pages/notificaciones";
-import BoletinPage from "@/pages/boletin";
+import DeprecatedModulePage from "@/pages/deprecated-module";
 import TerminosPage from "@/pages/terminos";
 import PrivacidadPage from "@/pages/privacidad";
 import ConsentPage from "@/pages/consent";
@@ -110,7 +110,6 @@ import AsistenciaSelectorPage from "@/pages/asistencia-selector";
 // Nuevos roles
 import AdministradorGeneralPage from "@/pages/administrador-general";
 import TransportePage from "@/pages/transporte";
-import TesoreriaPage from "@/pages/tesoreria";
 import NutricionPage from "@/pages/nutricion";
 import CafeteriaPage from "@/pages/cafeteria";
 
@@ -131,9 +130,6 @@ import TransporteAcademiaLayout from "@/pages/transporte-academia";
 import TransporteComunicacionLayout from "@/pages/transporte-comunicacion";
 
 // Módulos de Tesorería
-import TesoreriaComunidadLayout from "@/pages/tesoreria-comunidad";
-import TesoreriaAcademiaLayout from "@/pages/tesoreria-academia";
-import TesoreriaComunicacionLayout from "@/pages/tesoreria-comunicacion";
 
 // Módulos de Nutrición
 import NutricionComunidadLayout from "@/pages/nutricion-comunidad";
@@ -220,7 +216,7 @@ function AppRouter() {
               <AuthGuard><TransportePage /></AuthGuard>
             </Route>
             <Route path="/tesoreria">
-              <AuthGuard><TesoreriaPage /></AuthGuard>
+              <AuthGuard><DeprecatedModulePage /></AuthGuard>
             </Route>
             <Route path="/nutricion">
               <AuthGuard><NutricionPage /></AuthGuard>
@@ -371,7 +367,7 @@ function AppRouter() {
               <AuthGuard><StudentProfilePage /></AuthGuard>
             </Route>
             <Route path="/profesor/cursos/:cursoId/estudiantes/:estudianteId/boletin-inteligente">
-              <AuthGuard><BoletinInteligentePage /></AuthGuard>
+              <AuthGuard><DeprecatedModulePage /></AuthGuard>
             </Route>
 
             <Route path="/group-assignment">
@@ -418,7 +414,7 @@ function AppRouter() {
               <AuthGuard><NotificacionesPage /></AuthGuard>
             </Route>
             <Route path="/boletin">
-              <AuthGuard><BoletinPage /></AuthGuard>
+              <AuthGuard><DeprecatedModulePage /></AuthGuard>
             </Route>
 
             <Route path="/terminos">
@@ -545,15 +541,15 @@ function AppRouter() {
               <AuthGuard><TransporteComunicacionLayout /></AuthGuard>
             </Route>
 
-            {/* Módulos de Tesorería */}
+            {/* Módulos de Tesorería (removidos) */}
             <Route path="/tesoreria/comunidad">
-              <AuthGuard><TesoreriaComunidadLayout /></AuthGuard>
+              <AuthGuard><DeprecatedModulePage /></AuthGuard>
             </Route>
             <Route path="/tesoreria/academia">
-              <AuthGuard><TesoreriaAcademiaLayout /></AuthGuard>
+              <AuthGuard><DeprecatedModulePage /></AuthGuard>
             </Route>
             <Route path="/tesoreria/comunicacion">
-              <AuthGuard><TesoreriaComunicacionLayout /></AuthGuard>
+              <AuthGuard><DeprecatedModulePage /></AuthGuard>
             </Route>
 
             {/* Módulos de Nutrición */}

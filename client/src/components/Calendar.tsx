@@ -6,6 +6,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
+import { courseDisplayLabel } from '@/lib/assignmentUtils';
 
 interface Assignment {
   _id: string;
@@ -74,7 +75,7 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
   const uniqueMaterias = useMemo(() => {
     const set = new Set<string>();
     assignments.forEach((assignment) => {
-      const name = assignment.materiaNombre || assignment.curso || assignment.courseId || '';
+      const name = courseDisplayLabel(assignment);
       if (name) set.add(name);
     });
     return Array.from(set).sort();
@@ -121,7 +122,7 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
       // Agrupar tareas por materia (asignatura) para color y leyenda
       const assignmentsByMateria = new Map<string, Assignment[]>();
       dayAssignments.forEach((assignment) => {
-        const key = assignment.materiaNombre || assignment.curso || assignment.courseId || 'Sin materia';
+        const key = courseDisplayLabel(assignment) || 'Sin materia';
         if (!assignmentsByMateria.has(key)) {
           assignmentsByMateria.set(key, []);
         }
@@ -221,7 +222,7 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
                           </span>
                           <span className="text-white/30">•</span>
                           <span className="text-white/50" style={{ color }}>
-                            {assignment.materiaNombre || assignment.curso}
+                            {courseDisplayLabel(assignment)}
                           </span>
                         </div>
                       </div>

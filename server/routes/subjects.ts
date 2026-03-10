@@ -1,136 +1,111 @@
 import { Router } from 'express';
-import { Course } from '../models/Course';
-import { Assignment } from '../models/Assignment';
-import { User } from '../models/User';
 import { protect, AuthRequest } from '../middleware/auth';
-import { normalizeIdForQuery } from '../utils/idGenerator';
+import { findUserById } from '../repositories/userRepository.js';
+import { findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
+import { findGroupSubjectsByGroup, findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
+import { findSubjectById } from '../repositories/subjectRepository.js';
+import { findAssignmentsByGroupSubject } from '../repositories/assignmentRepository.js';
 
 const router = Router();
 
-// GET /api/subjects/mine - Obtener materias del curso del estudiante
+// GET /api/subjects/mine - Materias del grupo del estudiante
 router.get('/mine', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId);
-
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    if (user.rol !== 'estudiante' || !user.curso) {
+    const userId = req.user?.id;
+    if (!userId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'estudiante') {
       return res.status(403).json({ message: 'Solo estudiantes pueden ver sus materias' });
     }
+    let curso = (user.config as { curso?: string })?.curso;
+    if (!curso) curso = await getFirstGroupNameForStudent(userId) ?? undefined;
+    let group = curso ? await findGroupByNameAndInstitution(user.institution_id, curso.toUpperCase().trim()) : null;
+    if (!group) group = await getFirstGroupForStudent(userId, user.institution_id);
+    if (!group) return res.json([]);
 
-    // Buscar todas las materias que se imparten en el curso del estudiante
-    const subjects = await Course.find({
-      colegioId: user.colegioId,
-      cursos: user.curso
-    }).populate('profesorId', 'nombre email');
-
-    // Formatear respuesta
-    const formattedSubjects = subjects.map(subject => ({
-      _id: subject._id,
-      nombre: subject.nombre,
-      descripcion: subject.descripcion,
-      colorAcento: subject.colorAcento,
-      icono: subject.icono,
-      profesor: {
-        _id: (subject.profesorId as any)._id,
-        nombre: (subject.profesorId as any).nombre,
-        email: (subject.profesorId as any).email
-      },
-      createdAt: subject.createdAt
+    const groupSubjects = await findGroupSubjectsByGroupWithDetails(group.id, user.institution_id);
+    const formattedSubjects = groupSubjects.map((gs) => ({
+      _id: gs.subject_id,
+      id: gs.subject_id,
+      nombre: gs.subject_name,
+      descripcion: gs.subject_description ?? '',
+      colorAcento: '',
+      icono: '',
+      profesor: { _id: gs.teacher_id, nombre: gs.teacher_name, email: gs.teacher_email },
+      createdAt: gs.created_at,
     }));
-
     res.json(formattedSubjects);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error obteniendo materias:', error);
     res.status(500).json({ message: 'Error del servidor' });
   }
 });
 
-// GET /api/subjects/:id/overview - Obtener detalle de materia con tareas
+// GET /api/subjects/:id/overview - Detalle de materia con tareas (id = subject id o group_subject id)
 router.get('/:id/overview', protect, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId);
+    const userId = req.user?.id;
+    if (!userId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
 
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
+    const courseGroups = await getAllCourseGroupsForStudent(userId, user.institution_id);
+    if (!courseGroups.length) return res.status(403).json({ message: 'No tienes un curso asignado' });
 
-    // Obtener la materia
-    const subject = await Course.findById(id).populate('profesorId', 'nombre email');
+    const allGroupSubjects = (await Promise.all(
+      courseGroups.map((g) => findGroupSubjectsByGroup(g.id))
+    )).flat();
 
-    if (!subject) {
-      return res.status(404).json({ message: 'Materia no encontrada' });
-    }
+    const gsRow = allGroupSubjects.find((gs) => gs.subject_id === id || gs.id === id);
+    if (!gsRow) return res.status(403).json({ message: 'No tienes acceso a esta materia' });
+    const gsId = gsRow.id;
 
-    // Verificar que el estudiante pertenezca a un curso donde se imparte esta materia
-    if (user.rol === 'estudiante' && !subject.cursos.includes(user.curso || '')) {
-      return res.status(403).json({ message: 'No tienes acceso a esta materia' });
-    }
+    const subject = await findSubjectById(gsRow.subject_id);
+    if (!subject) return res.status(404).json({ message: 'Materia no encontrada' });
+    const teacher = await findUserById(gsRow.teacher_id);
+    const assignments = await findAssignmentsByGroupSubject(gsId);
+    const now = new Date().toISOString();
+    const pendingAssignments = assignments.filter((a) => a.due_date > now);
+    const pastAssignments = assignments.filter((a) => a.due_date <= now);
 
-    // Obtener todas las tareas de esta materia para el curso del estudiante
-    // Filtrar por courseId si está disponible, sino usar curso + profesorId (datos antiguos)
-    // Nota: subject.profesorId puede estar poblado, así que extraemos el _id
-    const profesorId = typeof subject.profesorId === 'object' && subject.profesorId._id 
-      ? subject.profesorId._id 
-      : subject.profesorId;
-      
-    const assignments = await Assignment.find({
-      $or: [
-        { courseId: subject._id, curso: user.curso }, // Nuevo: con courseId
-        { courseId: { $exists: false }, curso: user.curso, profesorId } // Antiguo: sin courseId
-      ],
-      colegioId: user.colegioId
-    }).sort({ fechaEntrega: 1 });
-
-    // Separar en pendientes y pasadas
-    const now = new Date();
-    const pendingAssignments = assignments.filter(a => new Date(a.fechaEntrega) > now);
-    const pastAssignments = assignments.filter(a => new Date(a.fechaEntrega) <= now);
-
-    // Formatear respuesta
     const response = {
-      _id: subject._id,
-      nombre: subject.nombre,
-      descripcion: subject.descripcion,
-      colorAcento: subject.colorAcento,
-      icono: subject.icono,
-      profesor: {
-        _id: (subject.profesorId as any)._id,
-        nombre: (subject.profesorId as any).nombre,
-        email: (subject.profesorId as any).email
-      },
+      _id: subject?.id ?? id,
+      nombre: subject?.name ?? '',
+      descripcion: subject?.description ?? '',
+      colorAcento: '',
+      icono: '',
+      profesor: teacher
+        ? { _id: teacher.id, nombre: teacher.full_name, email: teacher.email }
+        : null,
       assignments: {
-        pending: pendingAssignments.map(a => ({
-          _id: a._id,
-          titulo: a.titulo,
-          descripcion: a.descripcion,
-          fechaEntrega: a.fechaEntrega,
-          profesorNombre: a.profesorNombre,
-          createdAt: a.createdAt
+        pending: pendingAssignments.map((a) => ({
+          _id: a.id,
+          titulo: a.title,
+          descripcion: a.description,
+          fechaEntrega: a.due_date,
+          profesorNombre: null,
+          createdAt: a.created_at,
         })),
-        past: pastAssignments.map(a => ({
-          _id: a._id,
-          titulo: a.titulo,
-          descripcion: a.descripcion,
-          fechaEntrega: a.fechaEntrega,
-          profesorNombre: a.profesorNombre,
-          createdAt: a.createdAt
-        }))
+        past: pastAssignments.map((a) => ({
+          _id: a.id,
+          titulo: a.title,
+          descripcion: a.description,
+          fechaEntrega: a.due_date,
+          profesorNombre: null,
+          createdAt: a.created_at,
+        })),
       },
       stats: {
         totalAssignments: assignments.length,
         pendingCount: pendingAssignments.length,
-        pastCount: pastAssignments.length
-      }
+        pastCount: pastAssignments.length,
+      },
     };
-
     res.json(response);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error obteniendo detalle de materia:', error);
     res.status(500).json({ message: 'Error del servidor' });
   }

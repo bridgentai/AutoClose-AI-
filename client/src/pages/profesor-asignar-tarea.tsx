@@ -245,6 +245,7 @@ function ProfesorAsignarTareaPageInner() {
       fechaEntrega: fechaEntregaCompleta?.toISOString() || undefined,
       adjuntos,
       puntos: puntos !== '0' ? parseInt(puntos) : undefined,
+      categoryId: logroCalificacionId || undefined,
       logroCalificacionId: logroCalificacionId || undefined,
     });
   };

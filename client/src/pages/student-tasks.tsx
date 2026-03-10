@@ -25,6 +25,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
+import { courseDisplayLabel } from '@/lib/assignmentUtils';
 
 interface Assignment {
   _id: string;
@@ -69,9 +70,9 @@ export default function StudentTasksPage() {
 
   // Query para obtener todas las tareas del estudiante
   const { data: assignments = [], isLoading } = useQuery<Assignment[]>({
-    queryKey: ['studentAssignments', user?.curso],
+    queryKey: ['studentAssignments', user?.id],
     queryFn: () => apiRequest('GET', '/api/assignments/student'),
-    enabled: !!user?.id && !!user?.curso,
+    enabled: !!user?.id,
     staleTime: 0,
   });
 
@@ -167,7 +168,10 @@ export default function StudentTasksPage() {
     const EstadoIcon = estado.icon;
     const diasRestantes = getDiasRestantes(assignment.fechaEntrega);
     const fechaEntrega = new Date(assignment.fechaEntrega);
-    const materiaNombre = assignment.materiaNombre || assignment.curso || 'Sin materia';
+    const materiaNombre = (() => {
+      const label = courseDisplayLabel(assignment);
+      return label === 'Curso' ? 'Sin materia' : label;
+    })();
     const materiaColor = colorForMateria(materiaNombre);
 
     return (

@@ -1,6 +1,7 @@
 import crypto from 'crypto';
-import { User } from '../models/User';
+import bcrypt from 'bcryptjs';
 import { generateUserId } from '../utils/idGenerator';
+import { findUserByEmail, findUserByInternalCodeAny, createUser, updateUser } from '../repositories/userRepository.js';
 
 /** Rol aceptado en la carga masiva (inglés o español) → rol interno */
 const ROL_MAP: Record<string, 'estudiante' | 'profesor' | 'padre'> = {
@@ -56,12 +57,12 @@ function normalizeRol(rol: unknown): 'estudiante' | 'profesor' | 'padre' | null 
   return (ROL_MAP[r] ?? null) as 'estudiante' | 'profesor' | 'padre' | null;
 }
 
-/** Genera contraseña segura (solo para uso en creación; se hashea en pre-save). */
+/** Genera contraseña segura (solo para uso en creación; se hashea al guardar). */
 export function generateSecurePassword(): string {
   return crypto.randomBytes(16).toString('base64').replace(/[/+=]/g, '').slice(0, 16);
 }
 
-/** Valida una fila y comprueba si el email ya existe en el mismo colegio. */
+/** Valida una fila y comprueba si el email ya existe (globalmente, para evitar duplicados). */
 export async function validateBulkRow(
   row: BulkRowInput,
   rowIndex: number,
@@ -86,25 +87,21 @@ export async function validateBulkRow(
     return { valid: false, error: 'Rol debe ser student|teacher|parent (o equivalente en español)' };
   }
 
-  const existing = await User.findOne({
-    $or: [{ correo: email }, { email }],
-    colegioId,
-  });
-  if (existing) {
+  const existing = await findUserByEmail(email);
+  if (existing && existing.institution_id === colegioId) {
     return { valid: false, error: 'El email ya existe en este colegio' };
   }
 
   return { valid: true };
 }
 
-/** Genera código único de 4 dígitos (para codigoUnico en BD). */
 async function generateCodigoUnico(): Promise<string> {
   let codigo: string;
   let intentos = 0;
   const maxIntentos = 500;
   do {
     codigo = Math.floor(1000 + Math.random() * 9000).toString();
-    const existe = await User.findOne({ codigoUnico: codigo });
+    const existe = await findUserByInternalCodeAny(codigo);
     if (!existe) return codigo;
     intentos++;
   } while (intentos < maxIntentos);
@@ -112,8 +109,7 @@ async function generateCodigoUnico(): Promise<string> {
 }
 
 /**
- * Crea usuarios en batch. No aborta todo si una fila falla; devuelve creados y fallidos.
- * colegioId siempre del admin autenticado.
+ * Crea usuarios en batch usando PostgreSQL.
  */
 export async function createBulkUsers(
   rows: BulkRowInput[],
@@ -150,47 +146,40 @@ export async function createBulkUsers(
       .join(' ');
     const rol = normalizeRol(row.rol)!;
     const passwordPlain = generateSecurePassword();
+    const passwordHash = await bcrypt.hash(passwordPlain, 10);
     const codigoUnico = await generateCodigoUnico();
     const codigoInterno = row.codigo_interno != null ? String(row.codigo_interno).trim() : codigoUnico;
     const curso = row.curso_grupo != null ? String(row.curso_grupo).trim() : undefined;
     const esEstudiante = rol === 'estudiante';
 
     try {
-      const newUser = new User({
-        nombre,
-        correo: email,
+      const config: Record<string, unknown> = { curso: curso ?? undefined };
+      const newUser = await createUser({
+        institution_id: colegioId,
         email,
-        password: passwordPlain,
-        rol,
-        colegioId,
-        estado: esEstudiante ? 'pendiente_vinculacion' : 'active',
-        curso,
-        codigoUnico,
-        codigoInterno: codigoInterno || undefined,
-        configuraciones: {},
+        password_hash: passwordHash,
+        full_name: nombre,
+        role: rol,
+        status: esEstudiante ? 'pendiente_vinculacion' : 'active',
+        internal_code: codigoInterno || codigoUnico,
+        config,
       });
-
-      await newUser.save();
-
-      try {
-        const categorized = generateUserId(rol, newUser._id);
-        newUser.userId = categorized.fullId;
-        await newUser.save();
-      } catch (_) {
-        // userId opcional
-      }
+      const categorized = generateUserId(rol, newUser.id);
+      await updateUser(newUser.id, { config: { ...config, userId: categorized.fullId } });
 
       created.push({
         email,
         passwordGenerated: passwordPlain,
-        codigoInterno,
+        codigoInterno: codigoInterno || codigoUnico,
         colegioId,
         nombre,
         rol,
         rowIndex,
       });
-    } catch (err: any) {
-      const message = err?.message || err?.code === 11000 ? 'Email o código ya existe' : 'Error al crear usuario';
+    } catch (err: unknown) {
+      const message = (err as { message?: string; code?: string })?.code === '23505'
+        ? 'Email o código ya existe'
+        : (err as Error)?.message || 'Error al crear usuario';
       failed.push({ rowIndex, email, error: message });
     }
   }

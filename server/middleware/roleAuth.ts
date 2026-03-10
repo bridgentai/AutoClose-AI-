@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from './auth';
-import { User } from '../models';
-import { validateIdForRole, extractInternalId, isValidCategorizedId, normalizeIdForQuery } from '../utils/idGenerator';
+import { AuthRequest } from './auth.js';
+import { findUserById } from '../repositories/userRepository.js';
+import { validateIdForRole, isValidCategorizedId, normalizeIdForQuery } from '../utils/idGenerator.js';
 
 /**
  * Middleware que valida que un ID de usuario corresponde al rol esperado
@@ -41,37 +41,27 @@ export const validateUserAccess = async (
       });
     }
 
-    // Extraer ID interno y buscar el usuario
     const internalId = normalizeIdForQuery(userIdParam);
-    const targetUser = await User.findById(internalId).select('rol colegioId');
-    
+    const targetUser = await findUserById(internalId);
+
     if (!targetUser) {
       return res.status(404).json({ message: 'Usuario no encontrado.' });
     }
 
-    // Verificaciones adicionales por rol
     if (userRole === 'estudiante') {
-      // Estudiante solo puede acceder a su propio perfil
       if (req.userId !== internalId) {
-        return res.status(403).json({ 
-          message: 'Solo puedes acceder a tu propio perfil.' 
-        });
-      }
-    }
-    
-    if (userRole === 'padre') {
-      // Padre solo puede acceder a información de su hijo
-      const hijoId = req.user?.hijoId;
-      if (hijoId && hijoId !== internalId && targetUser.rol !== 'estudiante') {
-        return res.status(403).json({ 
-          message: 'Solo puedes acceder a información de tu hijo.' 
-        });
+        return res.status(403).json({ message: 'Solo puedes acceder a tu propio perfil.' });
       }
     }
 
-    // Verificar mismo colegio (excepto para super_admin que tiene acceso global)
-    // ⚠️ SEGURIDAD: super_admin puede acceder a cualquier colegio
-    if (req.user?.rol !== 'super_admin' && targetUser.colegioId !== req.user?.colegioId) {
+    if (userRole === 'padre') {
+      const hijoId = (req.user as { hijoId?: string })?.hijoId;
+      if (hijoId && hijoId !== internalId && targetUser.role !== 'estudiante') {
+        return res.status(403).json({ message: 'Solo puedes acceder a información de tu hijo.' });
+      }
+    }
+
+    if (req.user?.rol !== 'super_admin' && targetUser.institution_id !== req.user?.colegioId) {
       return res.status(403).json({ 
         message: 'No tienes acceso a usuarios de otro colegio.' 
       });

@@ -1,14 +1,24 @@
 import express from 'express';
-import { Conversacion, Mensaje, User } from '../models';
-import { protect, AuthRequest } from '../middleware/auth';
-import { normalizeIdForQuery } from '../utils/idGenerator';
+import { protect, AuthRequest } from '../middleware/authMiddleware.js';
+import {
+  findConversationById,
+  findConversationIdsByParticipant,
+  createConversation,
+  addConversationParticipant,
+  isConversationParticipant,
+} from '../repositories/conversationRepository.js';
+import {
+  findMessagesByConversation,
+  getLastMessageByConversation,
+  createMessage,
+  markMessagesAsReadByConversationForUser,
+} from '../repositories/messageRepository.js';
+import { findUserById } from '../repositories/userRepository.js';
 
 const router = express.Router();
 
-async function canAccessConversation(conversacionId: string, userId: string): Promise<boolean> {
-  const c = await Conversacion.findById(conversacionId).lean();
-  if (!c) return false;
-  return c.participanteIds.some((id: unknown) => id?.toString() === userId);
+async function canAccessConversation(conversationId: string, userId: string): Promise<boolean> {
+  return isConversationParticipant(conversationId, userId);
 }
 
 // GET /api/messages/conversations - Listar conversaciones del usuario
@@ -18,31 +28,34 @@ router.get('/conversations', protect, async (req: AuthRequest, res) => {
     const colegioId = req.user?.colegioId;
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const list = await Conversacion.find({
-      colegioId,
-      participanteIds: normalizeIdForQuery(userId),
-    })
-      .populate('participanteIds', 'nombre correo rol')
-      .populate('creadoPor', 'nombre')
-      .populate('materiaId', 'nombre')
-      .sort({ createdAt: -1 })
-      .lean();
+    const ids = await findConversationIdsByParticipant(userId);
+    const list = await Promise.all(ids.map((id) => findConversationById(id)));
+    const valid = list.filter((c): c is NonNullable<typeof c> => c != null);
 
     const withLastMessage = await Promise.all(
-      list.map(async (c) => {
-        const last = await Mensaje.findOne({ conversationId: c._id })
-          .sort({ fecha: -1 })
-          .populate('remitenteId', 'nombre')
-          .lean();
+      valid.map(async (c) => {
+        const last = await getLastMessageByConversation(c.id);
+        const creator = await findUserById(c.created_by);
         return {
-          ...c,
-          ultimoMensaje: last ? { texto: last.texto, fecha: last.fecha, remitente: (last.remitenteId as any)?.nombre } : null,
+          _id: c.id,
+          colegioId: c.institution_id,
+          asunto: c.subject,
+          tipo: c.type,
+          creadoPor: creator ? { _id: creator.id, nombre: creator.full_name } : null,
+          participanteIds: [], // se rellenan abajo si se necesita
+          ultimoMensaje: last
+            ? {
+                texto: last.text,
+                fecha: last.created_at,
+                remitente: null,
+              }
+            : null,
         };
       })
     );
 
     return res.json(withLastMessage);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al listar conversaciones.' });
   }
@@ -55,23 +68,40 @@ router.get('/conversations/:id', protect, async (req: AuthRequest, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const can = await canAccessConversation(id, normalizeIdForQuery(userId));
+    const can = await canAccessConversation(id, userId);
     if (!can) return res.status(403).json({ message: 'No autorizado a esta conversación.' });
 
-    const conversacion = await Conversacion.findById(normalizeIdForQuery(id))
-      .populate('participanteIds', 'nombre correo rol')
-      .populate('materiaId', 'nombre')
-      .lean();
-
+    const conversacion = await findConversationById(id);
     if (!conversacion) return res.status(404).json({ message: 'Conversación no encontrada.' });
 
-    const mensajes = await Mensaje.find({ conversationId: normalizeIdForQuery(id) })
-      .populate('remitenteId', 'nombre correo')
-      .sort({ fecha: 1 })
-      .lean();
+    const mensajes = await findMessagesByConversation(id);
+    const creator = await findUserById(conversacion.created_by);
 
-    return res.json({ conversacion, mensajes });
-  } catch (e: any) {
+    const conversacionPayload = {
+      _id: conversacion.id,
+      colegioId: conversacion.institution_id,
+      asunto: conversacion.subject,
+      tipo: conversacion.type,
+      creadoPor: creator ? { _id: creator.id, nombre: creator.full_name } : null,
+      participanteIds: [],
+    };
+
+    const mensajesPayload = await Promise.all(
+      mensajes.map(async (m) => {
+        const sender = await findUserById(m.sender_id);
+        return {
+          _id: m.id,
+          conversationId: m.conversation_id,
+          remitenteId: { _id: m.sender_id, nombre: sender?.full_name ?? '', correo: sender?.email ?? '' },
+          texto: m.text,
+          leido: !!m.read_at,
+          fecha: m.created_at,
+        };
+      })
+    );
+
+    return res.json({ conversacion: conversacionPayload, mensajes: mensajesPayload });
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al obtener mensajes.' });
   }
@@ -80,7 +110,7 @@ router.get('/conversations/:id', protect, async (req: AuthRequest, res) => {
 // POST /api/messages/conversations - Crear conversación y primer mensaje (profesor/directivo -> padre)
 router.post('/conversations', protect, async (req: AuthRequest, res) => {
   try {
-    const { destinatarioId, asunto, texto, materiaId } = req.body;
+    const { destinatarioId, asunto, texto } = req.body;
     const userId = req.user?.id;
     const rol = req.user?.rol;
     const colegioId = req.user?.colegioId;
@@ -93,35 +123,45 @@ router.post('/conversations', protect, async (req: AuthRequest, res) => {
     const allowed = ['profesor', 'directivo', 'admin-general-colegio', 'asistente'];
     if (!allowed.includes(rol)) return res.status(403).json({ message: 'Solo profesor, directivo o asistente pueden iniciar conversación con padres.' });
 
-    const dest = await User.findById(normalizeIdForQuery(destinatarioId)).select('rol').lean();
-    if (!dest || dest.rol !== 'padre') return res.status(400).json({ message: 'El destinatario debe ser un padre.' });
+    const dest = await findUserById(destinatarioId);
+    if (!dest || dest.role !== 'padre') return res.status(400).json({ message: 'El destinatario debe ser un padre.' });
 
     const tipo = rol === 'profesor' ? 'profesor-padre' : rol === 'asistente' ? 'asistente-padre' : 'directivo-padre';
 
-    const conversacion = await Conversacion.create({
-      colegioId,
-      asunto,
-      participanteIds: [normalizeIdForQuery(userId), normalizeIdForQuery(destinatarioId)],
-      tipo,
-      materiaId: materiaId ? normalizeIdForQuery(materiaId) : undefined,
-      creadoPor: userId,
+    const conversacion = await createConversation({
+      institution_id: colegioId,
+      subject: asunto,
+      type: tipo,
+      created_by: userId,
+    });
+    await addConversationParticipant(conversacion.id, userId);
+    await addConversationParticipant(conversacion.id, destinatarioId);
+
+    const mensaje = await createMessage({
+      conversation_id: conversacion.id,
+      sender_id: userId,
+      text: texto,
     });
 
-    const mensaje = await Mensaje.create({
-      conversationId: conversacion._id,
-      remitenteId: userId,
-      texto,
-      leido: false,
-    });
+    const creator = await findUserById(conversacion.created_by);
+    const conversacionPopulated = {
+      _id: conversacion.id,
+      colegioId: conversacion.institution_id,
+      asunto: conversacion.subject,
+      tipo: conversacion.type,
+      creadoPor: creator ? { _id: creator.id, nombre: creator.full_name } : null,
+      participanteIds: [],
+    };
+    const sender = await findUserById(mensaje.sender_id);
+    const mensajePopulated = {
+      _id: mensaje.id,
+      remitenteId: { _id: mensaje.sender_id, nombre: sender?.full_name ?? '' },
+      texto: mensaje.text,
+      fecha: mensaje.created_at,
+    };
 
-    const populated = await Conversacion.findById(conversacion._id)
-      .populate('participanteIds', 'nombre correo rol')
-      .populate('creadoPor', 'nombre')
-      .populate('materiaId', 'nombre')
-      .lean();
-
-    return res.status(201).json({ conversacion: populated, mensaje: await Mensaje.findById(mensaje._id).populate('remitenteId', 'nombre').lean() });
-  } catch (e: any) {
+    return res.status(201).json({ conversacion: conversacionPopulated, mensaje: mensajePopulated });
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al crear conversación.' });
   }
@@ -135,43 +175,43 @@ router.post('/conversations/:id', protect, async (req: AuthRequest, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const can = await canAccessConversation(id, normalizeIdForQuery(userId));
+    const can = await canAccessConversation(id, userId);
     if (!can) return res.status(403).json({ message: 'No autorizado a esta conversación.' });
 
-    if (!texto || !texto.trim()) return res.status(400).json({ message: 'Texto requerido.' });
+    if (!texto || !String(texto).trim()) return res.status(400).json({ message: 'Texto requerido.' });
 
-    const mensaje = await Mensaje.create({
-      conversationId: normalizeIdForQuery(id),
-      remitenteId: userId,
-      texto: texto.trim(),
-      leido: false,
+    const mensaje = await createMessage({
+      conversation_id: id,
+      sender_id: userId,
+      text: String(texto).trim(),
     });
 
-    const populated = await Mensaje.findById(mensaje._id).populate('remitenteId', 'nombre correo').lean();
-    return res.status(201).json(populated);
-  } catch (e: any) {
+    const sender = await findUserById(mensaje.sender_id);
+    return res.status(201).json({
+      _id: mensaje.id,
+      remitenteId: { _id: mensaje.sender_id, nombre: sender?.full_name ?? '', correo: sender?.email ?? '' },
+      texto: mensaje.text,
+      fecha: mensaje.created_at,
+    });
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al enviar mensaje.' });
   }
 });
 
-// PATCH /api/messages/read/:conversationId - Marcar mensajes de una conversación como leídos
+// PATCH /api/messages/read/:conversationId - Marcar mensajes como leídos
 router.patch('/read/:conversationId', protect, async (req: AuthRequest, res) => {
   try {
     const { conversationId } = req.params;
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const can = await canAccessConversation(conversationId, normalizeIdForQuery(userId));
+    const can = await canAccessConversation(conversationId, userId);
     if (!can) return res.status(403).json({ message: 'No autorizado.' });
 
-    await Mensaje.updateMany(
-      { conversationId: normalizeIdForQuery(conversationId), remitenteId: { $ne: normalizeIdForQuery(userId) } },
-      { $set: { leido: true } }
-    );
-
+    await markMessagesAsReadByConversationForUser(conversationId, userId);
     return res.json({ success: true });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al marcar leídos.' });
   }

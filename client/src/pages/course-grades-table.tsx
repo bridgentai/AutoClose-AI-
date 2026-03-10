@@ -7,6 +7,7 @@ import { useLocation, useRoute } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { useForecast } from '@/hooks/useCourseGrading';
 import { motion } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,6 +31,7 @@ interface Assignment {
   profesorNombre: string;
   submissions?: Submission[];
   entregas?: Submission[];
+  /** Id de grading_categories (logro); usado para agrupar columnas por categoría */
   logroCalificacionId?: string;
 }
 
@@ -104,13 +106,8 @@ interface PrediccionResult {
 
 function calcularPrediccion(
   estudianteId: string,
-  assignmentsByLogro: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }>,
-  tabOrder: { id: string; label: string }[]
+  assignmentsByLogro: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }>
 ): PrediccionResult {
-  const tareasLogro = tabOrder.find((t) => t.label === 'Tareas') ?? tabOrder[0];
-  const examenesLogro = tabOrder.find((t) => t.label === 'Exámenes') ?? tabOrder[1];
-  const trabajosLogro = tabOrder.find((t) => t.label === 'Trabajos') ?? tabOrder[2];
-
   const getGradesForLogro = (key: string | undefined): number[] => {
     if (!key) return [];
     const grupo = assignmentsByLogro[key];
@@ -140,14 +137,34 @@ function calcularPrediccion(
     if (cal != null && !Number.isNaN(cal)) orderedGrades.push(cal);
   });
 
-  const tareasProm = promedio(getGradesForLogro(tareasLogro?.id));
-  const examenesProm = promedio(getGradesForLogro(examenesLogro?.id));
-  const trabajosProm = promedio(getGradesForLogro(trabajosLogro?.id));
+  const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
+  const totalPorcentaje = entries.reduce((s, [, { logro }]) => s + (logro.porcentaje ?? 0), 0);
+  const hasWeightedLogros = totalPorcentaje > 0;
 
-  const notaActual =
-    tareasProm * 0.2 +
-    examenesProm * 0.4 +
-    trabajosProm * 0.3;
+  const simpleNotaActual = orderedGrades.length > 0 ? promedio(orderedGrades) : 0;
+
+  let notaActual: number;
+  if (hasWeightedLogros) {
+    let weightedSum = 0;
+    let totalWeight = 0;
+    for (const [id, { logro }] of entries) {
+      const pct = logro.porcentaje ?? 0;
+      if (pct <= 0) continue;
+      const grades = getGradesForLogro(id);
+      if (grades.length === 0) continue; // solo logros con al menos 1 nota
+      const prom = promedio(grades);
+      totalWeight += pct;
+      weightedSum += prom * (pct / 100);
+    }
+    if (totalWeight === 0) {
+      notaActual = simpleNotaActual;
+    } else {
+      notaActual = (weightedSum / totalWeight) * 100;
+    }
+    if (Number.isNaN(notaActual)) notaActual = simpleNotaActual;
+  } else {
+    notaActual = simpleNotaActual;
+  }
 
   const primeras3 = orderedGrades.slice(0, 3);
   const ultimas3 = orderedGrades.slice(-3);
@@ -287,55 +304,22 @@ function StudentAvatar({ nombre }: { nombre: string }) {
 }
 
 // =========================================================
-// CELDA PREDICCIÓN (sparkline + número + flecha)
+// CELDA PREDICCIÓN (solo pronóstico de la IA integrada; si no hay dato, "—")
 // =========================================================
 
-function PredictionCell({ result }: { result: PrediccionResult }) {
-  const { prediccion, tendencia, sparklineData } = result;
-  const strokeColor =
-    prediccion < 60 ? '#EF4444' : prediccion <= 80 ? '#FACC15' : '#3B82F6';
-  const TrendIcon = tendencia > 0 ? ChevronUp : tendencia < 0 ? ChevronDown : Minus;
+function PredictionCellFromAI({ courseId, studentId }: { courseId: string; studentId: string }) {
+  const { data: forecast } = useForecast(courseId, studentId);
+  const value = forecast?.projectedFinalGrade ?? null;
+  const display = value != null && !Number.isNaN(value) ? Math.round(value * 10) / 10 : null;
 
   return (
     <div className="flex flex-col items-center justify-center gap-1 py-1">
-      <motion.div
-        className="flex items-center gap-1"
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <motion.span
-          key={prediccion}
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-[20px] font-semibold tabular-nums text-[#E2E8F0]"
-        >
-          {prediccion > 0 ? prediccion : '—'}
-        </motion.span>
-        {prediccion > 0 && <span className="text-white/50 text-[10px]">/ 100</span>}
-        {prediccion > 0 && (
-          <TrendIcon
-            className="w-4 h-4 flex-shrink-0"
-            style={{ color: strokeColor }}
-          />
-        )}
-      </motion.div>
-      {sparklineData.length > 1 && (
-        <div className="w-full h-[30px] min-w-[80px]">
-          <ResponsiveContainer width="100%" height={30}>
-            <LineChart data={sparklineData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={strokeColor}
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      <div className="flex items-center gap-1">
+        <span className="text-[20px] font-semibold tabular-nums text-[#E2E8F0]">
+          {display != null ? display : '—'}
+        </span>
+        {display != null && <span className="text-white/50 text-[10px]">/ 100</span>}
+      </div>
     </div>
   );
 }
@@ -348,20 +332,20 @@ function StudentRow({
   student,
   assignments,
   getGradeFor,
-  getPromedioFor,
+  getPromedioForDisplay,
   onSaveGrade,
-  predictionResult,
+  courseId,
   onStudentClick,
 }: {
   student: Student;
   assignments: Assignment[];
   getGradeFor: (studentId: string, assignmentId: string) => number | string;
-  getPromedioFor: (studentId: string) => number | string;
+  getPromedioForDisplay: (studentId: string) => number | string;
   onSaveGrade: (assignmentId: string, estudianteId: string, calificacion: number | null) => void;
-  predictionResult: PrediccionResult;
+  courseId: string;
   onStudentClick: (studentId: string) => void;
 }) {
-  const promedio = getPromedioFor(student._id);
+  const promedio = getPromedioForDisplay(student._id);
 
   return (
     <motion.div
@@ -387,16 +371,18 @@ function StudentRow({
           />
         </div>
       ))}
+      {/* Columna PROMEDIO: mismo valor que la tarjeta de la materia (promedio ponderado por logros) */}
       <div className="flex items-center justify-center">
         <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 min-w-[60px] text-center">
           <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>
-          {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
-        </span>
+            {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
+          </span>
           {promedio !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
         </div>
       </div>
+      {/* Columna PREDICCIÓN: pronóstico de la IA integrada (API forecast); si no hay dato, "—" */}
       <div className="flex items-center justify-center pr-2">
-        <PredictionCell result={predictionResult} />
+        <PredictionCellFromAI courseId={courseId} studentId={student._id} />
       </div>
     </motion.div>
   );
@@ -458,6 +444,7 @@ export default function CourseGradesTablePage() {
     gcTime: 10 * 60 * 1000,
   });
 
+  /** Agrupa assignments por grading_category_id (logro). Cada grupo muestra nombre y porcentaje en el header. */
   const assignmentsByLogro = useMemo(() => {
     const logros = logrosData?.logros || [];
     const logrosOrdenados = [...logros].sort((a, b) => {
@@ -472,8 +459,9 @@ export default function CourseGradesTablePage() {
     });
     const sinLogro: Assignment[] = [];
     assignmentsForTable.forEach((assignment) => {
-      if (assignment.logroCalificacionId) {
-        const assignmentLogroId = String(assignment.logroCalificacionId);
+      const categoryId = assignment.logroCalificacionId;
+      if (categoryId) {
+        const assignmentLogroId = String(categoryId);
         const matchingLogro = logrosOrdenados.find((l) => String(l._id) === assignmentLogroId);
         if (matchingLogro && grouped[matchingLogro._id]) {
           grouped[matchingLogro._id].assignments.push(assignment);
@@ -503,24 +491,30 @@ export default function CourseGradesTablePage() {
     ];
   }, [assignmentsByLogro]);
 
-  const logroEntriesForPrediction = useMemo(
-    () => Object.entries(assignmentsByLogro).map(([id, { logro }]) => ({ id, label: logro.nombre })),
-    [assignmentsByLogro]
-  );
-
   useEffect(() => {
     if (tabOrder.length > 0 && !activeTab) setActiveTab(tabOrder[0].id);
   }, [tabOrder, activeTab]);
 
+  /** En Vista completa: grupos por logro (mismo orden que los tabs) para cabecera y columnas. */
+  const logroGroupsForVistaCompleta = useMemo(() => {
+    return tabOrder
+      .filter((t) => t.id !== TAB_VISTA_COMPLETA)
+      .map((t) => {
+        const group = assignmentsByLogro[t.id];
+        const assignments = (group?.assignments ?? []).slice().sort(
+          (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+        );
+        return { id: t.id, label: t.label, logro: group?.logro, assignments };
+      });
+  }, [tabOrder, assignmentsByLogro]);
+
   const activeAssignments = useMemo(() => {
     if (!activeTab) return [];
     if (activeTab === TAB_VISTA_COMPLETA) {
-      return (Object.values(assignmentsByLogro) as { logro: LogroCalificacion; assignments: Assignment[] }[])
-        .flatMap((g) => g.assignments)
-        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime());
+      return logroGroupsForVistaCompleta.flatMap((g) => g.assignments);
     }
     return assignmentsByLogro[activeTab]?.assignments ?? [];
-  }, [activeTab, assignmentsByLogro]);
+  }, [activeTab, assignmentsByLogro, logroGroupsForVistaCompleta]);
 
   /** Todas las asignaciones del curso, para calcular el promedio global (mismo valor en vista por categoría y vista completa). */
   const allAssignmentsForPromedio = useMemo(
@@ -557,30 +551,84 @@ export default function CourseGradesTablePage() {
   });
 
   const getGradeFor = (studentId: string, assignmentId: string): number | string => {
-    const assignment = assignmentsForTable.find((a) => a._id === assignmentId);
+    const aid = String(assignmentId);
+    const sid = String(studentId);
+    const assignment = assignmentsForTable.find((a) => String(a._id) === aid);
     if (!assignment) return '';
     const subs = assignment.submissions || assignment.entregas || [];
     const sub = subs.find(
       (x: { estudianteId?: { toString?: () => string } }) =>
-        x.estudianteId?.toString?.() === studentId || (x as { estudianteId?: string }).estudianteId === studentId
+        x.estudianteId?.toString?.() === sid || (x as { estudianteId?: string }).estudianteId === sid
     );
     const cal = (sub as { calificacion?: number })?.calificacion;
     return cal != null && !Number.isNaN(cal) ? cal : '';
   };
 
-  const getPrediccionFor = (estudianteId: string) =>
-    calcularPrediccion(estudianteId, assignmentsByLogro, logroEntriesForPrediction);
-
+  /** Promedio final: ponderado por logros (solo logros con al menos 1 nota). Normalización: (weightedSum / totalWeight) * 100. Si totalWeight === 0 pero hay notas, usar promedio simple. Nunca NaN. */
   const getPromedioFor = (estudianteId: string): number | string => {
+    const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
+    const totalPorcentaje = entries.reduce((s, [, { logro }]) => s + (logro.porcentaje ?? 0), 0);
+    const hasWeightedLogros = totalPorcentaje > 0;
+
     const notas: number[] = [];
     allAssignmentsForPromedio.forEach((a) => {
       const v = getGradeFor(estudianteId, a._id);
       if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
     });
     if (notas.length === 0) return '—';
-    const sum = notas.reduce((s, n) => s + n, 0);
-    return Math.round((sum / notas.length) * 10) / 10;
+    const simpleProm = notas.reduce((s, n) => s + n, 0) / notas.length;
+
+    if (hasWeightedLogros) {
+      let weightedSum = 0;
+      let totalWeight = 0;
+      for (const [, { logro, assignments }] of entries) {
+        const pct = logro.porcentaje ?? 0;
+        if (pct <= 0) continue;
+        const grades: number[] = [];
+        assignments.forEach((a) => {
+          const v = getGradeFor(estudianteId, a._id);
+          if (typeof v === 'number' && !Number.isNaN(v)) grades.push(v);
+        });
+        if (grades.length === 0) continue; // solo logros con al menos 1 nota
+        const prom = grades.reduce((s, n) => s + n, 0) / grades.length;
+        totalWeight += pct;
+        weightedSum += prom * (pct / 100);
+      }
+      // Si ningún logro tenía notas (totalWeight === 0) pero el estudiante sí tiene notas, usar promedio simple
+      if (totalWeight === 0) {
+        const rounded = Math.round(simpleProm * 10) / 10;
+        return Number.isNaN(rounded) ? '—' : rounded;
+      }
+      const result = (weightedSum / totalWeight) * 100;
+      if (Number.isNaN(result)) return Math.round(simpleProm * 10) / 10;
+      return Math.round(result * 10) / 10;
+    }
+
+    const rounded = Math.round(simpleProm * 10) / 10;
+    return Number.isNaN(rounded) ? '—' : rounded;
   };
+
+  /** En Vista completa: promedio final ponderado. En una categoría: solo el promedio de esa categoría. Evita NaN. */
+  const getPromedioForDisplay = (estudianteId: string): number | string => {
+    if (activeTab === TAB_VISTA_COMPLETA) return getPromedioFor(estudianteId);
+    if (activeAssignments.length === 0) return '—';
+    const notas: number[] = [];
+    activeAssignments.forEach((a) => {
+      const v = getGradeFor(estudianteId, a._id);
+      if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
+    });
+    if (notas.length === 0) return '—';
+    const sum = notas.reduce((s, n) => s + n, 0);
+    const result = Math.round((sum / notas.length) * 10) / 10;
+    return Number.isNaN(result) ? '—' : result;
+  };
+
+  const promedioColumnLabel =
+    activeTab === TAB_VISTA_COMPLETA
+      ? 'Promedio'
+      : assignmentsByLogro[activeTab]?.logro?.nombre
+        ? `Promedio (${assignmentsByLogro[activeTab].logro.nombre})`
+        : 'Promedio';
 
   const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
 
@@ -692,28 +740,82 @@ export default function CourseGradesTablePage() {
                 WebkitMaskImage: 'linear-gradient(to right, black 260px, black calc(100% - 20px), transparent)',
               }}
             >
-              {/* Header row: sticky, glass muy sutil para no crear bloque */}
-              <div
-                className="sticky top-0 z-20 grid items-center gap-2 min-h-[56px] py-3 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
-                style={{
-                  gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
-                  background: 'rgba(255,255,255,0.02)',
-                }}
-              >
-                <div
-                  className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
-                  style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
-                >
-                  Estudiante
-                </div>
-                {activeAssignments.map((a) => (
-                  <div key={a._id} className="text-center truncate px-1">
-                    {a.titulo}
+              {/* Header: en Vista completa dos filas (categorías + asignaciones); en pestaña categoría una fila */}
+              {activeTab === TAB_VISTA_COMPLETA && logroGroupsForVistaCompleta.length > 0 ? (
+                <>
+                  <div
+                    className="sticky top-0 z-20 grid items-center gap-2 min-h-[44px] py-2 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wider text-white/70 backdrop-blur-sm"
+                    style={{
+                      gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
+                      background: 'rgba(255,255,255,0.02)',
+                    }}
+                  >
+                    <div
+                      className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
+                      style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
+                    >
+                      Estudiante
+                    </div>
+                    {logroGroupsForVistaCompleta
+                      .filter((g) => g.assignments.length > 0)
+                      .map((g) => (
+                        <div
+                          key={g.id}
+                          className="text-center truncate px-1 border-r border-white/10"
+                          style={{ gridColumn: `span ${g.assignments.length}` }}
+                        >
+                          {g.logro?.nombre ?? g.label}
+                          {g.logro?.porcentaje != null && g.logro.porcentaje > 0 ? ` ${g.logro.porcentaje}%` : ''}
+                        </div>
+                      ))}
+                    <div className="text-center">{promedioColumnLabel}</div>
+                    <div className="text-center pr-2">Predicción</div>
                   </div>
-                ))}
-                <div className="text-center">Promedio</div>
-                <div className="text-center pr-2">Predicción</div>
-              </div>
+                  <div
+                    className="sticky top-[44px] z-20 grid items-center gap-2 min-h-[40px] py-2 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
+                    style={{
+                      gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
+                      background: 'rgba(255,255,255,0.02)',
+                    }}
+                  >
+                    <div
+                      className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
+                      style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
+                    >
+                      {' '}
+                    </div>
+                    {activeAssignments.map((a) => (
+                      <div key={a._id} className="text-center truncate px-1">
+                        {a.titulo}
+                      </div>
+                    ))}
+                    <div className="text-center" />
+                    <div className="text-center pr-2" />
+                  </div>
+                </>
+              ) : (
+                <div
+                  className="sticky top-0 z-20 grid items-center gap-2 min-h-[56px] py-3 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
+                  style={{
+                    gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
+                    background: 'rgba(255,255,255,0.02)',
+                  }}
+                >
+                  <div
+                    className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
+                    style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
+                  >
+                    Estudiante
+                  </div>
+                  {activeAssignments.map((a) => (
+                    <div key={a._id} className="text-center truncate px-1">
+                      {a.titulo}
+                    </div>
+                  ))}
+                  <div className="text-center">{promedioColumnLabel}</div>
+                  <div className="text-center pr-2">Predicción</div>
+                </div>
+              )}
 
               {students.map((student) => (
                 <StudentRow
@@ -721,11 +823,11 @@ export default function CourseGradesTablePage() {
                   student={student}
                   assignments={activeAssignments}
                   getGradeFor={getGradeFor}
-                  getPromedioFor={getPromedioFor}
+                  getPromedioForDisplay={getPromedioForDisplay}
                   onSaveGrade={(assignmentId, estudianteId, calificacion) =>
                     updateGradeMutation.mutate({ assignmentId, estudianteId, calificacion })
                   }
-                  predictionResult={getPrediccionFor(student._id)}
+                  courseId={firstSubjectId || ''}
                   onStudentClick={(studentId) =>
                     setLocation(`/profesor/cursos/${cursoId}/estudiantes/${studentId}/notas`)
                   }

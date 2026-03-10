@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { GraduationCap, ArrowRight, AlertCircle, BookOpen, Users, ClipboardList } from 'lucide-react';
+import { ArrowRight, AlertCircle, BookOpen, Users, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -317,10 +317,10 @@ const displayColor = course.colorAcento || generateColorFromId(course._id);
 return (
 <Card
 key={course._id}
-className="flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md hover-elevate cursor-pointer group transition-all duration-300 hover:bg-white/[0.07]"
+className="flex flex-col min-h-0 bg-white/5 border border-white/10 backdrop-blur-md hover-elevate cursor-pointer group transition-all duration-300 hover:bg-white/[0.07]"
 onClick={() => handleCourseClick(course._id)}
 >
-<CardHeader className="flex-1 flex flex-col p-6 pb-2">
+<CardHeader className="flex flex-col p-6">
 <div className="flex items-center justify-between mb-4 min-h-[56px]">
 <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
 <BookOpen className="w-7 h-7 text-white" />
@@ -333,30 +333,8 @@ onClick={() => handleCourseClick(course._id)}
 {course.descripcion || 'Sin descripción.'}
 </CardDescription>
 <p className="text-sm text-white/50 mt-2 truncate">Profesor: {primaryProfessor}</p>
-<p className="text-xs text-white/40 truncate">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
+<p className="text-xs text-white/40 truncate mt-0.5">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
 </CardHeader>
-
-<CardContent className="p-6 pt-2 flex flex-col gap-2">
-<Button
-variant="outline"
-size="sm"
-className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
-onClick={e => { e.stopPropagation(); handleCourseClick(course._id); }}
->
-{isDirectivo ? 'Ver Detalle' : 'Ingresar'}
-</Button>
-{!isDirectivo && (
-<Button
-variant="outline"
-size="sm"
-className="w-full rounded-[10px] border-[#3B82F6]/40 text-[#3B82F6] hover:bg-[#3B82F6]/20"
-onClick={e => { e.stopPropagation(); setLocation('/mi-aprendizaje/notas'); }}
->
-<GraduationCap className="w-4 h-4 mr-2" />
-Ver Notas
-</Button>
-)}
-</CardContent>
 </Card>
 );
 })}

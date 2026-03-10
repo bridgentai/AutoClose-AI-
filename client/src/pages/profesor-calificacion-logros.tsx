@@ -24,6 +24,8 @@ import {
 interface CourseItem {
   _id: string;
   nombre: string;
+  /** Nombre del grupo/curso (ej. "10A") — para mostrar "Materia (Grupo)" */
+  cursos?: string[];
 }
 
 interface LogroItem {
@@ -148,6 +150,8 @@ export default function ProfesorCalificacionLogrosPage() {
   const logros = logrosData?.logros ?? [];
   const totalPorcentaje = logrosData?.totalPorcentaje ?? 0;
   const completo = logrosData?.completo ?? false;
+  const cursoActual = cursos.find((c) => c._id === cursoSeleccionado);
+  const cursoActualLabel = cursoActual?.cursos?.[0] ? `${cursoActual.nombre} (${cursoActual.cursos[0]})` : cursoActual?.nombre ?? "";
 
   return (
     <div className="p-4 sm:p-6 md:p-10 max-w-4xl mx-auto">
@@ -164,26 +168,34 @@ export default function ProfesorCalificacionLogrosPage() {
 
       <Card className={`${CARD_STYLE} mb-6`}>
         <CardHeader>
-          <CardTitle className="text-white">Materia</CardTitle>
+          <CardTitle className="text-white">Materia y grupo</CardTitle>
           <CardDescription className="text-white/60">
-            Selecciona la materia para configurar los logros de calificación.
+            Selecciona la materia y el grupo (curso) para configurar los logros de calificación. Cada combinación materia+grupo tiene su propia configuración.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loadingCursos ? (
             <Skeleton className="h-10 w-full bg-white/10 rounded-md" />
+          ) : cursos.length === 0 ? (
+            <p className="text-white/60 py-2">
+              No tienes cursos asignados. Contacta a tu coordinación para que te asignen materias y grupos.
+            </p>
           ) : (
             <select
               value={cursoSeleccionado}
               onChange={(e) => setCursoSeleccionado(e.target.value)}
               className="w-full h-10 px-3 rounded-md bg-white/10 border border-white/20 text-white focus:ring-2 focus:ring-[#00c8ff]/50 focus:border-[#00c8ff]"
             >
-              <option value="">Selecciona una materia</option>
-              {cursos.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.nombre}
-                </option>
-              ))}
+              <option value="">✔ Selecciona materia y grupo</option>
+              {cursos.map((c) => {
+                const grupo = c.cursos?.[0];
+                const label = grupo ? `${c.nombre} — ${grupo}` : c.nombre;
+                return (
+                  <option key={c._id} value={c._id}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           )}
         </CardContent>
@@ -192,23 +204,23 @@ export default function ProfesorCalificacionLogrosPage() {
       {cursoSeleccionado && (
         <Card className={CARD_STYLE}>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <CardTitle className="text-white flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-[#00c8ff]" />
                   Logros de calificación
                 </CardTitle>
-                <CardDescription className="text-white/60">
-                  Los logros deben sumar 100% para completar la configuración.
+                <CardDescription className="text-white/60 mt-1">
+                  Para: <span className="text-[#00c8ff] font-medium">{cursoActualLabel}</span>. Los logros deben sumar 100%. Usa el botón &quot;Crear logro para este curso&quot; para agregar categorías.
                 </CardDescription>
               </div>
               <Button
                 onClick={abrirCrear}
                 disabled={loadingLogros}
-                className="bg-[#00c8ff] hover:bg-[#00c8ff]/90 text-black font-medium"
+                className="bg-[#00c8ff] hover:bg-[#00c8ff]/90 text-black font-medium shrink-0"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Crear logro
+                Crear logro para este curso
               </Button>
             </div>
           </CardHeader>

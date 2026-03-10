@@ -90,7 +90,6 @@ interface Stats {
   cursos: number;
   materias: number;
   asistenciaResumen?: { totalRegistros: number; presentes: number; porcentajePromedio: number };
-  treasuryResumen?: { facturasPendientes: number; ingresosMes: number };
 }
 
 export function AdminGeneralColegioDashboard() {
@@ -661,19 +660,6 @@ export function AdminGeneralColegioDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/tesoreria')}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">💰 Tesorería</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white font-['Poppins']">
-              {statsLoading ? '...' : (stats?.treasuryResumen?.facturasPendientes ?? 0)} pendientes
-            </div>
-            <p className="text-xs text-white/60 mt-1">
-              Ingresos mes: ${(stats?.treasuryResumen?.ingresosMes ?? 0).toLocaleString('es-CO')}
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* 2️⃣ Acciones Rápidas */}

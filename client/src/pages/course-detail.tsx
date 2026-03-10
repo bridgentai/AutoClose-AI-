@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -131,6 +131,52 @@ interface LogrosResponse {
     logros: LogroCalificacion[];
     totalPorcentaje: number;
     completo: boolean;
+}
+
+// Tipos para notas del estudiante (alineados con /api/student/notes y student-notes.tsx)
+interface NotaRealStudent {
+    tareaTitulo?: string;
+    nota: number;
+    fecha: string;
+    comentario?: string | null;
+    gradingCategoryId?: string;
+}
+interface MateriaConNotasStudent {
+    _id: string;
+    nombre: string;
+    groupSubjectId?: string | null;
+    notas: NotaRealStudent[];
+    promedio: number;
+    ultimaNota: number | null;
+    estado: string;
+}
+const noteScoreFrom = (n: { nota?: number }) => Number(n?.nota ?? 0) || 0;
+function computeWeightedPromedioAndUltima(
+    materia: MateriaConNotasStudent,
+    logros: { _id: string; porcentaje?: number; orden?: number }[] | undefined
+): { promedioFinal: number; ultimaNota: number } {
+    const notas = materia.notas ?? [];
+    const ultimaNota = notas.length
+        ? noteScoreFrom(notas.reduce((a, b) => (new Date(b.fecha ?? 0) > new Date(a.fecha ?? 0) ? b : a)))
+        : 0;
+    const totalPct = (logros ?? []).reduce((s, l) => s + (l.porcentaje ?? 0), 0);
+    const hasWeightedLogros = totalPct > 0 && (logros ?? []).length > 0;
+    if (hasWeightedLogros && logros!.length > 0) {
+        const logrosOrdenados = [...logros!].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+        let weightedSum = 0;
+        for (const logro of logrosOrdenados) {
+            const notasEnCategoria = notas.filter((n) => String(n.gradingCategoryId ?? '') === String(logro._id));
+            const promCat = notasEnCategoria.length > 0
+                ? notasEnCategoria.reduce((s, x) => s + noteScoreFrom(x), 0) / notasEnCategoria.length
+                : 0;
+            weightedSum += promCat * ((logro.porcentaje ?? 0) / 100);
+        }
+        return { promedioFinal: Math.round(weightedSum * 10) / 10, ultimaNota };
+    }
+    const promedioFinal = notas.length > 0
+        ? Math.round((notas.reduce((s, x) => s + noteScoreFrom(x), 0) / notas.length) * 10) / 10
+        : Number(materia.promedio) || 0;
+    return { promedioFinal, ultimaNota };
 }
 
 interface CourseSubject {
@@ -300,13 +346,33 @@ export default function CourseDetailPage() {
 
     const firstSubjectId = subjectsForGroup[0]?._id;
 
-    // Query 5: Notas del estudiante (para tarjetas Promedio / Última Nota / Estado en vista estudiante)
-    const { data: notesData } = useQuery<{ materias: { _id: string; nombre: string; promedio: number; ultimaNota: number; estado: string }[]; total: number }>({
+    // Query 5: Notas del estudiante (para tarjetas Promedio / Última Nota / Estado y pestaña Notas)
+    const { data: notesData } = useQuery<{ materias: MateriaConNotasStudent[]; total: number }>({
         queryKey: ['studentNotes', user?.id],
         queryFn: () => apiRequest('GET', '/api/student/notes'),
         enabled: isStudent && !!user?.id,
         staleTime: 0,
     });
+
+    // Materia actual para vista estudiante (match por subject id o por groupSubjectId si la URL es gs id)
+    const materiaNotasForStudent = useMemo(() => {
+        if (!notesData?.materias?.length || !courseDetails) return null;
+        const details = courseDetails as { _id: string };
+        return notesData.materias.find(
+            (m) => String(m._id) === String(details._id) || String(m.groupSubjectId) === String(cursoId)
+        ) ?? null;
+    }, [notesData?.materias, courseDetails, cursoId]);
+
+    // Logros para promedio ponderado y pestaña Notas (estudiante); courseId = group_subject id
+    const courseIdForStudentLogros = materiaNotasForStudent?.groupSubjectId ?? null;
+    const { data: logrosStudentData } = useQuery<LogrosResponse>({
+        queryKey: ['/api/logros-calificacion', courseIdForStudentLogros],
+        queryFn: () =>
+            apiRequest<LogrosResponse>('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForStudentLogros || '')}`),
+        enabled: isStudent && !!courseIdForStudentLogros,
+        staleTime: 5 * 60 * 1000,
+    });
+    const logrosStudent = logrosStudentData?.logros ?? [];
 
     // Query 6: Tareas para tabla de notas (grupo + materia, sin filtro mes)
     const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
@@ -364,20 +430,71 @@ export default function CourseDetailPage() {
         return grouped;
     }, [assignmentsForTable, logrosForTable]);
 
-    /** Promedio simple sobre todas las asignaciones (mismo criterio que la tabla completa en /course/:id/grades). */
-    const getPromedioSimple = (studentId: string): number | string => {
-        const subs = (a: Assignment) => a.submissions || a.entregas || [];
+    /** Obtiene la calificación de un estudiante en una asignación (IDs normalizados a string). */
+    const getGradeForTabla = (studentId: string, assignmentId: string): number | string => {
+        const aid = String(assignmentId);
+        const sid = String(studentId);
+        const assignment = assignmentsForTable.find((a) => String(a._id) === aid);
+        if (!assignment) return '';
+        const subs = assignment.submissions || assignment.entregas || [];
+        const sub = subs.find(
+            (x: { estudianteId?: { toString?: () => string } }) =>
+                x.estudianteId?.toString?.() === sid || (x as { estudianteId?: string }).estudianteId === sid
+        );
+        const cal = (sub as { calificacion?: number })?.calificacion;
+        return cal != null && !Number.isNaN(cal) ? cal : '';
+    };
+
+    /** Todas las asignaciones para calcular promedio (misma fuente que tabla completa). */
+    const allAssignmentsForPromedio = useMemo(
+        () =>
+            (Object.values(assignmentsByLogro) as { logro: { _id: string }; assignments: Assignment[] }[])
+                .flatMap((g) => g.assignments)
+                .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()),
+        [assignmentsByLogro]
+    );
+
+    /** Promedio ponderado por logros (solo logros con al menos 1 nota). Misma lógica que /course/:id/grades. Normalización: (weightedSum / totalWeight) * 100. Nunca NaN. */
+    const getPromedioForTablaGeneral = (studentId: string): number | string => {
+        const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
+        const totalPorcentaje = entries.reduce((s, [, { logro }]) => s + (logro.porcentaje ?? 0), 0);
+        const hasWeightedLogros = totalPorcentaje > 0;
+
         const notas: number[] = [];
-        assignmentsForTable.forEach(a => {
-            const s = subs(a).find((x: { estudianteId?: { toString?: () => string } }) =>
-                x.estudianteId?.toString?.() === studentId || x.estudianteId === studentId
-            );
-            const cal = (s as { calificacion?: number })?.calificacion;
-            if (cal != null && !isNaN(cal)) notas.push(cal);
+        allAssignmentsForPromedio.forEach((a) => {
+            const v = getGradeForTabla(studentId, a._id);
+            if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
         });
-        if (notas.length === 0) return '-';
-        const sum = notas.reduce((a, b) => a + b, 0);
-        return Math.round((sum / notas.length) * 10) / 10;
+        if (notas.length === 0) return '—';
+        const simpleProm = notas.reduce((s, n) => s + n, 0) / notas.length;
+
+        if (hasWeightedLogros) {
+            let weightedSum = 0;
+            let totalWeight = 0;
+            for (const [, { logro, assignments }] of entries) {
+                const pct = logro.porcentaje ?? 0;
+                if (pct <= 0) continue;
+                const grades: number[] = [];
+                assignments.forEach((a) => {
+                    const v = getGradeForTabla(studentId, a._id);
+                    if (typeof v === 'number' && !Number.isNaN(v)) grades.push(v);
+                });
+                if (grades.length === 0) continue;
+                const prom = grades.reduce((s, n) => s + n, 0) / grades.length;
+                totalWeight += pct;
+                weightedSum += prom * (pct / 100);
+            }
+            if (totalWeight === 0) {
+                const rounded = Math.round(simpleProm * 10) / 10;
+                return Number.isNaN(rounded) ? '—' : rounded;
+            }
+            const result = (weightedSum / totalWeight) * 100;
+            if (Number.isNaN(result)) return Math.round(simpleProm * 10) / 10;
+            return Math.round(result * 10) / 10;
+        }
+
+        const rounded = Math.round(simpleProm * 10) / 10;
+        return Number.isNaN(rounded) ? '—' : rounded;
     };
 
     // Efecto para Profesor (Auto-seleccionar materia)
@@ -440,6 +557,7 @@ export default function CourseDetailPage() {
                 curso: cursoId,
                 courseId: data.courseId,
                 fechaEntrega: data.fechaEntrega,
+                categoryId: assignmentType === 'assignment' ? (logroCalificacionId || undefined) : undefined,
                 logroCalificacionId: assignmentType === 'assignment' ? (logroCalificacionId || undefined) : undefined,
                 type,
                 isGradable: type === 'assignment',
@@ -772,7 +890,7 @@ export default function CourseDetailPage() {
                                             </thead>
                                             <tbody>
                                                 {students.map((student) => {
-                                                    const promedio = getPromedioSimple(student._id);
+                                                    const promedio = getPromedioForTablaGeneral(student._id);
                                                     const prediccion = typeof promedio === 'number' ? (promedio / 100 * 5).toFixed(1) : '—';
                                                     return (
                                                         <tr key={student._id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors duration-200">
@@ -819,10 +937,10 @@ export default function CourseDetailPage() {
                                                             )}
                                                             <td className="px-3 py-2.5 text-center min-w-[80px]">
                                                                 <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 inline-block">
-                                                                    <span className={`text-sm font-semibold ${promedio === '-' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>
+                                                                    <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>
                                                                         {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
                                                                     </span>
-                                                                    {promedio !== '-' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
+                                                                    {promedio !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
                                                                 </div>
                                                             </td>
                                                             <td className="px-3 py-2.5 text-center min-w-[80px]">
@@ -1190,11 +1308,16 @@ export default function CourseDetailPage() {
             ? tareasPendientes.sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())[0]
             : null;
 
-        // Datos reales de notas para esta materia (escala 0-100)
-        const materiaNotas = notesData?.materias?.find((m: any) => String(m._id) === String(details._id));
-        const promedioReal = materiaNotas != null ? materiaNotas.promedio : null;
-        const ultimaNotaReal = materiaNotas?.ultimaNota ?? null;
-        const estadoReal = materiaNotas?.estado ?? null;
+        // Datos reales de notas para esta materia (promedio ponderado por logros como en página de notas)
+        const materiaNotas = materiaNotasForStudent;
+        const { promedioFinal: computedPromedio, ultimaNota: computedUltima } = materiaNotas && logrosStudent.length > 0
+            ? computeWeightedPromedioAndUltima(materiaNotas, logrosStudent)
+            : materiaNotas
+                ? { promedioFinal: Number(materiaNotas.promedio) || 0, ultimaNota: Number(materiaNotas.ultimaNota) || 0 }
+                : { promedioFinal: 0, ultimaNota: 0 };
+        const promedioReal = materiaNotas != null ? computedPromedio : null;
+        const ultimaNotaReal = materiaNotas != null ? computedUltima : null;
+        const estadoReal = materiaNotas != null ? (computedPromedio >= 65 ? 'aprobado' : 'reprobado') : null;
 
         const getEstadoColor = (estado: string) => {
             switch (estado) {
@@ -1211,15 +1334,65 @@ export default function CourseDetailPage() {
             }
         };
 
+        // Categorías de notas para la pestaña Notas (igual que página de notas general)
+        const notasList = materiaNotas?.notas ?? [];
+        const logrosOrdenados = [...logrosStudent].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+        const totalPctLogros = logrosOrdenados.reduce((s, l) => s + (l.porcentaje ?? 0), 0);
+        const hasWeightedLogros = totalPctLogros > 0 && logrosOrdenados.length > 0;
+        type CategoriaNota = { categoria: string; promedio: number; notas: { actividad: string; nota: number; fecha: string; comentario?: string | null }[] };
+        const categoriasNotas: CategoriaNota[] = [];
+        if (hasWeightedLogros && logrosOrdenados.length > 0) {
+            for (const logro of logrosOrdenados) {
+                const notasEnCat = notasList.filter((n) => String(n.gradingCategoryId ?? '') === String(logro._id));
+                const promCat = notasEnCat.length > 0 ? notasEnCat.reduce((s, x) => s + noteScoreFrom(x), 0) / notasEnCat.length : 0;
+                categoriasNotas.push({
+                    categoria: `${logro.nombre} (${logro.porcentaje ?? 0}%)`,
+                    promedio: Math.round(promCat * 10) / 10,
+                    notas: notasEnCat.map((n) => ({
+                        actividad: n.tareaTitulo ?? 'Sin título',
+                        nota: noteScoreFrom(n),
+                        fecha: n.fecha ?? '',
+                        comentario: n.comentario ?? null,
+                    })),
+                });
+            }
+            const sinCat = notasList.filter((n) => !n.gradingCategoryId);
+            if (sinCat.length > 0) {
+                const promSin = sinCat.reduce((s, x) => s + noteScoreFrom(x), 0) / sinCat.length;
+                categoriasNotas.push({
+                    categoria: 'Sin categoría',
+                    promedio: Math.round(promSin * 10) / 10,
+                    notas: sinCat.map((n) => ({
+                        actividad: n.tareaTitulo ?? 'Sin título',
+                        nota: noteScoreFrom(n),
+                        fecha: n.fecha ?? '',
+                        comentario: n.comentario ?? null,
+                    })),
+                });
+            }
+        } else if (notasList.length > 0) {
+            const prom = notasList.reduce((s, x) => s + noteScoreFrom(x), 0) / notasList.length;
+            categoriasNotas.push({
+                categoria: 'Notas',
+                promedio: Math.round(prom * 10) / 10,
+                notas: notasList.map((n) => ({
+                    actividad: n.tareaTitulo ?? 'Sin título',
+                    nota: noteScoreFrom(n),
+                    fecha: n.fecha ?? '',
+                    comentario: n.comentario ?? null,
+                })),
+            });
+        }
+
         return (
             <>
                 {/* Breadcrumbs */}
                 <Breadcrumb className="mb-6">
                     <BreadcrumbList>
                         <BreadcrumbItem>
-                            <BreadcrumbLink 
+                            <BreadcrumbLink
                                 onClick={() => setLocation('/courses')}
-                                className="text-white/70 hover:text-white cursor-pointer"
+                                className="text-white/70 hover:text-[#3B82F6] cursor-pointer transition-colors duration-200"
                             >
                                 <Home className="w-4 h-4 mr-1" />
                                 Materias
@@ -1227,49 +1400,45 @@ export default function CourseDetailPage() {
                         </BreadcrumbItem>
                         <BreadcrumbSeparator className="text-white/40" />
                         <BreadcrumbItem>
-                            <BreadcrumbPage className="text-white">{details.nombre}</BreadcrumbPage>
+                            <BreadcrumbPage className="text-[#E2E8F0]">{details.nombre}</BreadcrumbPage>
                         </BreadcrumbItem>
                     </BreadcrumbList>
                 </Breadcrumb>
 
-                {/* Encabezado Visual Mejorado */}
-                <div className="mb-8 relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e3cff]/20 via-[#002366]/20 to-[#00c8ff]/20 border border-white/10 backdrop-blur-md">
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent"></div>
+                {/* Encabezado: mismo estilo glass que vista profesor (panel-grades) */}
+                <div className="mb-8 relative overflow-hidden rounded-2xl panel-grades border border-white/10 transition-all duration-300 hover:shadow-[0_0_48px_rgba(37,99,235,0.3)]">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-80" />
                     <div className="relative p-4 sm:p-6 md:p-8">
                         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 sm:gap-6">
                             <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-4">
                                     <div
-                                        className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg"
-                                        style={{ 
+                                        className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-300 hover:scale-105"
+                                        style={{
                                             backgroundColor: titleColor,
                                             boxShadow: `0 8px 32px ${titleColor}40`
                                         }}
                                     >
                                         <BookOpen className="w-8 h-8 text-white" />
                                     </div>
-                        <div>
-                                        <Badge 
-                                            className="bg-white/10 text-white border-white/20 mb-2"
-                                        >
+                                    <div>
+                                        <Badge className="bg-white/10 text-white border-white/20 mb-2 transition-colors hover:bg-white/15">
                                             {cursoAsignado}
-                            </Badge>
+                                        </Badge>
                                         <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-2 font-['Poppins']">
-                                {details.nombre}
+                                            {details.nombre}
                                         </h1>
                                     </div>
                                 </div>
-                                
                                 {details.descripcion && (
-                                    <p className="text-white/80 text-lg mb-4 max-w-2xl">
+                                    <p className="text-[#E2E8F0]/80 text-lg mb-4 max-w-2xl">
                                         {details.descripcion}
                                     </p>
                                 )}
-                                
                                 <div className="flex flex-wrap items-center gap-4 text-white/70">
                                     <div className="flex items-center gap-2">
                                         <User className="w-5 h-5 text-white/60" />
-                                        <span className="font-medium text-white/90">
+                                        <span className="font-medium text-[#E2E8F0]">
                                             {details.profesor?.nombre || 'No Asignado'}
                                         </span>
                                     </div>
@@ -1279,12 +1448,10 @@ export default function CourseDetailPage() {
                                     </div>
                                 </div>
                             </div>
-                            
-                            {/* Botones de Acción Rápida */}
                             <div className="flex flex-col gap-3">
                                 <NavBackButton to="/courses" label="Materias" />
                                 <Button
-                                    className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
+                                    className="bg-[#3B82F6] hover:bg-[#2563EB] text-white border-0 transition-all duration-200 hover:shadow-lg hover:shadow-[#3B82F6]/30"
                                     onClick={() => setLocation('/mi-aprendizaje/tareas')}
                                 >
                                     <ClipboardList className="w-4 h-4 mr-2" />
@@ -1292,7 +1459,7 @@ export default function CourseDetailPage() {
                                 </Button>
                                 <Button
                                     variant="outline"
-                                    className="bg-white/5 border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10 backdrop-blur-sm"
+                                    className="border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30 backdrop-blur-sm transition-all duration-200"
                                     onClick={() => setLocation('/mi-aprendizaje/notas')}
                                 >
                                     <Award className="w-4 h-4 mr-2" />
@@ -1303,48 +1470,40 @@ export default function CourseDetailPage() {
                     </div>
                 </div>
 
-                {/* Resumen General */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-[#002366] to-[#1e3cff]">
-                                    <TrendingUp className="w-6 h-6 text-white" />
-                                </div>
+                {/* Resumen General: mismo estilo que tarjetas vista profesor (glass, hover, iconos animados) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 max-w-5xl mx-auto">
+                    <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20">
+                        <CardContent className="p-6 text-center">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#1e3cff] via-[#002366] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#1e3cff]/30">
+                                <TrendingUp className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/60 text-sm mb-1">Promedio</p>
-                            <p className="text-3xl font-bold text-white">
+                            <p className="text-white/70 text-sm mb-1">Promedio</p>
+                            <p className="text-3xl font-bold text-[#E2E8F0]">
                                 {promedioReal != null ? (Math.round(promedioReal * 10) / 10).toFixed(1) : '—'}
                             </p>
-                            <p className="text-white/40 text-xs mt-1">/ 100</p>
+                            <p className="text-white/50 text-xs mt-1">/ 100</p>
                         </CardContent>
                     </Card>
-                    
-                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-blue-500 to-cyan-500">
-                                    <Award className="w-6 h-6 text-white" />
-                                </div>
+                    <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20">
+                        <CardContent className="p-6 text-center">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#002366] via-[#003d7a] to-[#1e3cff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#002366]/40">
+                                <Award className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/60 text-sm mb-1">Última Nota</p>
-                            <p className="text-3xl font-bold text-white">
+                            <p className="text-white/70 text-sm mb-1">Última Nota</p>
+                            <p className="text-3xl font-bold text-[#E2E8F0]">
                                 {ultimaNotaReal != null ? (Math.round(ultimaNotaReal * 10) / 10).toFixed(1) : '—'}
                             </p>
-                            <p className="text-white/40 text-xs mt-1">/ 100</p>
+                            <p className="text-white/50 text-xs mt-1">/ 100</p>
                         </CardContent>
                     </Card>
-                    
-                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-green-500 to-emerald-500">
-                                    <Gauge className="w-6 h-6 text-white" />
-                                </div>
+                    <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20">
+                        <CardContent className="p-6 text-center">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#059669] via-[#10B981] to-emerald-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
+                                <Gauge className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/60 text-sm mb-1">Estado</p>
+                            <p className="text-white/70 text-sm mb-1">Estado</p>
                             {estadoReal ? (
-                                <Badge className={`${getEstadoColor(estadoReal)} text-base px-3 py-1`}>
+                                <Badge className={`${getEstadoColor(estadoReal)} text-base px-3 py-1 transition-transform duration-200 hover:scale-105`}>
                                     {estadoReal.charAt(0).toUpperCase() + estadoReal.slice(1)}
                                 </Badge>
                             ) : (
@@ -1352,19 +1511,16 @@ export default function CourseDetailPage() {
                             )}
                         </CardContent>
                     </Card>
-                    
-                    <Card className="bg-white/5 border-white/10 backdrop-blur-md hover:bg-white/8 transition-colors">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br from-yellow-500 to-orange-500">
-                                    <Clock className="w-6 h-6 text-white" />
-                                </div>
+                    <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-orange-500/20">
+                        <CardContent className="p-6 text-center">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-amber-500 via-orange-500 to-yellow-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-orange-500/30">
+                                <Clock className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/60 text-sm mb-1">Próxima Tarea</p>
+                            <p className="text-white/70 text-sm mb-1">Próxima Tarea</p>
                             {proximaTarea ? (
                                 <>
-                                    <p className="text-lg font-semibold text-white line-clamp-1">{proximaTarea.titulo}</p>
-                                    <p className="text-white/40 text-xs mt-1">
+                                    <p className="text-lg font-semibold text-[#E2E8F0] line-clamp-1">{proximaTarea.titulo}</p>
+                                    <p className="text-white/50 text-xs mt-1">
                                         {new Date(proximaTarea.fechaEntrega).toLocaleDateString('es-CO', {
                                             day: 'numeric',
                                             month: 'short'
@@ -1378,33 +1534,33 @@ export default function CourseDetailPage() {
                     </Card>
                 </div>
 
-                {/* Secciones con Pestañas */}
+                {/* Secciones con Pestañas: mismo estilo que vista profesor (#3B82F6, panel glass) */}
                 <Tabs defaultValue="tareas" className="w-full">
-                    <TabsList className="bg-white/5 border border-white/10 backdrop-blur-md mb-6">
-                        <TabsTrigger 
-                            value="tareas" 
-                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                    <TabsList className="panel-grades border border-white/10 rounded-xl mb-6 p-1 gap-1 transition-all duration-200">
+                        <TabsTrigger
+                            value="tareas"
+                            className="data-[state=active]:bg-[#3B82F6] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#3B82F6] data-[state=active]:to-[#1D4ED8] transition-all duration-200 rounded-lg"
                         >
                             <ClipboardList className="w-4 h-4 mr-2" />
                             Tareas ({assignments.length})
                         </TabsTrigger>
-                        <TabsTrigger 
-                            value="notas" 
-                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                        <TabsTrigger
+                            value="notas"
+                            className="data-[state=active]:bg-[#3B82F6] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#3B82F6] data-[state=active]:to-[#1D4ED8] transition-all duration-200 rounded-lg"
                         >
                             <Award className="w-4 h-4 mr-2" />
                             Notas
                         </TabsTrigger>
-                        <TabsTrigger 
-                            value="materiales" 
-                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                        <TabsTrigger
+                            value="materiales"
+                            className="data-[state=active]:bg-[#3B82F6] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#3B82F6] data-[state=active]:to-[#1D4ED8] transition-all duration-200 rounded-lg"
                         >
                             <FileText className="w-4 h-4 mr-2" />
                             Materiales
                         </TabsTrigger>
-                        <TabsTrigger 
-                            value="anuncios" 
-                            className="data-[state=active]:bg-[#1e3cff] data-[state=active]:text-white data-[state=active]:shadow-lg"
+                        <TabsTrigger
+                            value="anuncios"
+                            className="data-[state=active]:bg-[#3B82F6] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#3B82F6] data-[state=active]:to-[#1D4ED8] transition-all duration-200 rounded-lg"
                         >
                             <Bell className="w-4 h-4 mr-2" />
                             Anuncios
@@ -1412,13 +1568,13 @@ export default function CourseDetailPage() {
                     </TabsList>
 
                     {/* Pestaña de Tareas */}
-                    <TabsContent value="tareas" className="space-y-6">
+                    <TabsContent value="tareas" className="space-y-6 mt-0">
                         {assignments.length > 0 ? (
                             <>
-                <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                                <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
                                     <CardHeader>
-                                        <CardTitle className="text-white flex items-center gap-2">
-                                            <CalendarIcon className="w-5 h-5 text-[#1e3cff]" />
+                                        <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
+                                            <CalendarIcon className="w-5 h-5 text-[#3B82F6]" />
                                             Calendario de Tareas
                                         </CardTitle>
                                         <CardDescription className="text-white/60">
@@ -1427,12 +1583,12 @@ export default function CourseDetailPage() {
                                     </CardHeader>
                                     <CardContent>
                                         <Calendar assignments={assignments} onDayClick={handleDayClick} />
-                    </CardContent>
-                </Card>
+                                    </CardContent>
+                                </Card>
 
-                                <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                                <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
                                     <CardHeader>
-                                        <CardTitle className="text-white">Lista de Tareas</CardTitle>
+                                        <CardTitle className="text-[#E2E8F0]">Lista de Tareas</CardTitle>
                                         <CardDescription className="text-white/60">
                                             {assignments.length} {assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'}
                                         </CardDescription>
@@ -1445,17 +1601,16 @@ export default function CourseDetailPage() {
                                                     const fechaEntrega = new Date(assignment.fechaEntrega);
                                                     const diasRestantes = Math.ceil((fechaEntrega.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                                                     const isVencida = fechaEntrega < now;
-                                                    
                                                     return (
                                                         <div
                                                             key={assignment._id}
-                                                            className="p-5 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer group"
+                                                            className="p-5 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/10 hover:shadow-lg hover:shadow-[#3B82F6]/10 transition-all duration-200 cursor-pointer group"
                                                             onClick={() => setLocation(`/assignment/${assignment._id}`)}
                                                         >
                                                             <div className="flex items-start justify-between gap-4">
                                                                 <div className="flex-1">
                                                                     <div className="flex items-center gap-3 mb-2">
-                                                                        <h4 className="font-semibold text-white text-lg group-hover:text-[#1e3cff] transition-colors">
+                                                                        <h4 className="font-semibold text-[#E2E8F0] text-lg group-hover:text-[#3B82F6] transition-colors">
                                                                             {assignment.titulo}
                                                                         </h4>
                                                                         {isVencida ? (
@@ -1497,7 +1652,7 @@ export default function CourseDetailPage() {
                                                                         </div>
                                                                     </div>
                                                                 </div>
-                                                                <ChevronRight className="w-5 h-5 text-white/40 group-hover:text-[#1e3cff] transition-colors flex-shrink-0 mt-1" />
+                                                                <ChevronRight className="w-5 h-5 text-white/40 group-hover:text-[#3B82F6] group-hover:translate-x-0.5 transition-all duration-200 flex-shrink-0 mt-1" />
                                                             </div>
                                                         </div>
                                                     );
@@ -1507,10 +1662,10 @@ export default function CourseDetailPage() {
                                 </Card>
                             </>
                         ) : (
-                            <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                            <Card className="panel-grades border border-white/10 rounded-2xl">
                                 <CardContent className="p-12 text-center">
-                                    <ClipboardList className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
-                                    <h3 className="text-xl font-semibold text-white mb-2">
+                                    <ClipboardList className="w-16 h-16 text-[#3B82F6]/50 mx-auto mb-4 transition-transform duration-200 hover:scale-110" />
+                                    <h3 className="text-xl font-semibold text-[#E2E8F0] mb-2">
                                         No hay tareas asignadas
                                     </h3>
                                     <p className="text-white/60">
@@ -1521,12 +1676,12 @@ export default function CourseDetailPage() {
                         )}
                     </TabsContent>
 
-                    {/* Pestaña de Notas */}
-                    <TabsContent value="notas">
-                        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                    {/* Pestaña de Notas — mismas notas de la materia que en la página de notas general */}
+                    <TabsContent value="notas" className="space-y-6 mt-0">
+                        <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
                             <CardHeader>
-                                <CardTitle className="text-white flex items-center gap-2">
-                                    <Award className="w-5 h-5 text-[#1e3cff]" />
+                                <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
+                                    <Award className="w-5 h-5 text-[#3B82F6]" />
                                     Notas de {details.nombre}
                                 </CardTitle>
                                 <CardDescription className="text-white/60">
@@ -1534,32 +1689,82 @@ export default function CourseDetailPage() {
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-center py-12">
-                                    <Award className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
-                                    <h3 className="text-xl font-semibold text-white mb-2">
-                                        Ver todas tus notas
-                                    </h3>
-                                    <p className="text-white/60 mb-6">
-                                        Accede a la sección completa de notas para ver tu historial detallado.
-                                    </p>
-                                    <Button
-                                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
-                                        onClick={() => setLocation('/mi-aprendizaje/notas')}
-                                    >
-                                        <Award className="w-4 h-4 mr-2" />
-                                        Ir a Mis Notas
-                                    </Button>
-                                </div>
+                                {categoriasNotas.length > 0 ? (
+                                    <div className="space-y-6">
+                                        {categoriasNotas.map((categoria, idx) => (
+                                            <div key={idx} className="space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="font-semibold text-[#E2E8F0]">{categoria.categoria}</h4>
+                                                    <span className="text-lg font-bold text-[#E2E8F0]">
+                                                        {Math.round(categoria.promedio)} <span className="text-white/50">/ 100</span>
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-white/60 mb-3">
+                                                    Promedio de {categoria.notas.length} {categoria.notas.length === 1 ? 'actividad' : 'actividades'}
+                                                </p>
+                                                <div className="space-y-3">
+                                                    {categoria.notas.map((nota, notaIdx) => (
+                                                        <div
+                                                            key={notaIdx}
+                                                            className="p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/10 transition-all duration-200"
+                                                        >
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div className="flex-1">
+                                                                    <h4 className="font-semibold text-[#E2E8F0] mb-1">{nota.actividad}</h4>
+                                                                    <p className="text-sm text-white/60">
+                                                                        {new Date(nota.fecha).toLocaleDateString('es-CO', {
+                                                                            year: 'numeric',
+                                                                            month: 'long',
+                                                                            day: 'numeric',
+                                                                        })}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-2xl font-bold text-[#E2E8F0]">{Math.round(nota.nota)}</span>
+                                                                    <span className="text-white/50">/ 100</span>
+                                                                </div>
+                                                            </div>
+                                                            {nota.comentario && (
+                                                                    <div className="mt-3 p-3 rounded-lg border border-white/10 bg-white/[0.03]">
+                                                                    <div className="flex items-start gap-2">
+                                                                        <MessageSquare className="w-4 h-4 text-[#3B82F6] mt-0.5 flex-shrink-0" />
+                                                                        <p className="text-sm text-white/80">{nota.comentario}</p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <Award className="w-16 h-16 text-[#3B82F6]/50 mx-auto mb-4 transition-transform duration-200 hover:scale-110" />
+                                        <h3 className="text-xl font-semibold text-[#E2E8F0] mb-2">Sin notas aún</h3>
+                                        <p className="text-white/60 mb-6">
+                                            Aún no hay calificaciones registradas para esta materia.
+                                        </p>
+                                        <Button
+                                            variant="outline"
+                                            className="border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30 transition-all duration-200"
+                                            onClick={() => setLocation('/mi-aprendizaje/notas')}
+                                        >
+                                            <Award className="w-4 h-4 mr-2" />
+                                            Ver todas mis notas
+                                        </Button>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>
 
                     {/* Pestaña de Materiales */}
-                    <TabsContent value="materiales">
-                        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                    <TabsContent value="materiales" className="mt-0">
+                        <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
                             <CardHeader>
-                                <CardTitle className="text-white flex items-center gap-2">
-                                    <FileText className="w-5 h-5 text-[#1e3cff]" />
+                                <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
+                                    <FileText className="w-5 h-5 text-[#3B82F6]" />
                                     Materiales de {details.nombre}
                                 </CardTitle>
                                 <CardDescription className="text-white/60">
@@ -1568,8 +1773,8 @@ export default function CourseDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-center py-12">
-                                    <FileText className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
-                                    <h3 className="text-xl font-semibold text-white mb-2">
+                                    <FileText className="w-16 h-16 text-[#3B82F6]/50 mx-auto mb-4 transition-transform duration-200 hover:scale-110" />
+                                    <h3 className="text-xl font-semibold text-[#E2E8F0] mb-2">
                                         Materiales del curso
                                     </h3>
                                     <p className="text-white/60 mb-6">
@@ -1577,7 +1782,7 @@ export default function CourseDetailPage() {
                                     </p>
                                     <Button
                                         variant="outline"
-                                        className="bg-white/5 border-white/20 text-white hover:bg-white/10"
+                                        className="border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30 transition-all duration-200"
                                         onClick={() => setLocation('/materials')}
                                     >
                                         <FileText className="w-4 h-4 mr-2" />
@@ -1589,11 +1794,11 @@ export default function CourseDetailPage() {
                     </TabsContent>
 
                     {/* Pestaña de Anuncios */}
-                    <TabsContent value="anuncios">
-                        <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                    <TabsContent value="anuncios" className="mt-0">
+                        <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
                             <CardHeader>
-                                <CardTitle className="text-white flex items-center gap-2">
-                                    <Bell className="w-5 h-5 text-[#1e3cff]" />
+                                <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
+                                    <Bell className="w-5 h-5 text-[#3B82F6]" />
                                     Anuncios del Profesor
                                 </CardTitle>
                                 <CardDescription className="text-white/60">
@@ -1602,8 +1807,8 @@ export default function CourseDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-center py-12">
-                                    <Bell className="w-16 h-16 text-[#1e3cff]/40 mx-auto mb-4" />
-                                    <h3 className="text-xl font-semibold text-white mb-2">
+                                    <Bell className="w-16 h-16 text-[#3B82F6]/50 mx-auto mb-4 transition-transform duration-200 hover:scale-110" />
+                                    <h3 className="text-xl font-semibold text-[#E2E8F0] mb-2">
                                         Sin anuncios
                                     </h3>
                                     <p className="text-white/60">

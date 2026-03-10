@@ -114,7 +114,7 @@ export async function createAssignment(params: CreateAssignmentParams): Promise<
     }
 
     // Validar logro si se proporciona
-    let logroObjId: import('mongoose').Types.ObjectId | undefined;
+    let logroObjId: string | undefined;
     if (logroCalificacionId) {
       const logro = await LogroCalificacion.findOne({
         _id: normalizeIdForQuery(logroCalificacionId),
@@ -127,7 +127,7 @@ export async function createAssignment(params: CreateAssignmentParams): Promise<
           error: 'El tipo de logro no existe o no pertenece a esta materia.',
         };
       }
-      logroObjId = logro._id as import('mongoose').Types.ObjectId;
+      logroObjId = logro._id != null ? String(logro._id) : undefined;
     }
 
     // Obtener materiaId del curso

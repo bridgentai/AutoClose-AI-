@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models';
-import { extractInternalId, generateUserId, normalizeIdForQuery } from '../utils/idGenerator';
+import { generateUserId } from '../utils/idGenerator';
+import { findUserById } from '../repositories/userRepository.js';
+import { getFirstGroupNameForStudent } from '../repositories/enrollmentRepository.js';
+import { ENV } from '../config/env.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -9,14 +11,17 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET no está configurado');
 }
 
+export type UserRole = 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
+
 export interface AuthRequest extends Request {
-  userId?: string; // ID interno (ObjectId)
-  categorizedUserId?: string; // ID categorizado (ej: "PROF-507f1f77bcf86cd799439011")
+  userId?: string;
+  categorizedUserId?: string;
   user?: {
-    id: string; // ID interno
-    categorizedId: string; // ID categorizado
+    id: string;
+    categorizedId: string;
     colegioId: string;
-    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
+    institution_id?: string;
+    rol: UserRole;
     curso?: string;
     materias?: string[];
   };
@@ -24,57 +29,42 @@ export interface AuthRequest extends Request {
 
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    if (!ENV.DATABASE_URL) {
+      return res.status(503).json({ message: 'Backend configurado solo para PostgreSQL. Configure DATABASE_URL.' });
+    }
     let token;
-
-    // Obtener token del header Authorization
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     }
-
     if (!token) {
       return res.status(401).json({ message: 'No autorizado. Token no proporcionado.' });
     }
 
-    // Verificar token
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
     req.userId = decoded.id;
 
-    // Cargar datos del usuario
-    const userDoc = await User.findById(decoded.id).select('-password');
-    if (!userDoc) {
+    const pgUser = await findUserById(decoded.id);
+    if (!pgUser) {
       return res.status(401).json({ message: 'Usuario no encontrado.' });
     }
-
-    // Generar o obtener userId categorizado
-    let categorizedId = userDoc.userId;
-    if (!categorizedId && userDoc.rol) {
-      try {
-        const generated = generateUserId(userDoc.rol, userDoc._id);
-        categorizedId = generated.fullId;
-        
-        // Guardar el userId categorizado en la BD (sin bloquear la request)
-        User.findByIdAndUpdate(userDoc._id, { userId: categorizedId }).catch((err) => {
-          console.error('Error al guardar userId categorizado:', err);
-        });
-      } catch (error: any) {
-        console.error('Error al generar userId categorizado:', error.message);
-        // Usar ID interno como fallback
-        categorizedId = userDoc._id.toString();
-      }
+    const config = pgUser.config as { userId?: string; curso?: string; materias?: string[] } | undefined;
+    let curso = config?.curso;
+    if (pgUser.role === 'estudiante' && !curso) {
+      curso = await getFirstGroupNameForStudent(pgUser.id) ?? undefined;
     }
-
+    const categorizedId = config?.userId ?? generateUserId(pgUser.role as UserRole, decoded.id).fullId;
     req.categorizedUserId = categorizedId;
     req.user = {
-      id: userDoc._id.toString(),
-      categorizedId: categorizedId || userDoc._id.toString(), // Fallback si no hay categorizado
-      colegioId: userDoc.colegioId,
-      rol: userDoc.rol,
-      curso: userDoc.curso,
-      materias: userDoc.materias,
+      id: pgUser.id,
+      categorizedId,
+      colegioId: pgUser.institution_id,
+      institution_id: pgUser.institution_id,
+      rol: pgUser.role as UserRole,
+      curso,
+      materias: config?.materias,
     };
-
     next();
-  } catch (error) {
+  } catch {
     return res.status(401).json({ message: 'No autorizado. Token inválido.' });
   }
 };

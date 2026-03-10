@@ -1,38 +1,49 @@
 import express from 'express';
-import { Types } from 'mongoose';
-import { User, Vinculacion, Notificacion } from '../models';
-import { Course } from '../models/Course';
-import { Group } from '../models/Group';
+import bcrypt from 'bcryptjs';
+import {
+  findUserById,
+  findUserByEmail,
+  findUserByInternalCode,
+  findUserByInternalCodeAny,
+  findUsersByInstitution,
+  findUsersByIds,
+  createUser,
+  updateUser,
+  countUsersByInstitutionAndRole,
+} from '../repositories/userRepository.js';
+import { findGuardianStudentsByGuardian, findGuardianStudentsByStudent, findGuardianStudent, createGuardianStudent } from '../repositories/guardianStudentRepository.js';
+import { createNotification } from '../repositories/notificationRepository.js';
+import { findGroupById } from '../repositories/groupRepository.js';
+import { getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
+import { findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
+import { findSubjectById } from '../repositories/subjectRepository.js';
+import { findGroupsByInstitution, countGradeGroupsByInstitution } from '../repositories/groupRepository.js';
+import { findSubjectsByInstitution } from '../repositories/subjectRepository.js';
+import { countAttendanceByInstitutionAndDateRange } from '../repositories/attendanceRepository.js';
 import { protect, AuthRequest } from '../middleware/auth';
-import { normalizeIdForQuery, generateUserId } from '../utils/idGenerator';
+import { generateUserId } from '../utils/idGenerator';
 import { createBulkUsers, type BulkRowInput } from '../services/bulkUserService';
 import { logAdminAction } from '../services/auditLogger';
 
 const router = express.Router();
 
-// Función para generar un código único de 4 dígitos
 const generarCodigoUnico = async (): Promise<string> => {
   let codigo: string;
   let existe: boolean;
   let intentos = 0;
-  const maxIntentos = 1000; // Prevenir loops infinitos
-
+  const maxIntentos = 1000;
   do {
-    // Generar código de 4 dígitos (1000-9999)
     codigo = Math.floor(1000 + Math.random() * 9000).toString();
-    const usuarioExistente = await User.findOne({ codigoUnico: codigo });
+    const usuarioExistente = await findUserByInternalCodeAny(codigo);
     existe = !!usuarioExistente;
     intentos++;
-    
     if (intentos >= maxIntentos) {
       throw new Error('No se pudo generar un código único después de múltiples intentos.');
     }
   } while (existe);
-
   return codigo;
 };
 
-/** Genera una contraseña aleatoria (solo para creación por Admin). No habilita login hasta activación. */
 const generarPasswordAleatorio = (): string => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   let s = '';
@@ -40,366 +51,234 @@ const generarPasswordAleatorio = (): string => {
   return s;
 };
 
-// =========================================================================
-// RUTA EXISTENTE: GET /api/users/profesores - Obtener todos los profesores
+// GET /api/users/profesores
 router.get('/profesores', protect, async (req: AuthRequest, res) => {
-try {
-const normalizedUserId = normalizeIdForQuery(req.userId || '');
-const user = await User.findById(normalizedUserId);
-if (!user) {
-return res.status(404).json({ message: 'Usuario no encontrado' });
-}
-
-// Solo directivos pueden ver la lista de profesores
-if (user.rol !== 'directivo') {
-return res.status(403).json({ message: 'Solo directivos pueden acceder a esta ruta' });
-}
-
-// Obtener todos los profesores del mismo colegio
-const profesores = await User.find({
-colegioId: user.colegioId,
-rol: 'profesor'
-})
-.select('nombre email materias createdAt userId')
-.sort({ nombre: 1 });
-
-// Incluir userId categorizado en la respuesta
-const profesoresConId = profesores.map(prof => ({
-  _id: prof._id,
-  id: prof._id.toString(),
-  userId: prof.userId || generateUserId(prof.rol, prof._id).fullId,
-  nombre: prof.nombre,
-  email: prof.email,
-  materias: prof.materias,
-  createdAt: prof.createdAt,
-}));
-
-res.json(profesoresConId);
-} catch (error: any) {
-console.error('Error al obtener profesores:', error.message);
-res.status(500).json({ message: 'Error en el servidor al cargar los profesores.' });
-}
-});
-
-// =========================================================================
-// NUEVA RUTA: GET /api/users/me/courses - Obtener materias del usuario autenticado
-// Para estudiantes: busca materias asignadas a su grupo
-router.get('/me/courses', protect, async (req: AuthRequest, res) => {
-    try {
-        const normalizedUserId = normalizeIdForQuery(req.userId || '');
-        const user = await User.findById(normalizedUserId).select('rol curso colegioId');
-
-        if (!user) {
-            return res.status(404).json({ message: 'Usuario no encontrado.' });
-        }
-
-        // Para estudiantes: buscar materias por su grupo
-        if (user.rol === 'estudiante') {
-            const grupoId = user.curso;
-            
-            if (!grupoId) {
-                return res.status(200).json([]);
-            }
-
-            // Normalizar grupoId para búsqueda consistente (mayúsculas)
-            const grupoIdNormalizado = (grupoId as string).toUpperCase().trim();
-            const colegioId = user.colegioId || 'COLEGIO_DEMO_2025';
-
-            console.log(`[DEBUG /api/users/me/courses] Buscando materias para estudiante:`);
-            console.log(`  - Estudiante ID: ${normalizedUserId}`);
-            console.log(`  - Grupo del estudiante: ${grupoId} (normalizado: ${grupoIdNormalizado})`);
-            console.log(`  - ColegioId: ${colegioId}`);
-
-            // Buscar materias (Course) que tienen este grupo en su array 'cursos'
-            // MongoDB busca directamente en arrays: { cursos: valor } busca si valor está en el array
-            // Usamos $or para buscar variantes normalizadas
-            const courses = await Course.find({ 
-                $or: [
-                    { cursos: grupoIdNormalizado },
-                    { cursos: grupoIdNormalizado.toLowerCase() },
-                    { cursos: grupoId as string }
-                ],
-                colegioId: colegioId
-            })
-            .populate('profesorIds', 'nombre apellido email')
-            .select('nombre descripcion colorAcento icono profesorIds cursos')
-            .lean();
-
-            console.log(`[DEBUG /api/users/me/courses] Encontradas ${courses.length} materias`);
-            courses.forEach(course => {
-                console.log(`  - ${course.nombre}: cursos=${JSON.stringify(course.cursos)}`);
-            });
-
-            // Formatear respuesta para que coincida con la interfaz Course del frontend
-            const formattedCourses = courses.map(course => ({
-                _id: course._id,
-                nombre: course.nombre,
-                descripcion: course.descripcion,
-                colorAcento: course.colorAcento,
-                icono: course.icono,
-                profesorIds: course.profesorIds || [],
-                cursos: course.cursos || [],
-            }));
-
-            return res.status(200).json(formattedCourses);
-        }
-
-        // Para otros roles, devolver vacío (los profesores usan /api/professor/my-groups)
-        res.status(200).json([]);
-
-    } catch (error: any) {
-        console.error('Error al obtener materias del usuario:', error.message);
-        res.status(500).json({ message: 'Error en el servidor al cargar las materias.' });
-    }
-});
-
-// =========================================================================
-// POST /api/users/asignar-codigos - Asignar códigos únicos a usuarios existentes
-// Este endpoint puede ejecutarse una vez para asignar códigos a usuarios que no los tengan
-router.post('/asignar-codigos', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId);
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    // Solo directivos pueden ejecutar esta acción
-    if (user.rol !== 'directivo') {
+    const userId = req.user?.id;
+    if (!userId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'directivo') {
       return res.status(403).json({ message: 'Solo directivos pueden acceder a esta ruta' });
     }
+    const all = await findUsersByInstitution(user.institution_id);
+    const profesores = all.filter((u) => u.role === 'profesor');
+    const profesoresConId = profesores.map((u) => ({
+      _id: u.id,
+      id: u.id,
+      userId: (u.config as { userId?: string })?.userId ?? generateUserId(u.role, u.id).fullId,
+      nombre: u.full_name,
+      email: u.email,
+      materias: (u.config as { materias?: string[] })?.materias,
+      createdAt: u.created_at,
+    }));
+    res.json(profesoresConId);
+  } catch (error: unknown) {
+    console.error('Error al obtener profesores:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor al cargar los profesores.' });
+  }
+});
 
-    // Buscar todos los usuarios sin código único
-    const usuariosSinCodigo = await User.find({
-      $or: [
-        { codigoUnico: { $exists: false } },
-        { codigoUnico: null },
-        { codigoUnico: '' }
-      ]
-    });
+// GET /api/users/me/courses - Para estudiantes: materias del grupo
+router.get('/me/courses', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(404).json({ message: 'Usuario no encontrado.' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
 
+    if (user.role === 'estudiante') {
+      const colegioId = user.institution_id;
+      const courseGroups = await getAllCourseGroupsForStudent(userId, colegioId ?? undefined);
+      if (!courseGroups.length) return res.status(200).json([]);
+      const courses = await Promise.all(
+        courseGroups.map(async (g) => {
+          const details = await findGroupSubjectsByGroupWithDetails(g.id, colegioId ?? undefined);
+          return {
+            _id: details[0]?.id ?? g.id,
+            nombre: g.name,
+            descripcion: details[0]?.subject_description ?? '',
+            colorAcento: '',
+            icono: '',
+            profesorIds: details[0]
+              ? [{ _id: details[0].teacher_id, nombre: details[0].teacher_name, email: details[0].teacher_email }]
+              : [],
+            cursos: [g.name],
+          };
+        })
+      );
+      return res.status(200).json(courses);
+    }
+    res.status(200).json([]);
+  } catch (error: unknown) {
+    console.error('Error al obtener materias:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor al cargar las materias.' });
+  }
+});
+
+// POST /api/users/asignar-codigos
+router.post('/asignar-codigos', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'directivo') {
+      return res.status(403).json({ message: 'Solo directivos pueden acceder a esta ruta' });
+    }
+    const all = await findUsersByInstitution(user.institution_id);
+    const sinCodigo = all.filter((u) => !u.internal_code || u.internal_code.trim() === '');
     let asignados = 0;
     let errores = 0;
-
-    for (const usuario of usuariosSinCodigo) {
+    for (const u of sinCodigo) {
       try {
         const codigo = await generarCodigoUnico();
-        usuario.codigoUnico = codigo;
-        await usuario.save();
+        await updateUser(u.id, { internal_code: codigo });
         asignados++;
-      } catch (error: any) {
-        console.error(`Error al asignar código a usuario ${usuario._id}:`, error.message);
+      } catch {
         errores++;
       }
     }
-
     res.json({
       message: 'Proceso completado',
-      usuariosProcesados: usuariosSinCodigo.length,
+      usuariosProcesados: sinCodigo.length,
       codigosAsignados: asignados,
-      errores: errores
+      errores,
     });
-  } catch (error: any) {
-    console.error('Error al asignar códigos:', error.message);
+  } catch (error: unknown) {
+    console.error('Error al asignar códigos:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al asignar códigos.' });
   }
 });
 
-
-// =========================================================================
-// GET /api/users/relaciones/:userId - Obtener relaciones padre-hijo de un usuario
+// GET /api/users/relaciones/:userId
 router.get('/relaciones/:userId', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const admin = await User.findById(normalizedUserId).select('rol colegioId').lean();
-    
-    if (!admin || admin.rol !== 'admin-general-colegio') {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(403).json({ message: 'No autorizado' });
+    const admin = await findUserById(adminId);
+    if (!admin || admin.role !== 'admin-general-colegio') {
       return res.status(403).json({ message: 'Solo administradores generales del colegio pueden acceder' });
     }
-
     const { userId } = req.params;
-    const usuario = await User.findById(normalizeIdForQuery(userId)).select('rol').lean();
-    if (!usuario) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
+    const usuario = await findUserById(userId);
+    if (!usuario) return res.status(404).json({ message: 'Usuario no encontrado' });
 
-    if (usuario.rol === 'estudiante') {
-      // Obtener padres vinculados
-      const vinculaciones = await Vinculacion.find({
-        estudianteId: normalizeIdForQuery(userId),
-        colegioId: admin.colegioId,
-      })
-        .populate('padreId', 'nombre email')
-        .select('padreId')
-        .lean();
-      
+    if (usuario.role === 'estudiante') {
+      const links = await findGuardianStudentsByStudent(userId);
+      const guardianIds = links.map((l) => l.guardian_id).filter(Boolean);
+      if (guardianIds.length === 0) return res.json({ tipo: 'estudiante', padres: [] });
+      const padres = await findUsersByIds(guardianIds);
       return res.json({
         tipo: 'estudiante',
-        padres: vinculaciones.map((v: any) => ({
-          _id: v.padreId._id,
-          nombre: v.padreId.nombre,
-          email: v.padreId.email,
-        })),
+        padres: padres.map((p) => ({ _id: p.id, nombre: p.full_name, email: p.email })),
       });
-    } else if (usuario.rol === 'padre') {
-      // Obtener hijos vinculados
-      const vinculaciones = await Vinculacion.find({
-        padreId: normalizeIdForQuery(userId),
-        colegioId: admin.colegioId,
-      })
-        .populate('estudianteId', 'nombre email curso')
-        .select('estudianteId')
-        .lean();
-      
+    }
+    if (usuario.role === 'padre') {
+      const links = await findGuardianStudentsByGuardian(userId);
+      const studentIds = links.map((l) => l.student_id).filter(Boolean);
+      if (studentIds.length === 0) return res.json({ tipo: 'padre', hijos: [] });
+      const hijos = await findUsersByIds(studentIds);
       return res.json({
         tipo: 'padre',
-        hijos: vinculaciones.map((v: any) => ({
-          _id: v.estudianteId._id,
-          nombre: v.estudianteId.nombre,
-          email: v.estudianteId.email,
-          curso: v.estudianteId.curso,
+        hijos: hijos.map((h) => ({
+          _id: h.id,
+          nombre: h.full_name,
+          email: h.email,
+          curso: (h.config as { curso?: string })?.curso,
         })),
       });
     }
-
-    return res.json({ tipo: usuario.rol, padres: [], hijos: [] });
-  } catch (error: any) {
-    console.error('Error al obtener relaciones:', error.message);
+    return res.json({ tipo: usuario.role, padres: [], hijos: [] });
+  } catch (error: unknown) {
+    console.error('Error al obtener relaciones:', (error as Error).message);
     res.status(500).json({ message: 'Error al obtener relaciones.' });
   }
 });
 
-// =========================================================================
-// GET /api/users/by-role - Obtener usuarios por rol (admin y directivo, solo lectura para directivo)
-// Permite filtrar por rol y colegioId del usuario autenticado
+// GET /api/users/by-role
 router.get('/by-role', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId).select('rol colegioId');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin' && user.rol !== 'directivo') {
+    const colegioId = req.user?.colegioId;
+    const rolUser = req.user?.rol;
+    if (!colegioId || !rolUser) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (rolUser !== 'admin-general-colegio' && rolUser !== 'school_admin' && rolUser !== 'directivo') {
       return res.status(403).json({ message: 'Solo administradores del colegio o directivos pueden acceder a esta ruta' });
     }
-
     let { rol } = req.query;
-    if (!rol || typeof rol !== 'string') {
-      return res.status(400).json({ message: 'El parámetro "rol" es requerido' });
-    }
-    rol = rol.trim().toLowerCase();
-    // Aceptar plural o singular: estudiantes→estudiante, profesores→profesor, padres→padre, directivos→directivo
+    if (!rol || typeof rol !== 'string') return res.status(400).json({ message: 'El parámetro "rol" es requerido' });
+    rol = (rol as string).trim().toLowerCase();
     const rolMap: Record<string, string> = {
-      estudiante: 'estudiante',
-      estudiantes: 'estudiante',
-      profesor: 'profesor',
-      profesores: 'profesor',
-      padre: 'padre',
-      padres: 'padre',
-      directivo: 'directivo',
-      directivos: 'directivo',
-      asistente: 'asistente',
-      asistentes: 'asistente',
+      estudiante: 'estudiante', estudiantes: 'estudiante',
+      profesor: 'profesor', profesores: 'profesor',
+      padre: 'padre', padres: 'padre',
+      directivo: 'directivo', directivos: 'directivo',
+      asistente: 'asistente', asistentes: 'asistente',
     };
     const rolNormalizado = rolMap[rol] || rol;
-
     const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo', 'asistente'];
     if (!rolesPermitidos.includes(rolNormalizado)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
     }
-
-    const selectFields = rolNormalizado === 'profesor' ? 'nombre email curso estado createdAt userId codigoUnico telefono celular materias' : 'nombre email curso estado createdAt userId codigoUnico telefono celular';
-    const usuarios = await User.find({
-      colegioId: user.colegioId,
-      rol: rolNormalizado
-    })
-    .select(selectFields)
-    .sort({ nombre: 1 })
-    .lean();
-
-    // Incluir userId categorizado
-    const usuariosConId = usuarios.map(usr => ({
-      _id: usr._id,
-      id: usr._id.toString(),
-      userId: usr.userId || generateUserId(usr.rol as string, usr._id).fullId,
-      nombre: usr.nombre,
-      email: usr.email || usr.correo,
-      curso: usr.curso,
-      estado: usr.estado || 'active',
-      codigoUnico: usr.codigoUnico,
-      telefono: usr.telefono,
-      celular: usr.celular,
-      materias: (usr as any).materias,
-      createdAt: usr.createdAt,
+    const all = await findUsersByInstitution(colegioId);
+    const usuarios = all.filter((u) => u.role === rolNormalizado);
+    const usuariosConId = usuarios.map((u) => ({
+      _id: u.id,
+      id: u.id,
+      userId: (u.config as { userId?: string })?.userId ?? generateUserId(u.role, u.id).fullId,
+      nombre: u.full_name,
+      email: u.email,
+      curso: (u.config as { curso?: string })?.curso,
+      estado: u.status || 'active',
+      codigoUnico: u.internal_code,
+      telefono: u.phone,
+      celular: u.phone,
+      materias: (u.config as { materias?: string[] })?.materias,
+      createdAt: u.created_at,
     }));
-
-    res.json(usuariosConId);
-  } catch (error: any) {
-    console.error('Error al obtener usuarios por rol:', error.message);
+    return res.json(usuariosConId);
+  } catch (error: unknown) {
+    console.error('Error al obtener usuarios por rol:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al cargar los usuarios.' });
   }
 });
 
-// =========================================================================
-// GET /api/users/stats - Obtener estadísticas del colegio (KPIs)
-// Accesible por admin-general-colegio y directivo
+// GET /api/users/stats
 router.get('/stats', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId).select('rol colegioId');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin' && user.rol !== 'directivo') {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (user.role !== 'admin-general-colegio' && user.role !== 'school_admin' && user.role !== 'directivo') {
       return res.status(403).json({ message: 'Solo administradores del colegio o directivos pueden acceder a esta ruta' });
     }
-
-    const colegioId = user.colegioId;
     const onlyActive = req.query.estado === 'active';
-    const estadoFilter = onlyActive ? { estado: 'active' } : {};
-
-    // Contar usuarios por rol (opcional: solo activos)
+    const statusFilter = onlyActive ? 'active' : undefined;
     const [estudiantes, profesores, padres, directivos, asistentes] = await Promise.all([
-      User.countDocuments({ colegioId, rol: 'estudiante', ...estadoFilter }),
-      User.countDocuments({ colegioId, rol: 'profesor', ...estadoFilter }),
-      User.countDocuments({ colegioId, rol: 'padre', ...estadoFilter }),
-      User.countDocuments({ colegioId, rol: 'directivo', ...estadoFilter }),
-      User.countDocuments({ colegioId, rol: 'asistente', ...estadoFilter }),
+      countUsersByInstitutionAndRole(colegioId, 'estudiante', statusFilter),
+      countUsersByInstitutionAndRole(colegioId, 'profesor', statusFilter),
+      countUsersByInstitutionAndRole(colegioId, 'padre', statusFilter),
+      countUsersByInstitutionAndRole(colegioId, 'directivo', statusFilter),
+      countUsersByInstitutionAndRole(colegioId, 'asistente', statusFilter),
     ]);
-
-    const { Group } = await import('../models/Group');
-    const cursos = await Group.countDocuments({ colegioId });
-    const materias = await Course.countDocuments({ colegioId });
-
-    // Resumen de asistencia del mes actual
-    const { Asistencia } = await import('../models/Asistencia');
+    const [gradeGroupCount, subjects] = await Promise.all([
+      countGradeGroupsByInstitution(colegioId),
+      findSubjectsByInstitution(colegioId),
+    ]);
+    const cursos = gradeGroupCount;
+    const materias = subjects.length;
     const startMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const endMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
-    const asistenciasMes = await Asistencia.find({
-      colegioId,
-      fecha: { $gte: startMonth, $lte: endMonth },
-    }).lean();
-    const presentesMes = asistenciasMes.filter((a) => a.estado === 'presente').length;
+    const endMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+    const fromStr = startMonth.toISOString().slice(0, 10);
+    const toStr = endMonth.toISOString().slice(0, 10);
+    const att = await countAttendanceByInstitutionAndDateRange(colegioId, fromStr, toStr);
     const asistenciaResumen = {
-      totalRegistros: asistenciasMes.length,
-      presentes: presentesMes,
-      porcentajePromedio: asistenciasMes.length > 0 ? Math.round((presentesMes / asistenciasMes.length) * 100) : 0,
+      totalRegistros: att.total,
+      presentes: att.presentCount,
+      porcentajePromedio: att.total > 0 ? Math.round((att.presentCount / att.total) * 100) : 0,
     };
-
-    // KPIs de tesorería (mismo colegio)
-    const { Factura, Pago } = await import('../models');
-    const [facturasPendientes, ingresosMes] = await Promise.all([
-      Factura.countDocuments({ colegioId, estado: 'pendiente' }),
-      Pago.aggregate([
-        { $match: { colegioId, estado: 'completado', fecha: { $gte: startMonth, $lte: endMonth } } },
-        { $group: { _id: null, total: { $sum: '$monto' } } },
-      ]).then((r) => (r[0]?.total ?? 0) as number),
-    ]);
-
     res.json({
       estudiantes,
       profesores,
@@ -409,618 +288,449 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
       cursos,
       materias,
       asistenciaResumen,
-      treasuryResumen: { facturasPendientes, ingresosMes },
+      treasuryResumen: { facturasPendientes: 0, ingresosMes: 0 },
     });
-  } catch (error: any) {
-    console.error('Error al obtener estadísticas:', error.message);
+  } catch (error: unknown) {
+    console.error('Error al obtener estadísticas:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al cargar las estadísticas.' });
   }
 });
 
-// =========================================================================
-// POST /api/users/create - Crear usuario (solo para admin-general-colegio)
-// Permite crear usuarios sin código de acceso
+// POST /api/users/create
 router.post('/create', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(normalizedUserId).select('rol colegioId');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-    }
-
-    if (user.rol !== 'admin-general-colegio' && user.rol !== 'school_admin') {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const admin = await findUserById(adminId);
+    if (!admin || (admin.role !== 'admin-general-colegio' && admin.role !== 'school_admin')) {
       return res.status(403).json({ message: 'Solo administradores del colegio pueden crear usuarios.' });
     }
-
     const { nombre, email, rol, curso, telefono, celular, materias: materiasBody, materia, cursos } = req.body;
-    // Profesor: aceptar "materia" (string) o "materias" (array); la materia es un campo del profesor, no entidad independiente
     const materias = rol === 'profesor' && (materia != null || materiasBody != null)
       ? (Array.isArray(materiasBody) ? materiasBody : (materia != null ? [materia] : materiasBody ? [materiasBody] : []))
       : undefined;
 
-    // TODOS los roles: solo nombre y email. Contraseña auto-generada. Estado según rol.
     if (!nombre || !email || !rol) {
       return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, email, rol' });
     }
-
-    // Validar rol (admin general crea también asistentes)
     const rolesPermitidos = ['estudiante', 'profesor', 'padre', 'directivo', 'asistente'];
     if (!rolesPermitidos.includes(rol)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
     }
 
-    // Verificar si el correo ya existe
-    const existing = await User.findOne({ 
-      $or: [
-        { email: (email || '').toLowerCase() },
-        { correo: (email || '').toLowerCase() }
-      ]
-    });
-    
-    if (existing) {
-      return res.status(400).json({ message: 'El correo ya está registrado.' });
-    }
+    const existing = await findUserByEmail((email || '').toLowerCase());
+    if (existing) return res.status(400).json({ message: 'El correo ya está registrado.' });
 
     const esEstudiante = rol === 'estudiante';
     const codigoUnico = await generarCodigoUnico();
-    const passwordPlain = generarPasswordAleatorio(); // TODOS generan contraseña aleatoria
+    const passwordPlain = generarPasswordAleatorio();
+    const passwordHash = await bcrypt.hash(passwordPlain, 10);
 
-    const newUser = new User({
-      nombre,
-      correo: email.toLowerCase(),
-      email: email.toLowerCase(),
-      password: passwordPlain,
-      rol,
-      colegioId: user.colegioId, // Automáticamente del colegio del admin
-      estado: esEstudiante ? 'pendiente_vinculacion' : 'active',
-      curso: undefined, // No se asigna curso al crear
+    const config: Record<string, unknown> = {
+      curso: rol === 'estudiante' ? curso : undefined,
       materias: rol === 'profesor' && materias ? (Array.isArray(materias) ? materias : [materias]) : undefined,
-      codigoUnico,
-      telefono,
-      celular,
-      configuraciones: {},
+      userId: undefined as string | undefined,
+    };
+    const newUser = await createUser({
+      institution_id: admin.institution_id,
+      email: (email as string).toLowerCase(),
+      password_hash: passwordHash,
+      full_name: nombre,
+      role: rol,
+      status: esEstudiante ? 'pendiente_vinculacion' : 'active',
+      internal_code: codigoUnico,
+      phone: telefono ?? celular ?? null,
+      config,
     });
-
-    const userIdInfo = generateUserId(rol, newUser._id);
-    newUser.userId = userIdInfo.fullId;
-
-    await newUser.save();
-
-    // Si es profesor con materias (nombres de materia, ej. "Matemáticas"): solo se guardan en User.materias.
-    // Si además se envían cursos (grupos), asignar al profesor a esos grupos (misma lógica que assign-professor-to-groups).
-    if (rol === 'profesor' && materias && Array.isArray(materias) && materias.length > 0) {
-      const areIds = materias.every((m: any) => typeof m === 'string' && m.length === 24 && /^[a-f0-9]+$/i.test(m));
-      if (areIds) {
-        try {
-          const profesorObjId = newUser._id;
-          await Course.updateMany(
-            { _id: { $in: materias }, colegioId: user.colegioId },
-            { $addToSet: { profesorIds: profesorObjId } }
-          );
-        } catch (error: any) {
-          console.error('[USERS] Error al asignar materias al profesor:', error.message);
-        }
-      }
-    }
-
-    // Asignar profesor a grupos (cursos) si se envió el array "cursos" al crear (ej. ["11H", "11A"]).
-    const groupNames = Array.isArray(cursos) ? cursos : (typeof cursos === 'string' ? [cursos] : []);
-    if (rol === 'profesor' && groupNames.length > 0 && materias && Array.isArray(materias) && materias.length > 0) {
-      const materiaNombre = String(materias[0]).trim();
-      const normalizedGroups = groupNames.map((g: string) => String(g).toUpperCase().trim()).filter(Boolean);
-      const colegioId = user.colegioId;
-      try {
-        for (const nombreGrupo of normalizedGroups) {
-          const grupo = await Group.findOne({ nombre: nombreGrupo, colegioId }).lean();
-          if (!grupo) {
-            console.warn(`[USERS] Grupo "${nombreGrupo}" no existe al crear profesor; créalo en Cursos para asignarlo después.`);
-            continue;
-          }
-        }
-        const profesorObjId = newUser._id as Types.ObjectId;
-        let course = await Course.findOne({ nombre: materiaNombre, colegioId }).lean();
-        if (!course) {
-          await Course.create({
-            nombre: materiaNombre,
-            colegioId,
-            profesorIds: [profesorObjId],
-            profesorId: profesorObjId,
-            cursos: normalizedGroups,
-            estudiantes: [],
-            estudianteIds: [],
-          });
-        } else {
-          await Course.findByIdAndUpdate(course._id, {
-            $addToSet: {
-              profesorIds: profesorObjId,
-              cursos: { $each: normalizedGroups },
-            },
-            $set: { profesorId: course.profesorId || profesorObjId },
-          });
-        }
-        console.log(`[USERS] Profesor ${newUser.email} asignado a grupos: ${normalizedGroups.join(', ')} (materia: ${materiaNombre}).`);
-      } catch (error: any) {
-        console.error('[USERS] Error al asignar profesor a grupos al crear:', error.message);
-      }
-    }
+    const userIdInfo = generateUserId(rol, newUser.id);
+    await updateUser(newUser.id, { config: { ...config, userId: userIdInfo.fullId } });
 
     await logAdminAction({
-      userId: normalizedUserId,
-      role: user.rol,
+      userId: adminId,
+      role: admin.role,
       action: 'create_user',
       entityType: 'user',
-      entityId: newUser._id,
-      colegioId: user.colegioId,
-      requestData: { rol, email: email.toLowerCase(), nombre },
+      entityId: newUser.id,
+      colegioId: admin.institution_id,
+      requestData: { rol, email: (email as string).toLowerCase(), nombre },
     });
 
-    // TODOS devuelven passwordTemporal
     res.status(201).json({
-      message: esEstudiante 
+      message: esEstudiante
         ? 'Estudiante creado. Debe vincularse con al menos un padre y luego activar la cuenta.'
         : 'Usuario creado exitosamente',
       user: {
-        _id: newUser._id,
-        nombre: newUser.nombre,
+        _id: newUser.id,
+        nombre: newUser.full_name,
         email: newUser.email,
-        rol: newUser.rol,
-        userId: newUser.userId,
-        codigoUnico: newUser.codigoUnico,
-        estado: newUser.estado,
-        passwordTemporal: passwordPlain, // Siempre devolver contraseña temporal
+        rol: newUser.role,
+        userId: userIdInfo.fullId,
+        codigoUnico: newUser.internal_code,
+        estado: newUser.status,
+        passwordTemporal: passwordPlain,
       },
     });
-  } catch (error: any) {
-    console.error('Error al crear usuario:', error.message);
+  } catch (error: unknown) {
+    console.error('Error al crear usuario:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al crear el usuario.' });
   }
 });
 
-// =========================================================================
-// POST /api/users/bulk - Creación masiva de usuarios (admin-general-colegio)
-// Body: { rows: BulkRowInput[] } con nombre, apellido?, email, rol, codigo_interno?, curso_grupo?
-// Rol: student | teacher | parent (o estudiante | profesor | padre)
-// =========================================================================
+// POST /api/users/bulk
 router.post('/bulk', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedUserId = normalizeIdForQuery(req.userId || '');
-    const admin = await User.findById(normalizedUserId).select('rol colegioId').lean();
-    if (!admin || (admin.rol !== 'admin-general-colegio' && admin.rol !== 'school_admin')) {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(403).json({ message: 'No autorizado' });
+    const admin = await findUserById(adminId);
+    if (!admin || (admin.role !== 'admin-general-colegio' && admin.role !== 'school_admin')) {
       return res.status(403).json({
         message: 'Solo administradores del colegio pueden realizar carga masiva de usuarios.',
       });
     }
-    const colegioId = admin.colegioId;
-    if (!colegioId) {
-      return res.status(400).json({ message: 'Colegio no definido para el administrador.' });
-    }
-
+    const colegioId = admin.institution_id;
+    if (!colegioId) return res.status(400).json({ message: 'Colegio no definido para el administrador.' });
     const { rows } = req.body as { rows?: BulkRowInput[] };
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({
         message: 'Se requiere un array "rows" con al menos una fila. Cada fila: nombre, apellido?, email, rol, codigo_interno?, curso_grupo?',
       });
     }
-
     const result = await createBulkUsers(rows, colegioId);
     res.status(200).json(result);
-  } catch (error: any) {
-    console.error('Error en carga masiva de usuarios:', error.message);
+  } catch (error: unknown) {
+    console.error('Error en carga masiva de usuarios:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al procesar la carga masiva.' });
   }
 });
 
-// =========================================================================
-// POST /api/users/reset-password - Restablecer contraseña de un usuario (admin del colegio)
-// Body: { userId: string }. Genera contraseña aleatoria y la devuelve (solo en la respuesta).
-// =========================================================================
+// POST /api/users/reset-password
 router.post('/reset-password', protect, async (req: AuthRequest, res) => {
   try {
-    const normalizedAdminId = normalizeIdForQuery(req.userId || '');
-    const admin = await User.findById(normalizedAdminId).select('rol colegioId').lean();
-    if (!admin || (admin.rol !== 'admin-general-colegio' && admin.rol !== 'school_admin')) {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(403).json({ message: 'No autorizado' });
+    const admin = await findUserById(adminId);
+    if (!admin || (admin.role !== 'admin-general-colegio' && admin.role !== 'school_admin')) {
       return res.status(403).json({ message: 'Solo administradores del colegio pueden restablecer contraseñas.' });
     }
     const { userId } = req.body as { userId?: string };
-    if (!userId) {
-      return res.status(400).json({ message: 'Falta userId.' });
-    }
-    const targetId = normalizeIdForQuery(userId);
-    const target = await User.findById(targetId).select('colegioId nombre email').lean();
-    if (!target) {
-      return res.status(404).json({ message: 'Usuario no encontrado.' });
-    }
-    if (target.colegioId !== admin.colegioId) {
+    if (!userId) return res.status(400).json({ message: 'Falta userId.' });
+    const target = await findUserById(userId);
+    if (!target) return res.status(404).json({ message: 'Usuario no encontrado.' });
+    if (target.institution_id !== admin.institution_id) {
       return res.status(403).json({ message: 'No puedes restablecer la contraseña de un usuario de otro colegio.' });
     }
     const newPassword = generarPasswordAleatorio();
-    const targetUser = await User.findById(targetId);
-    if (!targetUser) {
-      return res.status(404).json({ message: 'Usuario no encontrado.' });
-    }
-    targetUser.password = newPassword;
-    await targetUser.save(); // pre('save') hashea la contraseña
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await updateUser(userId, { password_hash: passwordHash });
     res.status(200).json({
       message: 'Contraseña restablecida. Comparte la nueva contraseña con el usuario.',
       passwordTemporal: newPassword,
     });
-  } catch (error: any) {
-    console.error('Error al restablecer contraseña:', error.message);
+  } catch (error: unknown) {
+    console.error('Error al restablecer contraseña:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al restablecer la contraseña.' });
   }
 });
 
-// =========================================================================
-// Helper: solo admin-general-colegio, mismo colegio
-// =========================================================================
-const ensureAdminColegio = async (req: AuthRequest) => {
-  const uid = normalizeIdForQuery(req.userId || '');
-  const u = await User.findById(uid).select('rol colegioId').lean();
-  if (!u || (u.rol !== 'admin-general-colegio' && u.rol !== 'school_admin')) {
+const ensureAdminColegio = async (req: AuthRequest): Promise<{ ok: true; user: { institution_id: string; role: string } } | { ok: false; status: number; message: string }> => {
+  const uid = req.user?.id;
+  if (!uid) return { ok: false, status: 403, message: 'No autorizado' };
+  const u = await findUserById(uid);
+  if (!u || (u.role !== 'admin-general-colegio' && u.role !== 'school_admin')) {
     return { ok: false, status: 403, message: 'Solo administradores generales del colegio pueden realizar esta acción.' };
   }
-  return { ok: true, user: u };
+  return { ok: true, user: { institution_id: u.institution_id, role: u.role } };
 };
 
-// =========================================================================
-// GET /api/users/me/hijos - Para rol padre: listar hijos vinculados
-// =========================================================================
+// GET /api/users/me/hijos
 router.get('/me/hijos', protect, async (req: AuthRequest, res) => {
   try {
-    const userId = normalizeIdForQuery(req.userId || '');
-    const user = await User.findById(userId).select('rol colegioId').lean();
-    if (!user || user.rol !== 'padre') {
-      return res.status(403).json({ message: 'Solo padres pueden acceder a esta ruta.' });
-    }
-    const list = await Vinculacion.find({
-      padreId: userId,
-      colegioId: user.colegioId,
-    })
-      .populate('estudianteId', 'nombre correo email curso')
-      .lean();
-    const hijos = list
-      .filter((v: any) => v.estudianteId)
-      .map((v: any) => ({
-        _id: v.estudianteId._id,
-        nombre: v.estudianteId.nombre,
-        correo: v.estudianteId.correo || v.estudianteId.email,
-        curso: v.estudianteId.curso,
-      }));
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (req.user?.rol !== 'padre') return res.status(403).json({ message: 'Solo padres pueden acceder a esta ruta.' });
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const links = await findGuardianStudentsByGuardian(userId!);
+    const studentIds = links.map((l) => l.student_id).filter(Boolean);
+    if (studentIds.length === 0) return res.json([]);
+    const users = await findUsersByIds(studentIds);
+    const hijos = users.map((u) => ({
+      _id: u.id,
+      id: u.id,
+      nombre: u.full_name,
+      correo: u.email,
+      email: u.email,
+      curso: (u.config as { curso?: string })?.curso ?? undefined,
+    }));
     return res.json(hijos);
-  } catch (e: any) {
-    console.error('Error en GET /me/hijos:', e.message);
+  } catch (e: unknown) {
+    console.error('Error en GET /me/hijos:', (e as Error).message);
     res.status(500).json({ message: 'Error al listar hijos.' });
   }
 });
 
-// =========================================================================
-// GET /api/users/me/consent - Obtener estado de consentimiento del usuario
-// =========================================================================
+// GET /api/users/me/consent
 router.get('/me/consent', protect, async (req: AuthRequest, res) => {
   try {
-    const uid = normalizeIdForQuery(req.userId || '');
-    const u = await User.findById(uid).select('consentimientoTerminos consentimientoPrivacidad consentimientoFecha').lean();
+    const uid = req.user?.id;
+    if (!uid) return res.status(404).json({ message: 'Usuario no encontrado.' });
+    const u = await findUserById(uid);
     if (!u) return res.status(404).json({ message: 'Usuario no encontrado.' });
     return res.json({
-      consentimientoTerminos: !!u.consentimientoTerminos,
-      consentimientoPrivacidad: !!u.consentimientoPrivacidad,
-      consentimientoFecha: u.consentimientoFecha ?? null,
+      consentimientoTerminos: u.consent_terms,
+      consentimientoPrivacidad: u.consent_privacy,
+      consentimientoFecha: u.consent_at ?? null,
     });
-  } catch (e: any) {
-    console.error('Error en GET /me/consent:', e.message);
+  } catch (e: unknown) {
+    console.error('Error en GET /me/consent:', (e as Error).message);
     res.status(500).json({ message: 'Error al obtener consentimiento.' });
   }
 });
 
-// =========================================================================
-// POST /api/users/me/consent - Registrar aceptación de términos y privacidad
-// =========================================================================
+// POST /api/users/me/consent
 router.post('/me/consent', protect, async (req: AuthRequest, res) => {
   try {
-    const uid = normalizeIdForQuery(req.userId || '');
+    const uid = req.user?.id;
+    if (!uid) return res.status(401).json({ message: 'No autorizado.' });
     const { consentimientoTerminos, consentimientoPrivacidad } = req.body;
     if (consentimientoTerminos !== true || consentimientoPrivacidad !== true) {
       return res.status(400).json({ message: 'Debe aceptar tanto términos como política de privacidad.' });
     }
-    await User.findByIdAndUpdate(uid, {
-      $set: {
-        consentimientoTerminos: true,
-        consentimientoPrivacidad: true,
-        consentimientoFecha: new Date(),
-      },
+    await updateUser(uid, {
+      consent_terms: true,
+      consent_privacy: true,
+      consent_at: new Date().toISOString(),
     });
     return res.json({
       success: true,
       message: 'Consentimiento registrado correctamente.',
       consentimientoTerminos: true,
       consentimientoPrivacidad: true,
-      consentimientoFecha: new Date(),
+      consentimientoFecha: new Date().toISOString(),
     });
-  } catch (e: any) {
-    console.error('Error en POST /me/consent:', e.message);
+  } catch (e: unknown) {
+    console.error('Error en POST /me/consent:', (e as Error).message);
     res.status(500).json({ message: 'Error al registrar consentimiento.' });
   }
 });
 
-// =========================================================================
-// GET /api/users/vinculaciones - Listar vinculaciones (por estudiante o por padre)
-// =========================================================================
+// GET /api/users/vinculaciones
 router.get('/vinculaciones', protect, async (req: AuthRequest, res) => {
   try {
     const check = await ensureAdminColegio(req);
-    if (!check.ok) return res.status((check as any).status).json({ message: (check as any).message });
-
+    if (!check.ok) return res.status(check.status).json({ message: check.message });
     const { estudianteId, padreId } = req.query;
-    const colegioId = (check as any).user.colegioId;
-
+    const colegioId = check.user.institution_id;
     if (estudianteId) {
-      const list = await Vinculacion.find({
-        estudianteId: normalizeIdForQuery(estudianteId as string),
-        colegioId,
-      })
-        .populate('padreId', 'nombre email')
-        .populate('estudianteId', 'nombre email curso estado')
-        .lean();
-      return res.json(list);
+      const list = await findGuardianStudentsByStudent(estudianteId as string);
+      const guardianIds = list.map((l) => l.guardian_id);
+      const students = list.map((l) => l.student_id);
+      const users = await findUsersByIds([...guardianIds, ...students]);
+      const byId = new Map(users.map((u) => [u.id, u]));
+      const result = list.map((l) => ({
+        guardian_id: l.guardian_id,
+        student_id: l.student_id,
+        padreId: byId.get(l.guardian_id) ? { _id: l.guardian_id, nombre: byId.get(l.guardian_id)!.full_name, email: byId.get(l.guardian_id)!.email } : null,
+        estudianteId: byId.get(l.student_id) ? { _id: l.student_id, nombre: byId.get(l.student_id)!.full_name, email: byId.get(l.student_id)!.email, curso: (byId.get(l.student_id)!.config as { curso?: string })?.curso, estado: byId.get(l.student_id)!.status } : null,
+      }));
+      return res.json(result);
     }
     if (padreId) {
-      const list = await Vinculacion.find({
-        padreId: normalizeIdForQuery(padreId as string),
-        colegioId,
-      })
-        .populate('padreId', 'nombre email')
-        .populate('estudianteId', 'nombre email curso estado')
-        .lean();
-      return res.json(list);
+      const list = await findGuardianStudentsByGuardian(padreId as string);
+      const guardianIds = list.map((l) => l.guardian_id);
+      const studentIds = list.map((l) => l.student_id);
+      const users = await findUsersByIds([...guardianIds, ...studentIds]);
+      const byId = new Map(users.map((u) => [u.id, u]));
+      const result = list.map((l) => ({
+        guardian_id: l.guardian_id,
+        student_id: l.student_id,
+        padreId: byId.get(l.guardian_id) ? { _id: l.guardian_id, nombre: byId.get(l.guardian_id)!.full_name, email: byId.get(l.guardian_id)!.email } : null,
+        estudianteId: byId.get(l.student_id) ? { _id: l.student_id, nombre: byId.get(l.student_id)!.full_name, email: byId.get(l.student_id)!.email, curso: (byId.get(l.student_id)!.config as { curso?: string })?.curso, estado: byId.get(l.student_id)!.status } : null,
+      }));
+      return res.json(result);
     }
     return res.status(400).json({ message: 'Indica estudianteId o padreId en query.' });
-  } catch (e: any) {
-    console.error('Error en GET /vinculaciones:', e.message);
+  } catch (e: unknown) {
+    console.error('Error en GET /vinculaciones:', (e as Error).message);
     res.status(500).json({ message: 'Error al listar vinculaciones.' });
   }
 });
 
-// =========================================================================
-// POST /api/users/vinculaciones - Crear vinculación padre–estudiante
-// =========================================================================
+// POST /api/users/vinculaciones
 router.post('/vinculaciones', protect, async (req: AuthRequest, res) => {
   try {
     const check = await ensureAdminColegio(req);
-    if (!check.ok) return res.status((check as any).status).json({ message: (check as any).message });
-
+    if (!check.ok) return res.status(check.status).json({ message: check.message });
     const { padreId, estudianteId } = req.body;
-    const colegioId = (check as any).user.colegioId;
+    const colegioId = check.user.institution_id;
+    if (!padreId || !estudianteId) return res.status(400).json({ message: 'Faltan padreId y estudianteId.' });
 
-    if (!padreId || !estudianteId) {
-      return res.status(400).json({ message: 'Faltan padreId y estudianteId.' });
-    }
-
-    const padre = await User.findById(normalizeIdForQuery(padreId)).select('rol colegioId').lean();
-    const estudiante = await User.findById(normalizeIdForQuery(estudianteId)).select('rol colegioId').lean();
-
-    if (!padre || padre.rol !== 'padre') return res.status(404).json({ message: 'Padre no encontrado.' });
-    if (!estudiante || estudiante.rol !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
-    if (padre.colegioId !== colegioId || estudiante.colegioId !== colegioId) {
+    const padre = await findUserById(padreId);
+    const estudiante = await findUserById(estudianteId);
+    if (!padre || padre.role !== 'padre') return res.status(404).json({ message: 'Padre no encontrado.' });
+    if (!estudiante || estudiante.role !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    if (padre.institution_id !== colegioId || estudiante.institution_id !== colegioId) {
       return res.status(403).json({ message: 'Padre y estudiante deben ser del mismo colegio.' });
     }
-
-    const existente = await Vinculacion.findOne({
-      padreId: normalizeIdForQuery(padreId),
-      estudianteId: normalizeIdForQuery(estudianteId),
-    });
+    const existente = await findGuardianStudent(padreId, estudianteId);
     if (existente) return res.status(400).json({ message: 'Esta vinculación ya existe.' });
 
-    const v = await Vinculacion.create({
-      padreId: normalizeIdForQuery(padreId),
-      estudianteId: normalizeIdForQuery(estudianteId),
-      colegioId,
-    });
-
+    const v = await createGuardianStudent(padreId, estudianteId, colegioId);
     await logAdminAction({
-      userId: normalizeIdForQuery(req.userId || ''),
-      role: (check as any).user.rol,
+      userId: req.user!.id!,
+      role: check.user.role,
       action: 'vinculacion',
       entityType: 'vinculacion',
-      entityId: v._id,
+      entityId: v.guardian_id + v.student_id,
       colegioId,
       requestData: { padreId, estudianteId },
     });
-
-    // Notificar al padre (y opcionalmente al estudiante)
     try {
-      await Notificacion.create({
-        usuarioId: normalizeIdForQuery(padreId),
-        titulo: 'Vinculación creada',
-        descripcion: 'Se ha creado una vinculación entre usted y un estudiante. La cuenta se activará cuando el administrador confirme y active las cuentas.',
-        fecha: new Date(),
-        leido: false,
+      await createNotification({
+        institution_id: colegioId,
+        user_id: padreId,
+        title: 'Vinculación creada',
+        body: 'Se ha creado una vinculación entre usted y un estudiante. La cuenta se activará cuando el administrador confirme y active las cuentas.',
       });
-      await Notificacion.create({
-        usuarioId: normalizeIdForQuery(estudianteId),
-        titulo: 'Vinculación con padre',
-        descripcion: 'Se ha vinculado su cuenta con un padre/tutor. La activación se completará cuando el administrador confirme.',
-        fecha: new Date(),
-        leido: false,
+      await createNotification({
+        institution_id: colegioId,
+        user_id: estudianteId,
+        title: 'Vinculación con padre',
+        body: 'Se ha vinculado su cuenta con un padre/tutor. La activación se completará cuando el administrador confirme.',
       });
-    } catch (err: any) {
-      console.error('Error al crear notificaciones de vinculación:', err.message);
+    } catch (err: unknown) {
+      console.error('Error al crear notificaciones de vinculación:', (err as Error).message);
     }
-
     res.status(201).json({ message: 'Vinculación creada.', vinculacion: v });
-  } catch (e: any) {
-    if (e.code === 11000) return res.status(400).json({ message: 'Esta vinculación ya existe.' });
-    console.error('Error en POST /vinculaciones:', e.message);
+  } catch (e: unknown) {
+    if ((e as { code?: string })?.code === '23505') return res.status(400).json({ message: 'Esta vinculación ya existe.' });
+    console.error('Error en POST /vinculaciones:', (e as Error).message);
     res.status(500).json({ message: 'Error al crear vinculación.' });
   }
 });
 
-// =========================================================================
-// POST /api/users/confirmar-vinculacion - Confirmar vinculación → estado VINCULADO
-// =========================================================================
+// POST /api/users/confirmar-vinculacion
 router.post('/confirmar-vinculacion', protect, async (req: AuthRequest, res) => {
   try {
     const check = await ensureAdminColegio(req);
-    if (!check.ok) return res.status((check as any).status).json({ message: (check as any).message });
-
+    if (!check.ok) return res.status(check.status).json({ message: check.message });
     const { estudianteId } = req.body;
-    const colegioId = (check as any).user.colegioId;
-
+    const colegioId = check.user.institution_id;
     if (!estudianteId) return res.status(400).json({ message: 'Falta estudianteId.' });
 
-    const links = await Vinculacion.find({
-      estudianteId: normalizeIdForQuery(estudianteId),
-      colegioId,
-    }).lean();
-
+    const links = await findGuardianStudentsByStudent(estudianteId);
     if (links.length === 0) {
       return res.status(400).json({ message: 'El estudiante debe tener al menos un padre vinculado antes de confirmar.' });
     }
-
-    const estudiante = await User.findById(normalizeIdForQuery(estudianteId)).select('rol colegioId estado').lean();
-    if (!estudiante || estudiante.rol !== 'estudiante' || estudiante.colegioId !== colegioId) {
+    const estudiante = await findUserById(estudianteId);
+    if (!estudiante || estudiante.role !== 'estudiante' || estudiante.institution_id !== colegioId) {
       return res.status(404).json({ message: 'Estudiante no encontrado.' });
     }
-
-    const padreIds = links.map((l: any) => l.padreId.toString());
-
-    await User.updateOne(
-      { _id: normalizeIdForQuery(estudianteId) },
-      { $set: { estado: 'vinculado' } }
-    );
-    await User.updateMany(
-      { _id: { $in: padreIds }, colegioId, rol: 'padre' },
-      { $set: { estado: 'vinculado' } }
-    );
-
+    const guardianIds = links.map((l) => l.guardian_id);
+    await updateUser(estudianteId, { status: 'vinculado' });
+    for (const gid of guardianIds) {
+      await updateUser(gid, { status: 'vinculado' });
+    }
     await logAdminAction({
-      userId: normalizeIdForQuery(req.userId || ''),
-      role: (check as any).user.rol,
+      userId: req.user!.id!,
+      role: check.user.role,
       action: 'confirmar_vinculacion',
       entityType: 'user',
-      entityId: normalizeIdForQuery(estudianteId),
+      entityId: estudianteId,
       colegioId,
-      requestData: { estudianteId, padresActualizados: padreIds.length },
+      requestData: { estudianteId, padresActualizados: guardianIds.length },
     });
-
-    // Notificar a padres y estudiante
     try {
-      for (const pid of padreIds) {
-        await Notificacion.create({
-          usuarioId: pid,
-          titulo: 'Vinculación confirmada',
-          descripcion: 'La vinculación con el estudiante ha sido confirmada. El administrador puede activar las cuentas para que puedan iniciar sesión.',
-          fecha: new Date(),
-          leido: false,
+      for (const gid of guardianIds) {
+        await createNotification({
+          institution_id: colegioId,
+          user_id: gid,
+          title: 'Vinculación confirmada',
+          body: 'La vinculación con el estudiante ha sido confirmada. El administrador puede activar las cuentas para que puedan iniciar sesión.',
         });
       }
-      await Notificacion.create({
-        usuarioId: normalizeIdForQuery(estudianteId),
-        titulo: 'Vinculación confirmada',
-        descripcion: 'Su vinculación con su(s) padre(s)/tutor(es) ha sido confirmada. Pronto podrá acceder cuando se activen las cuentas.',
-        fecha: new Date(),
-        leido: false,
+      await createNotification({
+        institution_id: colegioId,
+        user_id: estudianteId,
+        title: 'Vinculación confirmada',
+        body: 'Su vinculación con su(s) padre(s)/tutor(es) ha sido confirmada. Pronto podrá acceder cuando se activen las cuentas.',
       });
-    } catch (err: any) {
-      console.error('Error al crear notificaciones confirmar vinculación:', err.message);
+    } catch (err: unknown) {
+      console.error('Error al crear notificaciones confirmar vinculación:', (err as Error).message);
     }
-
     res.json({
       message: 'Vinculación confirmada. Estudiante y padres vinculados pasan a estado VINCULADO.',
       estudianteId,
-      padresActualizados: padreIds.length,
+      padresActualizados: guardianIds.length,
     });
-  } catch (e: any) {
-    console.error('Error en POST /confirmar-vinculacion:', e.message);
+  } catch (e: unknown) {
+    console.error('Error en POST /confirmar-vinculacion:', (e as Error).message);
     res.status(500).json({ message: 'Error al confirmar vinculación.' });
   }
 });
 
-// =========================================================================
-// POST /api/users/activar-cuentas - Activar cuentas (estudiante + padres vinculados)
-// =========================================================================
+// POST /api/users/activar-cuentas
 router.post('/activar-cuentas', protect, async (req: AuthRequest, res) => {
   try {
     const check = await ensureAdminColegio(req);
-    if (!check.ok) return res.status((check as any).status).json({ message: (check as any).message });
-
+    if (!check.ok) return res.status(check.status).json({ message: check.message });
     const { estudianteId } = req.body;
-    const colegioId = (check as any).user.colegioId;
-
+    const colegioId = check.user.institution_id;
     if (!estudianteId) return res.status(400).json({ message: 'Falta estudianteId.' });
 
-    const links = await Vinculacion.find({
-      estudianteId: normalizeIdForQuery(estudianteId),
-      colegioId,
-    }).lean();
-
+    const links = await findGuardianStudentsByStudent(estudianteId);
     if (links.length === 0) {
       return res.status(400).json({
         message: 'El estudiante debe estar vinculado con al menos un padre. Completa la vinculación y confírmala antes de activar.',
       });
     }
-
-    const estudiante = await User.findById(normalizeIdForQuery(estudianteId)).select('rol colegioId estado').lean();
-    if (!estudiante || estudiante.rol !== 'estudiante' || estudiante.colegioId !== colegioId) {
+    const estudiante = await findUserById(estudianteId);
+    if (!estudiante || estudiante.role !== 'estudiante' || estudiante.institution_id !== colegioId) {
       return res.status(404).json({ message: 'Estudiante no encontrado.' });
     }
-
-    if (estudiante.estado !== 'vinculado') {
+    if (estudiante.status !== 'vinculado') {
       return res.status(400).json({
         message: 'Solo se pueden activar cuentas cuando el estudiante está en estado VINCULADO. Confirma la vinculación antes.',
       });
     }
-
-    const padreIds = links.map((l: any) => l.padreId.toString());
-
-    await User.updateOne(
-      { _id: normalizeIdForQuery(estudianteId) },
-      { $set: { estado: 'active' } }
-    );
-    await User.updateMany(
-      { _id: { $in: padreIds }, colegioId, rol: 'padre' },
-      { $set: { estado: 'active' } }
-    );
-
+    const guardianIds = links.map((l) => l.guardian_id);
+    await updateUser(estudianteId, { status: 'active' });
+    for (const gid of guardianIds) {
+      await updateUser(gid, { status: 'active' });
+    }
     await logAdminAction({
-      userId: normalizeIdForQuery(req.userId || ''),
-      role: (check as any).user.rol,
+      userId: req.user!.id!,
+      role: check.user.role,
       action: 'activar_cuentas',
       entityType: 'user',
-      entityId: normalizeIdForQuery(estudianteId),
+      entityId: estudianteId,
       colegioId,
-      requestData: { estudianteId, padresActivados: padreIds.length },
+      requestData: { estudianteId, padresActivados: guardianIds.length },
     });
-
-    // Notificar a padres y estudiante que ya pueden iniciar sesión
     try {
-      for (const pid of padreIds) {
-        await Notificacion.create({
-          usuarioId: pid,
-          titulo: 'Cuentas activadas',
-          descripcion: 'Las cuentas han sido activadas. Ya puede iniciar sesión en la plataforma.',
-          fecha: new Date(),
-          leido: false,
+      for (const gid of guardianIds) {
+        await createNotification({
+          institution_id: colegioId,
+          user_id: gid,
+          title: 'Cuentas activadas',
+          body: 'Las cuentas han sido activadas. Ya puede iniciar sesión en la plataforma.',
         });
       }
-      await Notificacion.create({
-        usuarioId: normalizeIdForQuery(estudianteId),
-        titulo: 'Cuenta activada',
-        descripcion: 'Su cuenta ha sido activada. Ya puede iniciar sesión en la plataforma.',
-        fecha: new Date(),
-        leido: false,
+      await createNotification({
+        institution_id: colegioId,
+        user_id: estudianteId,
+        title: 'Cuenta activada',
+        body: 'Su cuenta ha sido activada. Ya puede iniciar sesión en la plataforma.',
       });
-    } catch (err: any) {
-      console.error('Error al crear notificaciones activar cuentas:', err.message);
+    } catch (err: unknown) {
+      console.error('Error al crear notificaciones activar cuentas:', (err as Error).message);
     }
-
     res.json({
       message: 'Cuentas activadas. El estudiante y los padres vinculados ya pueden iniciar sesión.',
       estudianteId,
-      padresActivados: padreIds.length,
+      padresActivados: guardianIds.length,
     });
-  } catch (e: any) {
-    console.error('Error en POST /activar-cuentas:', e.message);
+  } catch (e: unknown) {
+    console.error('Error en POST /activar-cuentas:', (e as Error).message);
     res.status(500).json({ message: 'Error al activar cuentas.' });
   }
 });

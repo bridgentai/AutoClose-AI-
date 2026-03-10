@@ -15,6 +15,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { NavBackButton } from '@/components/nav-back-button';
 import { DocumentEditor } from '@/components/document-editor';
+import { courseDisplayLabel } from '@/lib/assignmentUtils';
 
 type AttachmentType = 'pdf' | 'link' | 'imagen' | 'documento' | 'otro';
 
@@ -39,8 +40,10 @@ interface Assignment {
   titulo: string;
   descripcion: string;
   contenidoDocumento?: string;
-  curso: string;
+  curso?: string;
+  materiaNombre?: string;
   courseId?: string;
+  groupId?: string;
   fechaEntrega: string;
   profesorId: string;
   profesorNombre: string;
@@ -63,7 +66,8 @@ export default function AssignmentDetailPage() {
   const [submitData, setSubmitData] = useState({ comentario: '' });
   const [submitArchivos, setSubmitArchivos] = useState<Attachment[]>([]);
   const [newSubmitAttachment, setNewSubmitAttachment] = useState<Attachment>({ tipo: 'link', nombre: '', url: '' });
-  
+  const [isEditingMySubmission, setIsEditingMySubmission] = useState(false);
+
   // Estados para calificación (profesor)
   const [gradingStudent, setGradingStudent] = useState<string | null>(null);
   const [gradeData, setGradeData] = useState({ calificacion: '', retroalimentacion: '', logro: '' });
@@ -111,10 +115,12 @@ export default function AssignmentDetailPage() {
     mutationFn: async (data: any) => {
       return apiRequest('POST', `/api/assignments/${params.id}/submit`, data);
     },
-    onSuccess: () => {
-      toast({ title: 'Entrega enviada exitosamente' });
+    onSuccess: (_data, variables) => {
+      const isUpdate = (variables as { isUpdate?: boolean }).isUpdate;
+      toast({ title: isUpdate ? 'Entrega actualizada' : 'Entrega enviada exitosamente' });
       setSubmitData({ comentario: '' });
       setSubmitArchivos([]);
+      setIsEditingMySubmission(false);
       queryClient.invalidateQueries({ queryKey: ['/api/assignments', params.id] });
       queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
       refetch();
@@ -129,13 +135,15 @@ export default function AssignmentDetailPage() {
       return apiRequest('PUT', `/api/assignments/${params.id}/grade`, data);
     },
     onSuccess: () => {
-      toast({ title: 'Tarea calificada exitosamente' });
+      toast({ title: 'Tarea calificada y devuelta al estudiante' });
       setGradingStudent(null);
       setGradeData({ calificacion: '', retroalimentacion: '', logro: '' });
       queryClient.invalidateQueries({ queryKey: ['/api/assignments', params.id] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
-      queryClient.invalidateQueries({ queryKey: ['studentNotes'] }); // Invalidar notas del estudiante
-      queryClient.invalidateQueries({ queryKey: ['studentAssignments'] }); // Invalidar tareas del estudiante
+      queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['studentNotes'] });
+      queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['teacherPendingReview'] });
       refetch();
     },
     onError: (error: any) => {
@@ -186,6 +194,7 @@ export default function AssignmentDetailPage() {
     submitAssignmentMutation.mutate({
       archivos: submitArchivos,
       comentario: submitData.comentario,
+      isUpdate: isEditingMySubmission,
     });
   };
 
@@ -197,12 +206,34 @@ export default function AssignmentDetailPage() {
   const primerHijoId = hijos[0]?._id;
   const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
 
-  // Estudiantes del curso/grupo de la tarea (para sección Pendiente en vista profesor)
-  const cursoNombre = assignment?.curso?.trim() ?? '';
-  const { data: groupStudents = [] } = useQuery<{ _id: string; nombre: string; estado?: string }[]>({
-    queryKey: ['/api/groups', cursoNombre, 'students'],
-    queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoNombre)}/students`),
-    enabled: isProfesor && !!cursoNombre,
+  // Estudiantes del curso/grupo de la tarea (para secciones Entregado / Pendiente en vista profesor)
+  const groupId = assignment?.groupId ?? '';
+  const cursoName = (assignment?.curso ?? '').trim();
+  const groupIdOrName = groupId || cursoName;
+  const { data: groupStudents = [], isLoading: loadingGroupStudents, isError: errorGroupStudents, error: groupStudentsError, refetch: refetchGroupStudents } = useQuery<{ _id: string; nombre: string; estado?: string }[]>({
+    queryKey: ['/api/groups', groupId, cursoName, 'students'],
+    queryFn: async () => {
+      if (groupId) {
+        try {
+          const raw = await apiRequest<{ _id: string; nombre: string; estado?: string }[]>('GET', `/api/groups/${encodeURIComponent(groupId)}/students`);
+          return Array.isArray(raw) ? raw : [];
+        } catch (e: unknown) {
+          const msg = (e as Error)?.message ?? '';
+          if (cursoName && (msg.includes('encontrado') || msg.includes('404') || msg.includes('Grupo no'))) {
+            const byName = await apiRequest<{ _id: string; nombre: string; estado?: string }[]>('GET', `/api/groups/${encodeURIComponent(cursoName.toUpperCase())}/students`);
+            return Array.isArray(byName) ? byName : [];
+          }
+          throw e;
+        }
+      }
+      if (cursoName) {
+        const raw = await apiRequest<{ _id: string; nombre: string; estado?: string }[]>('GET', `/api/groups/${encodeURIComponent(cursoName.toUpperCase())}/students`);
+        return Array.isArray(raw) ? raw : [];
+      }
+      return [];
+    },
+    enabled: isProfesor && !!(groupId || cursoName),
+    retry: false,
   });
 
   // Usar submissions si existe, sino usar entregas (legacy)
@@ -220,6 +251,9 @@ export default function AssignmentDetailPage() {
   const estado = assignment?.estado || (mySubmission 
     ? (mySubmission.calificacion !== undefined ? 'calificada' : 'entregada')
     : 'pendiente');
+
+  const tabFromUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null;
+  const defaultTab = tabFromUrl === 'entregas' ? 'entregas' : 'info';
   
   const handleGrade = (estudianteId: string) => {
     const submission = submissions.find((s: Submission) => s.estudianteId === estudianteId);
@@ -292,11 +326,11 @@ export default function AssignmentDetailPage() {
           <NavBackButton to="/profesor/academia/tareas" label="Tareas" />
         )}
               {isProfesor ? (
-                <Tabs defaultValue="info" className="w-full">
+                <Tabs defaultValue={defaultTab} className="w-full">
                   <TabsList className="bg-white/5 border border-white/10 mb-6">
                     <TabsTrigger value="info" className="data-[state=active]:bg-[#1e3cff]">Información</TabsTrigger>
                     <TabsTrigger value="entregas" className="data-[state=active]:bg-[#1e3cff]">
-                      Entregas ({submissions.length})
+                      Entregas ({submissions.length}/{groupStudents.length || 0})
                     </TabsTrigger>
                   </TabsList>
 
@@ -316,7 +350,7 @@ export default function AssignmentDetailPage() {
                               <CardTitle className="text-2xl font-bold text-white mb-2">{assignment.titulo}</CardTitle>
                             )}
                             <div className="flex items-center gap-4 text-white/60">
-                              <Badge className="bg-[#1e3cff]">{assignment.curso}</Badge>
+                              <Badge className="bg-[#1e3cff]">{courseDisplayLabel(assignment)}</Badge>
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
                                 {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO')}
@@ -510,38 +544,53 @@ export default function AssignmentDetailPage() {
                           Entregas de Estudiantes
                         </CardTitle>
                         <CardDescription className="text-white/60">
-                          {submissions.length} han entregado · {pendingStudents.length} pendientes
+                          {loadingGroupStudents
+                            ? 'Cargando lista de estudiantes…'
+                            : `${submissions.length} entregado${submissions.length !== 1 ? 's' : ''} · ${pendingStudents.length} pendiente${pendingStudents.length !== 1 ? 's' : ''}`}
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-8">
-                        {submissions.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-semibold text-white/80 mb-3 flex items-center gap-2">
-                              <Check className="w-4 h-4 text-green-500" />
-                              Han entregado ({submissions.length})
-                            </h4>
+                        <div>
+                          <h4 className="text-sm font-semibold text-white/80 mb-3 flex items-center gap-2">
+                            <Check className="w-4 h-4 text-green-500" />
+                            Entregado ({submissions.length})
+                          </h4>
+                          {submissions.length === 0 ? (
+                            <p className="text-white/50 text-sm py-4">Ningún estudiante ha entregado aún.</p>
+                          ) : (
                             <div className="space-y-4">
-                              {submissions.map((submission, index) => (
-                              <div key={index} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                              {submissions.map((submission, index) => {
+                                const nombre = submission.estudianteNombre || groupStudents.find((e) => String(e._id) === String(submission.estudianteId))?.nombre || 'Estudiante';
+                                const hasGrade = submission.calificacion != null && submission.calificacion !== '';
+                                return (
+                              <div
+                                key={submission.estudianteId || index}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => handleGrade(submission.estudianteId)}
+                                onKeyDown={(e) => {
+                                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                                  const target = e.target as HTMLElement;
+                                  if (target.closest('form') || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
+                                  e.preventDefault();
+                                  handleGrade(submission.estudianteId);
+                                }}
+                                className="p-4 rounded-lg border cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/50 panel-grades border-white/10 hover:border-white/20"
+                              >
                                 <div className="flex items-start justify-between mb-3">
                                   <div className="flex-1">
-                                    <h4 className="font-semibold text-white">{submission.estudianteNombre}</h4>
+                                    <h4 className="font-semibold text-white">{nombre}</h4>
                                     <p className="text-sm text-white/50">
                                       Entregado: {new Date(submission.fechaEntrega).toLocaleString('es-CO')}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    {submission.calificacion !== undefined && (
-                                      <Badge className="bg-green-600">{submission.calificacion}/100</Badge>
-                                    )}
-                                    {submission.calificacion === undefined && (
-                                      <Button
-                                        size="sm"
-                                        onClick={() => handleGrade(submission.estudianteId)}
-                                        className="bg-[#1e3cff] hover:bg-[#002366]"
-                                      >
-                                        Calificar
-                                      </Button>
+                                    {hasGrade ? (
+                                      <Badge className="bg-green-600">{Number(submission.calificacion)}/100</Badge>
+                                    ) : (
+                                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[#3B82F6]/20 text-[#93C5FD] border border-[#3B82F6]/40">
+                                        —/100 · Clic para calificar
+                                      </span>
                                     )}
                                   </div>
                                 </div>
@@ -558,7 +607,7 @@ export default function AssignmentDetailPage() {
                                         rel="noopener noreferrer"
                                         className="flex items-center gap-2 p-2 bg-white/5 rounded hover:bg-white/10 transition-colors"
                                       >
-                                        <FileText className="w-4 h-4 text-[#1e3cff]" />
+                                        <FileText className="w-4 h-4 text-[#3B82F6]" />
                                         <span className="text-sm text-white">{archivo.nombre}</span>
                                       </a>
                                     ))}
@@ -571,35 +620,40 @@ export default function AssignmentDetailPage() {
                                   </div>
                                 )}
                                 {gradingStudent === submission.estudianteId && (
-                                  <form onSubmit={handleSubmitGrade} className="mt-4 p-4 bg-white/5 rounded-lg border border-[#1e3cff]/30">
+                                  <form
+                                    onSubmit={handleSubmitGrade}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    className="mt-4 p-4 rounded-lg border border-white/10 panel-grades"
+                                  >
                                     <div className="space-y-3">
                                       <div>
-                                        <Label className="text-white/60 mb-1 block">Calificación (0-100) *</Label>
+                                        <Label className="text-[#E2E8F0] mb-1 block">Calificación (0-100) *</Label>
                                         <Input
                                           type="number"
                                           min="0"
                                           max="100"
                                           value={gradeData.calificacion}
                                           onChange={(e) => setGradeData({ ...gradeData, calificacion: e.target.value })}
-                                          className="bg-white/5 border-white/10 text-white"
+                                          className="bg-white/5 border-white/10 text-[#E2E8F0] focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6]"
                                           required
                                         />
                                       </div>
                                       <div>
-                                        <Label className="text-white/60 mb-1 block">Retroalimentación</Label>
+                                        <Label className="text-[#E2E8F0] mb-1 block">Retroalimentación</Label>
                                         <Textarea
                                           value={gradeData.retroalimentacion}
                                           onChange={(e) => setGradeData({ ...gradeData, retroalimentacion: e.target.value })}
-                                          className="bg-white/5 border-white/10 text-white"
+                                          className="bg-white/5 border-white/10 text-[#E2E8F0] focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6]"
                                           rows={3}
                                         />
                                       </div>
                                       <div>
-                                        <Label className="text-white/60 mb-1 block">Logro (opcional)</Label>
+                                        <Label className="text-[#E2E8F0] mb-1 block">Logro (opcional)</Label>
                                         <Input
                                           value={gradeData.logro}
                                           onChange={(e) => setGradeData({ ...gradeData, logro: e.target.value })}
-                                          className="bg-white/5 border-white/10 text-white"
+                                          className="bg-white/5 border-white/10 text-[#E2E8F0] focus:border-[#3B82F6] focus:ring-1 focus:ring-[#3B82F6]"
                                           placeholder="Ej: Superado, En proceso..."
                                         />
                                       </div>
@@ -607,7 +661,7 @@ export default function AssignmentDetailPage() {
                                         <Button
                                           type="submit"
                                           disabled={gradeAssignmentMutation.isPending}
-                                          className="bg-[#1e3cff] hover:bg-[#002366]"
+                                          className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
                                         >
                                           {gradeAssignmentMutation.isPending ? 'Calificando...' : 'Calificar y Devolver'}
                                         </Button>
@@ -618,7 +672,7 @@ export default function AssignmentDetailPage() {
                                             setGradingStudent(null);
                                             setGradeData({ calificacion: '', retroalimentacion: '', logro: '' });
                                           }}
-                                          className="border-white/10 text-white hover:bg-white/10"
+                                          className="border-white/10 text-[#E2E8F0] hover:bg-white/10"
                                         >
                                           Cancelar
                                         </Button>
@@ -627,17 +681,29 @@ export default function AssignmentDetailPage() {
                                   </form>
                                 )}
                               </div>
-                            ))}
+                            );
+                              })}
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
 
                         <div>
                           <h4 className="text-sm font-semibold text-white/80 mb-3 flex items-center gap-2">
                             <UserX className="w-4 h-4 text-amber-500" />
                             Pendiente ({pendingStudents.length})
                           </h4>
-                          {pendingStudents.length > 0 ? (
+                          {!groupIdOrName ? (
+                            <p className="text-white/50 text-sm py-4">Esta tarea no tiene grupo asociado. No se puede mostrar la lista de estudiantes.</p>
+                          ) : loadingGroupStudents ? (
+                            <p className="text-white/50 text-sm py-4">Cargando estudiantes del curso…</p>
+                          ) : errorGroupStudents ? (
+                            <div className="py-4 space-y-2">
+                              <p className="text-amber-400/90 text-sm">{(groupStudentsError as Error)?.message ?? 'No se pudo cargar la lista de estudiantes.'}</p>
+                              <Button type="button" variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10" onClick={() => refetchGroupStudents()}>
+                                Reintentar
+                              </Button>
+                            </div>
+                          ) : pendingStudents.length > 0 ? (
                             <ul className="space-y-2">
                               {pendingStudents.map((est) => (
                                 <li
@@ -650,6 +716,8 @@ export default function AssignmentDetailPage() {
                                 </li>
                               ))}
                             </ul>
+                          ) : groupStudents.length === 0 ? (
+                            <p className="text-white/50 text-sm py-4">No hay estudiantes inscritos en este grupo. Sincroniza estudiantes desde el detalle del curso.</p>
                           ) : (
                             <p className="text-white/50 text-sm py-4">Todos los estudiantes del curso han entregado.</p>
                           )}
@@ -665,7 +733,7 @@ export default function AssignmentDetailPage() {
                     <CardHeader>
                       <CardTitle className="text-2xl font-bold text-white mb-2">{assignment.titulo}</CardTitle>
                       <div className="flex flex-wrap items-center gap-4 text-white/60">
-                        <Badge className="bg-[#1e3cff]">{assignment.curso}</Badge>
+                        <Badge className="bg-[#1e3cff]">{courseDisplayLabel(assignment)}</Badge>
                         <span className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
                           {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO')}
@@ -801,17 +869,15 @@ export default function AssignmentDetailPage() {
                         ) : (
                           <p className="text-white/50 text-center py-6">Sin entrega aún.</p>
                         )
-                      ) : mySubmission ? (
+                      ) : mySubmission && !isEditingMySubmission ? (
                         <div className="space-y-4">
-                          {mySubmission.comentario && (
-                            <div>
-                              <Label className="text-white/60 mb-1 block">Tu comentario:</Label>
-                              <p className="text-white">{mySubmission.comentario}</p>
-                            </div>
-                          )}
-                          {mySubmission.archivos && mySubmission.archivos.length > 0 && (
-                            <div>
-                              <Label className="text-white/60 mb-2 block">Archivos entregados:</Label>
+                          <div>
+                            <Label className="text-white/60 mb-1 block">Tu comentario:</Label>
+                            <p className="text-white">{mySubmission.comentario?.trim() || 'Sin comentario'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-white/60 mb-2 block">Archivos entregados:</Label>
+                            {mySubmission.archivos && mySubmission.archivos.length > 0 ? (
                               <div className="space-y-2">
                                 {mySubmission.archivos.map((archivo, idx) => (
                                   <a
@@ -826,8 +892,10 @@ export default function AssignmentDetailPage() {
                                   </a>
                                 ))}
                               </div>
-                            </div>
-                          )}
+                            ) : (
+                              <p className="text-white/50 text-sm">No adjuntaste archivos.</p>
+                            )}
+                          </div>
                           {mySubmission.calificacion !== undefined && (
                             <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-2">
                               <p className="text-green-400 font-semibold text-lg">Calificación: {mySubmission.calificacion}/100</p>
@@ -842,7 +910,8 @@ export default function AssignmentDetailPage() {
                           <Button
                             onClick={() => {
                               setSubmitData({ comentario: mySubmission.comentario || '' });
-                              setSubmitArchivos(mySubmission.archivos || []);
+                              setSubmitArchivos(Array.isArray(mySubmission.archivos) ? mySubmission.archivos : []);
+                              setIsEditingMySubmission(true);
                             }}
                             variant="outline"
                             className="w-full border-white/10 text-white hover:bg-white/10"
@@ -850,7 +919,7 @@ export default function AssignmentDetailPage() {
                             Actualizar Entrega
                           </Button>
                         </div>
-                      ) : (
+                      ) : (mySubmission && isEditingMySubmission) || !mySubmission ? (
                         <form onSubmit={handleSubmit} className="space-y-4">
                           <div>
                             <Label className="text-white/60 mb-2 block">Comentario (opcional)</Label>
@@ -921,17 +990,33 @@ export default function AssignmentDetailPage() {
                             </div>
                           </div>
 
-                          <Button
-                            type="submit"
-                            disabled={submitAssignmentMutation.isPending}
-                            className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
-                            data-testid="button-submit-entrega"
-                          >
-                            <Send className="w-4 h-4 mr-2" />
-                            {submitAssignmentMutation.isPending ? 'Enviando...' : 'Enviar Entrega'}
-                          </Button>
+                          <div className="flex gap-2">
+                            {isEditingMySubmission && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setIsEditingMySubmission(false)}
+                                className="border-white/10 text-white hover:bg-white/10"
+                              >
+                                Cancelar
+                              </Button>
+                            )}
+                            <Button
+                              type="submit"
+                              disabled={submitAssignmentMutation.isPending}
+                              className="flex-1 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
+                              data-testid="button-submit-entrega"
+                            >
+                              <Send className="w-4 h-4 mr-2" />
+                              {submitAssignmentMutation.isPending
+                                ? 'Guardando...'
+                                : isEditingMySubmission
+                                  ? 'Guardar cambios'
+                                  : 'Enviar Entrega'}
+                            </Button>
+                          </div>
                         </form>
-                      )}
+                      ) : null}
                     </CardContent>
                   </Card>
                 </div>

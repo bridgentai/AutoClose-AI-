@@ -1,14 +1,12 @@
 import express from 'express';
-import { ChatSession } from '../models';
-import { protect, AuthRequest } from '../middleware/authMiddleware';
-import { normalizeIdForQuery } from '../utils/idGenerator';
+import { protect, AuthRequest } from '../middleware/authMiddleware.js';
 import {
   validateChatOwnership,
   createChat,
   getHistoryForFrontend,
   getChatsForUser,
-  touchChat,
-} from '../services/chatService';
+  updateChatTitle,
+} from '../services/chatService.js';
 
 const router = express.Router();
 
@@ -62,10 +60,10 @@ router.get('/:sessionId/history', protect, async (req: AuthRequest, res) => {
     const historial = await getHistoryForFrontend(sessionId);
 
     res.json({
-      sessionId: chat._id,
-      titulo: chat.titulo,
+      sessionId: chat.id,
+      titulo: chat.title,
       historial,
-      contexto: chat.contexto,
+      contexto: {},
     });
   } catch (error: any) {
     console.error('Error al obtener historial:', error.message);
@@ -89,12 +87,11 @@ router.put('/:sessionId/title', protect, async (req: AuthRequest, res) => {
       return res.status(status ?? 403).json({ message: error });
     }
 
-    await ChatSession.findByIdAndUpdate(chat._id, { titulo: titulo.trim(), updatedAt: new Date() });
-    const updated = await ChatSession.findById(chat._id).select('titulo').lean();
+    const updated = await updateChatTitle(chat.id, titulo.trim());
 
     res.json({
       message: 'Título actualizado exitosamente',
-      titulo: updated?.titulo ?? titulo.trim(),
+      titulo: updated?.title ?? titulo.trim(),
     });
   } catch (error: any) {
     console.error('Error al actualizar título:', error.message);

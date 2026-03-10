@@ -1,8 +1,18 @@
 import express from 'express';
-import { Asistencia, User, Course, Group, GroupStudent } from '../models';
-import { protect, AuthRequest } from '../middleware/auth';
-import { normalizeIdForQuery } from '../utils/idGenerator';
 import { startOfDay, endOfDay } from 'date-fns';
+import { protect, AuthRequest } from '../middleware/auth.js';
+import { findUserById } from '../repositories/userRepository.js';
+import { findGroupSubjectById, findGroupSubjectsByGroup } from '../repositories/groupSubjectRepository.js';
+import { findGroupById, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
+import { findUsersByIds } from '../repositories/userRepository.js';
+import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
+import {
+  findAttendanceByGroupSubjectAndDate,
+  findAttendanceByStudent,
+  findAttendanceByStudentAndDate,
+  upsertAttendance,
+} from '../repositories/attendanceRepository.js';
 
 const router = express.Router();
 
@@ -15,246 +25,220 @@ function restrictTo(...roles: string[]) {
   };
 }
 
-// GET /api/attendance/curso/:cursoId/estudiantes - Listar estudiantes del curso (para tomar asistencia o reportes)
+function toEstatus(s: string): 'presente' | 'ausente' {
+  return s === 'present' ? 'presente' : 'ausente';
+}
+
+function fromEstatus(s: string): 'present' | 'absent' {
+  return s === 'presente' ? 'present' : 'absent';
+}
+
+async function resolveGroupSubjectId(cursoId: string, colegioId: string): Promise<string | null> {
+  if (cursoId.length === 36 && cursoId.includes('-')) {
+    const gs = await findGroupSubjectById(cursoId);
+    if (gs && gs.institution_id === colegioId) return gs.id;
+    const group = await findGroupById(cursoId);
+    if (group && group.institution_id === colegioId) {
+      const list = await findGroupSubjectsByGroup(group.id);
+      return list[0]?.id ?? null;
+    }
+    return null;
+  }
+  const group = await findGroupByNameAndInstitution(colegioId, cursoId.toUpperCase().trim());
+  if (!group || group.institution_id !== colegioId) return null;
+  const list = await findGroupSubjectsByGroup(group.id);
+  return list[0]?.id ?? null;
+}
+
+async function canParentViewStudent(parentId: string, studentId: string): Promise<boolean> {
+  const v = await findGuardianStudent(parentId, studentId);
+  return !!v;
+}
+
+// GET /api/attendance/curso/:cursoId/estudiantes
 router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const { cursoId } = req.params;
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-
-    const course = await Course.findById(normalizeIdForQuery(cursoId)).select('cursos estudianteIds').lean();
-    if (!course) return res.status(404).json({ message: 'Curso no encontrado.' });
-
-    let estudianteIds: unknown[] = course.estudianteIds || [];
-    if (estudianteIds.length === 0 && course.cursos?.length) {
-      const grupo = await Group.findOne({ nombre: (course.cursos[0] as string).toUpperCase().trim(), colegioId });
-      if (grupo) {
-        const gs = await GroupStudent.find({ grupoId: grupo._id, colegioId }).select('estudianteId').lean();
-        estudianteIds = gs.map((g) => g.estudianteId);
-      }
-    }
-
-    const students = await User.find({ _id: { $in: estudianteIds }, rol: 'estudiante' })
-      .select('_id nombre correo curso')
-      .sort({ nombre: 1 })
-      .lean();
-
+    const gsId = await resolveGroupSubjectId(cursoId, colegioId);
+    if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const gs = await findGroupSubjectById(gsId);
+    if (!gs) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const enrollments = await findEnrollmentsByGroup(gs.group_id);
+    const studentIds = enrollments.map((e) => e.student_id);
+    if (studentIds.length === 0) return res.json([]);
+    const users = await findUsersByIds(studentIds);
+    const students = users
+      .filter((u) => u.role === 'estudiante')
+      .map((u) => ({ _id: u.id, id: u.id, nombre: u.full_name, correo: u.email, curso: (u.config as { curso?: string })?.curso }));
     return res.json(students);
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al listar estudiantes.' });
   }
 });
 
-// GET /api/attendance/curso/:cursoId/fecha/:fecha/status - Indica si ya hay asistencia registrada
+// GET /api/attendance/curso/:cursoId/fecha/:fecha/status
 router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, fecha } = req.params;
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    const dayStart = startOfDay(new Date(fecha));
-    const dayEnd = endOfDay(new Date(fecha));
-    const count = await Asistencia.countDocuments({
-      cursoId: normalizeIdForQuery(cursoId),
-      colegioId,
-      fecha: { $gte: dayStart, $lte: dayEnd },
-    });
-    return res.json({ registrado: count > 0, total: count });
-  } catch (e: any) {
+    const gsId = await resolveGroupSubjectId(cursoId, colegioId);
+    if (!gsId) return res.json({ registrado: false, total: 0 });
+    const dateStr = startOfDay(new Date(fecha)).toISOString().slice(0, 10);
+    const list = await findAttendanceByGroupSubjectAndDate(gsId, dateStr);
+    return res.json({ registrado: list.length > 0, total: list.length });
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al verificar estado.' });
   }
 });
 
-// GET /api/attendance/curso/:cursoId/fecha/:fecha - Listar asistencia por curso y fecha (profesor/directivo/asistente)
+// GET /api/attendance/curso/:cursoId/fecha/:fecha
 router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, fecha } = req.params;
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-
-    const dayStart = startOfDay(new Date(fecha));
-    const dayEnd = endOfDay(new Date(fecha));
-
-    const list = await Asistencia.find({
-      cursoId: normalizeIdForQuery(cursoId),
-      colegioId,
-      fecha: { $gte: dayStart, $lte: dayEnd },
-    })
-      .populate('estudianteId', 'nombre correo curso')
-      .sort({ estudianteId: 1 })
-      .lean();
-
-    return res.json(list);
-  } catch (e: any) {
+    const gsId = await resolveGroupSubjectId(cursoId, colegioId);
+    if (!gsId) return res.json([]);
+    const dateStr = startOfDay(new Date(fecha)).toISOString().slice(0, 10);
+    const list = await findAttendanceByGroupSubjectAndDate(gsId, dateStr);
+    const userIds = [...new Set(list.map((a) => a.user_id))];
+    const users = userIds.length ? await findUsersByIds(userIds) : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const out = list.map((a) => ({
+      _id: a.id,
+      estudianteId: byId.get(a.user_id) ? { _id: a.user_id, nombre: byId.get(a.user_id)!.full_name, correo: byId.get(a.user_id)!.email, curso: (byId.get(a.user_id)!.config as { curso?: string })?.curso } : a.user_id,
+      fecha: a.date,
+      estado: toEstatus(a.status),
+      status: a.status,
+    }));
+    return res.json(out);
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al listar asistencia.' });
   }
 });
 
-// GET /api/attendance/grupo/:grupoId/fecha/:fecha - Asistencia del grupo en una fecha (directivo/asistente, reporte)
+// GET /api/attendance/grupo/:grupoId/fecha/:fecha
 router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
     const grupoParam = (req.params.grupoId || '').trim();
     const fechaParam = req.params.fecha || '';
     const colegioId = req.user?.colegioId;
-    if (!colegioId || !grupoParam || !fechaParam) {
-      return res.status(400).json({ message: 'Faltan grupoId o fecha.' });
+    if (!colegioId || !grupoParam || !fechaParam) return res.status(400).json({ message: 'Faltan grupoId o fecha.' });
+    const group = grupoParam.length === 36 && grupoParam.includes('-')
+      ? await findGroupById(grupoParam)
+      : await findGroupByNameAndInstitution(colegioId, grupoParam.toUpperCase().trim());
+    if (!group || group.institution_id !== colegioId) return res.json([]);
+    const gsList = await findGroupSubjectsByGroup(group.id);
+    const dateStr = startOfDay(new Date(fechaParam)).toISOString().slice(0, 10);
+    const all: Awaited<ReturnType<typeof findAttendanceByGroupSubjectAndDate>>[number][] = [];
+    for (const gs of gsList) {
+      const list = await findAttendanceByGroupSubjectAndDate(gs.id, dateStr);
+      all.push(...list);
     }
-
-    const dayStart = startOfDay(new Date(fechaParam));
-    const dayEnd = endOfDay(new Date(fechaParam));
-
-    const isObjectId = /^[a-fA-F0-9]{24}$/.test(grupoParam);
-    let groupFilter: Record<string, unknown> = { colegioId };
-    if (isObjectId) {
-      groupFilter._id = normalizeIdForQuery(grupoParam);
-    } else {
-      groupFilter.nombre = new RegExp('^' + grupoParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
-    }
-    const group = await Group.findOne(groupFilter).select('_id nombre').lean();
-    if (!group) {
-      return res.json([]);
-    }
-
-    const groupIdStr = String((group as any)._id);
-    const groupNombre = (group as any).nombre || '';
-    const grupoParamUpper = grupoParam.toUpperCase();
-
-    const list = await Asistencia.find({
-      colegioId,
-      fecha: { $gte: dayStart, $lte: dayEnd },
-      $or: [
-        { grupoId: grupoParam },
-        { grupoId: grupoParamUpper },
-        { grupoId: groupNombre },
-        { grupoId: groupIdStr },
-      ],
-    })
-      .populate('estudianteId', 'nombre correo curso')
-      .populate('cursoId', 'nombre')
-      .sort({ estudianteId: 1, horaBloque: 1 })
-      .lean();
-
-    return res.json(list);
-  } catch (e: any) {
+    const userIds = [...new Set(all.map((a) => a.user_id))];
+    const users = userIds.length ? await findUsersByIds(userIds) : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const out = all.map((a) => ({
+      _id: a.id,
+      estudianteId: byId.get(a.user_id) ? { _id: a.user_id, nombre: byId.get(a.user_id)!.full_name, correo: byId.get(a.user_id)!.email, curso: (byId.get(a.user_id)!.config as { curso?: string })?.curso } : a.user_id,
+      fecha: a.date,
+      estado: toEstatus(a.status),
+    }));
+    return res.json(out);
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al listar asistencia del grupo.' });
   }
 });
 
-// POST /api/attendance - Registrar o actualizar asistencia (profesor/directivo)
+// POST /api/attendance
 router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, estudianteId, fecha, estado } = req.body;
     const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-
+    const userId = req.user?.id;
+    if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
     if (!cursoId || !estudianteId || !fecha || !['presente', 'ausente'].includes(estado)) {
       return res.status(400).json({ message: 'Faltan cursoId, estudianteId, fecha o estado (presente|ausente).' });
     }
-
-    const dateOnly = startOfDay(new Date(fecha));
-
-    const doc = await Asistencia.findOneAndUpdate(
-      {
-        cursoId: normalizeIdForQuery(cursoId),
-        estudianteId: normalizeIdForQuery(estudianteId),
-        colegioId,
-        fecha: { $gte: dateOnly, $lte: endOfDay(dateOnly) },
-      },
-      { estado, colegioId },
-      { upsert: true, new: true }
-    )
-      .populate('estudianteId', 'nombre correo curso')
-      .lean();
-
-    return res.json(doc);
-  } catch (e: any) {
+    const gsId = await resolveGroupSubjectId(cursoId, colegioId);
+    if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const dateStr = startOfDay(new Date(fecha)).toISOString().slice(0, 10);
+    const row = await upsertAttendance({
+      institution_id: colegioId,
+      group_subject_id: gsId,
+      user_id: estudianteId,
+      date: dateStr,
+      status: fromEstatus(estado),
+      recorded_by_id: userId,
+    });
+    const user = await findUserById(estudianteId);
+    return res.json({
+      _id: row.id,
+      estudianteId: user ? { _id: user.id, nombre: user.full_name, correo: user.email, curso: (user.config as { curso?: string })?.curso } : estudianteId,
+      fecha: row.date,
+      estado: toEstatus(row.status),
+    });
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al registrar asistencia.' });
   }
 });
 
-// POST /api/attendance/bulk - Registrar asistencia en lote por curso/fecha (profesor/directivo)
+// POST /api/attendance/bulk
 router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
   try {
-    const { cursoId, fecha, horaBloque, grupoId, registros } = req.body as {
+    const { cursoId, fecha, horaBloque, registros } = req.body as {
       cursoId: string;
       fecha: string;
       horaBloque?: string;
-      grupoId?: string;
       registros: { estudianteId: string; estado: 'presente' | 'ausente'; puntualidad?: 'on_time' | 'late' }[];
     };
     const colegioId = req.user?.colegioId;
     const userId = req.user?.id;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-
+    if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
     if (!cursoId || !fecha || !Array.isArray(registros)) {
       return res.status(400).json({ message: 'Faltan cursoId, fecha o registros.' });
     }
-
-    let grupoIdToStore: string | undefined = grupoId ? String(grupoId).trim() : undefined;
-    if (grupoIdToStore) {
-      const isObjectId = /^[a-fA-F0-9]{24}$/.test(grupoIdToStore);
-      if (isObjectId) {
-        const course = await Course.findById(normalizeIdForQuery(grupoIdToStore)).select('cursos').lean();
-        if (course?.cursos?.length) {
-          grupoIdToStore = (course.cursos[0] as string).trim().toUpperCase();
-        }
-      } else {
-        grupoIdToStore = grupoIdToStore.toUpperCase();
-      }
+    const gsId = await resolveGroupSubjectId(cursoId, colegioId);
+    if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const dateStr = startOfDay(new Date(fecha)).toISOString().slice(0, 10);
+    for (const r of registros) {
+      await upsertAttendance({
+        institution_id: colegioId,
+        group_subject_id: gsId,
+        user_id: r.estudianteId,
+        date: dateStr,
+        period_slot: horaBloque ?? null,
+        status: fromEstatus(r.estado),
+        punctuality: r.puntualidad ?? null,
+        recorded_by_id: userId,
+      });
     }
-
-    const dateOnly = startOfDay(new Date(fecha));
-    const ops = registros.map((r) => {
-      const filter: Record<string, unknown> = {
-        cursoId: normalizeIdForQuery(cursoId),
-        estudianteId: normalizeIdForQuery(r.estudianteId),
-        colegioId,
-        fecha: { $gte: dateOnly, $lte: endOfDay(dateOnly) },
-      };
-      const update: Record<string, unknown> = {
-        estado: r.estado,
-        colegioId,
-        recordedBy: userId,
-        fecha: dateOnly,
-        cursoId: normalizeIdForQuery(cursoId),
-        estudianteId: normalizeIdForQuery(r.estudianteId),
-      };
-      if (r.puntualidad) update.puntualidad = r.puntualidad;
-      if (horaBloque) update.horaBloque = horaBloque;
-      if (grupoIdToStore) update.grupoId = grupoIdToStore;
-      return {
-        updateOne: {
-          filter,
-          update: { $set: update },
-          upsert: true,
-        },
-      };
-    });
-
-    const { Asistencia: AsistenciaModel } = await import('../models');
-    await AsistenciaModel.bulkWrite(ops);
-
-    const list = await Asistencia.find({
-      cursoId: normalizeIdForQuery(cursoId),
-      colegioId,
-      fecha: { $gte: dateOnly, $lte: endOfDay(dateOnly) },
-    })
-      .populate('estudianteId', 'nombre correo curso')
-      .sort({ estudianteId: 1 })
-      .lean();
-
-    return res.json(list);
-  } catch (e: any) {
+    const list = await findAttendanceByGroupSubjectAndDate(gsId, dateStr);
+    const userIds = [...new Set(list.map((a) => a.user_id))];
+    const users = userIds.length ? await findUsersByIds(userIds) : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const out = list.map((a) => ({
+      _id: a.id,
+      estudianteId: byId.get(a.user_id) ? { _id: a.user_id, nombre: byId.get(a.user_id)!.full_name, correo: byId.get(a.user_id)!.email, curso: (byId.get(a.user_id)!.config as { curso?: string })?.curso } : a.user_id,
+      fecha: a.date,
+      estado: toEstatus(a.status),
+    }));
+    return res.json(out);
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al registrar asistencia en lote.' });
   }
 });
 
-// GET /api/attendance/estudiante/:estudianteId - Asistencia de un estudiante (padre/directivo/estudiante)
+// GET /api/attendance/estudiante/:estudianteId
 router.get('/estudiante/:estudianteId', protect, async (req: AuthRequest, res) => {
   try {
     const { estudianteId } = req.params;
@@ -262,55 +246,37 @@ router.get('/estudiante/:estudianteId', protect, async (req: AuthRequest, res) =
     const rol = req.user?.rol;
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-
-    const normalizedEstudiante = normalizeIdForQuery(estudianteId);
-    const normalizedUser = normalizeIdForQuery(userId || '');
-
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
       rol === 'asistente' ||
-      normalizedUser === normalizedEstudiante ||
-      (rol === 'padre' && (await canParentViewStudent(normalizedUser, normalizedEstudiante)));
-
-    if (!canView) {
-      return res.status(403).json({ message: 'No autorizado a ver esta asistencia.' });
-    }
-
+      userId === estudianteId ||
+      (rol === 'padre' && (await canParentViewStudent(userId!, estudianteId)));
+    if (!canView) return res.status(403).json({ message: 'No autorizado a ver esta asistencia.' });
     const { desde, hasta } = req.query;
-    const filter: Record<string, unknown> = { estudianteId: normalizedEstudiante, colegioId };
-    if (desde) filter.fecha = { ...((filter.fecha as Record<string, Date>) || {}), $gte: new Date(desde as string) };
-    if (hasta) filter.fecha = { ...((filter.fecha as Record<string, Date>) || {}), $lte: new Date(hasta as string) };
-    if (desde && hasta) filter.fecha = { $gte: new Date(desde as string), $lte: new Date(hasta as string) };
-
-    const list = await Asistencia.find(filter)
-      .populate('cursoId', 'nombre')
-      .sort({ fecha: -1 })
-      .limit(100)
-      .lean();
-
+    let list = await findAttendanceByStudent(estudianteId);
+    if (desde || hasta) {
+      const from = desde ? startOfDay(new Date(desde as string)).toISOString().slice(0, 10) : '';
+      const to = hasta ? endOfDay(new Date(hasta as string)).toISOString().slice(0, 10) : '';
+      list = await findAttendanceByStudentAndDate(estudianteId, from || '1900-01-01', to || '2100-12-31');
+    }
+    list = list.slice(0, 100);
     const total = list.length;
-    const presentes = list.filter((a) => a.estado === 'presente').length;
+    const presentes = list.filter((a) => a.status === 'present').length;
     const porcentaje = total ? Math.round((presentes / total) * 100) : 0;
-
-    return res.json({ list, total, presentes, porcentaje });
-  } catch (e: any) {
+    return res.json({
+      list: list.map((a) => ({ _id: a.id, cursoId: a.group_subject_id, fecha: a.date, estado: toEstatus(a.status) })),
+      total,
+      presentes,
+      porcentaje,
+    });
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al obtener asistencia del estudiante.' });
   }
 });
 
-async function canParentViewStudent(parentId: string, studentId: string): Promise<boolean> {
-  const { Vinculacion } = await import('../models');
-  const v = await Vinculacion.findOne({
-    padreId: parentId,
-    estudianteId: studentId,
-    estado: 'vinculado',
-  }).lean();
-  return !!v;
-}
-
-// GET /api/attendance/resumen/estudiante/:estudianteId - Porcentaje mes actual (para dashboard)
+// GET /api/attendance/resumen/estudiante/:estudianteId
 router.get('/resumen/estudiante/:estudianteId', protect, async (req: AuthRequest, res) => {
   try {
     const { estudianteId } = req.params;
@@ -318,37 +284,22 @@ router.get('/resumen/estudiante/:estudianteId', protect, async (req: AuthRequest
     const rol = req.user?.rol;
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-
-    const normalizedEstudiante = normalizeIdForQuery(estudianteId);
-    const normalizedUser = normalizeIdForQuery(userId || '');
-
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
       rol === 'asistente' ||
-      normalizedUser === normalizedEstudiante ||
-      (rol === 'padre' && (await canParentViewStudent(normalizedUser, normalizedEstudiante)));
-
-    if (!canView) {
-      return res.status(403).json({ message: 'No autorizado.' });
-    }
-
+      userId === estudianteId ||
+      (rol === 'padre' && (await canParentViewStudent(userId!, estudianteId)));
+    if (!canView) return res.status(403).json({ message: 'No autorizado.' });
     const now = new Date();
-    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-    const list = await Asistencia.find({
-      estudianteId: normalizedEstudiante,
-      colegioId,
-      fecha: { $gte: startMonth, $lte: endMonth },
-    }).lean();
-
+    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const endMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+    const list = await findAttendanceByStudentAndDate(estudianteId, startMonth, endMonth);
     const total = list.length;
-    const presentes = list.filter((a) => a.estado === 'presente').length;
+    const presentes = list.filter((a) => a.status === 'present').length;
     const porcentaje = total ? Math.round((presentes / total) * 100) : 0;
-
     return res.json({ porcentaje, total, presentes });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al obtener resumen.' });
   }

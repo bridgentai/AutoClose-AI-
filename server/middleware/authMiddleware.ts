@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
-import { User } from '../models';
+import { ENV } from '../config/env.js';
+import { findUserById } from '../repositories/userRepository.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -16,10 +17,13 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     colegioId: string;
-    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria';
+    rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'admin-general-colegio' | 'asistente';
     curso?: string;
+    materias?: string[];
   };
 }
+
+const usePgOnly = ENV.USE_POSTGRES_ONLY || !!ENV.DATABASE_URL;
 
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
   let token: string | undefined;
@@ -28,18 +32,28 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     try {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-      
-      console.log('[AUTH] Token decodificado, buscando usuario con ID:', decoded.id);
-      
-      const userDoc = await User.findById(decoded.id).select('-password');
-      
-      if (!userDoc) {
-        console.error('[AUTH] Usuario no encontrado en BD con ID:', decoded.id);
-        return res.status(401).json({ message: 'Usuario no encontrado. Token inválido.' });
+
+      if (usePgOnly) {
+        const user = await findUserById(decoded.id);
+        if (!user) {
+          return res.status(401).json({ message: 'Usuario no encontrado. Token inválido.' });
+        }
+        const config = (user.config ?? {}) as { curso?: string; materias?: string[] };
+        req.user = {
+          id: user.id,
+          colegioId: user.institution_id,
+          rol: user.role as AuthRequest['user']['rol'],
+          curso: config.curso,
+          materias: config.materias,
+        };
+        return next();
       }
 
-      console.log('[AUTH] Usuario autenticado:', userDoc.nombre, 'Rol:', userDoc.rol);
-
+      const { User } = await import('../models/index.js');
+      const userDoc = await User.findById(decoded.id).select('-password');
+      if (!userDoc) {
+        return res.status(401).json({ message: 'Usuario no encontrado. Token inválido.' });
+      }
       req.user = {
         id: userDoc._id.toString(),
         colegioId: userDoc.colegioId,

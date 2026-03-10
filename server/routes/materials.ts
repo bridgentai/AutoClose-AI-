@@ -1,124 +1,104 @@
 import express from 'express';
-import { Material, Assignment } from '../models';
-import { protect, restrictTo, AuthRequest } from '../middleware/authMiddleware';
-import { Types } from 'mongoose';
+import { protect, restrictTo, AuthRequest } from '../middleware/authMiddleware.js';
+import { findLearningResourcesByInstitution, createLearningResource, findLearningResourceById, deleteLearningResource } from '../repositories/learningResourceRepository.js';
+import { findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
 
 const router = express.Router();
 
-// GET /api/materials - Obtener materiales (cursoId, assignmentId opcionales)
+function toMaterialApi(row: { id: string; title: string; type: string; url: string | null; description: string | null; created_at: string }) {
+  return {
+    _id: row.id,
+    titulo: row.title,
+    tipo: row.type,
+    url: row.url ?? '',
+    descripcion: row.description ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
 router.get('/', protect, async (req: AuthRequest, res) => {
-  const { colegioId } = req.user!;
-  const { cursoId, materiaId, assignmentId } = req.query;
-
   try {
-    const query: Record<string, unknown> = { colegioId };
-    if (cursoId) query.cursoId = cursoId;
-    if (materiaId) query.materiaId = materiaId;
-    if (assignmentId) query.linkedAssignments = assignmentId;
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const materials = await Material.find(query)
-      .populate('cursoId', 'nombre')
-      .populate('uploadedBy', 'nombre')
-      .sort({ createdAt: -1 });
+    const { cursoId, materiaId } = req.query;
+    let opts: { subjectId?: string; groupId?: string } = {};
+    if (typeof materiaId === 'string') {
+      const gs = await findGroupSubjectById(materiaId);
+      opts.subjectId = gs?.subject_id ?? undefined;
+    }
+    if (typeof cursoId === 'string') {
+      const group = await findGroupByNameAndInstitution(colegioId, cursoId.toUpperCase().trim());
+      opts.groupId = group?.id;
+    }
 
-    res.json(materials);
-  } catch (error: any) {
-    console.error('Error al obtener materiales:', error.message);
-    res.status(500).json({ message: 'Error en el servidor al cargar los materiales.' });
+    const rows = await findLearningResourcesByInstitution(colegioId, opts.subjectId ? { subjectId: opts.subjectId } : opts.groupId ? { groupId: opts.groupId } : undefined);
+    const filtered = opts.groupId
+      ? rows.filter((r) => !r.group_id || r.group_id === opts.groupId)
+      : opts.subjectId
+        ? rows.filter((r) => !r.subject_id || r.subject_id === opts.subjectId)
+        : rows;
+
+    return res.json(filtered.map(toMaterialApi));
+  } catch (error: unknown) {
+    console.error('Error al obtener materiales:', (error as Error).message);
+    return res.status(500).json({ message: 'Error en el servidor al cargar los materiales.' });
   }
 });
 
-// POST /api/materials - Crear material (profesor/directivo). Opcional: assignmentId para crear y vincular a una tarea.
 router.post('/', protect, restrictTo('profesor', 'directivo', 'school_admin', 'super_admin'), async (req: AuthRequest, res) => {
-  const { cursoId, materiaId, titulo, descripcion, tipo, url, contenido, files, documentId, linkedAssignments, assignmentId } = req.body;
-  const { colegioId, id: uploadedBy } = req.user!;
-
   try {
-    let finalCursoId = cursoId;
-    let finalMateriaId = materiaId;
-    let finalLinked = Array.isArray(linkedAssignments) ? linkedAssignments : [];
+    const { titulo, descripcion, tipo, url, materiaId, cursoId } = req.body;
+    const colegioId = req.user?.colegioId;
+    const userId = req.user?.id;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!titulo?.trim()) return res.status(400).json({ message: 'titulo es obligatorio.' });
 
-    if (assignmentId) {
-      const assignment = await Assignment.findById(assignmentId).select('cursoId courseId materiaId').lean();
-      if (!assignment) return res.status(400).json({ message: 'Asignación no encontrada.' });
-      const cid = (assignment as any).courseId ?? (assignment as any).cursoId ?? (assignment as any).materiaId;
-      const mid = (assignment as any).materiaId ?? cid;
-      finalCursoId = (assignment as any).cursoId ?? cid;
-      finalMateriaId = mid;
-      finalLinked = [new Types.ObjectId(assignmentId)];
+    let subjectId: string | null = null;
+    let groupId: string | null = null;
+    if (materiaId) {
+      const gs = await findGroupSubjectById(materiaId);
+      subjectId = gs?.subject_id ?? null;
+      groupId = gs?.group_id ?? null;
+    }
+    if (cursoId) {
+      const group = await findGroupByNameAndInstitution(colegioId, String(cursoId).toUpperCase().trim());
+      groupId = group?.id ?? null;
     }
 
-    if (!finalCursoId || !finalMateriaId) {
-      return res.status(400).json({ message: 'cursoId y materiaId son obligatorios (o proporciona assignmentId).' });
-    }
-    if (!titulo || typeof titulo !== 'string' || !titulo.trim()) {
-      return res.status(400).json({ message: 'titulo es obligatorio.' });
-    }
-
-    const nuevoMaterial = await Material.create({
-      titulo: titulo.trim(),
-      tipo: tipo || 'otro',
-      url: url || '',
-      cursoId: finalCursoId,
-      materiaId: finalMateriaId,
-      files: Array.isArray(files) ? files : [],
-      documentId: documentId || undefined,
-      linkedAssignments: finalLinked,
-      colegioId,
-      descripcion,
-      contenido,
-      uploadedBy,
+    const row = await createLearningResource({
+      institution_id: colegioId,
+      subject_id: subjectId,
+      group_id: groupId,
+      title: titulo.trim(),
+      description: descripcion?.trim() ?? null,
+      type: tipo ?? 'other',
+      url: url ?? null,
+      uploaded_by_id: userId ?? null,
     });
-
-    res.status(201).json(nuevoMaterial);
-  } catch (error: any) {
-    console.error('Error al crear material:', error.message);
-    res.status(500).json({ message: 'Error en el servidor al crear el material.' });
+    return res.status(201).json(toMaterialApi(row));
+  } catch (error: unknown) {
+    console.error('Error al crear material:', (error as Error).message);
+    return res.status(500).json({ message: 'Error en el servidor al crear el material.' });
   }
 });
 
-// PATCH /api/materials/:id - Actualizar material (linkedAssignments, etc.)
 router.patch('/:id', protect, restrictTo('profesor', 'directivo', 'school_admin', 'super_admin'), async (req: AuthRequest, res) => {
-  const { id } = req.params;
-  const { titulo, descripcion, tipo, url, contenido, files, documentId, linkedAssignments } = req.body;
-
-  try {
-    const material = await Material.findById(id);
-    if (!material) return res.status(404).json({ message: 'Material no encontrado.' });
-
-    if (titulo !== undefined) material.titulo = titulo;
-    if (descripcion !== undefined) material.descripcion = descripcion;
-    if (tipo !== undefined) material.tipo = tipo;
-    if (url !== undefined) material.url = url;
-    if (contenido !== undefined) material.contenido = contenido;
-    if (Array.isArray(files)) material.files = files;
-    if (documentId !== undefined) material.documentId = documentId;
-    if (Array.isArray(linkedAssignments)) material.linkedAssignments = linkedAssignments;
-
-    await material.save();
-    return res.json(material);
-  } catch (error: any) {
-    console.error('Error al actualizar material:', error.message);
-    res.status(500).json({ message: 'Error en el servidor.' });
-  }
+  return res.status(404).json({ message: 'Material no encontrado.' });
 });
 
-// DELETE /api/materials/:id - Eliminar material
-// ⚠️ SEGURIDAD: super_admin puede eliminar materiales de cualquier colegio
 router.delete('/:id', protect, restrictTo('profesor', 'directivo', 'school_admin', 'super_admin'), async (req: AuthRequest, res) => {
-  const { id } = req.params;
-
   try {
-    const material = await Material.findByIdAndDelete(id);
-
-    if (!material) {
-      return res.status(404).json({ message: 'Material no encontrado.' });
-    }
-
-    res.json({ message: 'Material eliminado exitosamente.' });
-  } catch (error: any) {
-    console.error('Error al eliminar material:', error.message);
-    res.status(500).json({ message: 'Error en el servidor.' });
+    const colegioId = req.user?.colegioId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const m = await findLearningResourceById(req.params.id);
+    if (!m || m.institution_id !== colegioId) return res.status(404).json({ message: 'Material no encontrado.' });
+    await deleteLearningResource(req.params.id);
+    return res.json({ message: 'Material eliminado exitosamente.' });
+  } catch (error: unknown) {
+    console.error('Error al eliminar material:', (error as Error).message);
+    return res.status(500).json({ message: 'Error al eliminar material.' });
   }
 });
 

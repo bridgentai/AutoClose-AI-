@@ -13,6 +13,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
+import { courseDisplayLabel } from '@/lib/assignmentUtils';
 
 interface Assignment {
   _id: string;
@@ -263,7 +264,7 @@ export function CalendarioGeneral() {
                         {assignment.descripcion}
                       </p>
                       <p className="text-xs mt-1" style={{ color }}>
-                        Curso: {assignment.curso}
+                        Curso: {courseDisplayLabel(assignment)}
                       </p>
                     </div>
                   );
@@ -346,7 +347,7 @@ export function CalendarioGeneral() {
                   style={{ borderColor: color, backgroundColor: `${color}20` }}
                 >
                   <p className="text-white font-medium truncate">{assignment.titulo}</p>
-                  <p className="text-white/60 text-[10px] mt-0.5">{assignment.curso}</p>
+                  <p className="text-white/60 text-[10px] mt-0.5">{courseDisplayLabel(assignment)}</p>
                 </div>
               );
             })}
@@ -400,7 +401,7 @@ export function CalendarioGeneral() {
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="text-white/60">Curso: {assignment.curso}</span>
+                  <span className="text-white/60">Curso: {courseDisplayLabel(assignment)}</span>
                   <span className="text-white/40">•</span>
                   <span className="text-white/60">
                     {new Date(assignment.fechaEntrega).toLocaleTimeString('es-CO', {

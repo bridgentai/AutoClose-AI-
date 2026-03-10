@@ -5,12 +5,15 @@ import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 
 interface Assignment {
   _id: string;
   titulo: string;
   descripcion: string;
-  curso: string;
+  curso?: string;
+  materiaNombre?: string;
+  courseId?: string;
   fechaEntrega: string;
   profesorNombre: string;
 }
@@ -19,13 +22,10 @@ export default function TeacherPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
-
-  const { data: assignments = [] } = useQuery<Assignment[]>({
-    queryKey: ['/api/assignments/profesor', user?.id, currentMonth, currentYear],
-    enabled: !!user?.id,
+  const { data: assignments = [], isLoading: loadingAssignments } = useQuery<Assignment[]>({
+    queryKey: ['/api/assignments', 'profesor', user?.id],
+    queryFn: () => apiRequest<Assignment[]>('GET', '/api/assignments'),
+    enabled: !!user?.id && user?.rol === 'profesor',
   });
 
   const handleDayClick = (assignment: Assignment) => {
@@ -137,7 +137,9 @@ export default function TeacherPage() {
           <CardHeader>
             <CardTitle className="text-white">Calendario de Tareas</CardTitle>
             <CardDescription className="text-white/60">
-              Tus tareas asignadas este mes
+              {loadingAssignments
+                ? 'Cargando…'
+                : `${assignments.length} tarea${assignments.length !== 1 ? 's' : ''} en total (todos tus cursos). Clic en un día o en una tarea para abrirla.`}
             </CardDescription>
           </CardHeader>
           <CardContent>

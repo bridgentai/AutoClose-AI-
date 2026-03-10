@@ -4,7 +4,7 @@ import './config/env';
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import cors from "cors";
-import { connectDB } from "./config/db";
+import { ENV } from "./config/env";
 
 // Importar rutas
 import authRoutes from "./routes/auth";
@@ -15,7 +15,7 @@ import materialsRoutes from "./routes/materials";
 import assignmentsRoutes from "./routes/assignments";
 import subjectsRoutes from "./routes/subjects";
 import usersRoutes from "./routes/users";
-import groupsRoutes, { seedGroups } from "./routes/groups";
+import groupsRoutes from "./routes/groups";
 import sectionsRoutes from "./routes/sections";
 import professorRoutes from "./routes/professor";
 import studentRoutes from "./routes/student";
@@ -24,10 +24,8 @@ import institutionRoutes from "./routes/institution";
 import attendanceRoutes from "./routes/attendance";
 import eventsRoutes from "./routes/events";
 import notificationsRoutes from "./routes/notifications";
-import treasuryRoutes from "./routes/treasury";
 import messagesRoutes from "./routes/messages";
 import evoSendRoutes from "./routes/evoSend";
-import boletinRoutes from "./routes/boletin";
 import logrosCalificacionRoutes from "./routes/logrosCalificacion";
 import gradeEventsRoutes from "./routes/gradeEvents";
 import gradingSchemaRoutes from "./routes/gradingSchema";
@@ -38,9 +36,6 @@ import integrationsRoutes from "./routes/integrations";
 import scheduleRoutes from "./routes/schedule";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Conectar a MongoDB
-  await connectDB();
-
   // CORS - Configuración explícita para permitir todas las solicitudes
   app.use(cors({
     origin: true, // Permitir cualquier origen
@@ -68,10 +63,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/events', eventsRoutes);
   app.use('/api/notifications', notificationsRoutes);
-  app.use('/api/treasury', treasuryRoutes);
   app.use('/api/messages', messagesRoutes);
   app.use('/api/evo-send', evoSendRoutes);
-  app.use('/api/boletin', boletinRoutes);
   app.use('/api/logros-calificacion', logrosCalificacionRoutes);
   app.use('/api/grade-events', gradeEventsRoutes);
   app.use('/api/grading-schemas', gradingSchemaRoutes);
@@ -81,23 +74,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/integrations', integrationsRoutes);
   app.use('/api/schedule', scheduleRoutes);
 
-  // Seed grupos fijos al iniciar
-  await seedGroups();
-
-  // Ruta de health check
+  // Ruta de health check (con verificación PG cuando USE_POSTGRES_ONLY)
   app.get('/api/health', async (req, res) => {
-    const { mongoConnected, mongoError } = await import('./config/db');
-    res.json({ 
-      status: mongoConnected ? 'ok' : 'degraded',
-      message: mongoConnected 
-        ? 'MindOS Backend funcionando correctamente'
-        : 'Backend iniciado pero MongoDB no conectado',
-      mongodb: {
-        connected: mongoConnected,
-        error: mongoError
-      },
-      timestamp: new Date().toISOString()
-    });
+    const pgConfigured = !!ENV.DATABASE_URL;
+    const postgresOnly = ENV.USE_POSTGRES_ONLY || false;
+    const payload: Record<string, unknown> = {
+      status: pgConfigured ? 'ok' : 'degraded',
+      message: pgConfigured ? 'MindOS Backend (PostgreSQL)' : 'Configure DATABASE_URL',
+      postgres: { configured: pgConfigured, postgres_only: postgresOnly },
+      timestamp: new Date().toISOString(),
+    };
+    if (pgConfigured && postgresOnly) {
+      try {
+        const { queryPg } = await import('./config/db-pg.js');
+        const [u, i, g] = await Promise.all([
+          queryPg<{ c: number }>('SELECT COUNT(*)::int AS c FROM users'),
+          queryPg<{ c: number }>('SELECT COUNT(*)::int AS c FROM institutions'),
+          queryPg<{ c: number }>('SELECT COUNT(*)::int AS c FROM groups'),
+        ]);
+        payload.postgres = {
+          configured: true,
+          postgres_only: true,
+          counts: { users: u.rows[0]?.c ?? 0, institutions: i.rows[0]?.c ?? 0, groups: g.rows[0]?.c ?? 0 },
+        };
+      } catch (e) {
+        payload.postgres = { configured: true, postgres_only: true, error: (e as Error).message };
+      }
+    }
+    res.json(payload);
   });
 
   const httpServer = createServer(app);
