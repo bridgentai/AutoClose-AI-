@@ -66,6 +66,7 @@ import ComunicacionHome from "@/pages/ComunicacionHome";
 import ComunicacionAcademico from "@/pages/ComunicacionAcademico";
 import BandejaDeEntrada from "@/pages/BandejaDeEntrada";
 import EvoSendPage from "@/pages/evo-send";
+import EvoDrivePage from "@/pages/evo-drive";
 
 import ComunidadLayout from "@/pages/ComunidadLayout";
 import CalendarioEventos from "@/pages/CalendarioEventos";
@@ -333,6 +334,9 @@ function AppRouter() {
             </Route>
             <Route path="/evo-send">
               <AuthGuard><EvoSendPage /></AuthGuard>
+            </Route>
+            <Route path="/evo-drive">
+              <AuthGuard><EvoDrivePage /></AuthGuard>
             </Route>
 
             <Route path="/comunidad">

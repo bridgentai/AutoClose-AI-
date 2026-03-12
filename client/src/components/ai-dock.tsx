@@ -23,7 +23,8 @@ import {
   Mail,
   UsersRound,
   FileCheck,
-  Bell
+  Bell,
+  FolderOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
@@ -88,6 +89,21 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["estudiante"] },
       { icon: UsersRound, label: "Comunidad", path: "/comunidad", roles: ["estudiante", "profesor", "padre"] },
       { icon: UsersRound, label: "Comunidad", path: "/directivo/comunidad", roles: ["directivo"] },
+      { 
+        icon: FolderOpen, 
+        label: "Evo Drive", 
+        path: "/evo-drive", 
+        roles: [
+          "estudiante",
+          "profesor",
+          "directivo",
+          "padre",
+          "administrador-general",
+          "admin-general-colegio",
+          "school_admin",
+          "super_admin"
+        ]
+      },
       // Módulos principales del profesor
       { icon: BookOpen, label: "Academia", path: "/profesor/academia", roles: ["profesor"] },
       // Academia y acceso a módulo directivo en el panel (no solo Acceso Rápido)

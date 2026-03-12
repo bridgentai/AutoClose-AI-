@@ -187,6 +187,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           roles: ["profesor"]
         },
         { 
+          icon: FolderOpen, 
+          label: "Evo Drive", 
+          path: "/evo-drive",
+          keywords: ["evo", "drive", "google", "archivos", "materiales"],
+          roles: ["profesor", "directivo"]
+        },
+        { 
           icon: Globe, 
           label: "Plataformas", 
           path: "/profesor/academia/plataformas",

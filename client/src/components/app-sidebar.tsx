@@ -2,7 +2,7 @@
 
 import { 
   Home, MessageSquare, Send, BookOpen, GraduationCap, Settings, 
-  LogOut, User, Calendar, Users, Globe, Mail, FileCheck 
+  LogOut, User, Calendar, Users, Globe, Mail, FileCheck, FolderOpen
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -40,6 +40,21 @@ export function AppSidebar() {
 
     { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["profesor", "directivo", "padre"] },
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },
+    { 
+      icon: FolderOpen, 
+      label: "Evo Drive", 
+      path: "/evo-drive", 
+      roles: [
+        "estudiante",
+        "profesor",
+        "directivo",
+        "padre",
+        "administrador-general",
+        "admin-general-colegio",
+        "school_admin",
+        "super_admin"
+      ] 
+    },
 
     { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
     { icon: Settings, label: "Configuración", path: "/settings", roles: ["directivo"] },

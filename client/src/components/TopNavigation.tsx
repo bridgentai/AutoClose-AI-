@@ -2,7 +2,7 @@
 
 import { 
   Home, MessageSquare, BookOpen, GraduationCap, Settings, 
-  LogOut, User, Calendar, Users, Globe, Menu, X
+  LogOut, User, Calendar, Users, Globe, Menu, X, FolderOpen
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -37,6 +37,7 @@ export function TopNavigation() {
 
     { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["profesor", "directivo", "padre"] },
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },
+    { icon: FolderOpen, label: "Evo Drive", path: "/evo-drive", roles: ["profesor", "directivo"] },
 
     { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
     { icon: Settings, label: "Configuracion", path: "/settings", roles: ["directivo"] },

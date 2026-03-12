@@ -1,8 +1,10 @@
 import express from 'express';
 import { protect, restrictTo, AuthRequest } from '../middleware/authMiddleware.js';
 import { findLearningResourcesByInstitution, createLearningResource, findLearningResourceById, deleteLearningResource } from '../repositories/learningResourceRepository.js';
-import { findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { findGroupByNameAndInstitution, findGroupById } from '../repositories/groupRepository.js';
 import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
+import { createEvoFile } from '../repositories/evoFileRepository.js';
+import { findUserById } from '../repositories/userRepository.js';
 
 const router = express.Router();
 
@@ -77,6 +79,27 @@ router.post('/', protect, restrictTo('profesor', 'directivo', 'school_admin', 's
       url: url ?? null,
       uploaded_by_id: userId ?? null,
     });
+    if (groupId && userId) {
+      const group = await findGroupById(groupId);
+      const user = await findUserById(userId);
+      try {
+        await createEvoFile({
+          institution_id: colegioId,
+          nombre: titulo.trim(),
+          tipo: tipo ?? 'other',
+          origen: 'material',
+          group_id: groupId,
+          curso_nombre: group?.name ?? String(cursoId),
+          propietario_id: userId,
+          propietario_nombre: user?.full_name ?? 'Usuario',
+          propietario_rol: req.user?.rol ?? 'profesor',
+          es_publico: true,
+          evo_storage_url: url ?? undefined,
+        });
+      } catch (e) {
+        console.error('Error creando evo_file desde material:', (e as Error).message);
+      }
+    }
     return res.status(201).json(toMaterialApi(row));
   } catch (error: unknown) {
     console.error('Error al crear material:', (error as Error).message);

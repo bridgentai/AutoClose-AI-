@@ -45,7 +45,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       {/* Main Content Container */}
       <div className="relative z-10 text-white">
         {/* Content Area - with dynamic padding for AI Dock and Chat */}
-        <div 
+        <div
           className={cn(
             "transition-all duration-500 ease-in-out",
             isChatOpen ? "pr-96" : isDockExpanded ? "pr-80" : "pr-16"
@@ -60,7 +60,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </div>
 
       {/* AI Dock */}
-      <AIDock 
+      <AIDock
         onOpenCommandPalette={() => setCommandOpen(true)}
         onChatStateChange={(chatOpen, dockExpanded) => {
           setIsChatOpen(chatOpen);

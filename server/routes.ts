@@ -26,6 +26,7 @@ import eventsRoutes from "./routes/events";
 import notificationsRoutes from "./routes/notifications";
 import messagesRoutes from "./routes/messages";
 import evoSendRoutes from "./routes/evoSend";
+import evoDriveRoutes from "./routes/evoDrive";
 import logrosCalificacionRoutes from "./routes/logrosCalificacion";
 import gradeEventsRoutes from "./routes/gradeEvents";
 import gradingSchemaRoutes from "./routes/gradingSchema";
@@ -65,6 +66,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/notifications', notificationsRoutes);
   app.use('/api/messages', messagesRoutes);
   app.use('/api/evo-send', evoSendRoutes);
+  app.use('/api/evo-drive', evoDriveRoutes);
   app.use('/api/logros-calificacion', logrosCalificacionRoutes);
   app.use('/api/grade-events', gradeEventsRoutes);
   app.use('/api/grading-schemas', gradingSchemaRoutes);

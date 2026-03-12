@@ -549,3 +549,57 @@ CREATE TABLE IF NOT EXISTS professor_schedules (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (institution_id, professor_id)
 );
+
+-- Evo Drive: tokens Google por usuario/institución
+CREATE TABLE IF NOT EXISTS google_drive_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, institution_id)
+);
+CREATE INDEX IF NOT EXISTS idx_google_drive_tokens_user ON google_drive_tokens(user_id);
+
+-- Evo Drive: archivos (materiales + Google Drive)
+CREATE TABLE IF NOT EXISTS evo_files (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  nombre VARCHAR(500) NOT NULL,
+  tipo VARCHAR(50) NOT NULL DEFAULT 'file',
+  origen VARCHAR(20) NOT NULL CHECK (origen IN ('material', 'google')),
+  mime_type VARCHAR(200),
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  curso_nombre VARCHAR(100) NOT NULL,
+  propietario_id VARCHAR(255) NOT NULL,
+  propietario_nombre VARCHAR(255) NOT NULL,
+  propietario_rol VARCHAR(50) NOT NULL,
+  es_publico BOOLEAN NOT NULL DEFAULT true,
+  google_file_id VARCHAR(255),
+  google_web_view_link TEXT,
+  google_mime_type VARCHAR(200),
+  evo_storage_key VARCHAR(500),
+  evo_storage_url TEXT,
+  size_bytes BIGINT,
+  etiquetas TEXT[] DEFAULT '{}',
+  destacado BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_evo_files_institution_group ON evo_files(institution_id, group_id);
+CREATE INDEX IF NOT EXISTS idx_evo_files_updated ON evo_files(updated_at DESC);
+
+-- Categorías dentro de cada curso en Evo Drive
+CREATE TABLE IF NOT EXISTS evo_categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_evo_categories_group ON evo_categories(group_id);
+
+ALTER TABLE evo_files ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES evo_categories(id) ON DELETE SET NULL;
