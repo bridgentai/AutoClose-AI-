@@ -1,7 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* AUTOCLOSE AI - Misma paleta que Tabla completa de notas (vista profesor) */
 /* Fondo: radial #1E3A8A → #0F172A → #020617 | Panel: glass rgba(30,58,138,0.35) | Primario: #3B82F6 #2563EB */
 :root {
@@ -175,19 +171,17 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
+* {
+  border-color: hsl(var(--border));
+}
 
-  body {
-    @apply font-sans antialiased text-foreground;
-    /* Mismo fondo que Tabla completa de notas: radial #1E3A8A → #0F172A → #020617 */
-    background: radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%);
-    min-height: 100vh;
-    background-attachment: fixed;
-  }
-
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  color: hsl(var(--foreground));
+  background: radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%);
+  min-height: 100vh;
+  background-attachment: fixed;
 }
 
 /* Movimiento fluido del gradiente - transiciones suaves entre azules */
@@ -263,12 +257,10 @@
  * Even without handling focused or not, this is six possible combinations that
  * need to be distinguished from eachother visually.
  */
-@layer utilities {
-
-  /* Hide ugly search cancel button in Chrome until we can style it properly */
-  input[type="search"]::-webkit-search-cancel-button {
-    @apply hidden;
-  }
+/* Utilidades y componentes custom (Tailwind se carga por CDN) */
+input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
 
   /* Placeholder styling for contentEditable div */
   [contenteditable][data-placeholder]:empty::before {
@@ -877,4 +869,3 @@
   .force-white-bg label {
     color: #374151 !important;
   }
-}

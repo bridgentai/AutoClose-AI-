@@ -11,6 +11,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { content: ['./src/**/*.{js,ts,jsx,tsx}', './index.html'] }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -23,8 +23,11 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
-  },
-  css: {
-    postcss: './postcss.config.js',
+    proxy: {
+      "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+    },
   },
 });

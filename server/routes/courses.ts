@@ -1,5 +1,6 @@
 import express, { Response, NextFunction } from 'express';
 import { protect, AuthRequest, checkAdminColegioOnly } from '../middleware/auth.js';
+import { requireRole } from '../middleware/roleAuth.js';
 import { logAdminAction } from '../services/auditLogger.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupById, findGroupByNameAndInstitution, findGroupsByInstitution } from '../repositories/groupRepository.js';
@@ -19,6 +20,7 @@ import {
   findGroupSubjectById,
   createGroupSubject,
 } from '../repositories/groupSubjectRepository.js';
+import { findAcademicFeedWithDetails, createAnnouncement } from '../repositories/announcementRepository.js';
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
 import { findUsersByIds } from '../repositories/userRepository.js';
@@ -89,6 +91,107 @@ router.get('/by-name', protect, async (req: AuthRequest, res) => {
   } catch (error: unknown) {
     console.error('Error al buscar materia por nombre:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// GET /api/courses/academic-feed — notificaciones académicas (nuevas tareas, notas)
+router.get('/academic-feed', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    type GsDetails = Awaited<ReturnType<typeof findGroupSubjectsByGroupWithDetails>>[number];
+    let gsList: GsDetails[] = [];
+    if (user.role === 'estudiante') {
+      let curso = (user.config as { curso?: string })?.curso;
+      if (!curso) curso = await getFirstGroupNameForStudent(userId) ?? undefined;
+      const group = curso ? await findGroupByNameAndInstitution(colegioId, curso.toUpperCase().trim()) : null;
+      const groupFallback = group ?? await getFirstGroupForStudent(userId, colegioId);
+      if (groupFallback) gsList = await findGroupSubjectsByGroupWithDetails(groupFallback.id, colegioId);
+    } else if (user.role === 'profesor') {
+      gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    } else {
+      const groups = await findGroupsByInstitution(colegioId);
+      for (const g of groups) gsList.push(...(await findGroupSubjectsByGroupWithDetails(g.id, colegioId)));
+    }
+    const groupSubjectIds = gsList.length ? gsList.map((gs) => gs.id) : undefined;
+    const feed = await findAcademicFeedWithDetails(colegioId, { groupSubjectIds });
+    res.json(feed.map((row) => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      body: row.body,
+      assignment_id: row.assignment_id,
+      group_subject_id: row.group_subject_id,
+      created_at: row.created_at,
+      subject_name: row.subject_name,
+      group_name: row.group_name,
+    })));
+  } catch (error: unknown) {
+    console.error('Error al obtener feed académico:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
+// GET /api/courses/group-subjects-options — opciones para "Enviar a" (profesor/directivo/asistente)
+router.get('/group-subjects-options', protect, requireRole('profesor', 'directivo', 'asistente', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    type GsDetails = Awaited<ReturnType<typeof findGroupSubjectsByGroupWithDetails>>[number];
+    let gsList: GsDetails[] = [];
+    if (user.role === 'profesor') {
+      gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    } else {
+      const groups = await findGroupsByInstitution(colegioId);
+      for (const g of groups) gsList.push(...(await findGroupSubjectsByGroupWithDetails(g.id, colegioId)));
+    }
+    res.json(gsList.map((gs) => ({ id: gs.id, subject_name: gs.subject_name, group_name: gs.group_name })));
+  } catch (error: unknown) {
+    console.error('Error al obtener opciones de envío:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
+// POST /api/courses/academic-message — enviar mensaje académico a un curso (profesor/directivo/asistente)
+router.post('/academic-message', protect, requireRole('profesor', 'directivo', 'asistente', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const body = req.body as { title?: string; body?: string; group_subject_id?: string; groupSubjectId?: string };
+    const title = body?.title;
+    const groupSubjectId = body?.group_subject_id ?? body?.groupSubjectId;
+    if (!title || typeof title !== 'string' || title.trim() === '') return res.status(400).json({ message: 'El título es obligatorio.' });
+    if (!groupSubjectId || typeof groupSubjectId !== 'string') return res.status(400).json({ message: 'Debe indicar el curso de destino (group_subject_id).' });
+    const gs = await findGroupSubjectById(groupSubjectId);
+    if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(401).json({ message: 'Usuario no encontrado' });
+    if (user.role === 'profesor') {
+      const myGs = await findGroupSubjectsByTeacher(userId, colegioId);
+      if (!myGs.some((x) => x.id === groupSubjectId)) return res.status(403).json({ message: 'Solo puede enviar mensajes a sus propios cursos.' });
+    }
+    const created = await createAnnouncement({
+      institution_id: colegioId,
+      title: title.trim(),
+      body: body.body && typeof body.body === 'string' ? body.body.trim().slice(0, 2000) : null,
+      type: 'mensaje_academico',
+      group_id: gs.group_id,
+      group_subject_id: groupSubjectId,
+      created_by_id: userId,
+    });
+    res.status(201).json({ id: created.id, title: created.title, created_at: created.created_at });
+  } catch (error: unknown) {
+    const err = error as Error & { code?: string };
+    console.error('Error al enviar mensaje académico:', err.message, err.stack);
+    const message = err.code === '23503' ? 'Datos inconsistentes (curso o institución no encontrada).' : (err.message || 'Error en el servidor.');
+    res.status(500).json({ message });
   }
 });
 

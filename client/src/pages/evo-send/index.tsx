@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/authContext';
@@ -14,6 +14,7 @@ import {
   Loader2,
   Star,
   ChevronRight,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,13 +42,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const EVO_BLUE = '#3B82F6';
 const EVO_BLUE_DARK = '#1D4ED8';
-const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md';
+const EVO_PANEL = 'panel-grades rounded-2xl border border-white/[0.08] overflow-hidden';
 
-type ThreadType = 'comunicado_general' | 'curso' | 'asignacion' | 'asistencia' | 'general';
+type ThreadType = 'comunicado_general' | 'curso' | 'asignacion' | 'asistencia' | 'general' | 'evo_chat';
 
 interface EvoThreadItem {
   _id: string;
   asunto: string;
+  displayTitle?: string;
   tipo: ThreadType;
   creadoPor?: { _id: string; nombre: string; rol: string };
   cursoId?: { _id: string; nombre: string };
@@ -86,6 +88,7 @@ const tipoLabels: Record<ThreadType, string> = {
   asignacion: 'Tarea',
   asistencia: 'Asistencia',
   general: 'General',
+  evo_chat: 'Chat',
 };
 
 const tipoIcons: Record<ThreadType, React.ReactNode> = {
@@ -94,6 +97,7 @@ const tipoIcons: Record<ThreadType, React.ReactNode> = {
   asignacion: <FileText className="w-4 h-4" />,
   asistencia: <AlertCircle className="w-4 h-4" />,
   general: <Inbox className="w-4 h-4" />,
+  evo_chat: <MessageSquare className="w-4 h-4" />,
 };
 
 export default function EvoSendPage() {
@@ -113,7 +117,8 @@ export default function EvoSendPage() {
   const [newCursoId, setNewCursoId] = useState('');
   const [newPrioridad, setNewPrioridad] = useState<'normal' | 'alta' | 'urgente'>('normal');
 
-  const canCreateThread = ['directivo', 'profesor', 'admin-general-colegio'].includes(user?.rol || '');
+  const isProfesorOrEstudiante = ['profesor', 'estudiante'].includes(user?.rol || '');
+  const canCreateThread = !isProfesorOrEstudiante && ['directivo', 'admin-general-colegio'].includes(user?.rol || '');
   const isAsistente = user?.rol === 'asistente';
 
   const { data: threads = [], isLoading: loadingThreads } = useQuery({
@@ -195,6 +200,16 @@ export default function EvoSendPage() {
     ? threads.filter((t) => t.asunto?.toLowerCase().includes(searchQ.trim().toLowerCase()))
     : threads;
 
+  const sortedThreads = useMemo(
+    () =>
+      [...filteredThreads].sort((a, b) => {
+        const dateA = a.ultimoMensaje?.fecha ? new Date(a.ultimoMensaje.fecha).getTime() : new Date(a.updatedAt).getTime();
+        const dateB = b.ultimoMensaje?.fecha ? new Date(b.ultimoMensaje.fecha).getTime() : new Date(b.updatedAt).getTime();
+        return dateB - dateA;
+      }),
+    [filteredThreads]
+  );
+
   const selectedThread = threads.find((t) => t._id === selectedId);
   const messages = threadDetail?.messages || [];
 
@@ -215,26 +230,27 @@ export default function EvoSendPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 min-h-screen">
-      <div className="mb-6">
-        <NavBackButton to="/dashboard" label="Dashboard" />
-        <div className="flex items-center gap-3 mt-4">
+    <div className="p-4 sm:p-6 flex flex-col min-h-screen">
+      <div className="flex-shrink-0 mb-4">
+        <NavBackButton to="/comunicacion" label="Comunicación" />
+        <div className="flex items-center gap-3 mt-3">
           <div
             className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
-            style={{ background: 'linear-gradient(145deg, #3B82F6, #1D4ED8)' }}
+            style={{ background: 'linear-gradient(145deg, #3B82F6, #1E40AF)' }}
           >
             <Send className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins']">Evo Send</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-[#E2E8F0] font-['Poppins']">Evo Send</h1>
             <p className="text-white/60 text-sm">Comunicación y asignaciones en tiempo real</p>
           </div>
           {connected && (
-            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">En línea</Badge>
+            <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-[#3B82F6]/30">En línea</Badge>
           )}
         </div>
       </div>
 
+      <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: 'calc(100vh - 180px)' }}>
       {isAsistente ? (
         <Tabs defaultValue="asistencia" className="space-y-4">
           <TabsList className="bg-white/10 border border-white/10">
@@ -244,9 +260,9 @@ export default function EvoSendPage() {
           <TabsContent value="asistencia" className="mt-4">
             <AttendanceInbox />
           </TabsContent>
-          <TabsContent value="mensajes" className="mt-4">
+          <TabsContent value="mensajes" className="mt-4 flex-1 flex flex-col min-h-0">
             <EvoLayout
-              threads={filteredThreads}
+              threads={sortedThreads}
               selectedId={selectedId}
               setSelectedId={setSelectedId}
               selectedThread={selectedThread}
@@ -265,6 +281,7 @@ export default function EvoSendPage() {
               setSearchQ={setSearchQ}
               filterTipo={filterTipo}
               setFilterTipo={setFilterTipo}
+              showFilters={false}
               typing={typing}
               emitTyping={emitTyping}
               selectedIdForTyping={selectedId}
@@ -273,7 +290,7 @@ export default function EvoSendPage() {
         </Tabs>
       ) : (
         <EvoLayout
-          threads={filteredThreads}
+          threads={sortedThreads}
           selectedId={selectedId}
           setSelectedId={setSelectedId}
           selectedThread={selectedThread}
@@ -292,11 +309,13 @@ export default function EvoSendPage() {
           setSearchQ={setSearchQ}
           filterTipo={filterTipo}
           setFilterTipo={setFilterTipo}
+          showFilters={!isProfesorOrEstudiante}
           typing={typing}
           emitTyping={emitTyping}
           selectedIdForTyping={selectedId}
         />
       )}
+      </div>
 
       <Dialog open={newMessageOpen} onOpenChange={setNewMessageOpen}>
         <DialogContent className="bg-[var(--mid-dark)] border-white/10 text-white">
@@ -403,7 +422,7 @@ function AttendanceInbox() {
   });
 
   return (
-    <Card className={CARD_STYLE}>
+    <Card className={EVO_PANEL}>
       <CardHeader>
         <CardTitle className="text-white flex items-center gap-2">
           <AlertCircle className="w-5 h-5" style={{ color: EVO_BLUE }} />
@@ -462,6 +481,7 @@ interface EvoLayoutProps {
   setSearchQ: (s: string) => void;
   filterTipo: string;
   setFilterTipo: (s: string) => void;
+  showFilters?: boolean;
   typing: { userId?: string; userName?: string; threadId?: string } | null;
   emitTyping: (threadId: string, userName?: string) => void;
   selectedIdForTyping: string | null;
@@ -487,18 +507,19 @@ function EvoLayout({
   setSearchQ,
   filterTipo,
   setFilterTipo,
+  showFilters = true,
   typing,
   emitTyping,
   selectedIdForTyping,
 }: EvoLayoutProps) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-[70vh]">
-      <div className="lg:col-span-4">
-        <Card className={`${CARD_STYLE} h-full flex flex-col overflow-hidden`}>
-          <div className="p-4 border-b border-white/10 space-y-2">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 h-full">
+      <div className="lg:col-span-4 flex flex-col min-h-0">
+        <div className={`${EVO_PANEL} flex flex-col h-full min-h-0`}>
+          <div className="p-4 border-b border-white/10 space-y-2 flex-shrink-0">
             {canCreateThread && (
               <Button
-                className="w-full"
+                className="w-full rounded-xl"
                 style={{ background: 'linear-gradient(180deg, #3B82F6, #1D4ED8)' }}
                 onClick={onNewMessage}
               >
@@ -506,28 +527,32 @@ function EvoLayout({
                 Nuevo mensaje
               </Button>
             )}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
-              <Input
-                placeholder="Buscar..."
-                value={searchQ}
-                onChange={(e) => setSearchQ(e.target.value)}
-                className="pl-10 bg-white/10 border-white/10 text-white"
-              />
-            </div>
-            <Select value={filterTipo} onValueChange={setFilterTipo}>
-              <SelectTrigger className="bg-white/10 border-white/10 text-white">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {Object.entries(tipoLabels).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {showFilters && (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" />
+                  <Input
+                    placeholder="Buscar..."
+                    value={searchQ}
+                    onChange={(e) => setSearchQ(e.target.value)}
+                    className="pl-10 bg-white/[0.06] border-white/[0.08] text-[#E2E8F0] rounded-xl"
+                  />
+                </div>
+                <Select value={filterTipo} onValueChange={setFilterTipo}>
+                  <SelectTrigger className="bg-white/[0.06] border-white/[0.08] text-[#E2E8F0] rounded-xl">
+                    <SelectValue placeholder="Tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {Object.entries(tipoLabels).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {loadingThreads ? (
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="w-8 h-8 animate-spin text-white/50" />
@@ -536,35 +561,35 @@ function EvoLayout({
               filteredThreadsList(threads, selectedId, setSelectedId)
             )}
           </div>
-        </Card>
+        </div>
       </div>
 
-      <div className="lg:col-span-8">
-        <Card className={`${CARD_STYLE} h-full flex flex-col overflow-hidden`}>
+      <div className="lg:col-span-8 flex flex-col min-h-0">
+        <div className={`${EVO_PANEL} flex flex-col h-full min-h-0`}>
           {selectedThread ? (
             <>
-              <CardHeader className="border-b border-white/10 py-4">
+              <div className="flex-shrink-0 border-b border-white/10 py-4 px-4">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-white/60 text-sm">
                     {tipoIcons[selectedThread.tipo]}
                     <span className="ml-1">{tipoLabels[selectedThread.tipo]}</span>
                   </span>
                   {selectedThread.assignmentId && (
-                    <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">Tarea</Badge>
+                    <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-[#3B82F6]/30">Tarea</Badge>
                   )}
                 </div>
-                <CardTitle className="text-xl text-white">{selectedThread.asunto}</CardTitle>
+                <h3 className="text-xl font-semibold text-[#E2E8F0]">{selectedThread.displayTitle ?? selectedThread.asunto}</h3>
                 <p className="text-white/60 text-sm">
                   De: {(selectedThread.creadoPor as any)?.nombre} ({(selectedThread.creadoPor as any)?.rol})
                 </p>
                 {typing?.threadId === selectedId && typing?.userId !== user?.id && (
                   <p className="text-white/50 text-sm italic animate-pulse">{typing.userName || 'Alguien'} está escribiendo...</p>
                 )}
-              </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto p-4 space-y-3">
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                 {threadDetail?.thread?.assignmentId && (
                   <div
-                    className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/10"
+                    className="p-4 rounded-xl border border-[#3B82F6]/30 bg-[#3B82F6]/10"
                     style={{ borderLeftWidth: '4px', borderLeftColor: EVO_BLUE }}
                   >
                     <p className="text-white font-medium">Tarea: {(threadDetail.thread.assignmentId as any)?.titulo}</p>
@@ -572,7 +597,7 @@ function EvoLayout({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="mt-2 border-blue-500/50 text-blue-300"
+                      className="mt-2 border-[#3B82F6]/50 text-[#93C5FD] rounded-xl"
                       onClick={() => {
                       const aid = (threadDetail.thread as any).assignmentId?._id;
                       window.location.href = aid ? `/assignment/${aid}` : '/mi-aprendizaje/tareas';
@@ -587,54 +612,67 @@ function EvoLayout({
                     <Loader2 className="w-8 h-8 animate-spin text-white/50" />
                   </div>
                 ) : (
-                  <AnimatePresence mode="popLayout">
-                    {messages.map((m) => {
-                      const isMine = (m.remitenteId as any)?._id === user?.id;
-                      return (
-                        <motion.div
-                          key={m._id}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className={`p-3 rounded-xl max-w-[85%] ${isMine ? 'ml-auto bg-blue-500/20 border border-blue-500/30' : 'bg-white/5 border border-white/10'}`}
-                        >
-                          <p className="text-white/80 text-sm font-medium">{(m.remitenteId as any)?.nombre} · {m.rolRemitente}</p>
-                          <p className="text-white mt-1 whitespace-pre-wrap">{m.contenido}</p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <p className="text-white/50 text-xs">{new Date(m.fecha).toLocaleString('es')}</p>
-                            {m.prioridad === 'urgente' && <Badge variant="destructive" className="text-xs">Urgente</Badge>}
-                            {m.prioridad === 'alta' && <Badge className="bg-amber-500/20 text-amber-400 text-xs">Alta</Badge>}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
+                  <div className="space-y-1 flex flex-col">
+                    <AnimatePresence mode="popLayout">
+                      {messages.map((m) => {
+                        const isMine = (m.remitenteId as any)?._id === user?.id;
+                        return (
+                          <motion.div
+                            key={m._id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`max-w-[75%] rounded-2xl px-4 py-2.5 shadow-md ${
+                                isMine
+                                  ? 'rounded-br-md text-white'
+                                  : 'rounded-bl-md bg-white/[0.08] text-[#E2E8F0] border border-white/[0.08]'
+                              }`}
+                              style={isMine ? { background: 'linear-gradient(145deg, #3B82F6, #1D4ED8)' } : undefined}
+                            >
+                              {!isMine && (
+                                <p className="text-[#93C5FD] text-xs font-medium mb-0.5">{(m.remitenteId as any)?.nombre}</p>
+                              )}
+                              <p className="whitespace-pre-wrap break-words text-sm">{m.contenido}</p>
+                              <div className="flex items-center gap-2 mt-1 justify-end">
+                                {m.prioridad === 'urgente' && <Badge variant="destructive" className="text-[10px] px-1">Urgente</Badge>}
+                                {m.prioridad === 'alta' && <Badge className="bg-amber-500/20 text-amber-400 text-[10px] px-1">Alta</Badge>}
+                                <span className="text-white/50 text-[10px]">{new Date(m.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </AnimatePresence>
+                  </div>
                 )}
-              </CardContent>
-              <div className="p-4 border-t border-white/10 flex gap-2">
+              </div>
+              <div className="flex-shrink-0 p-4 border-t border-white/10 flex gap-2">
                 <Textarea
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   onFocus={() => selectedIdForTyping && emitTyping(selectedIdForTyping, user?.nombre)}
                   placeholder="Escribe tu respuesta..."
-                  className="flex-1 bg-white/10 border-white/10 text-white placeholder:text-white/50 min-h-[80px]"
+                  className="flex-1 bg-white/[0.06] border-white/[0.08] text-[#E2E8F0] placeholder:text-white/50 min-h-[56px] rounded-xl resize-none"
                 />
                 <Button
                   onClick={onSendReply}
                   disabled={!replyText.trim() || sendReplyMutation.isPending}
                   style={{ background: 'linear-gradient(180deg, #3B82F6, #1D4ED8)' }}
-                  className="self-end"
+                  className="self-end rounded-xl"
                 >
                   {sendReplyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </Button>
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-white/50 py-16">
+            <div className="flex flex-col items-center justify-center flex-1 text-white/50 py-16">
               <Inbox className="w-16 h-16 mb-4" style={{ color: EVO_BLUE }} />
               <p className="text-lg">Selecciona un hilo para ver la conversación.</p>
             </div>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );
@@ -645,17 +683,19 @@ function filteredThreadsList(
   selectedId: string | null,
   setSelectedId: (id: string | null) => void
 ) {
+  const title = (t: EvoThreadItem) => t.displayTitle ?? t.asunto;
   return (
     <>
       {threads.map((t) => {
         const isSelected = t._id === selectedId;
+        const hasUnread = (t.unreadCount ?? 0) > 0;
         return (
           <motion.div
             key={t._id}
             layout
             onClick={() => setSelectedId(t._id)}
-            className={`p-3 border-b border-white/10 cursor-pointer transition-all min-h-[72px] flex flex-col justify-center ${
-              isSelected ? 'bg-blue-500/15 border-l-4' : 'hover:bg-white/5'
+            className={`p-3 border-b border-white/[0.06] cursor-pointer transition-all min-h-[72px] flex items-center gap-3 ${
+              isSelected ? 'bg-[#3B82F6]/15 border-l-4' : 'hover:bg-white/[0.04]'
             }`}
             style={isSelected ? { borderLeftColor: EVO_BLUE } : undefined}
             role="button"
@@ -667,28 +707,29 @@ function filteredThreadsList(
               }
             }}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-medium truncate">{t.asunto}</p>
-                <p className="text-white/50 text-xs truncate mt-0.5">
-                  {t.ultimoMensaje?.contenido || 'Sin mensajes'}
-                </p>
-                <p className="text-white/40 text-xs mt-1">
-                  {tipoLabels[t.tipo]} · {new Date(t.updatedAt).toLocaleDateString('es')}
-                </p>
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                {t.unreadCount ? (
-                  <Badge className="bg-blue-500 text-white text-xs">{t.unreadCount}</Badge>
-                ) : null}
-                <ChevronRight className="w-4 h-4 text-white/40" />
-              </div>
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{ background: 'linear-gradient(145deg, rgba(59, 130, 246, 0.4), rgba(30, 64, 175, 0.5))' }}
+            >
+              <MessageSquare className="w-6 h-6 text-[#93C5FD]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`font-medium truncate ${hasUnread ? 'text-[#E2E8F0]' : 'text-white/90'}`}>{title(t)}</p>
+              <p className="text-white/60 text-sm truncate mt-0.5">
+                {t.ultimoMensaje?.contenido || 'Sin mensajes'}
+              </p>
+            </div>
+            <div className="flex flex-col items-end flex-shrink-0 gap-1">
+              <span className="text-white/40 text-xs">{new Date(t.updatedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>
+              {hasUnread && (
+                <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] flex-shrink-0" title="No leídos" aria-label="No leídos" />
+              )}
             </div>
           </motion.div>
         );
       })}
       {threads.length === 0 && (
-        <p className="p-4 text-white/50 text-center">No hay hilos.</p>
+        <p className="p-4 text-white/50 text-center text-sm">No hay chats. Tus grupos son tus cursos (profesor) o materias (estudiante).</p>
       )}
     </>
   );

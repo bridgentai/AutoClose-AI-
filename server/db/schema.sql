@@ -440,6 +440,7 @@ CREATE TABLE IF NOT EXISTS announcements (
   body TEXT,
   "type" VARCHAR(50) NOT NULL DEFAULT 'general',
   group_id UUID REFERENCES groups(id) ON DELETE SET NULL,
+  group_subject_id UUID REFERENCES group_subjects(id) ON DELETE SET NULL,
   assignment_id UUID REFERENCES assignments(id) ON DELETE SET NULL,
   created_by_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   published_at TIMESTAMPTZ,
@@ -448,6 +449,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 );
 
 CREATE INDEX IF NOT EXISTS idx_announcements_institution ON announcements(institution_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_announcements_group_subject_evo ON announcements(group_subject_id) WHERE group_subject_id IS NOT NULL AND type = 'evo_chat';
 
 CREATE TABLE IF NOT EXISTS announcement_recipients (
   announcement_id UUID NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,

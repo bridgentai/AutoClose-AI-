@@ -4,6 +4,7 @@ import { ReactNode, useState } from "react";
 import { CommandPalette, useCommandPalette } from "./command-palette";
 import { AIDock } from "./ai-dock";
 import { cn } from "@/lib/utils";
+import glcShield from "@/assets/glc-shield.png";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -21,6 +22,18 @@ export function AppLayout({ children }: AppLayoutProps) {
         <span className="text-xl font-bold text-white/90 font-['Poppins'] tracking-tight drop-shadow-sm">
           Caobos
         </span>
+      </div>
+
+      {/* Escudo (arriba derecha) */}
+      <div className="fixed top-4 right-4 z-20 pointer-events-none">
+        <img
+          src={glcShield}
+          alt="GLC"
+          className="w-9 h-9 opacity-95 drop-shadow"
+          style={{
+            filter: "brightness(1.18) saturate(1.08) contrast(1.02)",
+          }}
+        />
       </div>
 
       {/* Mismo fondo que Tabla completa de notas: radial #1E3A8A → #0F172A → #020617 */}

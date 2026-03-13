@@ -25,6 +25,7 @@ import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRe
 import { findEnrollmentsByStudent, getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
 import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
+import { createAnnouncement } from '../repositories/announcementRepository.js';
 import { queryPg } from '../config/db-pg.js';
 
 const router = express.Router();
@@ -195,6 +196,17 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       is_gradable: isGradable !== false,
       assignment_category_id: assignmentCategoryId,
     });
+
+    await createAnnouncement({
+      institution_id: gs.institution_id,
+      title: `Nueva tarea: ${titulo}`,
+      body: (descripcion ?? '').slice(0, 500) || null,
+      type: 'nueva_asignacion',
+      group_id: gs.group_id,
+      group_subject_id: courseId,
+      assignment_id: created.id,
+      created_by_id: userId,
+    }).catch((err) => console.error('Error al crear notificación académica:', (err as Error).message));
 
     return res.status(201).json(assignmentToApi(created));
   } catch (err: unknown) {

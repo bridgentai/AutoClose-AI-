@@ -1,8 +1,9 @@
-import { Briefcase, Users, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Briefcase, Users, AlertTriangle, ChevronRight, Send } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
 import { NavBackButton } from '@/components/nav-back-button';
+import { useAuth } from '@/lib/authContext';
 
 const resumenAcademico = {
   mensajesNuevos: 5,
@@ -31,6 +32,8 @@ interface ResumenCardProps {
   type: 'academico' | 'comunidad';
   onClick?: () => void;
 }
+
+const EVO_SEND_ROLES = ['estudiante', 'profesor', 'directivo', 'asistente', 'admin-general-colegio'];
 
 const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onClick }) => {
   const isAcademico = type === 'academico';
@@ -85,16 +88,45 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onCl
   );
 };
 
+const EvoSendCard: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 flex flex-col justify-between h-full hover:shadow-xl transition-shadow duration-300 border-emerald-500/20">
+    <CardContent className="p-0">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-500/20 text-emerald-400">
+          <Send className="w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-extrabold text-white">Evo Send</h2>
+      </div>
+      <p className="text-white/80 text-base mt-2">
+        Chat por curso y materia, tipo WhatsApp. El profesor ve sus cursos como grupos; el estudiante ve cada materia con el nombre del profesor.
+      </p>
+      <Button
+        className="w-full mt-8 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white"
+        data-testid="button-evo-send"
+        onClick={onClick}
+      >
+        Abrir Evo Send
+        <ChevronRight className="w-5 h-5" />
+      </Button>
+    </CardContent>
+  </Card>
+);
+
 const ComunicacionHome: React.FC = () => {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const showEvoSend = user?.rol && EVO_SEND_ROLES.includes(user.rol);
 
   const handleAcademicoClick = () => {
     setLocation('/comunicacion/academico');
   };
 
   const handleComunidadClick = () => {
-    // TODO: Implementar navegación a comunidad cuando esté lista
     setLocation('/comunicacion/comunidad');
+  };
+
+  const handleEvoSendClick = () => {
+    setLocation('/evo-send');
   };
 
   return (
@@ -105,7 +137,7 @@ const ComunicacionHome: React.FC = () => {
         <p className="text-lg text-white/70 mt-2">Selecciona tu area de interes para gestionar conversaciones academicas o comunitarias.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-[60vh]">
+      <div className={`grid grid-cols-1 gap-8 min-h-[60vh] ${showEvoSend ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
         <ResumenCard
           title="Academico"
           icon={<Briefcase />}
@@ -121,6 +153,10 @@ const ComunicacionHome: React.FC = () => {
           type="comunidad"
           onClick={handleComunidadClick}
         />
+
+        {showEvoSend && (
+          <EvoSendCard onClick={handleEvoSendClick} />
+        )}
       </div>
     </div>
   );

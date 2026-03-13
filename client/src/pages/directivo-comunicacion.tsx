@@ -23,6 +23,13 @@ const navigationItems = [
     icon: Mail,
   },
   {
+    title: "Evo Send",
+    path: "/evo-send",
+    icon: MessageSquare,
+    description: "Chat por curso y materia, tipo WhatsApp",
+    evoSend: true,
+  },
+  {
     title: "Chat con Profesores",
     path: "/directivo/comunicacion/profesores",
     icon: Users,
@@ -60,17 +67,27 @@ export default function DirectivoComunicacionLayout() {
         Comunicación: Canales Institucionales
       </h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {navigationItems.map((item) => (
-          <Link key={item.path} href={item.path}>
-            <Card className="hover-elevate cursor-pointer bg-white/5 border-white/10 backdrop-blur-md">
-              <CardContent className="flex flex-col items-center justify-center p-8">
-                <item.icon className="w-12 h-12 mb-4 text-[#1e3cff]" />
-                <span className="text-lg font-medium text-white">{item.title}</span>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {navigationItems.map((item) => {
+          const isEvoSend = "evoSend" in item && (item as { evoSend?: boolean }).evoSend;
+          return (
+            <Link key={item.path} href={item.path}>
+              <Card
+                className={`hover-elevate cursor-pointer backdrop-blur-md ${
+                  isEvoSend ? "bg-emerald-500/10 border-emerald-500/30" : "bg-white/5 border-white/10"
+                }`}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-8">
+                  <item.icon className={`w-12 h-12 mb-4 ${isEvoSend ? "text-emerald-400" : "text-[#1e3cff]"}`} />
+                  <span className="text-lg font-medium text-white">{item.title}</span>
+                  {"description" in item && (
+                    <span className="text-sm text-white/60 mt-1 text-center">{(item as { description?: string }).description}</span>
+                  )}
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
