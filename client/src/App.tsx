@@ -91,7 +91,6 @@ import ParentCourseAnalyticsPage from "@/pages/parent-course-analytics";
 
 // Módulos del profesor
 import ProfesorAcademiaLayout from "@/pages/profesor-academia";
-import ProfesorComunicacionLayout from "@/pages/profesor-comunicacion";
 import ProfesorBandejaEntrada from "@/pages/profesor-bandeja-entrada";
 import ProfesorRedactarMensaje from "@/pages/profesor-redactar-mensaje";
 import ProfesorMensajesEnviados from "@/pages/profesor-mensajes-enviados";
@@ -482,7 +481,7 @@ function AppRouter() {
             </Route>
 
             <Route path="/profesor/comunicacion">
-              <AuthGuard><ProfesorComunicacionLayout /></AuthGuard>
+              <AuthGuard><ComunicacionHome /></AuthGuard>
             </Route>
             <Route path="/profesor/comunicacion/bandeja">
               <AuthGuard><ProfesorBandejaEntrada /></AuthGuard>

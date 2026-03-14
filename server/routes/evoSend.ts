@@ -17,6 +17,7 @@ import {
   findGroupSubjectsByTeacher,
   findGroupSubjectsByTeacherWithDetails,
   findGroupSubjectsByGroupWithDetails,
+  findGroupSubjectById,
 } from '../repositories/groupSubjectRepository.js';
 import { findGroupsByInstitution } from '../repositories/groupRepository.js';
 import { findEnrollmentsByStudent } from '../repositories/enrollmentRepository.js';
@@ -129,6 +130,45 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
   } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al listar hilos.' });
+  }
+});
+
+// GET /api/evo-send/thread-id-by-group-subject/:groupSubjectId — devuelve el threadId del chat Evo Send para ese curso (atajo desde página del curso)
+router.get('/thread-id-by-group-subject/:groupSubjectId', protect, requireRole(...EVO_SEND_ROLES), async (req: AuthRequest, res) => {
+  try {
+    const { groupSubjectId } = req.params;
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    const rol = req.user?.rol;
+    if (!userId || !colegioId || !groupSubjectId) return res.status(401).json({ message: 'No autorizado.' });
+
+    const gs = await findGroupSubjectById(groupSubjectId);
+    if (!gs || gs.institution_id !== colegioId) {
+      return res.status(404).json({ message: 'Curso no encontrado.' });
+    }
+
+    if (rol === 'profesor' && gs.teacher_id !== userId) {
+      return res.status(403).json({ message: 'Solo el profesor del curso puede acceder.' });
+    }
+    if (rol === 'estudiante') {
+      const enrollments = await findEnrollmentsByStudent(userId);
+      const inGroup = enrollments.some((e) => e.group_id === gs.group_id);
+      if (!inGroup) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
+    }
+
+    const group = await findGroupById(gs.group_id);
+    const title = group?.name ?? gs.group_id;
+    const a = await findOrCreateEvoChatForGroupSubject(
+      gs.id,
+      colegioId,
+      title,
+      gs.teacher_id,
+      gs.group_id
+    );
+    return res.json({ threadId: a.id });
+  } catch (e: unknown) {
+    console.error(e);
+    return res.status(500).json({ message: 'Error al obtener el hilo.' });
   }
 });
 

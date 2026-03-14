@@ -15,7 +15,9 @@ import {
   Star,
   ChevronRight,
   MessageSquare,
+  ArrowLeft,
 } from 'lucide-react';
+import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -101,6 +103,7 @@ const tipoIcons: Record<ThreadType, React.ReactNode> = {
 };
 
 export default function EvoSendPage() {
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem('autoclose_token') : null;
@@ -116,6 +119,20 @@ export default function EvoSendPage() {
   const [newTipo, setNewTipo] = useState<'comunicado_general' | 'curso'>('comunicado_general');
   const [newCursoId, setNewCursoId] = useState('');
   const [newPrioridad, setNewPrioridad] = useState<'normal' | 'alta' | 'urgente'>('normal');
+
+  const [back, setBack] = useState<{ to: string; label: string }>({ to: '/comunicacion', label: 'Comunicación' });
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('evo-send-return-path');
+      if (stored && stored.startsWith('/course-detail/') && !stored.includes(',')) {
+        sessionStorage.removeItem('evo-send-return-path');
+        setBack({ to: stored, label: 'Volver al curso' });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const isProfesorOrEstudiante = ['profesor', 'estudiante'].includes(user?.rol || '');
   const canCreateThread = !isProfesorOrEstudiante && ['directivo', 'admin-general-colegio'].includes(user?.rol || '');
@@ -186,6 +203,19 @@ export default function EvoSendPage() {
     }
   }, [selectedId]);
 
+  // Abrir hilo desde query ?thread= (atajo desde página del curso)
+  useEffect(() => {
+    if (loadingThreads || threads.length === 0) return;
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    const threadFromUrl = params.get('thread');
+    if (threadFromUrl && threads.some((t) => t._id === threadFromUrl)) {
+      setSelectedId(threadFromUrl);
+      if (typeof window !== 'undefined' && window.history.replaceState) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [loadingThreads, threads]);
+
   useEffect(() => {
     if (!lastMessage) return;
     const m = lastMessage as { threadId?: string };
@@ -232,7 +262,18 @@ export default function EvoSendPage() {
   return (
     <div className="p-4 sm:p-6 flex flex-col min-h-screen">
       <div className="flex-shrink-0 mb-4">
-        <NavBackButton to="/comunicacion" label="Comunicación" />
+        {back.label === 'Volver al curso' ? (
+          <Button
+            variant="ghost"
+            onClick={() => setLocation(back.to)}
+            className="flex items-center gap-2 text-[#3B82F6] hover:text-[#2563EB] hover:bg-white/5 transition-colors duration-200 mb-4"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium">Volver al curso</span>
+          </Button>
+        ) : (
+          <NavBackButton to={back.to} label={back.label} />
+        )}
         <div className="flex items-center gap-3 mt-3">
           <div
             className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"

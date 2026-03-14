@@ -135,6 +135,61 @@ router.get('/academic-feed', protect, async (req: AuthRequest, res) => {
   }
 });
 
+// GET /api/courses/communication-summary — resumen para tarjetas del Centro de Comunicación (datos reales por group_subject_id)
+router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    type GsDetails = Awaited<ReturnType<typeof findGroupSubjectsByGroupWithDetails>>[number];
+    let gsList: GsDetails[] = [];
+    if (user.role === 'estudiante') {
+      let curso = (user.config as { curso?: string })?.curso;
+      if (!curso) curso = await getFirstGroupNameForStudent(userId) ?? undefined;
+      const group = curso ? await findGroupByNameAndInstitution(colegioId, curso.toUpperCase().trim()) : null;
+      const groupFallback = group ?? await getFirstGroupForStudent(userId, colegioId);
+      if (groupFallback) gsList = await findGroupSubjectsByGroupWithDetails(groupFallback.id, colegioId);
+    } else if (user.role === 'profesor') {
+      gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    } else {
+      const groups = await findGroupsByInstitution(colegioId);
+      for (const g of groups) gsList.push(...(await findGroupSubjectsByGroupWithDetails(g.id, colegioId)));
+    }
+    const groupSubjectIds = gsList.length ? gsList.map((gs) => gs.id) : undefined;
+    const feed = await findAcademicFeedWithDetails(colegioId, { groupSubjectIds });
+
+    const total = feed.length;
+    const materiasDiferentes = new Set(feed.map((r) => r.group_subject_id).filter(Boolean)).size;
+    const ultimoMensaje = feed.find((r) => r.type === 'mensaje_academico') ?? feed[0] ?? null;
+    const urgente = ultimoMensaje
+      ? {
+          remitente: [ultimoMensaje.subject_name, ultimoMensaje.group_name].filter(Boolean).join(' - ') || 'Comunicación',
+          extracto: ultimoMensaje.title || ultimoMensaje.body || '',
+        }
+      : null;
+
+    return res.json({
+      academico: {
+        mensajesNuevos: total,
+        mensajesSinLeer: total,
+        materiasDiferentes,
+        urgente,
+      },
+      comunidad: {
+        mensajesNuevos: 0,
+        mensajesSinLeer: 0,
+        gruposDiferentes: 0,
+        urgente: null,
+      },
+    });
+  } catch (error: unknown) {
+    console.error('Error al obtener resumen de comunicación:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
 // GET /api/courses/group-subjects-options — opciones para "Enviar a" (profesor/directivo/asistente)
 router.get('/group-subjects-options', protect, requireRole('profesor', 'directivo', 'asistente', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
   try {

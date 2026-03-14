@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -346,6 +346,15 @@ export default function CourseDetailPage() {
 
     const firstSubjectId = subjectsForGroup[0]?._id;
 
+    // Query: threadId de Evo Send para este curso (atajo desde la tarjeta)
+    const { data: evoThreadIdData } = useQuery<{ threadId: string }>({
+        queryKey: ['evo-send-thread-id', firstSubjectId],
+        queryFn: () => apiRequest<{ threadId: string }>('GET', `/api/evo-send/thread-id-by-group-subject/${firstSubjectId}`),
+        enabled: isProfessor && !!firstSubjectId,
+        staleTime: 5 * 60 * 1000,
+    });
+    const evoSendThreadId = evoThreadIdData?.threadId;
+
     // Query 5: Notas del estudiante (para tarjetas Promedio / Última Nota / Estado y pestaña Notas)
     const { data: notesData } = useQuery<{ materias: MateriaConNotasStudent[]; total: number }>({
         queryKey: ['studentNotes', user?.id],
@@ -683,8 +692,8 @@ export default function CourseDetailPage() {
                     </p>
                 </div>
 
-                {/* 4 Tarjetas: Estudiantes, Tareas, Materiales, Asistencia */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 max-w-5xl mx-auto">
+                {/* 5 Tarjetas: Estudiantes, Tareas, Materiales, Asistencia, Evo Send */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8 max-w-6xl mx-auto">
                     {/* Carta 1: Estudiantes */}
                     <Card 
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
@@ -748,6 +757,32 @@ export default function CourseDetailPage() {
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Asistencia</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
                                 Registrar asistencia del grupo
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
+                    </Card>
+
+                    {/* Carta 5: Evo Send — atajo al chat del curso */}
+                    <Card 
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-emerald-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20"
+                        onClick={() => {
+                        try {
+                          sessionStorage.setItem('evo-send-return-path', `/course-detail/${cursoId}`);
+                        } catch {
+                          /* ignore */
+                        }
+                        const params = new URLSearchParams();
+                        if (evoSendThreadId) params.set('thread', evoSendThreadId);
+                        setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
+                      }}
+                    >
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-emerald-500 via-[#10B981] to-teal-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
+                                <Send className="w-10 h-10 text-white" />
+                            </div>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Send</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                Chat del curso, tipo WhatsApp
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="text-center pt-0" />

@@ -2,33 +2,61 @@ import { Briefcase, Users, AlertTriangle, ChevronRight, Send } from 'lucide-reac
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 import { NavBackButton } from '@/components/nav-back-button';
 import { useAuth } from '@/lib/authContext';
 
-const resumenAcademico = {
-  mensajesNuevos: 5,
-  mensajesSinLeer: 4,
-  materiasDiferentes: 3,
-  urgente: {
-    remitente: "Prof. Maria Lopez (Matematicas)",
-    extracto: "Urgente: La entrega del proyecto de la semana pasada tiene un error de calculo...",
-  },
+export interface ResumenUrgente {
+  remitente: string;
+  extracto: string;
+}
+
+export interface ResumenAcademicoData {
+  mensajesNuevos: number;
+  mensajesSinLeer: number;
+  materiasDiferentes: number;
+  urgente: ResumenUrgente | null;
+}
+
+export interface ResumenComunidadData {
+  mensajesNuevos: number;
+  mensajesSinLeer: number;
+  gruposDiferentes: number;
+  urgente: ResumenUrgente | null;
+}
+
+interface CommunicationSummaryResponse {
+  academico: ResumenAcademicoData;
+  comunidad: ResumenComunidadData;
+}
+
+const fetchCommunicationSummary = async (): Promise<CommunicationSummaryResponse> => {
+  const token = localStorage.getItem('autoclose_token') || localStorage.getItem('token');
+  const res = await fetch('/api/courses/communication-summary', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Error al cargar el resumen');
+  return res.json();
 };
 
-const resumenComunidad = {
-  mensajesNuevos: 12,
-  mensajesSinLeer: 7,
-  gruposDiferentes: 5,
-  urgente: {
-    remitente: "Comite de Estudiantes",
-    extracto: "Alerta: Reunion obligatoria para todos los delegados de grupo manana a las 10 AM...",
-  },
+const defaultResumenAcademico: ResumenAcademicoData = {
+  mensajesNuevos: 0,
+  mensajesSinLeer: 0,
+  materiasDiferentes: 0,
+  urgente: null,
+};
+
+const defaultResumenComunidad: ResumenComunidadData = {
+  mensajesNuevos: 0,
+  mensajesSinLeer: 0,
+  gruposDiferentes: 0,
+  urgente: null,
 };
 
 interface ResumenCardProps {
   title: string;
   icon: React.ReactElement;
-  data: any;
+  data: ResumenAcademicoData | ResumenComunidadData;
   type: 'academico' | 'comunidad';
   onClick?: () => void;
 }
@@ -63,17 +91,19 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onCl
           </p>
           <p className="text-base flex justify-between">
             <span>{isAcademico ? 'Materias Diferentes:' : 'Grupos Diferentes:'}</span>
-            <span className="text-xl font-bold text-white/90">{isAcademico ? data.materiasDiferentes : data.gruposDiferentes}</span>
+            <span className="text-xl font-bold text-white/90">{isAcademico ? (data as ResumenAcademicoData).materiasDiferentes : (data as ResumenComunidadData).gruposDiferentes}</span>
           </p>
         </div>
 
-        <div className="mt-8 p-4 bg-red-900/40 border border-red-700/50 rounded-lg">
-          <div className="flex items-center gap-2 text-red-400 font-semibold mb-2">
-            <AlertTriangle className="w-5 h-5" /> MENSAJE URGENTE
+        {data.urgente && (
+          <div className="mt-8 p-4 bg-red-900/40 border border-red-700/50 rounded-lg">
+            <div className="flex items-center gap-2 text-red-400 font-semibold mb-2">
+              <AlertTriangle className="w-5 h-5" /> MENSAJE URGENTE
+            </div>
+            <p className="text-sm text-white font-medium">{data.urgente.remitente}</p>
+            <p className="text-xs text-white/70 mt-1 italic truncate">{data.urgente.extracto}</p>
           </div>
-          <p className="text-sm text-white font-medium">{data.urgente.remitente}</p>
-          <p className="text-xs text-white/70 mt-1 italic truncate">{data.urgente.extracto}</p>
-        </div>
+        )}
       </CardContent>
 
       <Button 
@@ -117,6 +147,14 @@ const ComunicacionHome: React.FC = () => {
   const { user } = useAuth();
   const showEvoSend = user?.rol && EVO_SEND_ROLES.includes(user.rol);
 
+  const { data: summary, isLoading } = useQuery({
+    queryKey: ['communication-summary'],
+    queryFn: fetchCommunicationSummary,
+  });
+
+  const resumenAcademico = summary?.academico ?? defaultResumenAcademico;
+  const resumenComunidad = summary?.comunidad ?? defaultResumenComunidad;
+
   const handleAcademicoClick = () => {
     setLocation('/comunicacion/academico');
   };
@@ -137,27 +175,38 @@ const ComunicacionHome: React.FC = () => {
         <p className="text-lg text-white/70 mt-2">Selecciona tu area de interes para gestionar conversaciones academicas o comunitarias.</p>
       </div>
 
-      <div className={`grid grid-cols-1 gap-8 min-h-[60vh] ${showEvoSend ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-        <ResumenCard
-          title="Academico"
-          icon={<Briefcase />}
-          data={resumenAcademico}
-          type="academico"
-          onClick={handleAcademicoClick}
-        />
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-8 min-h-[60vh] lg:grid-cols-2">
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 animate-pulse">
+            <CardContent className="p-0 h-64 rounded bg-white/5" />
+          </Card>
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 animate-pulse">
+            <CardContent className="p-0 h-64 rounded bg-white/5" />
+          </Card>
+        </div>
+      ) : (
+        <div className={`grid grid-cols-1 gap-8 min-h-[60vh] ${showEvoSend ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+          <ResumenCard
+            title="Academico"
+            icon={<Briefcase />}
+            data={resumenAcademico}
+            type="academico"
+            onClick={handleAcademicoClick}
+          />
 
-        <ResumenCard
-          title="Comunidad"
-          icon={<Users />}
-          data={resumenComunidad}
-          type="comunidad"
-          onClick={handleComunidadClick}
-        />
+          <ResumenCard
+            title="Comunidad"
+            icon={<Users />}
+            data={resumenComunidad}
+            type="comunidad"
+            onClick={handleComunidadClick}
+          />
 
-        {showEvoSend && (
-          <EvoSendCard onClick={handleEvoSendClick} />
-        )}
-      </div>
+          {showEvoSend && (
+            <EvoSendCard onClick={handleEvoSendClick} />
+          )}
+        </div>
+      )}
     </div>
   );
 };

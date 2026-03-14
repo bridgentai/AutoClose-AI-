@@ -108,7 +108,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       { icon: BookOpen, label: "Academia", path: "/profesor/academia", roles: ["profesor"] },
       // Academia y acceso a módulo directivo en el panel (no solo Acceso Rápido)
       { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
-      { icon: Mail, label: "Comunicación", path: "/profesor/comunicacion", roles: ["profesor"] },
+      { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["profesor"] },
       { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
       // Otros roles
       { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },

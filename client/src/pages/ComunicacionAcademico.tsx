@@ -102,6 +102,7 @@ const ComunicacionAcademico: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['academic-feed'] });
+      queryClient.invalidateQueries({ queryKey: ['communication-summary'] });
       setShowCompose(false);
       setComposeTitle('');
       setComposeBody('');
