@@ -51,6 +51,14 @@ export default function CourseGradesInputPage() {
       ? cursoId
       : (cursoId || '').toUpperCase().trim();
 
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ['group', cursoId],
+    queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoId)}`),
+    enabled: !!cursoId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const groupDisplayName = (groupInfo?.nombre?.trim() || displayGroupId) as string;
+
   const { data: subjectsForGroup = [] } = useQuery<CourseSubject[]>({
     queryKey: ['subjectsForGroup', cursoId],
     queryFn: () => apiRequest('GET', `/api/courses/for-group/${cursoId}`),
@@ -130,7 +138,7 @@ export default function CourseGradesInputPage() {
               Entrada de calificaciones
             </CardTitle>
             <p className="text-white/70 text-sm">
-              Grupo {displayGroupId}
+              Grupo {groupDisplayName}
               {subjectName && ` · ${subjectName}`}
             </p>
           </CardHeader>

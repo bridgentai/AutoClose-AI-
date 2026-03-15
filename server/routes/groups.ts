@@ -6,15 +6,18 @@ import {
   findGroupsByInstitution,
   createGroup,
 } from '../repositories/groupRepository.js';
+import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 import {
   findSectionById,
   findSectionsByInstitution,
   findSectionByInstitutionAndName,
 } from '../repositories/sectionRepository.js';
+import { findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
 import {
   findEnrollmentsByGroup,
   findEnrollment,
   createEnrollment,
+  countEnrollmentsByGroupIds,
 } from '../repositories/enrollmentRepository.js';
 import { findUserById, findUsersByInstitution, updateUser } from '../repositories/userRepository.js';
 import { findGradesByGroup } from '../repositories/gradeRepository.js';
@@ -216,33 +219,50 @@ router.get('/all', protect, async (req: AuthRequest, res) => {
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
     const groups = await findGroupsByInstitution(colegioId);
-    res.json(groups.map((g) => ({ _id: g.id, id: g.id, nombre: g.name })));
+    const groupIds = groups.map((g) => g.id);
+    const counts = await countEnrollmentsByGroupIds(groupIds);
+    const result = await Promise.all(
+      groups.map(async (g) => {
+        const materias = await findGroupSubjectsByGroupWithDetails(g.id, colegioId);
+        return {
+          _id: g.id,
+          id: g.id,
+          nombre: g.name,
+          materias: materias.map((m) => ({
+            group_subject_id: m.id,
+            subject_id: m.subject_id,
+            subject_name: m.subject_name,
+            teacher_id: m.teacher_id,
+            teacher_name: m.teacher_name,
+          })),
+          cantidadEstudiantes: counts[g.id] ?? 0,
+        };
+      })
+    );
+    res.json(result);
   } catch (error: unknown) {
     console.error('Error al obtener grupos:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
 
-// GET /api/groups/:groupId/students
+// GET /api/groups/:groupId/students — grupoId puede ser UUID o nombre/legacy
 router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
   try {
-    const { groupId } = req.params;
+    const groupIdParam = decodeURIComponent(req.params.groupId ?? '');
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
 
-    const group = groupId.length === 36 && groupId.includes('-')
-      ? await findGroupById(groupId)
-      : await findGroupByNameAndInstitution(colegioId, groupId.toUpperCase().trim());
-    if (!group || group.institution_id !== colegioId) {
-      return res.status(404).json({ message: 'Grupo no encontrado.' });
-    }
+    const resolved = await resolveGroupId(groupIdParam, colegioId);
+    if (!resolved) return res.status(404).json({ message: 'Grupo no encontrado.' });
+    const group = { id: resolved.id, institution_id: colegioId };
 
-    const enrollments = await findEnrollmentsByGroup(group.id);
+    const enrollments = await findEnrollmentsByGroup(resolved.id);
     const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
     const allInstitution = await findUsersByInstitution(colegioId);
     const byId = new Map(allInstitution.filter((u) => studentIds.includes(u.id)).map((u) => [u.id, u]));
 
-    const grades = await findGradesByGroup(group.id);
+    const grades = await findGradesByGroup(resolved.id);
     const promediosPorEstudiante: Record<string, { suma: number; cantidad: number }> = {};
     grades.forEach((g) => {
       const uid = g.user_id;
@@ -271,22 +291,23 @@ router.get('/:groupId/students', protect, async (req: AuthRequest, res) => {
 // POST /api/groups/:groupId/sync-students
 router.post('/:groupId/sync-students', protect, async (req: AuthRequest, res) => {
   try {
-    const { groupId } = req.params;
+    const groupIdParam = decodeURIComponent(req.params.groupId ?? '');
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
-    const grupoIdNorm = groupId.toUpperCase().trim();
 
-    const group = await findGroupByNameAndInstitution(colegioId, grupoIdNorm);
-    if (!group) return res.status(404).json({ message: 'Grupo no encontrado.' });
+    const resolved = await resolveGroupId(groupIdParam, colegioId);
+    if (!resolved) return res.status(404).json({ message: 'Grupo no encontrado.' });
+    const group = { id: resolved.id, name: resolved.name, institution_id: colegioId };
 
     const allUsers = await findUsersByInstitution(colegioId);
+    const grupoIdNorm = resolved.name.toUpperCase();
     const estudiantesEnUser = allUsers.filter(
       (u) =>
         u.role === 'estudiante' &&
         ((u.config as { curso?: string })?.curso?.toUpperCase() === grupoIdNorm ||
-          (u.config as { curso?: string })?.curso === groupId)
+          (u.config as { curso?: string })?.curso === groupIdParam)
     );
-    const enrollments = await findEnrollmentsByGroup(group.id);
+    const enrollments = await findEnrollmentsByGroup(resolved.id);
     const idsExistentes = new Set(enrollments.map((e) => e.student_id));
     const period = await findActiveAcademicPeriodForInstitution(colegioId);
     let sincronizados = 0;
@@ -295,10 +316,10 @@ router.post('/:groupId/sync-students', protect, async (req: AuthRequest, res) =>
       try {
         await createEnrollment({
           student_id: u.id,
-          group_id: group.id,
+          group_id: resolved.id,
           academic_period_id: period?.id ?? null,
         });
-        await updateUser(u.id, { config: { ...u.config, curso: group.name } });
+        await updateUser(u.id, { config: { ...u.config, curso: resolved.name } });
         sincronizados++;
       } catch (_) {}
     }

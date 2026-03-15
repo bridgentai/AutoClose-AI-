@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
-import { findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 import { getFirstGroupNameForStudent } from '../repositories/enrollmentRepository.js';
 import {
   findGroupScheduleByGroup,
@@ -16,19 +16,19 @@ router.get('/my-group', protect, async (req: AuthRequest, res) => {
     if (req.user?.rol !== 'estudiante') {
       return res.status(403).json({ message: 'Solo estudiantes pueden consultar su horario.' });
     }
-    const colegioId = req.user?.colegioId;
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
     const userId = req.user?.id;
-    if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!institutionId || !userId) return res.status(401).json({ message: 'No autorizado.' });
 
     const grupoNombre = req.user?.curso ?? (await getFirstGroupNameForStudent(userId)) ?? '';
     if (!grupoNombre) return res.json({ grupoNombre: '', slots: {} });
 
-    const group = await findGroupByNameAndInstitution(colegioId, grupoNombre.toUpperCase().trim());
-    if (!group) return res.json({ grupoNombre, slots: {} });
+    const resolved = await resolveGroupId(grupoNombre, institutionId);
+    if (!resolved) return res.json({ grupoNombre, slots: {} });
 
-    const schedule = await findGroupScheduleByGroup(colegioId, group.id);
+    const schedule = await findGroupScheduleByGroup(institutionId, resolved.id);
     const slots = schedule?.slots ?? {};
-    return res.json({ grupoNombre: group.name, slots });
+    return res.json({ grupoNombre: resolved.name, slots });
   } catch (e: unknown) {
     console.error('Error GET schedule/my-group:', e);
     return res.status(500).json({ message: (e as Error).message || 'Error al cargar horario.' });
@@ -37,15 +37,15 @@ router.get('/my-group', protect, async (req: AuthRequest, res) => {
 
 router.get('/group/:grupoId', protect, async (req: AuthRequest, res) => {
   try {
-    const { grupoId } = req.params;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const grupoId = decodeURIComponent(req.params.grupoId ?? '');
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!institutionId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const group = await findGroupByNameAndInstitution(colegioId, grupoId.toUpperCase().trim());
-    if (!group) return res.json({ grupoId, slots: {} });
+    const resolved = await resolveGroupId(grupoId, institutionId);
+    if (!resolved) return res.json({ grupoId, slots: {} });
 
-    const schedule = await findGroupScheduleByGroup(colegioId, group.id);
-    return res.json({ grupoId: group.name, slots: schedule?.slots ?? {} });
+    const schedule = await findGroupScheduleByGroup(institutionId, resolved.id);
+    return res.json({ grupoId: resolved.name, slots: schedule?.slots ?? {} });
   } catch (e: unknown) {
     console.error('Error GET schedule/group:', e);
     return res.status(500).json({ message: (e as Error).message || 'Error al cargar horario.' });
@@ -54,16 +54,16 @@ router.get('/group/:grupoId', protect, async (req: AuthRequest, res) => {
 
 router.put('/group/:grupoId', protect, async (req: AuthRequest, res) => {
   try {
-    const { grupoId } = req.params;
+    const grupoId = decodeURIComponent(req.params.grupoId ?? '');
     const { slots } = req.body;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!institutionId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const group = await findGroupByNameAndInstitution(colegioId, grupoId.toUpperCase().trim());
-    if (!group) return res.status(404).json({ message: 'Grupo no encontrado.' });
+    const resolved = await resolveGroupId(grupoId, institutionId);
+    if (!resolved) return res.status(404).json({ message: 'Grupo no encontrado.' });
 
     const safeSlots = typeof slots === 'object' && slots !== null ? slots : {};
-    await upsertGroupSchedule(colegioId, group.id, safeSlots);
+    await upsertGroupSchedule(institutionId, resolved.id, safeSlots);
     return res.json({ success: true });
   } catch (e: unknown) {
     console.error('Error PUT schedule/group:', e);
@@ -74,11 +74,11 @@ router.put('/group/:grupoId', protect, async (req: AuthRequest, res) => {
 router.get('/my-professor', protect, async (req: AuthRequest, res) => {
   try {
     if (req.user?.rol !== 'profesor') return res.status(403).json({ message: 'Solo profesores pueden consultar su horario.' });
-    const colegioId = req.user?.colegioId;
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
     const userId = req.user?.id;
-    if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+    if (!institutionId || !userId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const schedule = await findProfessorScheduleByProfessor(colegioId, userId);
+    const schedule = await findProfessorScheduleByProfessor(institutionId, userId);
     return res.json({ slots: schedule?.slots ?? {} });
   } catch (e: unknown) {
     console.error('Error GET schedule/my-professor:', e);
@@ -88,15 +88,15 @@ router.get('/my-professor', protect, async (req: AuthRequest, res) => {
 
 router.get('/group-for-attendance/:grupoId', protect, async (req: AuthRequest, res) => {
   try {
-    const { grupoId } = req.params;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const grupoId = decodeURIComponent(req.params.grupoId ?? '');
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!institutionId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const group = await findGroupByNameAndInstitution(colegioId, grupoId.toUpperCase().trim());
-    if (!group) return res.json({ slots: {} });
+    const resolved = await resolveGroupId(grupoId, institutionId);
+    if (!resolved) return res.json({ slots: {} });
 
-    const schedule = await findGroupScheduleByGroup(colegioId, group.id);
-    return res.json({ slots: schedule?.slots ?? {} });
+    const schedule = await findGroupScheduleByGroup(institutionId, resolved.id);
+    return res.json({ grupoId: resolved.id, grupoNombre: resolved.name, slots: schedule?.slots ?? {} });
   } catch (e: unknown) {
     return res.json({ slots: {} });
   }
@@ -105,10 +105,10 @@ router.get('/group-for-attendance/:grupoId', protect, async (req: AuthRequest, r
 router.get('/professor/:profesorId', protect, async (req: AuthRequest, res) => {
   try {
     const { profesorId } = req.params;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!institutionId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const schedule = await findProfessorScheduleByProfessor(colegioId, profesorId);
+    const schedule = await findProfessorScheduleByProfessor(institutionId, profesorId);
     return res.json({ slots: schedule?.slots ?? {} });
   } catch (e: unknown) {
     return res.json({ slots: {} });
@@ -119,11 +119,11 @@ router.put('/professor/:profesorId', protect, async (req: AuthRequest, res) => {
   try {
     const { profesorId } = req.params;
     const { slots } = req.body;
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!institutionId) return res.status(401).json({ message: 'No autorizado.' });
 
     const safeSlots = typeof slots === 'object' && slots !== null ? slots : {};
-    await upsertProfessorSchedule(colegioId, profesorId, safeSlots);
+    await upsertProfessorSchedule(institutionId, profesorId, safeSlots);
     return res.json({ success: true });
   } catch (e: unknown) {
     return res.status(500).json({ message: (e as Error).message || 'Error al actualizar horario.' });

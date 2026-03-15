@@ -32,9 +32,11 @@ icono?: string;
 }
 
 // Interfaz para la vista de Profesor (Sus asignaciones de Grupos)
+// groupId = UUID del grupo real; groupName = nombre legible (10C, 11H); subjects[]._id = group_subject_id, subjects[].nombre = "Materia Grupo"
 interface ProfessorGroupAssignment {
-groupId: string; // El ID del grupo (ej. "10A")
-subjects: Course[]; // Las materias que imparte en ese grupo
+groupId: string;
+groupName?: string;
+subjects: Course[];
 totalStudents: number;
 }
 
@@ -86,11 +88,13 @@ const generateColorFromId = (id: string): string => {
   return colors[index];
 };
 
-// Función para obtener el nombre del grupo desde el grupoId
-const getGroupDisplayName = (groupId: string): string => {
-  // El backend ahora siempre devuelve el nombre del grupo, no ObjectIds
-  // Solo normalizamos a mayúsculas para consistencia
-  return groupId.toUpperCase().trim();
+// Nombre legible del grupo: usar groupName del backend si existe, sino fallback al id (evitar mostrar UUID)
+const getGroupDisplayName = (group: { groupId: string; groupName?: string }): string => {
+  const name = group.groupName?.trim();
+  if (name) return name.toUpperCase();
+  const id = group.groupId?.trim() ?? '';
+  if (id.length === 36 && id.includes('-')) return id; // UUID sin nombre → mostrar id (evitar confusión)
+  return id.toUpperCase();
 };
 
 // 🎯 FUNCIÓN DE FETCHING - MODIFICADA para reflejar la nueva lógica
@@ -237,7 +241,7 @@ Estos son los grupos (cursos) que el administrador del colegio te ha asignado. H
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
 {groups.map((group) => {
-const groupDisplayName = getGroupDisplayName(group.groupId);
+const groupDisplayName = getGroupDisplayName(group);
 const groupColor = groupColorsMap.get(group.groupId) || '#002366';
 
 return (

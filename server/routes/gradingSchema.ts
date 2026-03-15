@@ -1,32 +1,35 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
-import { findGradingSchemaById, findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
+import { findGradingSchemaById, findGradingSchemaByGroupSubject } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
 import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
+import { resolveGroupSubjectId } from '../utils/resolveLegacyCourse.js';
 import { queryPg } from '../config/db-pg.js';
 
 const router = express.Router();
 
-// courseId en body = group_subject_id en PG; creamos schema por group_id
+// courseId en body = group_subject_id (UUID) o nombre/legacy; creamos schema por group_id
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
     const { courseId, nombre } = req.body;
     const userId = req.user?.id;
-    const colegioId = req.user?.colegioId;
-    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!userId || !institutionId) return res.status(401).json({ message: 'No autorizado.' });
     if (!courseId) return res.status(400).json({ message: 'courseId es requerido.' });
 
-    const gs = await findGroupSubjectById(courseId);
+    const gsId = await resolveGroupSubjectId(String(courseId).trim(), institutionId);
+    if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const gs = await findGroupSubjectById(gsId);
     if (!gs || gs.teacher_id !== userId) {
       return res.status(403).json({ message: 'No tienes acceso a este curso.' });
     }
 
-    const existing = await findGradingSchemaByGroup(gs.group_id, gs.institution_id);
+    const existing = await findGradingSchemaByGroupSubject(gsId, gs.institution_id);
     if (existing) return res.status(200).json({ id: existing.id, group_id: existing.group_id, name: existing.name, version: existing.version, is_active: existing.is_active });
 
     const r = await queryPg(
-      'INSERT INTO grading_schemas (group_id, institution_id, name, version, is_active) VALUES ($1, $2, $3, 1, true) RETURNING *',
-      [gs.group_id, gs.institution_id, nombre ?? null]
+      'INSERT INTO grading_schemas (group_id, group_subject_id, institution_id, name, version, is_active) VALUES ($1, $2, $3, $4, 1, true) RETURNING *',
+      [gs.group_id, gsId, gs.institution_id, nombre ?? null]
     );
     const row = r.rows[0];
     return res.status(201).json(row);

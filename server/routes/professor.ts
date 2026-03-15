@@ -118,25 +118,25 @@ router.get('/my-groups', protect, async (req: AuthRequest, res) => {
     const colegioId = req.user?.colegioId;
     if (!profesorId) return res.status(401).json({ message: 'No autorizado.' });
     const gsList = await findGroupSubjectsByTeacherWithDetails(profesorId, colegioId ?? undefined);
-    const groupMap = new Map<string, { subjects: { _id: string; nombre: string; descripcion: string | null; colorAcento: string; icono: string }[]; studentIds: Set<string> }>();
+    const groupMap = new Map<string, { groupName: string; subjects: { _id: string; nombre: string; groupName: string; descripcion: string | null; colorAcento: string; icono: string }[]; studentIds: Set<string> }>();
     for (const gs of gsList) {
-      const groupName = gs.group_name;
-      if (!groupMap.has(groupName)) groupMap.set(groupName, { subjects: [], studentIds: new Set() });
-      const entry = groupMap.get(groupName)!;
-      if (!entry.subjects.some((s) => s._id === gs.subject_id)) {
-        entry.subjects.push({
-          _id: gs.subject_id,
-          nombre: gs.subject_name,
-          descripcion: gs.subject_description,
-          colorAcento: '',
-          icono: '',
-        });
-      }
+      const gid = gs.group_id;
+      if (!groupMap.has(gid)) groupMap.set(gid, { groupName: gs.group_name ?? '', subjects: [], studentIds: new Set() });
+      const entry = groupMap.get(gid)!;
+      entry.subjects.push({
+        _id: gs.id,
+        nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || gs.subject_name || '',
+        groupName: gs.group_name ?? '',
+        descripcion: gs.subject_description,
+        colorAcento: '',
+        icono: '',
+      });
       const enrollments = await findEnrollmentsByGroup(gs.group_id);
       enrollments.forEach((e) => entry.studentIds.add(e.student_id));
     }
     const result = Array.from(groupMap.entries()).map(([groupId, data]) => ({
       groupId,
+      groupName: data.groupName,
       subjects: data.subjects,
       totalStudents: data.studentIds.size,
     }));

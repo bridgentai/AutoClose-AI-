@@ -41,6 +41,14 @@ export default function CourseStudentsPage() {
     ? cursoId
     : (cursoId || '').toUpperCase().trim();
 
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ['group', cursoId],
+    queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoId)}`),
+    enabled: !!cursoId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const groupDisplayName = (groupInfo?.nombre?.trim() || displayGroupId) as string;
+
   const { data: students = [], isLoading } = useQuery<Student[]>({
     queryKey: ['students', cursoId],
     queryFn: () => fetchStudentsByGroup(cursoId),
@@ -59,11 +67,11 @@ export default function CourseStudentsPage() {
 
   return (
     <div className="p-6">
-      <NavBackButton to={`/course-detail/${cursoId}`} label={`Grupo ${displayGroupId}`} />
+      <NavBackButton to={`/course-detail/${cursoId}`} label={`Grupo ${groupDisplayName}`} />
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white font-['Poppins'] mt-4 flex items-center gap-2">
           <Users className="w-7 h-7 text-[#00c8ff]" />
-          Estudiantes del Grupo {displayGroupId}
+          Estudiantes del Grupo {groupDisplayName}
         </h1>
         <p className="text-white/60">Lista completa de estudiantes del curso</p>
       </div>

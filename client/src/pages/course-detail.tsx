@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3 } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -268,6 +268,15 @@ export default function CourseDetailPage() {
     const isPadre = userRole === 'padre';
     const isStudentOrParent = userRole === 'estudiante' || userRole === 'padre';
 
+    // Nombre legible del grupo (cuando la URL usa UUID, se obtiene del API)
+    const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+        queryKey: ['group', cursoId],
+        queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoId)}`),
+        enabled: isProfessor && !!cursoId,
+        staleTime: 5 * 60 * 1000,
+    });
+    const groupDisplayName = (groupInfo?.nombre?.trim() || displayGroupId) as string;
+
     const [, setLocation] = useLocation();
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -346,11 +355,14 @@ export default function CourseDetailPage() {
 
     const firstSubjectId = subjectsForGroup[0]?._id;
 
-    // Query: threadId de Evo Send para este curso (atajo desde la tarjeta)
+    // groupSubjectId para Evo Send: profesor = primera materia del grupo; estudiante = cursoId (materia actual)
+    const evoSendGroupSubjectId = isProfessor ? firstSubjectId : (isStudent ? cursoId : null);
+
+    // Query: threadId de Evo Send para este curso (atajo desde la tarjeta — profesor y estudiante)
     const { data: evoThreadIdData } = useQuery<{ threadId: string }>({
-        queryKey: ['evo-send-thread-id', firstSubjectId],
-        queryFn: () => apiRequest<{ threadId: string }>('GET', `/api/evo-send/thread-id-by-group-subject/${firstSubjectId}`),
-        enabled: isProfessor && !!firstSubjectId,
+        queryKey: ['evo-send-thread-id', evoSendGroupSubjectId],
+        queryFn: () => apiRequest<{ threadId: string }>('GET', `/api/evo-send/thread-id-by-group-subject/${evoSendGroupSubjectId}`),
+        enabled: !!evoSendGroupSubjectId,
         staleTime: 5 * 60 * 1000,
     });
     const evoSendThreadId = evoThreadIdData?.threadId;
@@ -685,15 +697,15 @@ export default function CourseDetailPage() {
                 <div className="mb-8">
                     <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
                     <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 font-['Poppins'] break-words">
-                        Gestión del Grupo {displayGroupId}
+                        Gestión del Grupo {groupDisplayName}
                     </h2>
                     <p className="text-white/60 text-sm sm:text-base">
                         Gestiona estudiantes, notas, tareas y calendario del grupo
                     </p>
                 </div>
 
-                {/* 5 Tarjetas: Estudiantes, Tareas, Materiales, Asistencia, Evo Send */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8 max-w-6xl mx-auto">
+                {/* 6 Tarjetas: Estudiantes, Tareas, Materiales, Asistencia, Evo Send, Notas */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 max-w-6xl mx-auto">
                     {/* Carta 1: Estudiantes */}
                     <Card 
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
@@ -787,223 +799,28 @@ export default function CourseDetailPage() {
                         </CardHeader>
                         <CardContent className="text-center pt-0" />
                     </Card>
+
+                    {/* Carta 6: Notas — tabla de calificaciones del grupo */}
+                    <Card 
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20"
+                        onClick={() => setLocation(`/course/${cursoId}/grades`)}
+                    >
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#3B82F6] via-[#2563EB] to-[#1D4ED8] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#3B82F6]/30">
+                                <Award className="w-10 h-10 text-white" />
+                            </div>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Notas</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                Ver y editar tabla de calificaciones
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
+                    </Card>
                 </div>
 
-                {/* Tabla General de Notas — integrada al fondo, glass sutil, sin corte */}
-                {firstSubjectId && (
-                    <section
-                        className="mb-8 rounded-[16px] overflow-hidden"
-                        style={{
-                            background: 'rgba(255,255,255,0.02)',
-                            backdropFilter: 'blur(12px)',
-                            WebkitBackdropFilter: 'blur(12px)',
-                            border: '1px solid rgba(255,255,255,0.06)',
-                        }}
-                    >
-                        {/* Header fluido: mismo fondo, sin bloque separado */}
-                        <div className="px-6 pt-6 pb-4">
-                            <div className="flex flex-wrap items-start justify-between gap-4">
-                                <div>
-                                    <h3 className="text-[#E2E8F0] font-semibold flex items-center gap-2 text-lg mb-1">
-                                        <Award className="w-5 h-5 text-[#3B82F6]" />
-                                        Tabla General de Notas
-                                    </h3>
-                                    <p className="text-white/60 text-sm">
-                                        Las columnas se actualizan al crear asignaciones. Las notas se sincronizan al calificar entregas (Escala: 10-100) — Grupo {displayGroupId}
-                                        {subjects.length > 0 && ` · ${subjects[0].nombre}`}
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <Button
-                                        size="sm"
-                                        className="rounded-[10px] bg-[#3B82F6] hover:bg-[#2563EB] text-white border-0"
-                                        onClick={() => setShowAssignmentForm(true)}
-                                    >
-                                        <Plus className="w-4 h-4 mr-2" />
-                                        Asignar Nueva Asignación
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-[10px] border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30"
-                                        onClick={() => setLocation(`/course/${cursoId}/grades`)}
-                                    >
-                                        <Maximize2 className="w-4 h-4 mr-2" />
-                                        Ver Tabla Completa
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="rounded-[10px] border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30"
-                                        onClick={() => setLocation('/materials')}
-                                    >
-                                        <FileText className="w-4 h-4 mr-2" />
-                                        Materiales
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="px-4 pb-6 pt-0">
-                            {isLoadingStudents || isLoadingGradeTable || isLoadingLogrosForTable ? (
-                                <div className="space-y-2 py-4">
-                                    <Skeleton className="h-12 w-full rounded-xl bg-white/10" />
-                                    <Skeleton className="h-12 w-full rounded-xl bg-white/10" />
-                                    <Skeleton className="h-12 w-full rounded-xl bg-white/10" />
-                                </div>
-                            ) : students.length > 0 ? (
-                                <div
-                                    className="overflow-x-auto rounded-[16px] relative"
-                                    style={{
-                                        maskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
-                                        WebkitMaskImage: 'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
-                                    }}
-                                >
-                                    <div className="inline-block min-w-full align-middle py-2" style={{ minWidth: '800px' }}>
-                                        <table className="min-w-full border-collapse">
-                                            <thead>
-                                                {Object.keys(assignmentsByLogro).length > 0 ? (
-                                                    <>
-                                                        <tr
-                                                            className="sticky top-0 z-10 border-b border-white/[0.08]"
-                                                            style={{ background: 'rgba(255,255,255,0.04)' }}
-                                                        >
-                                                            <th rowSpan={2} className="sticky left-0 z-20 px-3 py-3 text-left text-xs font-semibold text-white/90 uppercase tracking-wider min-w-[180px] max-w-[180px]" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                                                                <div className="flex items-center gap-2">
-                                                                    <User className="w-4 h-4 text-white/80" />
-                                                                    <span>Estudiante</span>
-                                                                </div>
-                                                            </th>
-                                                            {Object.values(assignmentsByLogro).map((grupo) => {
-                                                                const colSpan = grupo.assignments.length > 0 ? grupo.assignments.length : 1;
-                                                                const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                                return (
-                                                                    <th
-                                                                        key={grupo.logro._id}
-                                                                        colSpan={colSpan}
-                                                                        className={`px-2 py-3 text-center text-xs font-semibold text-white/90 uppercase tracking-wider border-r border-white/[0.06] ${isSinCategoria ? 'text-amber-400/90' : ''}`}
-                                                                    >
-                                                                        <span>{grupo.logro.nombre.toUpperCase()}</span>
-                                                                        {grupo.logro.porcentaje > 0 && (
-                                                                            <span className="block text-[10px] text-white/60 font-normal mt-0.5">{grupo.logro.porcentaje}%</span>
-                                                                        )}
-                                                                    </th>
-                                                                );
-                                                            })}
-                                                            <th rowSpan={2} className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase tracking-wider min-w-[80px] max-w-[80px] border-l border-white/[0.06]">
-                                                                Promedio
-                                                            </th>
-                                                            <th rowSpan={2} className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase tracking-wider min-w-[80px] max-w-[80px] border-l border-white/[0.06]">
-                                                                Predicción
-                                                            </th>
-                                                        </tr>
-                                                        <tr className="border-b border-white/[0.08]" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                                                            {Object.values(assignmentsByLogro).flatMap((grupo, grupoIdx) =>
-                                                                grupo.assignments.length > 0
-                                                                    ? grupo.assignments.map((assignment) => (
-                                                                        <th
-                                                                            key={assignment._id}
-                                                                            className="px-2 py-2 text-center text-[10px] font-medium text-white/70 uppercase tracking-wider border-r border-white/[0.06] min-w-[100px] max-w-[120px]"
-                                                                        >
-                                                                            <span className="truncate block w-full text-[9px] leading-tight">{assignment.titulo}</span>
-                                                                        </th>
-                                                                    ))
-                                                                    : [(
-                                                                        <th key={`empty-${grupo.logro._id}`} className="px-2 py-2 text-center text-[10px] text-white/50 border-r border-white/[0.06] min-w-[100px]">—</th>
-                                                                    )]
-                                                            )}
-                                                        </tr>
-                                                    </>
-                                                ) : (
-                                                    <tr className="sticky top-0 z-10 border-b border-white/[0.08]" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                                                        <th className="sticky left-0 z-20 px-3 py-3 text-left text-xs font-semibold text-white/90 uppercase min-w-[180px]" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                                                            <div className="flex items-center gap-2"><User className="w-4 h-4 text-white/80" /><span>Estudiante</span></div>
-                                                        </th>
-                                                        <th className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase min-w-[80px]">Promedio</th>
-                                                        <th className="px-3 py-3 text-center text-xs font-semibold text-white/90 uppercase min-w-[80px]">Predicción</th>
-                                                    </tr>
-                                                )}
-                                            </thead>
-                                            <tbody>
-                                                {students.map((student) => {
-                                                    const promedio = getPromedioForTablaGeneral(student._id);
-                                                    const prediccion = typeof promedio === 'number' ? (promedio / 100 * 5).toFixed(1) : '—';
-                                                    return (
-                                                        <tr key={student._id} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors duration-200">
-                                                            <td
-                                                                className="sticky left-0 z-10 px-3 py-2.5 min-w-[180px] max-w-[180px] cursor-pointer group"
-                                                                style={{ background: 'inherit' }}
-                                                                onClick={() => isProfessor && setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}/notas`)}
-                                                            >
-                                                                <div className="flex items-center gap-2">
-                                                                    <Avatar className="w-7 h-7 flex-shrink-0">
-                                                                        <AvatarFallback className="bg-gradient-to-r from-[#3B82F6] to-[#1D4ED8] text-white text-[10px] font-semibold">
-                                                                            {student.nombre.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
-                                                                        </AvatarFallback>
-                                                                    </Avatar>
-                                                                    <div className="min-w-0 flex-1">
-                                                                        <div className={`font-medium text-xs truncate ${isProfessor ? 'text-[#E2E8F0] group-hover:text-[#3B82F6] transition-colors' : 'text-[#E2E8F0]'}`}>{student.nombre}</div>
-                                                                        {student.email && <div className="text-[9px] text-white/50 truncate">{student.email}</div>}
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            {Object.keys(assignmentsByLogro).length > 0 && Object.values(assignmentsByLogro).flatMap((grupo) =>
-                                                                grupo.assignments.length > 0
-                                                                    ? grupo.assignments.map((assignment) => {
-                                                                        const subsA = assignment.submissions || assignment.entregas || [];
-                                                                        const sub = subsA.find((x: { estudianteId?: { toString?: () => string } }) =>
-                                                                            x.estudianteId?.toString?.() === student._id || x.estudianteId === student._id
-                                                                        );
-                                                                        const cal = (sub as { calificacion?: number })?.calificacion;
-                                                                        const displayValue = cal != null && !isNaN(cal) ? cal : '—';
-                                                                        const isSinCategoria = grupo.logro._id === 'sin-logro';
-                                                                        return (
-                                                                            <td key={assignment._id} className="px-2 py-2 align-middle">
-                                                                                <PreviewEditableNoteCell
-                                                                                    value={displayValue}
-                                                                                    isSinCategoria={!!isSinCategoria}
-                                                                                    onSave={(calif) => isProfessor && updateGradeMutation.mutate({ assignmentId: assignment._id, estudianteId: student._id, calificacion: calif })}
-                                                                                />
-                                                                            </td>
-                                                                        );
-                                                                    })
-                                                                    : [(
-                                                                        <td key={`empty-${grupo.logro._id}-${student._id}`} className="px-2 py-2 text-center text-xs text-white/40">—</td>
-                                                                    )]
-                                                            )}
-                                                            <td className="px-3 py-2.5 text-center min-w-[80px]">
-                                                                <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 inline-block">
-                                                                    <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>
-                                                                        {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
-                                                                    </span>
-                                                                    {promedio !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-center min-w-[80px]">
-                                                                <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 inline-block">
-                                                                    <span className={`text-sm font-semibold ${prediccion === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>{prediccion}</span>
-                                                                    {prediccion !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 5</span>}
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-12">
-                                    <Award className="w-14 h-14 text-white/20 mx-auto mb-3" />
-                                    <p className="text-white/50 text-sm">No hay estudiantes para mostrar notas</p>
-                                    <p className="text-white/40 text-xs mt-1">Asigna estudiantes al grupo para ver la tabla</p>
-                                </div>
-                            )}
-                        </div>
-                    </section>
-                )}
 
                 {/* Calendario */}
-                {renderCalendarAndAssignmentList(assignments, `Grupo ${displayGroupId}`)}
+                {renderCalendarAndAssignmentList(assignments, `Grupo ${groupDisplayName}`)}
 
                 {/* Botones de acción y Formulario para asignar asignación (Movido debajo del calendario) */}
                 <div className="flex gap-4 mb-8 mt-8">
@@ -1200,7 +1017,7 @@ export default function CourseDetailPage() {
                         <DialogHeader>
                             <DialogTitle className="text-white flex items-center gap-2">
                                 <Users className="w-5 h-5 text-[#1e3cff]" />
-                                Estudiantes del Grupo {displayGroupId}
+                                Estudiantes del Grupo {groupDisplayName}
                             </DialogTitle>
                             <DialogDescription className="text-white/60">
                                 {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} conectados a este grupo
@@ -1500,13 +1317,23 @@ export default function CourseDetailPage() {
                                     <Award className="w-4 h-4 mr-2" />
                                     Ver Notas
                                 </Button>
+                                {isStudent && (
+                                    <Button
+                                        variant="outline"
+                                        className="border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10 hover:border-[#3B82F6] backdrop-blur-sm transition-all duration-200"
+                                        onClick={() => setLocation(`/course/${cursoId}/analytics`)}
+                                    >
+                                        <BarChart3 className="w-4 h-4 mr-2" />
+                                        Vista analítica
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Resumen General: mismo estilo que tarjetas vista profesor (glass, hover, iconos animados) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 max-w-5xl mx-auto">
+                {/* Resumen General: mismo estilo que tarjetas vista profesor (glass, hover, iconos animados) + Evo Send */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 max-w-6xl mx-auto">
                     <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20">
                         <CardContent className="p-6 text-center">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#1e3cff] via-[#002366] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#1e3cff]/30">
@@ -1565,6 +1392,30 @@ export default function CourseDetailPage() {
                             ) : (
                                 <p className="text-white/60 text-sm">Sin tareas pendientes</p>
                             )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Tarjeta Evo Send: atajo al chat del grupo de la materia */}
+                    <Card
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-emerald-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20"
+                        onClick={() => {
+                            try {
+                                sessionStorage.setItem('evo-send-return-path', `/course/${cursoId}`);
+                            } catch {
+                                /* ignore */
+                            }
+                            const params = new URLSearchParams();
+                            if (evoSendThreadId) params.set('thread', evoSendThreadId);
+                            setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
+                        }}
+                    >
+                        <CardContent className="p-6 text-center">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-emerald-500 via-[#10B981] to-teal-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
+                                <Send className="w-10 h-10 text-white" />
+                            </div>
+                            <p className="text-white/70 text-sm mb-1">Evo Send</p>
+                            <p className="text-lg font-semibold text-[#E2E8F0]">Chat del curso</p>
+                            <p className="text-white/50 text-xs mt-1">Comunicación en tiempo real</p>
                         </CardContent>
                     </Card>
                 </div>

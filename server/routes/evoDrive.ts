@@ -3,7 +3,8 @@ import { google } from 'googleapis';
 import { protect, restrictTo, AuthRequest } from '../middleware/authMiddleware.js';
 import { ENV } from '../config/env.js';
 import { findUserById } from '../repositories/userRepository.js';
-import { findGroupById, findGroupsByInstitution } from '../repositories/groupRepository.js';
+import { findGroupsByInstitution } from '../repositories/groupRepository.js';
+import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 import { getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
 import { findGroupSubjectsByTeacherWithDetails } from '../repositories/groupSubjectRepository.js';
 import { queryPg } from '../config/db-pg.js';
@@ -203,31 +204,30 @@ router.get('/groups', protect, async (req: AuthRequest, res) => {
   return res.json(groups.map((g) => ({ id: g.id, name: g.name })));
 });
 
-// GET /api/evo-drive/files?cursoId= — archivos del curso (cursoId = group id). Estudiante: solo si está inscrito en ese curso.
+// GET /api/evo-drive/files?cursoId= — archivos del curso (cursoId = group id o nombre/legacy). Estudiante: solo si está inscrito en ese curso.
 router.get('/files', protect, async (req: AuthRequest, res) => {
   const colegioId = req.user?.colegioId;
   const userId = req.user?.id;
   const rol = req.user?.rol;
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
-  const cursoId = req.query.cursoId as string | undefined;
-  if (!cursoId) return res.status(400).json({ message: 'cursoId es requerido.' });
-  const group = await findGroupById(cursoId);
-  if (!group || group.institution_id !== colegioId) {
-    return res.status(404).json({ message: 'Curso no encontrado.' });
-  }
+  const cursoIdParam = req.query.cursoId as string | undefined;
+  if (!cursoIdParam) return res.status(400).json({ message: 'cursoId es requerido.' });
+  const resolved = await resolveGroupId(cursoIdParam.trim(), colegioId);
+  if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
+  const groupId = resolved.id;
   if (rol === 'estudiante') {
     const myGroups = await getAllCourseGroupsForStudent(userId, colegioId);
-    const canAccess = myGroups.some((g) => g.id === cursoId);
+    const canAccess = myGroups.some((g) => g.id === groupId);
     if (!canAccess) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
   }
   if (rol === 'profesor') {
     const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
-    const teachesCourse = gsList.some((gs) => gs.group_id === cursoId);
+    const teachesCourse = gsList.some((gs) => gs.group_id === groupId);
     if (!teachesCourse) {
       return res.status(403).json({ message: 'Solo puedes ver archivos de las materias que dictas.' });
     }
   }
-  const rows = await getEvoFiles(colegioId, cursoId, userId, rol ?? '');
+  const rows = await getEvoFiles(colegioId, groupId, userId, rol ?? '');
   return res.json(rows.map(toEvoFileApi));
 });
 
@@ -261,13 +261,12 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
   } = req.body;
   if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
   if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
-  const group = await findGroupById(cursoId);
-  if (!group || group.institution_id !== colegioId) {
-    return res.status(404).json({ message: 'Curso no encontrado.' });
-  }
+  const resolved = await resolveGroupId(String(cursoId).trim(), colegioId);
+  if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
+  const groupId = resolved.id;
   if (req.user?.rol === 'profesor') {
     const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
-    const teachesCourse = gsList.some((gs) => gs.group_id === cursoId);
+    const teachesCourse = gsList.some((gs) => gs.group_id === groupId);
     if (!teachesCourse) {
       return res.status(403).json({ message: 'Solo puedes subir archivos a las materias que dictas.' });
     }
@@ -278,8 +277,8 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
     tipo: tipo ?? 'file',
     origen: origen ?? 'material',
     mime_type: mimeType,
-    group_id: cursoId,
-    curso_nombre: cursoNombre ?? group.name,
+    group_id: groupId,
+    curso_nombre: cursoNombre ?? resolved.name,
     propietario_id: userId,
     propietario_nombre: propietarioNombre,
     propietario_rol: req.user?.rol ?? 'profesor',

@@ -36,7 +36,7 @@ export default function RegistroAsistenciaPage() {
 
   const search = typeof window !== "undefined" ? window.location.search : "";
   const searchParams = new URLSearchParams(search);
-  const courseId = searchParams.get("courseId") || "";
+  const courseIdFromQuery = searchParams.get("courseId") || "";
   const fechaParam = searchParams.get("fecha") || new Date().toISOString().slice(0, 10);
   const horaParam = searchParams.get("hora") || "7:00";
   const materiaNombre = searchParams.get("materia") || "Clase";
@@ -44,19 +44,21 @@ export default function RegistroAsistenciaPage() {
   const grupoDisplay = grupoId.toUpperCase().trim();
   const titulo = `Registro de Asistencia – ${grupoDisplay} ${materiaNombre} – ${horaParam}`;
 
+  const courseId = courseIdFromQuery || grupoId;
+
   const [registros, setRegistros] = useState<Record<string, { puntualidad: Puntualidad; presencia: Presencia }>>({});
 
   const { data: students = [], isLoading: loadingStudents } = useQuery<Student[]>({
     queryKey: ["/api/attendance/curso", courseId, "estudiantes"],
     queryFn: () =>
-      apiRequest("GET", `/api/attendance/curso/${courseId}/estudiantes`),
+      apiRequest("GET", `/api/attendance/curso/${encodeURIComponent(courseId)}/estudiantes`),
     enabled: !!courseId,
   });
 
   const { data: existingAttendance = [] } = useQuery<AttendanceRecord[]>({
     queryKey: ["/api/attendance/curso", courseId, "fecha", fechaParam],
     queryFn: () =>
-      apiRequest("GET", `/api/attendance/curso/${courseId}/fecha/${fechaParam}`),
+      apiRequest("GET", `/api/attendance/curso/${encodeURIComponent(courseId)}/fecha/${fechaParam}`),
     enabled: !!courseId && !!fechaParam,
   });
 

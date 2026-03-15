@@ -5,7 +5,7 @@ import { findGroupSubjectsByGroup, findGroupSubjectsByGroupWithDetails, findGrou
 import { findSubjectById } from '../repositories/subjectRepository.js';
 import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
 import { getFirstGroupNameForStudent, getAllCourseGroupsForStudent, findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
-import { findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { findGroupById, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
 import { findGradesByUserAndGroup } from '../repositories/gradeRepository.js';
 import { findAssignmentById } from '../repositories/assignmentRepository.js';
 
@@ -27,8 +27,8 @@ router.get('/subjects', protect, async (req: AuthRequest, res) => {
       courseGroups.map((g) => findGroupSubjectsByGroupWithDetails(g.id, colegioId ?? undefined))
     );
     const subjects = allGsList.flat().map((gs) => ({
-      _id: gs.subject_id,
-      nombre: gs.subject_name,
+      _id: gs.id,
+      nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || gs.subject_name || '',
       descripcion: gs.subject_description ?? '',
       profesores: [{ _id: gs.teacher_id, nombre: gs.teacher_name, email: gs.teacher_email }],
       colorAcento: '',
@@ -119,10 +119,12 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
         const assignment = await findAssignmentById(g.assignment_id);
         const gs = assignment ? await findGroupSubjectById(assignment.group_subject_id) : null;
         const subject = gs ? await findSubjectById(gs.subject_id) : null;
+        const group = gs ? await findGroupById(gs.group_id) : null;
         return {
           _id: g.id,
           subjectId: subject?.id ?? g.assignment_id,
           subjectName: subject?.name ?? 'Sin materia',
+          groupName: group?.name ?? '',
           gsId: gs?.id ?? null,
           assignmentCategoryId: assignment?.assignment_category_id ?? null,
           tareaId: { _id: assignment?.id, titulo: assignment?.title, fechaEntrega: assignment?.due_date },
@@ -132,25 +134,26 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
         };
       })
     );
-    const bySubject = new Map<string, { _id: string; nombre: string; groupSubjectId: string | null; notas: typeof notesWithSubject; sum: number; count: number }>();
+    const byCourse = new Map<string, { _id: string; nombre: string; groupSubjectId: string; notas: typeof notesWithSubject; sum: number; count: number }>();
     for (const n of notesWithSubject) {
-      const sid = n.subjectId;
-      if (!bySubject.has(sid)) bySubject.set(sid, { _id: sid, nombre: n.subjectName, groupSubjectId: null, notas: [], sum: 0, count: 0 });
-      const row = bySubject.get(sid)!;
+      const gsId = n.gsId ?? n.subjectId;
+      if (!gsId) continue;
+      const key = gsId;
+      const displayName = ([n.subjectName, n.groupName].filter(Boolean).join(' ').trim() || n.subjectName) ?? 'Sin materia';
+      if (!byCourse.has(key)) byCourse.set(key, { _id: gsId, nombre: displayName, groupSubjectId: gsId, notas: [], sum: 0, count: 0 });
+      const row = byCourse.get(key)!;
       row.notas.push(n);
-      if (n.gsId && !row.groupSubjectId) row.groupSubjectId = n.gsId;
       row.sum += n.nota;
       row.count += 1;
     }
-    const materias = Array.from(bySubject.values()).map((row) => {
+    const materias = Array.from(byCourse.values()).map((row) => {
       const promedio = row.count > 0 ? Math.round((row.sum / row.count) * 10) / 10 : 0;
       const ultimaNota = row.notas.length ? row.notas.reduce((a, b) => (new Date(b.fecha) > new Date(a.fecha) ? b : a)).nota : null;
       const estado = promedio >= 65 ? 'aprobado' : 'reprobado';
-      const groupSubjectId = row.groupSubjectId ?? row.notas[0]?.gsId ?? null;
       return {
         _id: row._id,
         nombre: row.nombre,
-        groupSubjectId,
+        groupSubjectId: row.groupSubjectId,
         promedio,
         ultimaNota,
         estado,
@@ -309,6 +312,41 @@ router.get('/hijo/:estudianteId/profile', protect, async (req: AuthRequest, res)
   }
 });
 
+// GET /api/student/hijo/:estudianteId/courses - Todas las materias del hijo (para padre)
+router.get('/hijo/:estudianteId/courses', protect, async (req: AuthRequest, res) => {
+  try {
+    const { estudianteId: paramId } = req.params;
+    const userId = req.user?.id;
+    const rol = req.user?.rol;
+    const estudiante = await findUserById(paramId);
+    if (!estudiante || estudiante.role !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    let allowed = rol === 'directivo' || rol === 'admin-general-colegio';
+    if (!allowed && rol === 'padre') allowed = !!(await findGuardianStudent(userId!, paramId));
+    if (!allowed) return res.status(403).json({ message: 'No autorizado a ver los cursos de este estudiante.' });
+    const courseGroups = await getAllCourseGroupsForStudent(paramId, estudiante.institution_id);
+    if (!courseGroups.length) return res.status(200).json([]);
+    const courses: Array<{ _id: string; nombre: string; descripcion: string; colorAcento: string; icono: string; profesorIds: Array<{ _id: string; nombre: string; email: string }>; cursos: string[] }> = [];
+    for (const g of courseGroups) {
+      const details = await findGroupSubjectsByGroupWithDetails(g.id, estudiante.institution_id ?? undefined);
+      for (const gs of details) {
+        courses.push({
+          _id: gs.id,
+          nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || gs.subject_name || '',
+          descripcion: gs.subject_description ?? '',
+          colorAcento: '',
+          icono: '',
+          profesorIds: [{ _id: gs.teacher_id, nombre: gs.teacher_name, email: gs.teacher_email }],
+          cursos: [g.name],
+        });
+      }
+    }
+    return res.status(200).json(courses);
+  } catch (error: unknown) {
+    console.error('Error al obtener cursos del hijo:', (error as Error).message);
+    res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
 // GET /api/student/hijo/:estudianteId/notes
 router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) => {
   try {
@@ -330,10 +368,12 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
         const assignment = await findAssignmentById(g.assignment_id);
         const gs = assignment ? await findGroupSubjectById(assignment.group_subject_id) : null;
         const subject = gs ? await findSubjectById(gs.subject_id) : null;
+        const group = gs ? await findGroupById(gs.group_id) : null;
         return {
           _id: g.id,
           subjectId: subject?.id ?? g.assignment_id,
           subjectName: subject?.name ?? 'Sin materia',
+          groupName: group?.name ?? '',
           gsId: gs?.id ?? null,
           assignmentCategoryId: assignment?.assignment_category_id ?? null,
           tareaId: { _id: assignment?.id, titulo: assignment?.title, fechaEntrega: assignment?.due_date },
@@ -343,25 +383,26 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
         };
       })
     );
-    const bySubject = new Map<string, { _id: string; nombre: string; groupSubjectId: string | null; notas: typeof notesWithSubject; sum: number; count: number }>();
+    const byCourse = new Map<string, { _id: string; nombre: string; groupSubjectId: string; notas: typeof notesWithSubject; sum: number; count: number }>();
     for (const n of notesWithSubject) {
-      const sid = n.subjectId;
-      if (!bySubject.has(sid)) bySubject.set(sid, { _id: sid, nombre: n.subjectName, groupSubjectId: null, notas: [], sum: 0, count: 0 });
-      const row = bySubject.get(sid)!;
+      const gsId = n.gsId ?? n.subjectId;
+      if (!gsId) continue;
+      const key = gsId;
+      const displayName = ([n.subjectName, n.groupName].filter(Boolean).join(' ').trim() || n.subjectName) ?? 'Sin materia';
+      if (!byCourse.has(key)) byCourse.set(key, { _id: gsId, nombre: displayName, groupSubjectId: gsId, notas: [], sum: 0, count: 0 });
+      const row = byCourse.get(key)!;
       row.notas.push(n);
-      if (n.gsId && !row.groupSubjectId) row.groupSubjectId = n.gsId;
       row.sum += n.nota;
       row.count += 1;
     }
-    const materias = Array.from(bySubject.values()).map((row) => {
+    const materias = Array.from(byCourse.values()).map((row) => {
       const promedio = row.count > 0 ? Math.round((row.sum / row.count) * 10) / 10 : 0;
       const ultimaNota = row.notas.length ? row.notas.reduce((a, b) => (new Date(b.fecha) > new Date(a.fecha) ? b : a)).nota : null;
       const estado = promedio >= 65 ? 'aprobado' : 'reprobado';
-      const groupSubjectId = row.groupSubjectId ?? row.notas[0]?.gsId ?? null;
       return {
         _id: row._id,
         nombre: row.nombre,
-        groupSubjectId,
+        groupSubjectId: row.groupSubjectId,
         promedio,
         ultimaNota,
         estado,

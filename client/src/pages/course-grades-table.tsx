@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Plus, Settings, Percent, Award, ChevronDown, ChevronUp, Minus } from 'lucide-react';
+import { Plus, Percent, Award, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Button } from '@/components/ui/button';
 import { useLocation, useRoute } from 'wouter';
@@ -406,6 +406,14 @@ export default function CourseGradesTablePage() {
       ? cursoId
       : (cursoId || '').toUpperCase().trim();
 
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ['group', cursoId],
+    queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoId)}`),
+    enabled: !!cursoId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const groupDisplayName = (groupInfo?.nombre?.trim() || displayGroupId) as string;
+
   const { data: subjectsForGroup = [], isLoading: isLoadingSubjects } = useQuery<CourseSubject[]>({
     queryKey: ['subjectsForGroup', cursoId],
     queryFn: () => fetchSubjectsForGroup(cursoId),
@@ -556,12 +564,12 @@ export default function CourseGradesTablePage() {
     const assignment = assignmentsForTable.find((a) => String(a._id) === aid);
     if (!assignment) return '';
     const subs = assignment.submissions || assignment.entregas || [];
-    const sub = subs.find(
-      (x: { estudianteId?: { toString?: () => string } }) =>
-        x.estudianteId?.toString?.() === sid || (x as { estudianteId?: string }).estudianteId === sid
-    );
-    const cal = (sub as { calificacion?: number })?.calificacion;
-    return cal != null && !Number.isNaN(cal) ? cal : '';
+    const sub = subs.find((x: { estudianteId?: string; studentId?: string; student_id?: string; userId?: string; user_id?: string }) => {
+      const xId = x.estudianteId ?? x.studentId ?? x.student_id ?? x.userId ?? x.user_id;
+      return String(xId) === sid;
+    });
+    const cal = (sub as { calificacion?: number; score?: number })?.calificacion ?? (sub as { calificacion?: number; score?: number })?.score;
+    return cal != null && !Number.isNaN(Number(cal)) ? Number(cal) : '';
   };
 
   /** Promedio final: ponderado por logros (solo logros con al menos 1 nota). Normalización: (weightedSum / totalWeight) * 100. Si totalWeight === 0 pero hay notas, usar promedio simple. Nunca NaN. */
@@ -599,7 +607,7 @@ export default function CourseGradesTablePage() {
         const rounded = Math.round(simpleProm * 10) / 10;
         return Number.isNaN(rounded) ? '—' : rounded;
       }
-      const result = (weightedSum / totalWeight) * 100;
+      const result = weightedSum;
       if (Number.isNaN(result)) return Math.round(simpleProm * 10) / 10;
       return Math.round(result * 10) / 10;
     }
@@ -636,7 +644,7 @@ export default function CourseGradesTablePage() {
     if (user && user.rol !== 'profesor') setLocation('/courses');
   }, [user, setLocation]);
 
-  const pageTitle = `${cursoId} – ${subjectsForGroup[0]?.nombre ?? 'Notas'}`;
+  const pageTitle = `${groupDisplayName} – ${subjectsForGroup[0]?.nombre ?? 'Notas'}`;
 
   return (
     <div
@@ -667,15 +675,6 @@ export default function CourseGradesTablePage() {
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva asignación
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
-                onClick={() => setLocation(`/profesor/cursos/${cursoId}/notas`)}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Gestionar Notas
               </Button>
               <Button
                 variant="outline"

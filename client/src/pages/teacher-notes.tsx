@@ -143,30 +143,49 @@ export default function TeacherNotesPage() {
   const estudianteId = paramsStudent?.estudianteId || null;
   const displayGroupId = cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId) ? cursoId : (cursoId || '').toUpperCase().trim();
 
-  const { data: subjectsForGroup = [] } = useQuery({ queryKey: ['subjectsForGroup', cursoId], queryFn: () => fetchSubjectsForGroup(cursoId), enabled: !!cursoId });
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ['group', cursoId],
+    queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoId)}`),
+    enabled: !!cursoId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const groupDisplayName = (groupInfo?.nombre?.trim() || displayGroupId) as string;
+
+  const { data: subjectsForGroup = [], isSuccess: subjectsLoaded } = useQuery({
+    queryKey: ['subjectsForGroup', cursoId],
+    queryFn: () => fetchSubjectsForGroup(cursoId),
+    enabled: !!cursoId,
+  });
+
   const firstSubjectId = subjectsForGroup[0]?._id;
+  const courseIdForData = subjectsLoaded && firstSubjectId ? firstSubjectId : '';
+
   const { data: assignmentsForTable = [] } = useQuery({
-    queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
-    queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
-    enabled: !!cursoId && !!firstSubjectId,
+    queryKey: ['gradeTableAssignments', cursoId, courseIdForData],
+    queryFn: () => fetchGradeTableAssignments(displayGroupId, courseIdForData),
+    enabled: !!cursoId && !!courseIdForData,
   });
   const { data: students = [] } = useQuery({
     queryKey: ['students', cursoId],
     queryFn: () => fetchStudentsByGroup(cursoId),
     enabled: !!cursoId,
   });
-  const { data: logrosData } = useQuery({
-    queryKey: ['/api/logros-calificacion', firstSubjectId],
-    queryFn: () => apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(firstSubjectId || '')}`),
-    enabled: !!firstSubjectId,
+  const { data: logrosRaw } = useQuery({
+    queryKey: ['logros', courseIdForData],
+    queryFn: () =>
+      fetch(`/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForData)}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('autoclose_token')}` },
+      }).then((r) => r.json()),
+    enabled: !!courseIdForData,
   });
-  const logros = logrosData?.logros ?? [];
+
+  const logros = logrosRaw?.logros ?? [];
 
   const updateGradeMutation = useMutation({
     mutationFn: async ({ assignmentId, estudianteId: sid, calificacion }: { assignmentId: string; estudianteId: string; calificacion: number }) =>
       apiRequest('PUT', `/api/assignments/${assignmentId}/grade`, { estudianteId: sid, calificacion: Math.min(100, Math.max(0, calificacion)), manualOverride: true }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, firstSubjectId] });
+      queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, courseIdForData] });
       queryClient.invalidateQueries({ queryKey: ['students', cursoId] });
     },
   });
@@ -229,18 +248,18 @@ export default function TeacherNotesPage() {
   };
   const promedioPonderado = useMemo(() => {
     if (!estudianteId || !currentStudent) return null;
-    let totalP = 0, totalPorc = 0;
+    let weightedSum = 0;
     Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
       if (logro._id === 'sin-logro') return;
       const notas: number[] = [];
       assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
       if (notas.length) {
         const prom = notas.reduce((s, n) => s + n, 0) / notas.length;
-        totalP += (prom * logro.porcentaje) / 100;
-        totalPorc += logro.porcentaje;
+        weightedSum += (prom * (logro.porcentaje ?? 0)) / 100;
       }
     });
-    return totalPorc > 0 ? Math.round(totalP * (100 / totalPorc)) : null;
+    const result = Math.round(weightedSum * 10) / 10;
+    return Number.isNaN(result) ? null : result;
   }, [estudianteId, currentStudent, assignmentsByLogro]);
 
   // Vista de notas individual del estudiante (misma fuente que tabla, editable)
@@ -266,27 +285,27 @@ export default function TeacherNotesPage() {
           <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
             <CardHeader>
               <CardTitle className="text-white">{subjectName}</CardTitle>
-              <CardDescription className="text-white/60">Grupo {displayGroupId}</CardDescription>
+              <CardDescription className="text-white/60">Grupo {groupDisplayName}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
                   <span className="text-white font-semibold">Promedio general</span>
-                  <span className="text-2xl font-bold text-white ml-2">{promedioPonderado != null ? promedioPonderado : '—'}</span>
-                  <span className="text-white/50">/ 100</span>
+                  <span className="text-2xl font-bold text-white ml-2">{promedioPonderado != null && !Number.isNaN(promedioPonderado) ? promedioPonderado : '—'}</span>
+                  <span className="text-white">/ 100</span>
                 </div>
                 <div className="p-4 bg-white/5 border border-white/10 rounded-lg flex items-center gap-2">
                   <span className="text-white font-semibold">Estado</span>
                   <span
                     className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium text-white"
                     style={{
-                      backgroundColor: promedioPonderado != null
+                      backgroundColor: promedioPonderado != null && !Number.isNaN(promedioPonderado)
                         ? (promedioPonderado >= PASSED_THRESHOLD ? '#16A34A' : '#DC2626')
                         : 'transparent',
-                      border: promedioPonderado == null ? '1px solid rgba(255,255,255,0.3)' : undefined,
+                      border: (promedioPonderado == null || Number.isNaN(promedioPonderado)) ? '1px solid rgba(255,255,255,0.3)' : undefined,
                     }}
                   >
-                    {promedioPonderado != null
+                    {promedioPonderado != null && !Number.isNaN(promedioPonderado)
                       ? (promedioPonderado >= PASSED_THRESHOLD ? 'Aprobado' : 'Reprobado')
                       : 'Sin notas'}
                   </span>
@@ -304,8 +323,8 @@ export default function TeacherNotesPage() {
                 <Card key={logro._id} className="bg-white/5 border-white/10 backdrop-blur-md">
                   <CardHeader>
                     <CardTitle className="text-white">{logro.nombre}</CardTitle>
-                    <CardDescription className="text-white/60">
-                      Promedio: {promLogro != null ? `${promLogro} / 100` : '—'} {logro.porcentaje > 0 && ` · ${logro.porcentaje}% del total`}
+                    <CardDescription className="text-white">
+                      Promedio: {promLogro != null && !Number.isNaN(promLogro) ? `${promLogro} / 100` : '—'} {logro.porcentaje > 0 && ` · ${logro.porcentaje}% del total`}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -316,14 +335,14 @@ export default function TeacherNotesPage() {
                           <div key={a._id} className="p-4 bg-white/5 border border-white/10 rounded-lg flex items-center justify-between gap-4">
                             <div>
                               <h4 className="font-semibold text-white">{a.titulo}</h4>
-                              {a.fechaEntrega && <p className="text-sm text-white/60">{new Date(a.fechaEntrega).toLocaleDateString('es-CO')}</p>}
+                              {a.fechaEntrega && <p className="text-sm text-white">{new Date(a.fechaEntrega).toLocaleDateString('es-CO')}</p>}
                             </div>
                             <Input
                               type="number"
                               min={0}
                               max={100}
                               defaultValue={val != null ? val : ''}
-                              className="w-20 text-center font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              className="w-20 text-center font-semibold text-white bg-white/10 border-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               onBlur={(e) => {
                                 const n = parseInt(e.target.value, 10);
                                 if (!isNaN(n) && n >= 0 && n <= 100) updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: n });
@@ -343,18 +362,21 @@ export default function TeacherNotesPage() {
     );
   }
 
-  const promedioGeneral = students.reduce((acc, s) => acc + s.promedio, 0) / students.length;
+  const promedioGeneral =
+    students.length > 0
+      ? students.reduce((acc, s) => acc + (Number((s as { promedio?: number }).promedio) || 0), 0) / students.length
+      : 0;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
       <div className="max-w-7xl mx-auto w-full">
         {/* Header */}
         <div className="mb-8">
-          <NavBackButton to={`/course-detail/${cursoId}`} label={`Grupo ${displayGroupId}`} />
+          <NavBackButton to={`/course-detail/${cursoId}`} label={`Grupo ${groupDisplayName}`} />
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">
-                Notas del Curso {cursoId}
+                Notas del Curso {groupDisplayName}
               </h1>
               <p className="text-white/60 text-sm sm:text-base">
                 Gestiona las notas de tus estudiantes en este curso
@@ -410,28 +432,30 @@ export default function TeacherNotesPage() {
                         </div>
                         <div>
                           <div className="font-medium text-white">{student.nombre}</div>
-                          <div className="text-xs text-white/50 truncate max-w-[180px]">{student.email}</div>
+                          <div className="text-xs text-white/50 truncate max-w-[180px]">{(student as { email?: string }).email ?? ''}</div>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="py-3 text-right">
-                      <span className="font-semibold text-white tabular-nums">{student.promedio.toFixed(1)}</span>
-                      <span className="text-white/40 text-sm ml-0.5">/100</span>
+                      <span className="font-semibold text-white tabular-nums">
+                        {(Number((student as { promedio?: number }).promedio) || 0).toFixed(1)}
+                      </span>
+                      <span className="text-white text-sm ml-0.5">/100</span>
                     </TableCell>
                     <TableCell className="py-3 text-right hidden sm:table-cell text-white/80 tabular-nums">
-                      {student.ultimaNota.toFixed(1)}
+                      {(Number((student as { ultimaNota?: number }).ultimaNota) ?? (student as { promedio?: number }).promedio ?? 0).toFixed(1)}
                     </TableCell>
                     <TableCell className="py-3 text-center hidden md:table-cell">
                       <span
                         className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${
-                          student.promedio >= 70
+                          (Number((student as { promedio?: number }).promedio) || 0) >= 70
                             ? 'text-emerald-400/90 bg-emerald-500/10'
-                            : student.promedio >= 50
+                            : (Number((student as { promedio?: number }).promedio) || 0) >= 50
                               ? 'text-amber-400/90 bg-amber-500/10'
                               : 'text-red-400/90 bg-red-500/10'
                         }`}
                       >
-                        {student.promedio >= 70 ? 'Aprobado' : student.promedio >= 50 ? 'En proceso' : 'Bajo'}
+                        {(Number((student as { promedio?: number }).promedio) || 0) >= 70 ? 'Aprobado' : (Number((student as { promedio?: number }).promedio) || 0) >= 50 ? 'En proceso' : 'Bajo'}
                       </span>
                     </TableCell>
                     <TableCell className="py-3 pr-5 text-right">

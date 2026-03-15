@@ -26,6 +26,13 @@ export default function DirectivoCursoEstudiantesPage() {
   const [, params] = useRoute("/directivo/cursos/:grupoId/estudiantes");
   const grupoId = params?.grupoId ? decodeURIComponent(params.grupoId) : "";
 
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ["/api/groups", grupoId],
+    queryFn: () => apiRequest("GET", `/api/groups/${encodeURIComponent(grupoId)}`),
+    enabled: !!grupoId,
+  });
+  const groupDisplayName = groupInfo?.nombre?.trim() || grupoId;
+
   useEffect(() => {
     if (user && user.rol !== "directivo") {
       setLocation("/dashboard");
@@ -51,7 +58,7 @@ export default function DirectivoCursoEstudiantesPage() {
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
           <Users className="w-8 h-8 text-[#00c8ff]" />
-          {grupoId}
+          {groupDisplayName}
         </h1>
         <p className="text-white/60 mt-1">Estudiantes del curso. Ver notas en solo lectura.</p>
       </div>

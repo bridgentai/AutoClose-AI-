@@ -7,95 +7,73 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   FileText,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   ChevronLeft,
   Download,
   Sparkles,
   AlertTriangle,
-  CheckCircle2,
-  Target,
+  TrendingUp,
 } from "lucide-react";
-import { motion } from "framer-motion";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Tooltip,
-  Legend,
-} from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { NavBackButton } from "@/components/nav-back-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { BoletinPDFView } from "@/components/boletin/BoletinPDFView";
 
-// Design tokens evoOS
 const BG = "#0F0F14";
 const CARD = "#171721";
 const BORDER = "#232334";
 const ACCENT = "#7C3AED";
 const ACCENT_LIGHT = "#A855F7";
 
-// Interfaces
-interface Materia {
-  _id: string;
+interface CategoriaDetalle {
   nombre: string;
-  nota: number;
-  tendencia: number;
-  descripcionIA: string;
-  sparkline: number[];
+  peso: number;
+  promedio: number | null;
+  actividades: number;
 }
 
-interface EvolucionPoint {
-  periodo: string;
-  matemáticas?: number;
-  español?: number;
-  ciencias?: number;
-  inglés?: number;
-  sociales?: number;
-  promedio?: number;
+interface MateriaData {
+  materia: string;
+  profesor: string;
+  promedio: number | null;
+  categorias: CategoriaDetalle[];
+  asistencia: number | null;
+  evolucion: { fecha: string; promedio: number }[];
 }
 
-interface Competencias {
-  pensamientoCritico: number;
-  comunicacion: number;
-  trabajoEnEquipo: number;
-  autonomia: number;
-  resolucionProblemas: number;
-}
-
-interface BoletinInteligenteData {
-  student: { _id: string; nombre: string; grado: string; periodo: string };
-  promedioGeneral: number;
-  tendencia: number;
-  riesgo: "bajo" | "medio" | "alto";
-  materias: Materia[];
-  evolucion: EvolucionPoint[];
-  competencias: Competencias;
-  escenarioFuturo: { materia: string; mejora: number; promedioProyectado: number };
+interface BoletinData {
+  estudiante: { id: string; nombre: string; email: string };
+  grupo: string;
+  promedioGeneral: number | null;
+  estado: string;
+  materias: MateriaData[];
   resumenIA: string;
 }
 
-// Estilos base
 const CARD_STYLE =
   "rounded-2xl border shadow-lg transition-all duration-300 hover:shadow-[0_0_24px_-4px_rgba(124,58,237,0.25)]";
 const cardInner = { backgroundColor: CARD, borderColor: BORDER };
 
+function getEstadoColor(estado: string) {
+  switch (estado) {
+    case "excelente":
+      return "bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
+    case "bueno":
+      return "bg-blue-500/20 text-blue-400 border-blue-500/40";
+    case "en riesgo":
+      return "bg-amber-500/20 text-amber-400 border-amber-500/40";
+    case "crítico":
+      return "bg-red-500/20 text-red-400 border-red-500/40";
+    default:
+      return "bg-white/10 text-white/70 border-white/20";
+  }
+}
+
 export default function BoletinInteligentePage() {
   const [, params] = useRoute("/profesor/cursos/:cursoId/estudiantes/:estudianteId/boletin-inteligente");
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
   const pdfRef = useRef<HTMLDivElement>(null);
   const cursoId = params?.cursoId ?? "";
   const estudianteId = params?.estudianteId ?? "";
@@ -103,14 +81,12 @@ export default function BoletinInteligentePage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["/api/boletin/inteligente", estudianteId],
     queryFn: () =>
-      apiRequest<BoletinInteligenteData>("GET", `/api/boletin/inteligente/${estudianteId}`),
+      apiRequest<BoletinData>("GET", `/api/boletin/inteligente/${estudianteId}`),
     enabled: !!estudianteId,
   });
 
   const handleDescargarPDF = () => {
-    // Preparado para integración futura con generación backend
-    console.log("PDF export - integrar con backend");
-    // Futuro: POST /api/boletin/pdf con { studentId, cursoId } -> devuelve PDF
+    window.print();
   };
 
   const volverANotas = () => {
@@ -155,56 +131,24 @@ export default function BoletinInteligentePage() {
     );
   }
 
-  const { student, promedioGeneral, tendencia, riesgo, materias, evolucion, competencias, escenarioFuturo, resumenIA } =
-    data;
-
-  const riesgoConfig = {
-    bajo: { label: "Bajo riesgo", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/40", icon: CheckCircle2 },
-    medio: { label: "Riesgo medio", color: "bg-amber-500/20 text-amber-400 border-amber-500/40", icon: AlertTriangle },
-    alto: { label: "Alto riesgo", color: "bg-red-500/20 text-red-400 border-red-500/40", icon: AlertTriangle },
-  };
-  const riesgoInfo = riesgoConfig[riesgo];
-  const RiesgoIcon = riesgoInfo.icon;
-
-  const chartConfig = {
-    promedio: { label: "Promedio", color: ACCENT_LIGHT },
-    matemáticas: { label: "Matemáticas", color: "#8B5CF6" },
-    español: { label: "Español", color: "#3B82F6" },
-    ciencias: { label: "Ciencias", color: "#10B981" },
-    inglés: { label: "Inglés", color: "#F59E0B" },
-    sociales: { label: "Sociales", color: "#EC4899" },
-  };
-
-  const radarData = [
-    { subject: "Pensamiento crítico", value: competencias.pensamientoCritico, fullMark: 5 },
-    { subject: "Comunicación", value: competencias.comunicacion, fullMark: 5 },
-    { subject: "Trabajo en equipo", value: competencias.trabajoEnEquipo, fullMark: 5 },
-    { subject: "Autonomía", value: competencias.autonomia, fullMark: 5 },
-    { subject: "Resolución de problemas", value: competencias.resolucionProblemas, fullMark: 5 },
-  ];
+  const { estudiante, grupo, promedioGeneral, estado, materias, resumenIA } = data;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: BG }}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .boletin-print-area, .boletin-print-area * { visibility: visible; }
+          .boletin-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+          .no-print { display: none !important; }
+        }
+      `}</style>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
-        {/* Header con navegación */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <NavBackButton
-              to={`/profesor/cursos/${cursoId}/estudiantes/${estudianteId}/notas`}
-              label="Notas del estudiante"
-            />
-            <div className="flex items-center gap-3 mt-4">
-              <FileText className="w-8 h-8 text-[#A855F7]" style={{ filter: "drop-shadow(0 0 8px rgba(168,85,247,0.4))" }} />
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins']">
-                  Boletín Inteligente
-                </h1>
-                <p className="text-white/60 text-sm mt-0.5">
-                  Análisis académico y proyección · {student.nombre}
-                </p>
-              </div>
-            </div>
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 no-print">
+          <NavBackButton
+            to={`/profesor/cursos/${cursoId}/estudiantes/${estudianteId}/notas`}
+            label="Notas del estudiante"
+          />
           <Button
             onClick={handleDescargarPDF}
             className="border-[#7C3AED]/50 bg-[#7C3AED]/10 text-[#A855F7] hover:bg-[#7C3AED]/20 transition-all"
@@ -215,12 +159,9 @@ export default function BoletinInteligentePage() {
         </div>
 
         <BoletinPDFView innerRef={pdfRef} compact={false}>
-          <div className="space-y-8">
-            {/* Hero Section */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
+          <div className="boletin-print-area space-y-8">
+            {/* Header */}
+            <div
               className={`${CARD_STYLE} overflow-hidden`}
               style={cardInner}
             >
@@ -231,228 +172,145 @@ export default function BoletinInteligentePage() {
                   borderBottom: `1px solid ${BORDER}`,
                 }}
               >
-                <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-20 blur-3xl" style={{ background: ACCENT }} />
-                <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-bold text-white font-['Poppins'] mb-1">
-                      {student.nombre}
-                    </h2>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <Badge variant="outline" className="border-[#232334] text-white/80 bg-white/5">
-                        {student.grado}
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] mb-1">
+                      {estudiante.nombre}
+                    </h1>
+                    {grupo && (
+                      <Badge variant="outline" className="border-[#232334] text-white/80 bg-white/5 mb-2">
+                        {grupo}
                       </Badge>
-                      <Badge variant="outline" className="border-[#232334] text-white/80 bg-white/5">
-                        {student.periodo}
-                      </Badge>
-                    </div>
-                    <div className="flex items-baseline gap-3">
-                      <span className="text-5xl sm:text-6xl font-bold text-white font-['Poppins']">
-                        {promedioGeneral.toFixed(1)}
+                    )}
+                    <div className="flex items-baseline gap-3 mt-2">
+                      <span className="text-4xl sm:text-5xl font-bold text-white font-['Poppins']">
+                        {promedioGeneral !== null ? promedioGeneral.toFixed(1) : "—"}
                       </span>
                       <span className="text-white/50 text-lg">/ 100</span>
-                      <span className="text-sm text-white/60">Promedio general</span>
+                      <span className="text-sm text-white/60 ml-2">Promedio general</span>
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl ${
-                        tendencia > 0
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : tendencia < 0
-                          ? "bg-red-500/15 text-red-400"
-                          : "bg-white/5 text-white/70"
-                      }`}
-                    >
-                      {tendencia > 0 ? (
-                        <TrendingUp className="w-5 h-5" />
-                      ) : tendencia < 0 ? (
-                        <TrendingDown className="w-5 h-5" />
-                      ) : (
-                        <Minus className="w-5 h-5" />
-                      )}
-                      <span className="font-semibold">
-                        {tendencia > 0 ? "+" : ""}
-                        {tendencia.toFixed(1)} vs periodo anterior
-                      </span>
-                    </div>
-                    <Badge className={`${riesgoInfo.color} border px-4 py-2 gap-2`}>
-                      <RiesgoIcon className="w-4 h-4" />
-                      {riesgoInfo.label}
-                    </Badge>
-                  </div>
+                  <Badge className={`${getEstadoColor(estado)} border px-4 py-2 capitalize`}>
+                    {estado}
+                  </Badge>
                 </div>
-              </div>
-            </motion.div>
-
-            {/* Evolución Académica */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 }}
-              className={`${CARD_STYLE} p-6`}
-              style={cardInner}
-            >
-              <CardHeader className="p-0 mb-6">
-                <CardTitle className="text-white font-['Poppins'] flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-[#A855F7]" />
-                  Evolución Académica
-                </CardTitle>
-                <CardDescription className="text-white/60">
-                  Líneas por materia y promedio general
-                </CardDescription>
-              </CardHeader>
-              <div className="h-[320px] w-full">
-                <ChartContainer config={chartConfig} className="h-full w-full">
-                  <LineChart data={evolucion} margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                      <XAxis dataKey="periodo" stroke="rgba(255,255,255,0.5)" tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 12 }} />
-                      <YAxis domain={[0, 5]} stroke="rgba(255,255,255,0.5)" tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 12 }} width={36} />
-                      <Tooltip
-                        content={
-                          <ChartTooltipContent
-                            className="rounded-xl border-[#232334] bg-[#171721]"
-                          />
-                        }
-                        cursor={{ stroke: BORDER, strokeWidth: 1 }}
-                      />
-                      <Legend wrapperStyle={{ paddingTop: 16 }} />
-                      <Line type="monotone" dataKey="matemáticas" stroke="#8B5CF6" strokeWidth={2} dot={{ r: 4 }} name="Matemáticas" />
-                      <Line type="monotone" dataKey="español" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} name="Español" />
-                      <Line type="monotone" dataKey="ciencias" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} name="Ciencias" />
-                      <Line type="monotone" dataKey="inglés" stroke="#F59E0B" strokeWidth={2} dot={{ r: 4 }} name="Inglés" />
-                      <Line type="monotone" dataKey="sociales" stroke="#EC4899" strokeWidth={2} dot={{ r: 4 }} name="Sociales" />
-                      <Line type="monotone" dataKey="promedio" stroke={ACCENT_LIGHT} strokeWidth={3} strokeDasharray="5 5" dot={{ r: 5 }} name="Promedio" />
-                    </LineChart>
-                </ChartContainer>
-              </div>
-            </motion.div>
-
-            {/* Materias en Cards */}
-            <div>
-              <h3 className="text-lg font-semibold text-white font-['Poppins'] mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-[#A855F7]" />
-                Materias
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {materias.map((m, i) => (
-                  <motion.div
-                    key={m._id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.15 + i * 0.05 }}
-                    className={`${CARD_STYLE} p-6 group relative overflow-hidden border-[#232334] hover:border-[#7C3AED]/50 transition-colors`}
-                    style={cardInner}
-                  >
-                    <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-[#7C3AED]/5 to-transparent" />
-                    <div className="relative">
-                      <div className="flex justify-between items-start mb-3">
-                        <h4 className="font-semibold text-white">{m.nombre}</h4>
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl font-bold text-white">{Math.round(m.nota)}</span>
-                          <span
-                            className={`flex items-center text-sm ${
-                              m.tendencia >= 0 ? "text-emerald-400" : "text-red-400"
-                            }`}
-                          >
-                            {m.tendencia >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                            {m.tendencia >= 0 ? "+" : ""}
-                            {m.tendencia.toFixed(1)}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-sm text-white/60 leading-relaxed">{m.descripcionIA}</p>
-                    </div>
-                  </motion.div>
-                ))}
               </div>
             </div>
 
-            {/* Radar de Competencias */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.25 }}
-              className={`${CARD_STYLE} p-6`}
-              style={cardInner}
-            >
-              <CardHeader className="p-0 mb-6">
-                <CardTitle className="text-white font-['Poppins'] flex items-center gap-2">
-                  <Target className="w-5 h-5 text-[#A855F7]" />
-                  Radar de Competencias
-                </CardTitle>
-                <CardDescription className="text-white/60">
-                  Evaluación de habilidades transversales
-                </CardDescription>
-              </CardHeader>
-              <div className="h-[300px] w-full flex justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.15)" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: "rgba(255,255,255,0.8)", fontSize: 11 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 5]} tick={{ fill: "rgba(255,255,255,0.6)" }} />
-                    <Radar
-                      name="Competencias"
-                      dataKey="value"
-                      stroke={ACCENT_LIGHT}
-                      fill={ACCENT}
-                      fillOpacity={0.3}
-                      strokeWidth={2}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: CARD,
-                        border: `1px solid ${BORDER}`,
-                        borderRadius: 12,
-                        color: "#fff",
-                      }}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            </motion.div>
+            {/* Resumen IA */}
+            {resumenIA && (
+              <Card className={CARD_STYLE} style={cardInner}>
+                <CardHeader>
+                  <CardTitle className="text-white font-['Poppins'] flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-[#A855F7]" />
+                    Resumen
+                  </CardTitle>
+                  <CardDescription className="text-white/60">
+                    Análisis personalizado del rendimiento
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-white/80 leading-relaxed">{resumenIA}</p>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Escenario Futuro */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 }}
-              className={`${CARD_STYLE} overflow-hidden`}
-              style={{
-                background: `linear-gradient(135deg, rgba(124,58,237,0.2) 0%, rgba(88,28,135,0.15) 50%, rgba(35,35,52,0.9) 100%)`,
-                borderColor: "rgba(124,58,237,0.3)",
-              }}
-            >
-              <div className="p-6 sm:p-8">
-                <h3 className="text-lg font-semibold text-white font-['Poppins'] mb-2 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-[#A855F7]" />
-                  Escenario Futuro
-                </h3>
-                <p className="text-white/90 leading-relaxed">
-                  Si mejora <span className="text-[#A855F7] font-semibold">+{escenarioFuturo.mejora}</span> en{" "}
-                  <span className="text-white font-medium">{escenarioFuturo.materia}</span>, su promedio proyectado sería{" "}
-                  <span className="text-[#A855F7] font-bold">{escenarioFuturo.promedioProyectado.toFixed(1)}</span>.
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Resumen Inteligente */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.35 }}
-              className={`${CARD_STYLE} p-8 sm:p-10`}
-              style={cardInner}
-            >
-              <h3 className="text-lg font-semibold text-white font-['Poppins'] mb-4 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-[#A855F7]" />
-                Resumen Inteligente
-              </h3>
-              <div className="prose prose-invert max-w-none">
-                <p className="text-white/80 leading-loose text-base sm:text-lg" style={{ letterSpacing: "0.01em" }}>
-                  {resumenIA}
-                </p>
-              </div>
-            </motion.div>
+            {/* Por cada materia */}
+            {materias.map((m) => (
+              <Card key={m.materia} className={CARD_STYLE} style={cardInner}>
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle className="text-white font-['Poppins']">{m.materia}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      {m.promedio !== null && (
+                        <span className="text-xl font-bold text-white">{m.promedio}/100</span>
+                      )}
+                      <Badge className={getEstadoColor(estado)}>{estado}</Badge>
+                    </div>
+                  </div>
+                  {m.profesor && (
+                    <CardDescription className="text-white/60">Profesor: {m.profesor}</CardDescription>
+                  )}
+                  {m.asistencia !== null && (
+                    <p className="text-white/60 text-sm">Asistencia: {m.asistencia}%</p>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {m.categorias.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-white/80 mb-2">Categorías</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="text-left py-2 text-white/70">Categoría</th>
+                              <th className="text-right py-2 text-white/70">Peso %</th>
+                              <th className="text-right py-2 text-white/70">Promedio</th>
+                              <th className="text-right py-2 text-white/70">Actividades</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {m.categorias.map((c) => (
+                              <tr key={c.nombre} className="border-b border-white/5">
+                                <td className="py-2 text-white/90">{c.nombre}</td>
+                                <td className="text-right py-2 text-white/70">{c.peso}</td>
+                                <td className="text-right py-2 text-white/90">
+                                  {c.promedio !== null ? c.promedio : "—"}
+                                </td>
+                                <td className="text-right py-2 text-white/70">{c.actividades}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  {m.evolucion.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-white/80 mb-2 flex items-center gap-1">
+                        <TrendingUp className="w-4 h-4" /> Evolución
+                      </h4>
+                      <div className="h-[220px] w-full">
+                        <ChartContainer
+                          config={{ promedio: { label: "Promedio", color: ACCENT_LIGHT } }}
+                          className="h-full w-full"
+                        >
+                          <LineChart
+                            data={m.evolucion}
+                            margin={{ top: 10, right: 10, bottom: 20, left: 10 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                            <XAxis
+                              dataKey="fecha"
+                              stroke="rgba(255,255,255,0.5)"
+                              tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 11 }}
+                            />
+                            <YAxis
+                              domain={[0, 100]}
+                              stroke="rgba(255,255,255,0.5)"
+                              tick={{ fill: "rgba(255,255,255,0.7)", fontSize: 11 }}
+                              width={32}
+                            />
+                            <Tooltip
+                              content={<ChartTooltipContent />}
+                              cursor={{ stroke: BORDER, strokeWidth: 1 }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="promedio"
+                              stroke={ACCENT_LIGHT}
+                              strokeWidth={2}
+                              dot={{ fill: ACCENT_LIGHT, r: 3 }}
+                              name="Promedio"
+                            />
+                          </LineChart>
+                        </ChartContainer>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </BoletinPDFView>
       </div>

@@ -91,22 +91,29 @@ router.get('/me/courses', protect, async (req: AuthRequest, res) => {
       const colegioId = user.institution_id;
       const courseGroups = await getAllCourseGroupsForStudent(userId, colegioId ?? undefined);
       if (!courseGroups.length) return res.status(200).json([]);
-      const courses = await Promise.all(
-        courseGroups.map(async (g) => {
-          const details = await findGroupSubjectsByGroupWithDetails(g.id, colegioId ?? undefined);
-          return {
-            _id: details[0]?.id ?? g.id,
-            nombre: g.name,
-            descripcion: details[0]?.subject_description ?? '',
+      const courses: Array<{
+        _id: string;
+        nombre: string;
+        descripcion: string;
+        colorAcento: string;
+        icono: string;
+        profesorIds: Array<{ _id: string; nombre: string; email: string }>;
+        cursos: string[];
+      }> = [];
+      for (const g of courseGroups) {
+        const details = await findGroupSubjectsByGroupWithDetails(g.id, colegioId ?? undefined);
+        for (const gs of details) {
+          courses.push({
+            _id: gs.id,
+            nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || g.name,
+            descripcion: gs.subject_description ?? '',
             colorAcento: '',
             icono: '',
-            profesorIds: details[0]
-              ? [{ _id: details[0].teacher_id, nombre: details[0].teacher_name, email: details[0].teacher_email }]
-              : [],
+            profesorIds: [{ _id: gs.teacher_id, nombre: gs.teacher_name, email: gs.teacher_email }],
             cursos: [g.name],
-          };
-        })
-      );
+          });
+        }
+      }
       return res.status(200).json(courses);
     }
     res.status(200).json([]);

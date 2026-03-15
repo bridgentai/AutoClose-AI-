@@ -11,13 +11,14 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
-  MessageSquare
+  MessageSquare,
+  BarChart3
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { NavBackButton } from '@/components/nav-back-button';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -28,10 +29,12 @@ import { apiRequest } from '@/lib/queryClient';
 
 interface SubjectGrade {
   _id: string;
+  groupSubjectId?: string | null;
   nombre: string;
-  promedio: number;
-  ultimaNota: number;
-  estado: 'excelente' | 'bueno' | 'regular' | 'bajo';
+  /** null cuando no hay notas (N/A) */
+  promedio: number | null;
+  ultimaNota: number | null;
+  estado: 'excelente' | 'bueno' | 'regular' | 'bajo' | 'sin_notas';
   tendencia: 'up' | 'down' | 'stable';
   colorAcento?: string;
 }
@@ -90,6 +93,48 @@ interface LogroItem {
 
 const noteScoreFrom = (n: { nota?: number; score?: number; calificacion?: number }) =>
   Number((n as { nota?: number }).nota ?? (n as { score?: number }).score ?? (n as { calificacion?: number }).calificacion) || 0;
+
+/** Colores distintos por materia (icono y línea en el gráfico). */
+const SUBJECT_COLORS = ['#00c8ff', '#1e3cff', '#ffd700', '#10b981', '#f43f5e', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#ec4899'];
+
+/** Evolución del promedio acumulado por fecha (para gráfico de progreso por materia). */
+function computeEvolucion(
+  materia: MateriaConNotas,
+  logros: LogroItem[] | undefined
+): { date: Date; dateStr: string; promedio: number }[] {
+  const notas = materia.notas ?? [];
+  const logrosList = logros ?? [];
+  const totalPct = logrosList.reduce((s, l) => s + (l.porcentaje ?? 0), 0);
+  const hasWeightedLogros = totalPct > 0 && logrosList.length > 0;
+  const notasOrdenadas = [...notas].sort((a, b) =>
+    new Date((a as NotaReal).fecha ?? 0).getTime() - new Date((b as NotaReal).fecha ?? 0).getTime()
+  );
+  return notasOrdenadas.map((n, i, arr) => {
+    const hastaFecha = arr.slice(0, i + 1);
+    let promedioAcum: number;
+    if (hasWeightedLogros && logrosList.length > 0) {
+      const logrosOrdenados = [...logrosList].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+      let weightedSum = 0;
+      for (const logro of logrosOrdenados) {
+        const notasEnCat = hastaFecha.filter((x) => String((x as NotaReal).gradingCategoryId ?? '') === String(logro._id));
+        const promCat = notasEnCat.length > 0 ? notasEnCat.reduce((s, x) => s + noteScoreFrom(x), 0) / notasEnCat.length : 0;
+        weightedSum += promCat * ((logro.porcentaje ?? 0) / 100);
+      }
+      promedioAcum = weightedSum;
+    } else {
+      promedioAcum = hastaFecha.reduce((s, x) => s + noteScoreFrom(x), 0) / hastaFecha.length;
+    }
+    const fecha = new Date((n as NotaReal).fecha ?? '');
+    const valid = !Number.isNaN(fecha.getTime());
+    return valid
+      ? {
+          date: fecha,
+          dateStr: fecha.toLocaleDateString('es-CO', { month: 'short', day: 'numeric', year: '2-digit' }),
+          promedio: Math.round(promedioAcum * 10) / 10,
+        }
+      : null;
+  }).filter((p): p is { date: Date; dateStr: string; promedio: number } => p !== null);
+}
 
 /** Calcula promedio ponderado por logros y última nota (misma lógica que la vista detalle). */
 function computeWeightedPromedioAndUltima(
@@ -160,9 +205,25 @@ export default function StudentNotesPage() {
   });
 
   const notesData = isEstudiante ? notesDataEstudiante : notesDataHijo;
-  const isLoading = isEstudiante ? loadingEstudiante : loadingHijo;
+  const isLoadingNotes = isEstudiante ? loadingEstudiante : loadingHijo;
   const isError = isEstudiante ? errorEstudiante : errorHijo;
   const refetch = isEstudiante ? refetchEstudiante : refetchHijo;
+
+  type CourseItem = { _id: string; nombre: string };
+  const { data: coursesEstudiante, isLoading: loadingCoursesEstudiante } = useQuery<CourseItem[]>({
+    queryKey: ['/api/users/me/courses'],
+    queryFn: () => apiRequest('GET', '/api/users/me/courses'),
+    enabled: !!user?.id && isEstudiante,
+  });
+  const { data: coursesHijo, isLoading: loadingCoursesHijo } = useQuery<CourseItem[]>({
+    queryKey: ['/api/student/hijo', primerHijoId, 'courses'],
+    queryFn: () => apiRequest('GET', `/api/student/hijo/${primerHijoId}/courses`),
+    enabled: !!user?.id && !!primerHijoId && isPadre,
+  });
+  const coursesRaw = isEstudiante ? coursesEstudiante : coursesHijo;
+  const allCourses = Array.isArray(coursesRaw) ? coursesRaw : [];
+  const loadingCourses = isEstudiante ? loadingCoursesEstudiante : (!!primerHijoId && loadingCoursesHijo);
+  const isLoading = isLoadingNotes || loadingCourses;
 
   const groupSubjectIds = useMemo(
     () => [...new Set((notesData?.materias ?? []).map((m) => m.groupSubjectId).filter(Boolean))] as string[],
@@ -186,24 +247,41 @@ export default function StudentNotesPage() {
     return map;
   }, [groupSubjectIds, logrosQueries]);
 
-  // Mismo promedio ponderado que en el detalle (logros) para lista, gráfica y promedio general
+  // Todas las materias del estudiante: de allCourses, con notas cuando existan (si no, N/A). Color único por materia.
   const subjects: SubjectGrade[] = useMemo(() => {
-    const materias = notesData?.materias ?? [];
-    return materias.map((m: MateriaConNotas) => {
-      const logros = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
-      const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, logros);
-      const estado: SubjectGrade['estado'] = promedioFinal >= 65 ? 'bueno' : 'bajo';
+    const materiasConNotas = notesData?.materias ?? [];
+    const byId = new Map<string, MateriaConNotas>();
+    for (const m of materiasConNotas) byId.set(m._id, m);
+    return allCourses.map((course, index) => {
+      const color = SUBJECT_COLORS[index % SUBJECT_COLORS.length];
+      const m = byId.get(course._id);
+      if (m) {
+        const logros = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
+        const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, logros);
+        const estado: SubjectGrade['estado'] = promedioFinal >= 65 ? 'bueno' : 'bajo';
+        return {
+          _id: m._id,
+          groupSubjectId: m.groupSubjectId ?? null,
+          nombre: m.nombre,
+          promedio: promedioFinal,
+          ultimaNota,
+          estado,
+          tendencia: m.tendencia ?? 'stable',
+          colorAcento: color,
+        };
+      }
       return {
-        _id: m._id,
-        nombre: m.nombre,
-        promedio: promedioFinal,
-        ultimaNota,
-        estado,
-        tendencia: m.tendencia ?? 'stable',
-        colorAcento: m.colorAcento || '#00c8ff',
+        _id: course._id,
+        groupSubjectId: course._id,
+        nombre: course.nombre,
+        promedio: null,
+        ultimaNota: null,
+        estado: 'sin_notas',
+        tendencia: 'stable',
+        colorAcento: color,
       };
     });
-  }, [notesData?.materias, logrosByGsId]);
+  }, [allCourses, notesData?.materias, logrosByGsId]);
 
   const selectedSubjectData = selectedSubject
     ? notesData?.materias.find(m => m._id === selectedSubject)
@@ -318,9 +396,10 @@ export default function StudentNotesPage() {
     };
   })() : null;
 
-  // Calcular promedio general
-  const promedioGeneral = subjects.length > 0
-    ? subjects.reduce((acc, s) => acc + s.promedio, 0) / subjects.length
+  // Promedio general solo sobre materias con notas
+  const subjectsWithGrades = subjects.filter((s) => s.promedio !== null);
+  const promedioGeneral = subjectsWithGrades.length > 0
+    ? subjectsWithGrades.reduce((acc, s) => acc + (s.promedio ?? 0), 0) / subjectsWithGrades.length
     : 0;
 
   if (isPadre && !primerHijoId && !isLoading) {
@@ -375,6 +454,8 @@ export default function StudentNotesPage() {
         return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40';
       case 'bajo':
         return 'bg-red-500/20 text-red-400 border-red-500/40';
+      case 'sin_notas':
+        return 'bg-white/10 text-white/50 border-white/20';
       default:
         return 'bg-white/10 text-white/70 border-white/20';
     }
@@ -392,23 +473,62 @@ export default function StudentNotesPage() {
     }
   };
 
-  // Datos para la gráfica general
-  const chartData = subjects.map(s => ({
-    materia: s.nombre.substring(0, 8),
-    promedio: s.promedio,
-    color: s.colorAcento || '#00c8ff'
-  }));
+  // Evolución por materia y datos para gráfico de varias líneas (una por materia con notas)
+  const { chartData, chartConfig, subjectsWithEvolucion } = useMemo(() => {
+    const withGrades = subjects.filter((s) => s.promedio !== null);
+    const materiasConNotas = notesData?.materias ?? [];
+    const byId = new Map(materiasConNotas.map((m) => [m._id, m]));
 
-  const chartConfig = {
-    promedio: {
-      label: 'Promedio',
-      color: '#00c8ff'
+    const evolucionPorMateria: Record<string, { date: Date; dateStr: string; promedio: number }[]> = {};
+    const allPoints: { date: Date; dateStr: string }[] = [];
+    for (const s of withGrades) {
+      const m = byId.get(s._id);
+      if (!m) continue;
+      const logros = s.groupSubjectId ? logrosByGsId[s.groupSubjectId] : undefined;
+      const ev = computeEvolucion(m, logros);
+      evolucionPorMateria[s._id] = ev;
+      for (const p of ev) allPoints.push({ date: p.date, dateStr: p.dateStr });
     }
-  };
+    // Ordenar fechas y quedarnos con una fila por fecha (única por dateStr para mostrar)
+    allPoints.sort((a, b) => a.date.getTime() - b.date.getTime());
+    const seen = new Set<string>();
+    const sortedRows: { date: Date; dateStr: string }[] = [];
+    for (const p of allPoints) {
+      const t = p.date.getTime();
+      if (Number.isNaN(t) || !p.dateStr) continue;
+      const key = String(t);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sortedRows.push(p);
+    }
+    const getValue = (subjectId: string, rowDate: Date): number | undefined => {
+      const ev = evolucionPorMateria[subjectId];
+      if (!ev?.length) return undefined;
+      let last: { promedio: number } | null = null;
+      for (const point of ev) {
+        if (point.date.getTime() <= rowDate.getTime()) last = point;
+        else break;
+      }
+      return last?.promedio;
+    };
+    const chartData = sortedRows.map((row) => {
+      const rowData: Record<string, string | number> = { period: row.dateStr };
+      for (const s of withGrades) {
+        const v = getValue(s._id, row.date);
+        if (v !== undefined) rowData[s._id] = v;
+      }
+      return rowData;
+    });
+    const chartConfig: Record<string, { label: string; color: string }> = {};
+    for (const s of withGrades) {
+      chartConfig[s._id] = { label: s.nombre, color: s.colorAcento || '#00c8ff' };
+    }
+    return { chartData, chartConfig, subjectsWithEvolucion: withGrades };
+  }, [subjects, notesData?.materias, logrosByGsId]);
 
   // Vista principal (lista de materias)
   if (!selectedSubject) {
-    if (subjects.length === 0) {
+    if (allCourses.length === 0 && !isLoading) {
       const pageTitle = isPadre ? `Notas de ${nombreHijo}` : 'Mis Notas';
       const pageSubtitle = isPadre
         ? `Revisa el rendimiento académico de ${nombreHijo} por materia`
@@ -491,51 +611,68 @@ export default function StudentNotesPage() {
               </CardTitle>
               <CardDescription className="text-white/60 space-y-2">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span>Promedio general: <span className="text-white font-semibold">{Math.round(promedioGeneral * 10) / 10}</span></span>
-                  <div className="flex-1 min-w-[120px] max-w-[200px] h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[#00c8ff] transition-all duration-300"
-                      style={{ width: `${Math.min(100, Math.max(0, promedioGeneral))}%` }}
-                    />
-                  </div>
+                  <span>Promedio general: <span className="text-white font-semibold">{subjectsWithGrades.length > 0 ? Math.round(promedioGeneral * 10) / 10 : 'N/A'}</span></span>
+                  {subjectsWithGrades.length > 0 && (
+                    <div className="flex-1 min-w-[120px] max-w-[200px] h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[#00c8ff] transition-all duration-300"
+                        style={{ width: `${Math.min(100, Math.max(0, promedioGeneral))}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6">
-              <div className="w-full overflow-x-auto">
-                <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
-                  <BarChart 
-                    data={chartData}
-                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis 
-                      dataKey="materia" 
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                      interval={0}
-                    />
-                    <YAxis 
-                      domain={[0, 100]}
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      width={40}
-                    />
-                    <ChartTooltip 
-                      content={<ChartTooltipContent />}
-                      cursor={{ fill: 'rgba(159, 37, 184, 0.1)' }}
-                    />
-                    <Bar 
-                      dataKey="promedio" 
-                      fill="#00c8ff"
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ChartContainer>
-              </div>
+              {chartData.length > 0 && subjectsWithEvolucion.length > 0 ? (
+                <div className="w-full overflow-x-auto">
+                  <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
+                    <LineChart
+                      data={chartData}
+                      margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                      <XAxis
+                        dataKey="period"
+                        stroke="rgba(255,255,255,0.5)"
+                        tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                        interval={0}
+                      />
+                      <YAxis
+                        domain={[0, 100]}
+                        stroke="rgba(255,255,255,0.5)"
+                        tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                        width={40}
+                      />
+                      <ChartTooltip
+                        content={<ChartTooltipContent />}
+                        cursor={{ stroke: 'rgba(255,255,255,0.3)' }}
+                      />
+                      {subjectsWithEvolucion.map((s) => (
+                        <Line
+                          key={s._id}
+                          type="monotone"
+                          dataKey={s._id}
+                          name={s.nombre}
+                          stroke={s.colorAcento || '#00c8ff'}
+                          strokeWidth={2}
+                          dot={{ fill: s.colorAcento || '#00c8ff', r: 4 }}
+                          activeDot={{ r: 6 }}
+                          connectNulls
+                        />
+                      ))}
+                      <Legend wrapperStyle={{ paddingTop: 12 }} />
+                    </LineChart>
+                  </ChartContainer>
+                </div>
+              ) : (
+                <div className="h-[280px] flex items-center justify-center text-white/50 text-sm">
+                  No hay promedios por materia aún. Las notas aparecerán aquí cuando se registren calificaciones.
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -562,34 +699,79 @@ export default function StudentNotesPage() {
                   </CardTitle>
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-3xl font-bold text-white">
-                      {Math.round(subject.promedio)}
+                      {subject.promedio !== null ? Math.round(subject.promedio) : 'N/A'}
                     </span>
-                    <span className="text-white/50">/ 100</span>
+                    {subject.promedio !== null && <span className="text-white/50">/ 100</span>}
                   </div>
                   <div className="flex items-center gap-2 mb-2">
                     <Badge className={getEstadoColor(subject.estado)}>
-                      {subject.estado.charAt(0).toUpperCase() + subject.estado.slice(1)}
+                      {subject.estado === 'sin_notas' ? 'N/A' : subject.estado.charAt(0).toUpperCase() + subject.estado.slice(1)}
                     </Badge>
                   </div>
                   <p className="text-sm text-white/60">
-                    Última nota: <span className="text-white font-semibold">{Math.round(subject.ultimaNota)}</span>
+                    Última nota: <span className="text-white font-semibold">{subject.ultimaNota !== null ? Math.round(subject.ultimaNota) : 'N/A'}</span>
                   </p>
                 </CardHeader>
                 <CardContent className="p-6 pt-0">
                   <Button
                     variant="outline"
-                    className="w-full border-white/10 text-white hover:bg-white/10"
+                    className="w-full border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10 hover:border-[#3B82F6]"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedSubject(subject._id);
+                      const courseId = subject.groupSubjectId ?? subject._id;
+                      setLocation(`/course/${courseId}/analytics`);
                     }}
                   >
-                    Ver Detalles
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Vista analítica
                   </Button>
                 </CardContent>
               </Card>
             ))}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Materia seleccionada pero sin notas (solo N/A)
+  if (selectedSubject && !subjectDetail) {
+    const subjectCard = subjects.find((s) => s._id === selectedSubject);
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="mb-8">
+            <Button variant="ghost" className="text-[#3B82F6] hover:text-[#2563EB] hover:bg-white/5 -ml-2" onClick={() => setSelectedSubject(null)}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Volver a Notas
+            </Button>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 font-['Poppins'] break-words">
+                  {subjectCard?.nombre ?? 'Materia'}
+                </h1>
+                <Badge className={getEstadoColor('sin_notas')}>N/A</Badge>
+              </div>
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ backgroundColor: subjectCard?.colorAcento || '#00c8ff' }}>
+                <BookOpen className="w-10 h-10 text-white" />
+              </div>
+            </div>
+          </div>
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+            <CardContent className="p-12 text-center">
+              <AlertCircle className="w-12 h-12 text-white/40 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-white mb-2">Sin notas registradas</h3>
+              <p className="text-white/60 mb-6">Aún no hay calificaciones para esta materia.</p>
+              <Button
+                variant="outline"
+                className="border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10"
+                onClick={() => setLocation(`/course/${selectedSubject}/analytics`)}
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Vista analítica
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );

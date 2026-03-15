@@ -41,6 +41,18 @@ function slotKey(dia: number, periodo: number): string {
 interface Course {
   _id: string;
   nombre: string;
+  /** Nombres de grupo a los que se dicta esta materia (ej. ["11H"]) */
+  cursos?: string[];
+}
+
+interface GroupOption {
+  _id: string;
+  id: string;
+  nombre: string;
+}
+
+function looksLikeUuid(s: string): boolean {
+  return s.length === 36 && s.includes("-");
 }
 
 export default function AsistenciaSelectorPage() {
@@ -48,6 +60,14 @@ export default function AsistenciaSelectorPage() {
   const [, setLocation] = useLocation();
   const grupoId = params?.grupoId || "";
   const grupoDisplay = grupoId.toUpperCase().trim();
+
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ["/api/groups", grupoId],
+    queryFn: () => apiRequest("GET", `/api/groups/${encodeURIComponent(grupoId)}`),
+    enabled: !!grupoId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const groupDisplayName = (groupInfo?.nombre?.trim() || grupoDisplay) as string;
 
   const hoy = new Date();
   const fechaDefault = hoy.toISOString().slice(0, 10);
@@ -76,8 +96,22 @@ export default function AsistenciaSelectorPage() {
     enabled: !!grupoId,
   });
 
+  const { data: groupsList = [] } = useQuery<GroupOption[]>({
+    queryKey: ["/api/groups/all"],
+    queryFn: () => apiRequest("GET", "/api/groups/all"),
+    enabled: !!grupoId,
+  });
+
   const groupIdStr = groupScheduleData?.grupoId ? toId(groupScheduleData.grupoId) : "";
   const grupoNombre = (groupScheduleData?.grupoNombre ?? "").trim();
+  const groupNameByUuid = useMemo(() => {
+    const map: Record<string, string> = {};
+    groupsList.forEach((g) => {
+      const id = toId(g._id ?? g.id);
+      if (id) map[id] = (g.nombre ?? "").trim();
+    });
+    return map;
+  }, [groupsList]);
   const profSlots = useMemo(() => {
     const raw = profScheduleData?.slots && typeof profScheduleData.slots === "object" ? profScheduleData.slots : {};
     const out: Record<string, string> = {};
@@ -103,34 +137,82 @@ export default function AsistenciaSelectorPage() {
     return map;
   }, [courses]);
 
-  /** Si en el horario del profesor aparece este grupo (por nombre o id de la URL) */
+  /** Si en el horario del profesor aparece este grupo (por nombre, UUID del grupo, o id de la URL) */
   const profScheduleContainsGroup = useMemo(() => {
     const search = (grupoId || "").trim().toUpperCase();
-    if (!search) return false;
-    return Object.values(profSlots).some((v) => (v || "").trim().toUpperCase() === search);
-  }, [grupoId, profSlots]);
+    const nombreUpper = (grupoNombre || "").toUpperCase();
+    if (!search && !nombreUpper) return false;
+    return Object.values(profSlots).some((v) => {
+      const slotVal = (v || "").trim();
+      if (!slotVal) return false;
+      const slotUpper = slotVal.toUpperCase();
+      if (slotVal === groupIdStr) return true;
+      if (slotUpper === search) return true;
+      if (search && (search.includes(slotUpper) || slotUpper.includes(search))) return true;
+      if (looksLikeUuid(slotVal)) {
+        const slotGroupName = groupNameByUuid[slotVal];
+        if (slotGroupName) {
+          const nameUpper = slotGroupName.toUpperCase();
+          if (search && (nameUpper === search || nameUpper.includes(search) || search.includes(nameUpper))) return true;
+          if (nombreUpper && (nameUpper === nombreUpper || nameUpper.includes(nombreUpper) || nombreUpper.includes(nameUpper))) return true;
+        }
+      }
+      return false;
+    });
+  }, [grupoId, profSlots, groupIdStr, grupoNombre, groupNameByUuid]);
 
-  /** Comprueba si el valor del slot del profesor corresponde a este grupo (_id o nombre de API, o nombre de la URL) */
+  /** Comprueba si el valor del slot del profesor corresponde a este grupo.
+   * El slot puede ser: UUID del grupo (horario guarda _id del grupo) o nombre (ej. "11H").
+   * Acepta coincidencia exacta o cuando el nombre del grupo del slot es parte del nombre actual (ej. "11H" en "FÍSICA 11H"). */
   const slotMatchesGroup = (slotVal: string) => {
     const s = (slotVal || "").trim();
     if (!s) return false;
     if (s === groupIdStr) return true;
-    if (grupoNombre && s.toUpperCase() === grupoNombre.toUpperCase()) return true;
-    if ((grupoId || "").trim().toUpperCase() === s.toUpperCase()) return true;
+    const su = s.toUpperCase();
+    const urlNombre = (grupoId || "").trim().toUpperCase();
+    if (grupoNombre) {
+      const gnu = grupoNombre.toUpperCase();
+      if (su === gnu) return true;
+      if (gnu.includes(su) || su.includes(gnu)) return true;
+    }
+    if (urlNombre === su) return true;
+    if (urlNombre.includes(su) || su.includes(urlNombre)) return true;
+    if (looksLikeUuid(s)) {
+      const slotGroupName = groupNameByUuid[s];
+      if (slotGroupName) {
+        const slotNameUpper = slotGroupName.toUpperCase();
+        if (grupoNombre && (grupoNombre.toUpperCase() === slotNameUpper || grupoNombre.toUpperCase().includes(slotNameUpper) || slotNameUpper.includes(grupoNombre.toUpperCase()))) return true;
+        if (urlNombre === slotNameUpper || urlNombre.includes(slotNameUpper) || slotNameUpper.includes(urlNombre)) return true;
+      }
+    }
     return false;
   };
+
+  /** Un group_subject de este grupo (para asistencia): del horario del grupo o un curso del profesor que sea de este grupo. Nunca usar un curso de otro grupo. */
+  const courseIdParaEsteGrupo = useMemo(() => {
+    const fromSlots = Object.values(groupSlots)[0];
+    if (fromSlots) return fromSlots;
+    const grupoNorm = (grupoNombre || grupoId || "").toUpperCase().trim();
+    if (!grupoNorm) return groupIdStr || "";
+    const cursoDeEsteGrupo = courses.find(
+      (c) =>
+        Array.isArray(c.cursos) &&
+        c.cursos.some((cur) => String(cur || "").toUpperCase().trim() === grupoNorm)
+    );
+    if (cursoDeEsteGrupo) return toId(cursoDeEsteGrupo._id);
+    return groupIdStr;
+  }, [groupSlots, grupoNombre, grupoId, groupIdStr, courses]);
 
   /** Slots donde el profesor tiene este grupo: solo los días/horas donde EN SU HORARIO aparece este grupo. */
   const slotsConEsteGrupo = useMemo(() => {
     const list: { dia: number; periodo: number; courseId: string; materia: string; inicio: string; fin: string }[] = [];
-    const fallbackCourseId = Object.values(groupSlots)[0] || (courses.length ? toId(courses[0]._id) : "");
     for (let dia = 1; dia <= 6; dia++) {
       for (const per of PERIODOS) {
         if (per.especial) continue;
         const key = slotKey(dia, per.num);
         const profTieneEsteSlot = slotMatchesGroup(profSlots[key]);
         if (!profTieneEsteSlot) continue;
-        const courseId = groupSlots[key] || fallbackCourseId;
+        const courseId = groupSlots[key] || courseIdParaEsteGrupo;
         list.push({
           dia,
           periodo: per.num,
@@ -142,7 +224,7 @@ export default function AsistenciaSelectorPage() {
       }
     }
     return list;
-  }, [groupIdStr, grupoNombre, grupoId, profSlots, groupSlots, courseById, courses]);
+  }, [groupIdStr, grupoNombre, grupoId, profSlots, groupSlots, courseById, courses, groupNameByUuid, courseIdParaEsteGrupo]);
 
   const slotsDelDia = useMemo(() => {
     if (diaSeleccionado == null) return [];
@@ -176,13 +258,13 @@ export default function AsistenciaSelectorPage() {
     >
       <div className="relative z-10 w-full flex flex-col min-h-0 max-w-2xl mx-auto">
         <div className="mb-6">
-          <NavBackButton to={`/course-detail/${grupoId}`} label={`Grupo ${grupoDisplay}`} />
+          <NavBackButton to={`/course-detail/${grupoId}`} label={`Grupo ${groupDisplayName}`} />
         </div>
 
         <header className="mb-8">
           <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-2 flex items-center gap-2">
             <CheckCircle className="w-7 h-7 text-emerald-500" />
-            Registrar Asistencia – {grupoDisplay}
+            Registrar Asistencia – {groupDisplayName}
           </h1>
           <p className="text-white/60 text-sm">
             Elige la fecha y el día. Solo podrás continuar si tienes clase con este grupo ese día según tu horario.
@@ -199,7 +281,7 @@ export default function AsistenciaSelectorPage() {
             className="rounded-2xl p-8 text-center border border-emerald-500/30 bg-emerald-500/10"
           >
             <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-            <p className="text-white/90 font-medium">Tu horario incluye este grupo ({grupoDisplay}).</p>
+            <p className="text-white/90 font-medium">Tu horario incluye este grupo ({groupDisplayName}).</p>
             <p className="text-white/60 text-sm mt-1">No se pudo cargar el detalle del horario. Recarga la página o pulsa Reintentar.</p>
             <Button
               type="button"
@@ -221,7 +303,7 @@ export default function AsistenciaSelectorPage() {
           <div
             className="rounded-2xl p-8 text-center border border-white/10 bg-white/[0.03]"
           >
-            <p className="text-white/80 font-medium">No se encontró el grupo {grupoDisplay}.</p>
+            <p className="text-white/80 font-medium">No se encontró el grupo {groupDisplayName}.</p>
             <p className="text-white/50 text-sm mt-1">Verifica que el curso exista en el colegio.</p>
           </div>
         ) : horarioGrupoSinDefinir ? (
@@ -230,7 +312,7 @@ export default function AsistenciaSelectorPage() {
           >
             <Clock className="w-12 h-12 text-white/30 mx-auto mb-3" />
             <p className="text-white/80 font-medium">Tu horario no tiene clase con este grupo en ningún día.</p>
-            <p className="text-white/50 text-sm mt-1">Solo puedes tomar asistencia en los días y horas donde tu horario indica que tienes clase con {grupoDisplay}.</p>
+            <p className="text-white/50 text-sm mt-1">Solo puedes tomar asistencia en los días y horas donde tu horario indica que tienes clase con {groupDisplayName}.</p>
           </div>
         ) : (
           <>
@@ -298,7 +380,7 @@ export default function AsistenciaSelectorPage() {
                 {diaSeleccionado != null && slotsDelDia.length === 0 && (
                   <p className="mt-4 text-sm text-amber-400/90 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    No tienes clase con {grupoDisplay} el día {diaSeleccionado}. Elige otro día.
+                    No tienes clase con {groupDisplayName} el día {diaSeleccionado}. Elige otro día.
                   </p>
                 )}
 

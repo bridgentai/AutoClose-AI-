@@ -7,6 +7,7 @@ import {
   updateEvent,
   deleteEvent,
 } from '../repositories/eventRepository.js';
+import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 
 const router = express.Router();
 
@@ -44,15 +45,20 @@ function toEventResponse(row: {
 
 router.get('/', protect, async (req: AuthRequest, res) => {
   try {
-    const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!institutionId) return res.status(401).json({ message: 'No autorizado.' });
 
     const { desde, hasta, tipo, cursoId } = req.query;
-    const list = await findEventsByInstitutionWithDetails(colegioId, {
+    let groupId: string | undefined;
+    if (cursoId && typeof cursoId === 'string') {
+      const resolved = await resolveGroupId(cursoId.trim(), institutionId);
+      groupId = resolved?.id;
+    }
+    const list = await findEventsByInstitutionWithDetails(institutionId, {
       fromDate: desde as string,
       toDate: hasta as string,
       type: tipo as string,
-      groupId: cursoId as string,
+      groupId,
     });
     return res.json(list.map(toEventResponse));
   } catch (e: unknown) {

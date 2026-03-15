@@ -44,11 +44,24 @@ export default function DirectivoEstudianteNotasPage() {
   const grupoId = params?.grupoId ? decodeURIComponent(params.grupoId) : "";
   const estudianteId = params?.estudianteId ?? "";
 
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ["/api/groups", grupoId],
+    queryFn: () => apiRequest("GET", `/api/groups/${encodeURIComponent(grupoId)}`),
+    enabled: !!grupoId,
+  });
+  const groupDisplayName = groupInfo?.nombre?.trim() || grupoId;
+
   useEffect(() => {
     if (user && user.rol !== "directivo") {
       setLocation("/dashboard");
     }
   }, [user, setLocation]);
+
+  useEffect(() => {
+    if (user && user.rol === "directivo" && (!grupoId || !estudianteId)) {
+      setLocation("/directivo/cursos");
+    }
+  }, [user, grupoId, estudianteId, setLocation]);
 
   const { data: notesData, isLoading } = useQuery<HijoNotesResponse>({
     queryKey: ["/api/student/hijo", estudianteId, "notes"],
@@ -57,11 +70,20 @@ export default function DirectivoEstudianteNotasPage() {
     enabled: !!user?.colegioId && user?.rol === "directivo" && !!estudianteId,
   });
 
-  if (!user || user.rol !== "directivo") return null;
-  if (!grupoId || !estudianteId) {
-    setLocation("/directivo/cursos");
-    return null;
+  if (!user) {
+    return (
+      <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-48 bg-white/10 rounded-md" />
+          <Skeleton className="h-32 w-full bg-white/10 rounded-xl" />
+          <Skeleton className="h-48 w-full bg-white/10 rounded-xl" />
+        </div>
+      </div>
+    );
   }
+
+  if (user.rol !== "directivo") return null;
+  if (!grupoId || !estudianteId) return null;
 
   const materias = notesData?.materias ?? [];
 
@@ -69,14 +91,14 @@ export default function DirectivoEstudianteNotasPage() {
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
       <NavBackButton
         to={`/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes`}
-        label={grupoId}
+        label={groupDisplayName}
       />
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
           <FileText className="w-8 h-8 text-[#00c8ff]" />
           Notas del estudiante
         </h1>
-        <p className="text-white/60 mt-1">Vista solo lectura. Curso: {grupoId}</p>
+        <p className="text-white/60 mt-1">Vista solo lectura. Curso: {groupDisplayName}</p>
       </div>
 
       {isLoading ? (

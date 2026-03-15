@@ -17,6 +17,20 @@ export async function findEnrollmentsByGroup(groupId: string): Promise<Enrollmen
   return r.rows;
 }
 
+/** Count students per group in one query. Returns map group_id -> count (distinct student_id per group). */
+export async function countEnrollmentsByGroupIds(groupIds: string[]): Promise<Record<string, number>> {
+  if (groupIds.length === 0) return {};
+  const r = await queryPg<{ group_id: string; count: string }>(
+    `SELECT group_id, COUNT(DISTINCT student_id)::text AS count
+     FROM enrollments WHERE group_id = ANY($1::uuid[])
+     GROUP BY group_id`,
+    [groupIds]
+  );
+  const out: Record<string, number> = {};
+  for (const row of r.rows) out[row.group_id] = parseInt(row.count, 10) || 0;
+  return out;
+}
+
 export async function findEnrollmentsByStudent(studentId: string): Promise<EnrollmentRow[]> {
   const r = await queryPg<EnrollmentRow>(
     'SELECT * FROM enrollments WHERE student_id = $1',
@@ -25,23 +39,24 @@ export async function findEnrollmentsByStudent(studentId: string): Promise<Enrol
   return r.rows;
 }
 
-/** Para estudiantes: devuelve el nombre del grado real (grupo tipo 1: nombre ~ '^[0-9]'). */
+/** Para estudiantes: devuelve el nombre del primer grupo en el que está inscrito. */
 export async function getFirstGroupNameForStudent(studentId: string): Promise<string | null> {
   const r = await queryPg<{ name: string }>(
     `SELECT g.name FROM enrollments e JOIN groups g ON g.id = e.group_id
-     WHERE e.student_id = $1 AND g.name ~ '^[0-9]'
+     WHERE e.student_id = $1
+     ORDER BY e.created_at
      LIMIT 1`,
     [studentId]
   );
   return r.rows[0]?.name ?? null;
 }
 
-/** Devuelve el grado real del estudiante (grupo tipo 1: nombre ~ '^[0-9]'). */
+/** Devuelve el primer grupo del estudiante por fecha de enrollment. */
 export async function getFirstGroupForStudent(studentId: string, institutionId?: string): Promise<GroupRow | null> {
   const r = await queryPg<GroupRow>(
     `SELECT g.id, g.institution_id, g.section_id, g.name, g.description, g.academic_period_id, g.created_at, g.updated_at
      FROM enrollments e JOIN groups g ON g.id = e.group_id
-     WHERE e.student_id = $1 AND g.name ~ '^[0-9]'
+     WHERE e.student_id = $1
      ${institutionId ? 'AND g.institution_id = $2' : ''}
      ORDER BY e.created_at
      LIMIT 1`,
@@ -50,7 +65,7 @@ export async function getFirstGroupForStudent(studentId: string, institutionId?:
   return r.rows[0] ?? null;
 }
 
-/** Grupos-materia del estudiante (tipo 2: nombre ~ '^[^0-9]'). Para grades/submissions. */
+/** Grupos del estudiante (reales, ej. 11H, 10C). Para grades/submissions. */
 export async function getAllCourseGroupsForStudent(
   studentId: string,
   institutionId?: string
@@ -60,7 +75,6 @@ export async function getAllCourseGroupsForStudent(
             g.academic_period_id, g.created_at, g.updated_at
      FROM enrollments e JOIN groups g ON g.id = e.group_id
      WHERE e.student_id = $1
-     AND g.name ~ '^[^0-9]'
      ${institutionId ? 'AND g.institution_id = $2' : ''}
      ORDER BY g.name`,
     institutionId ? [studentId, institutionId] : [studentId]

@@ -27,9 +27,9 @@ router.get('/mine', protect, async (req: AuthRequest, res) => {
 
     const groupSubjects = await findGroupSubjectsByGroupWithDetails(group.id, user.institution_id);
     const formattedSubjects = groupSubjects.map((gs) => ({
-      _id: gs.subject_id,
-      id: gs.subject_id,
-      nombre: gs.subject_name,
+      _id: gs.id,
+      id: gs.id,
+      nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || gs.subject_name || '',
       descripcion: gs.subject_description ?? '',
       colorAcento: '',
       icono: '',

@@ -23,8 +23,14 @@ export interface PerformanceSnapshotResponse {
   weightedFinalAverage: number;
   categoryAverages: Record<string, number>;
   categoryImpacts: Record<string, number>;
+  categoryNames?: Record<string, string>;
+  categoryWeights?: Record<string, number>;
   consistencyIndex?: number;
   trendDirection?: 'up' | 'down' | 'stable';
+  evolucion?: {
+    labels: string[];
+    promedios: number[];
+  };
 }
 
 export interface PerformanceForecastResponse {

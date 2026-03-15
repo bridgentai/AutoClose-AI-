@@ -5,7 +5,7 @@ import { ENV } from '../config/env.js';
 import { findUserByEmail, findUserById, findUserByInternalCodeAny, createUser, updateUser } from '../repositories/userRepository.js';
 import { toAuthResponse } from '../mappers/userMapper.js';
 import { findInstitutionCodeByCode, findInstitutionCodesByInstitution } from '../repositories/institutionCodeRepository.js';
-import { findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 import { getFirstGroupNameForStudent } from '../repositories/enrollmentRepository.js';
 import { findActiveAcademicPeriodForInstitution } from '../repositories/academicPeriodRepository.js';
 import { createEnrollment } from '../repositories/enrollmentRepository.js';
@@ -61,13 +61,12 @@ const CODIGOS_COLEGIO: Record<string, string> = {
 async function syncStudentToGroup(estudianteId: string, grupoId: string | undefined, colegioId: string): Promise<void> {
   if (!grupoId || !estudianteId) return;
   try {
-    const grupoIdNorm = grupoId.toUpperCase().trim();
-    const group = await findGroupByNameAndInstitution(colegioId, grupoIdNorm);
-    if (!group) return;
+    const resolved = await resolveGroupId(grupoId.trim(), colegioId);
+    if (!resolved) return;
     const period = await findActiveAcademicPeriodForInstitution(colegioId);
     await createEnrollment({
       student_id: estudianteId,
-      group_id: group.id,
+      group_id: resolved.id,
       academic_period_id: period?.id ?? null,
     });
   } catch (err: unknown) {

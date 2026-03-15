@@ -4,6 +4,7 @@ import { requireRole } from '../middleware/roleAuth.js';
 import { logAdminAction } from '../services/auditLogger.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupById, findGroupByNameAndInstitution, findGroupsByInstitution } from '../repositories/groupRepository.js';
+import { resolveGroupId, resolveGroupSubjectId } from '../utils/resolveLegacyCourse.js';
 import { getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
 import {
   findSubjectById,
@@ -24,8 +25,10 @@ import { findAcademicFeedWithDetails, createAnnouncement } from '../repositories
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
 import { findUsersByIds } from '../repositories/userRepository.js';
-import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
+import { findGradingSchemaByGroupSubject } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
+import { queryPg } from '../config/db-pg.js';
+import { generateAcademicInsightsSummary, type AcademicInsightsContext, type AcademicInsightRole } from '../services/openai.js';
 
 const router = express.Router();
 
@@ -40,10 +43,11 @@ const checkIsDirectivoOrAdminColegio = (req: AuthRequest, res: Response, next: N
 };
 
 function toCourseResponse(gs: { id: string; subject_id: string; group_id: string; teacher_id: string; institution_id: string; created_at: string }, subject: { id: string; name: string; description: string | null } | null, teacher: { id: string; full_name: string; email: string } | null, groupName?: string) {
+  const nombre = groupName ? `${subject?.name ?? ''} ${groupName}`.trim() || (subject?.name ?? '') : (subject?.name ?? '');
   return {
     _id: gs.id,
     id: gs.id,
-    nombre: subject?.name ?? '',
+    nombre,
     descripcion: subject?.description ?? '',
     colorAcento: '',
     icono: '',
@@ -54,27 +58,44 @@ function toCourseResponse(gs: { id: string; subject_id: string; group_id: string
 }
 
 // Rutas con path fijo primero (antes de /:id)
-// GET /api/courses/for-group/:grupo
+// GET /api/courses/for-group/:grupo — :grupo puede ser UUID del grupo o nombre (ej. 11H)
 router.get('/for-group/:grupo', protect, async (req: AuthRequest, res) => {
   try {
     const { grupo } = req.params;
     const userId = req.user?.id;
-    const colegioId = req.user?.colegioId;
-    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
-    const user = await findUserById(userId);
-    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
-    if (user.role !== 'profesor') return res.status(403).json({ message: 'Solo los profesores pueden acceder a esta ruta' });
-    const group = await findGroupByNameAndInstitution(colegioId, grupo.toUpperCase().trim());
-    if (!group) return res.json([]);
-    const list = await findGroupSubjectsByGroupWithDetails(group.id, colegioId);
-    const byTeacher = list.filter((gs) => gs.teacher_id === userId);
-    const courses = byTeacher.map((gs) =>
-      toCourseResponse(gs, { id: gs.subject_id, name: gs.subject_name, description: gs.subject_description }, { id: gs.teacher_id, full_name: gs.teacher_name, email: gs.teacher_email }, gs.group_name)
+    const colegioId = req.user?.institutionId ?? req.user?.colegioId;
+    const userRole = req.user?.rol;
+
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
+
+    const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'school_admin', 'super_admin', 'padre'];
+    if (!allowedRoles.includes(userRole ?? '')) {
+      return res.status(403).json({ message: 'Sin acceso' });
+    }
+
+    const resolved = await resolveGroupId(grupo.trim(), colegioId);
+    if (!resolved) return res.json([]);
+
+    const list = await findGroupSubjectsByGroupWithDetails(resolved.id, colegioId);
+
+    // Profesor: solo sus materias. Otros roles: todas las materias del grupo
+    const filtered = userRole === 'profesor'
+      ? list.filter((gs) => gs.teacher_id === userId)
+      : list;
+
+    const courses = filtered.map((gs) =>
+      toCourseResponse(
+        gs,
+        { id: gs.subject_id, name: gs.subject_name, description: gs.subject_description },
+        { id: gs.teacher_id, full_name: gs.teacher_name, email: gs.teacher_email },
+        gs.group_name
+      )
     );
-    res.json(courses);
+
+    return res.json(courses);
   } catch (error: unknown) {
     console.error('Error al obtener materias para grupo:', (error as Error).message);
-    res.status(500).json({ message: 'Error en el servidor.' });
+    return res.status(500).json({ message: 'Error en el servidor.' });
   }
 });
 
@@ -335,7 +356,8 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Solo estudiantes y padres pueden acceder a los detalles de materias desde esta ruta' });
     }
 
-    const gs = await findGroupSubjectById(id);
+    const gsIdResolved = await resolveGroupSubjectId(id ?? '', colegioId);
+    const gs = gsIdResolved ? await findGroupSubjectById(gsIdResolved) : await findGroupSubjectById(id);
     const subject = gs ? await findSubjectById(gs.subject_id) : await findSubjectById(id);
     if (!subject) return res.status(404).json({ message: 'Materia no encontrada' });
     if (subject.institution_id !== colegioId) return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
@@ -395,12 +417,12 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
 // GET /api/courses/:id/grading-schema
 router.get('/:id/grading-schema', protect, async (req: AuthRequest, res) => {
   try {
-    const courseId = req.params.id;
+    const courseId = req.params.id ?? '';
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-    const gs = await findGroupSubjectById(courseId);
-    const groupId = gs?.group_id ?? courseId;
-    const schema = await findGradingSchemaByGroup(groupId, gs?.institution_id);
+    const gsId = await resolveGroupSubjectId(courseId, colegioId);
+    if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const schema = await findGradingSchemaByGroupSubject(gsId, colegioId);
     if (!schema) return res.json({ schema: null, categories: [] });
     const categories = await findGradingCategoriesBySchema(schema.id);
     return res.json({
@@ -413,13 +435,460 @@ router.get('/:id/grading-schema', protect, async (req: AuthRequest, res) => {
   }
 });
 
-// GET /api/courses/:id/snapshots | forecast | risk | insights | analytics-summary | intelligence - stubs
-router.get('/:id/snapshots', protect, async (_req, res) => res.json([]));
-router.get('/:id/forecast', protect, async (_req, res) => res.json({ forecast: [] }));
-router.get('/:id/risk', protect, async (_req, res) => res.json({ risks: [] }));
-router.get('/:id/insights', protect, async (_req, res) => res.json({ insights: [] }));
-router.get('/:id/analytics-summary', protect, async (_req, res) => res.json({ summary: null }));
-router.get('/:id/intelligence', protect, async (_req, res) => res.json({ intelligence: null }));
+// --- Analytics helper: shared data for snapshots, forecast, risk, insights, analytics-summary, intelligence
+interface AnalyticsGradeRow {
+  score: number;
+  grading_category_id: string;
+  assignment_id: string;
+  recorded_at: string;
+}
+interface AnalyticsAllGradeRow {
+  user_id: string;
+  score: number;
+  grading_category_id: string;
+}
+interface AnalyticsAttendanceRow {
+  status: string;
+  punctuality: string | null;
+}
+interface AnalyticsSubmissionRow {
+  status: string;
+  assignment_id: string;
+}
+
+async function getAnalyticsData(
+  groupSubjectId: string,
+  studentId: string,
+  institutionId: string
+): Promise<{
+  gs: Awaited<ReturnType<typeof findGroupSubjectById>>;
+  schema: Awaited<ReturnType<typeof findGradingSchemaByGroupSubject>>;
+  categories: Awaited<ReturnType<typeof findGradingCategoriesBySchema>>;
+  studentGrades: AnalyticsGradeRow[];
+  allGrades: AnalyticsAllGradeRow[];
+  attendanceData: AnalyticsAttendanceRow[];
+  submissionsData: AnalyticsSubmissionRow[];
+} | null> {
+  const gs = await findGroupSubjectById(groupSubjectId);
+  if (!gs || gs.institution_id !== institutionId) return null;
+
+  const schema = await findGradingSchemaByGroupSubject(groupSubjectId, institutionId);
+  if (!schema) return null;
+
+  const categories = await findGradingCategoriesBySchema(schema.id);
+
+  const studentGradesResult = await queryPg<AnalyticsGradeRow>(
+    `SELECT g.score, g.grading_category_id, g.assignment_id, g.recorded_at
+     FROM grades g
+     JOIN assignments a ON g.assignment_id = a.id
+     WHERE g.user_id = $1 AND g.group_id = $2 AND a.group_subject_id = $3
+     ORDER BY g.recorded_at ASC`,
+    [studentId, gs.group_id, groupSubjectId]
+  );
+
+  const allGradesResult = await queryPg<AnalyticsAllGradeRow>(
+    `SELECT g.user_id, g.score, g.grading_category_id
+     FROM grades g
+     JOIN assignments a ON g.assignment_id = a.id
+     WHERE a.group_subject_id = $1`,
+    [groupSubjectId]
+  );
+
+  const attendanceResult = await queryPg<AnalyticsAttendanceRow>(
+    `SELECT status, punctuality FROM attendance
+     WHERE user_id = $1 AND group_subject_id = $2`,
+    [studentId, groupSubjectId]
+  );
+
+  const submissionsResult = await queryPg<AnalyticsSubmissionRow>(
+    `SELECT s.status, s.assignment_id
+     FROM submissions s
+     JOIN assignments a ON s.assignment_id = a.id
+     WHERE s.student_id = $1 AND a.group_subject_id = $2`,
+    [studentId, groupSubjectId]
+  );
+
+  return {
+    gs,
+    schema,
+    categories,
+    studentGrades: studentGradesResult.rows,
+    allGrades: allGradesResult.rows,
+    attendanceData: attendanceResult.rows,
+    submissionsData: submissionsResult.rows,
+  };
+}
+
+// GET /api/courses/:id/snapshots
+router.get('/:id/snapshots', protect, async (req: AuthRequest, res) => {
+  const courseId = req.params.id;
+  const studentId = req.query.studentId as string;
+  const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+
+  if (!studentId) return res.json([]);
+  if (req.user?.rol === 'estudiante' && req.user?.id !== studentId) return res.json([]);
+
+  const gsId = await resolveGroupSubjectId(courseId ?? '', institutionId ?? '');
+  if (!gsId) return res.json([]);
+
+  const data = await getAnalyticsData(gsId, studentId, institutionId ?? '');
+  if (!data) return res.json([]);
+
+  const { categories, studentGrades } = data;
+
+  const categoryAverages: Record<string, number> = {};
+  const categoryImpacts: Record<string, number> = {};
+  const categoryNames: Record<string, string> = {};
+  const categoryWeights: Record<string, number> = {};
+  let weightedSum = 0;
+
+  for (const cat of categories) {
+    categoryNames[cat.id] = cat.name;
+    categoryWeights[cat.id] = Number(cat.weight);
+    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
+    if (catGrades.length === 0) continue;
+    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
+    categoryAverages[cat.id] = avg;
+    const impact = avg * (Number(cat.weight) / 100);
+    categoryImpacts[cat.id] = impact;
+    weightedSum += impact;
+  }
+
+  const evolucionLabels: string[] = [];
+  const evolucionPromedios: number[] = [];
+  const gradesByDate = (studentGrades as AnalyticsGradeRow[])
+    .filter((g) => g.recorded_at)
+    .sort((a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime());
+
+  if (gradesByDate.length > 0) {
+    let runningSum = 0;
+    let runningCount = 0;
+    gradesByDate.forEach((g) => {
+      runningSum += Number(g.score);
+      runningCount += 1;
+      const d = new Date(g.recorded_at);
+      evolucionLabels.push(`${d.getDate()}/${d.toLocaleString('es', { month: 'short' })}`);
+      evolucionPromedios.push(Math.round((runningSum / runningCount) * 10) / 10);
+    });
+  }
+
+  const snapshot = {
+    _id: `${gsId}-${studentId}`,
+    studentId,
+    courseId: gsId,
+    at: new Date().toISOString(),
+    weightedFinalAverage: Math.round(weightedSum * 10) / 10,
+    categoryAverages,
+    categoryImpacts,
+    categoryNames,
+    categoryWeights,
+    trendDirection: 'stable' as const,
+    evolucion: {
+      labels: evolucionLabels,
+      promedios: evolucionPromedios,
+    },
+  };
+
+  return res.json([snapshot]);
+});
+
+// GET /api/courses/:id/forecast
+router.get('/:id/forecast', protect, async (req: AuthRequest, res) => {
+  const courseId = req.params.id;
+  const studentId = req.query.studentId as string;
+  const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+
+  if (!studentId) return res.json(null);
+  if (req.user?.rol === 'estudiante' && req.user?.id !== studentId) return res.json(null);
+
+  const gsId = await resolveGroupSubjectId(courseId ?? '', institutionId ?? '');
+  if (!gsId) return res.json(null);
+
+  const data = await getAnalyticsData(gsId, studentId, institutionId ?? '');
+  if (!data || data.studentGrades.length === 0) return res.json(null);
+
+  const { categories, studentGrades } = data;
+
+  let weightedSum = 0;
+  for (const cat of categories) {
+    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
+    if (catGrades.length === 0) continue;
+    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
+    weightedSum += avg * (Number(cat.weight) / 100);
+  }
+
+  const current = Math.round(weightedSum * 10) / 10;
+
+  const scores = studentGrades.map((g) => Number(g.score));
+  const last3 = scores.slice(-3);
+  const prev3 = scores.slice(-6, -3);
+  const avgLast = last3.reduce((s, n) => s + n, 0) / (last3.length || 1);
+  const avgPrev = prev3.length ? prev3.reduce((s, n) => s + n, 0) / prev3.length : avgLast;
+  const delta = avgLast - avgPrev;
+
+  const projected = Math.min(100, Math.max(0, current + delta));
+
+  return res.json({
+    _id: `forecast-${gsId}-${studentId}`,
+    projectedFinalGrade: Math.round(projected * 10) / 10,
+    confidenceInterval: {
+      low: Math.max(0, Math.round((projected - Math.abs(delta) * 2) * 10) / 10),
+      high: Math.min(100, Math.round((projected + Math.abs(delta) * 2) * 10) / 10),
+    },
+    riskProbabilityPercent: delta < -3 ? Math.min(90, Math.round(Math.abs(delta) * 5)) : 10,
+    method: 'trend',
+  });
+});
+
+// GET /api/courses/:id/risk
+router.get('/:id/risk', protect, async (req: AuthRequest, res) => {
+  const courseId = req.params.id;
+  const studentId = req.query.studentId as string;
+  const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+
+  if (!studentId) return res.json(null);
+  if (req.user?.rol === 'estudiante' && req.user?.id !== studentId) return res.json(null);
+
+  const gsId = await resolveGroupSubjectId(courseId ?? '', institutionId ?? '');
+  if (!gsId) return res.json(null);
+
+  const data = await getAnalyticsData(gsId, studentId, institutionId ?? '');
+  if (!data) return res.json(null);
+
+  const { categories, studentGrades, attendanceData } = data;
+
+  let weightedSum = 0;
+  for (const cat of categories) {
+    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
+    if (catGrades.length === 0) continue;
+    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
+    weightedSum += avg * (Number(cat.weight) / 100);
+  }
+  const current = weightedSum;
+
+  const factors: string[] = [];
+  if (current < 60) factors.push('Promedio por debajo del mínimo aprobatorio');
+  if (current < 75 && current >= 60) factors.push('Promedio en zona de riesgo');
+
+  const absences = attendanceData.filter((a) => a.status === 'absent').length;
+  const totalAtt = attendanceData.length;
+  const attRate = totalAtt > 0 ? (totalAtt - absences) / totalAtt : 1;
+  if (attRate < 0.8) factors.push(`Asistencia baja: ${Math.round(attRate * 100)}%`);
+
+  const scores = studentGrades.map((g) => Number(g.score));
+  const last3 = scores.slice(-3);
+  const prev3 = scores.slice(-6, -3);
+  const avgLast = last3.reduce((s, n) => s + n, 0) / (last3.length || 1);
+  const avgPrev = prev3.length ? prev3.reduce((s, n) => s + n, 0) / prev3.length : avgLast;
+  const delta = avgLast - avgPrev;
+  if (delta < -5) factors.push('Tendencia descendente en calificaciones recientes');
+
+  const level = current < 60 ? 'high' : current < 75 ? 'medium' : 'low';
+  const stabilityIndex = Math.min(1, Math.max(0, current / 100));
+
+  return res.json({
+    _id: `risk-${gsId}-${studentId}`,
+    level,
+    factors,
+    academicStabilityIndex: Math.round(stabilityIndex * 100) / 100,
+    recoveryPotentialScore: Math.round(Math.min(1, (100 - current) / 40) * 100) / 100,
+  });
+});
+
+// GET /api/courses/:id/insights
+router.get('/:id/insights', protect, async (req: AuthRequest, res) => {
+  const courseId = req.params.id;
+  const studentId = req.query.studentId as string;
+  const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+
+  if (!studentId) return res.json({ insights: [] });
+  if (req.user?.rol === 'estudiante' && req.user?.id !== studentId) return res.json({ insights: [] });
+
+  const gsId = await resolveGroupSubjectId(courseId ?? '', institutionId ?? '');
+  if (!gsId) return res.json({ insights: [] });
+
+  const data = await getAnalyticsData(gsId, studentId, institutionId ?? '');
+  if (!data) return res.json({ insights: [] });
+
+  const { categories, studentGrades, allGrades } = data;
+  const insights: string[] = [];
+
+  for (const cat of categories) {
+    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
+    if (catGrades.length === 0) continue;
+    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
+    const allCatGrades = allGrades.filter((g) => g.grading_category_id === cat.id);
+    const groupAvg = allCatGrades.length
+      ? allCatGrades.reduce((s, g) => s + Number(g.score), 0) / allCatGrades.length
+      : avg;
+
+    if (Number(cat.weight) >= 30 && avg < 75) {
+      insights.push(`${cat.name} representa el ${cat.weight}% de la nota — promedio actual: ${Math.round(avg)}`);
+    }
+    if (avg > groupAvg + 5) {
+      insights.push(`Desempeño destacado en ${cat.name}: ${Math.round(avg - groupAvg)} pts sobre el promedio del grupo`);
+    }
+    if (avg < groupAvg - 5) {
+      insights.push(`Área de oportunidad en ${cat.name}: ${Math.round(groupAvg - avg)} pts bajo el promedio del grupo`);
+    }
+  }
+
+  return res.json({ insights });
+});
+
+// GET /api/courses/:id/analytics-summary
+router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
+  const courseId = req.params.id;
+  const studentId = req.query.studentId as string;
+  const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+
+  if (!studentId) return res.json({ weightedAverage: null, byCategory: [], aiSummary: '', insights: [] });
+  if (req.user?.rol === 'estudiante' && req.user?.id !== studentId) return res.status(403).json({ weightedAverage: null, byCategory: [], aiSummary: '', insights: [] });
+
+  const gsId = await resolveGroupSubjectId(courseId ?? '', institutionId ?? '');
+  if (!gsId) return res.json({ weightedAverage: null, byCategory: [], aiSummary: '', insights: [] });
+
+  const data = await getAnalyticsData(gsId, studentId, institutionId ?? '');
+  if (!data) return res.json({ weightedAverage: null, byCategory: [], aiSummary: '', insights: [] });
+
+  const { categories, studentGrades } = data;
+
+  let weightedSum = 0;
+  const byCategory: Array<{ categoryName: string; percentage: number; average: number; count: number }> = [];
+
+  for (const cat of categories) {
+    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
+    const avg = catGrades.length
+      ? catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length
+      : 0;
+    weightedSum += avg * (Number(cat.weight) / 100);
+    byCategory.push({
+      categoryName: cat.name,
+      percentage: Number(cat.weight),
+      average: Math.round(avg * 10) / 10,
+      count: catGrades.length,
+    });
+  }
+
+  const weightedAverage = Math.round(weightedSum * 10) / 10;
+  const estado = weightedAverage >= 85 ? 'excelente' : weightedAverage >= 75 ? 'bueno' : weightedAverage >= 60 ? 'en riesgo' : 'crítico';
+
+  let aiSummary = `Promedio ponderado: ${weightedAverage}/100. Estado: ${estado}.`;
+
+  try {
+    const student = await findUserById(studentId);
+    const subject = data.gs ? await findSubjectById(data.gs.subject_id) : null;
+    const context: AcademicInsightsContext = {
+      studentName: student?.full_name ?? 'Estudiante',
+      courseName: subject?.name ?? 'Materia',
+      weightedAverage,
+      byCategory,
+      role: (req.user?.rol as AcademicInsightRole) ?? 'profesor',
+    };
+    const generated = await generateAcademicInsightsSummary(context);
+    if (generated && !generated.includes('OPENAI_API_KEY') && !generated.includes('Error al generar')) {
+      aiSummary = generated;
+    }
+  } catch (e) {
+    console.error('Error generando aiSummary con IA (vista analítica):', e);
+  }
+
+  return res.json({
+    weightedAverage,
+    byCategory,
+    snapshot: null,
+    forecast: null,
+    risk: null,
+    aiSummary,
+    insights: byCategory
+      .filter((c) => c.average < 75 && c.percentage >= 20)
+      .map((c) => `${c.categoryName} (${c.percentage}%): promedio ${c.average}`),
+  });
+});
+
+// GET /api/courses/:id/intelligence
+router.get('/:id/intelligence', protect, async (req: AuthRequest, res) => {
+  const courseId = req.params.id;
+  const studentId = req.query.studentId as string;
+  const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+
+  if (!studentId) return res.json(null);
+  if (req.user?.rol === 'estudiante' && req.user?.id !== studentId) return res.json(null);
+
+  const gsId = await resolveGroupSubjectId(courseId ?? '', institutionId ?? '');
+  if (!gsId) return res.json(null);
+
+  const data = await getAnalyticsData(gsId, studentId, institutionId ?? '');
+  if (!data) return res.json(null);
+
+  const { categories, studentGrades, allGrades, attendanceData, submissionsData } = data;
+
+  let studentWeighted = 0;
+  for (const cat of categories) {
+    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
+    if (!catGrades.length) continue;
+    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
+    studentWeighted += avg * (Number(cat.weight) / 100);
+  }
+
+  const studentIds = Array.from(new Set(allGrades.map((g) => g.user_id)));
+  const studentAverages: number[] = [];
+
+  for (const sid of studentIds) {
+    const sGrades = allGrades.filter((g) => g.user_id === sid);
+    let sw = 0;
+    for (const cat of categories) {
+      const cg = sGrades.filter((g) => g.grading_category_id === cat.id);
+      if (!cg.length) continue;
+      const avg = cg.reduce((s, g) => s + Number(g.score), 0) / cg.length;
+      sw += avg * (Number(cat.weight) / 100);
+    }
+    studentAverages.push(sw);
+  }
+
+  studentAverages.sort((a, b) => a - b);
+  const rankIndex = studentAverages.filter((a) => a <= studentWeighted).length;
+  const total = studentAverages.length || 1;
+  const percentile = Math.round((rankIndex / total) * 100);
+  const groupAverage = studentAverages.reduce((s, n) => s + n, 0) / (studentAverages.length || 1);
+
+  const totalAtt = attendanceData.length;
+  const presents = attendanceData.filter((a) => a.status === 'present').length;
+  const onTime = attendanceData.filter((a) => a.punctuality === 'on_time').length;
+  const attRate = totalAtt > 0 ? presents / totalAtt : null;
+  const punctRate = totalAtt > 0 ? onTime / totalAtt : null;
+
+  const totalAssignmentsResult = await queryPg<{ count: string }>(
+    'SELECT COUNT(*) as count FROM assignments WHERE group_subject_id = $1',
+    [gsId]
+  );
+  const totalCount = parseInt(totalAssignmentsResult.rows[0]?.count ?? '0', 10);
+  const completedCount = submissionsData.filter((s) => s.status === 'submitted').length;
+  const tasksRate = totalCount > 0 ? completedCount / totalCount : null;
+
+  const rates = [attRate, tasksRate].filter((v): v is number => v !== null);
+  const commitmentIndex = rates.length > 0 ? rates.reduce((s, v) => s + v, 0) / rates.length : null;
+
+  return res.json({
+    snapshot: null,
+    forecast: null,
+    risk: null,
+    groupComparison: {
+      groupAverage: Math.round(groupAverage * 10) / 10,
+      groupStdDev: null,
+      percentile,
+      rank: total - rankIndex + 1,
+      totalStudents: total,
+    },
+    commitment: {
+      attendanceRate: attRate !== null ? Math.round(attRate * 100) / 100 : null,
+      punctualityRate: punctRate !== null ? Math.round(punctRate * 100) / 100 : null,
+      onTimeRate: punctRate !== null ? Math.round(punctRate * 100) / 100 : null,
+      tasksCompletionRate: tasksRate !== null ? Math.round(tasksRate * 100) / 100 : null,
+      commitmentIndex: commitmentIndex !== null ? Math.round(commitmentIndex * 100) / 100 : null,
+    },
+  });
+});
 
 // POST /api/courses - Crear curso (subject + group_subjects)
 router.post('/', protect, async (req: AuthRequest, res) => {
@@ -519,22 +988,26 @@ router.post('/assign-professor-to-groups', protect, checkAdminColegioOnly, async
 router.put('/assign-professor', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
   try {
     const { courseId, professorId } = req.body;
+    const colegioId = req.user?.colegioId;
     if (!courseId || !professorId) return res.status(400).json({ message: 'Se requiere el ID del curso y el ID del profesor.' });
-    const gs = await findGroupSubjectById(courseId);
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const gsId = await resolveGroupSubjectId(String(courseId).trim(), colegioId);
+    if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const gs = await findGroupSubjectById(gsId);
     if (!gs) return res.status(404).json({ message: 'Curso no encontrado.' });
     const professor = await findUserById(professorId);
     if (!professor || professor.role !== 'profesor') return res.status(404).json({ message: 'Profesor no encontrado o rol incorrecto.' });
     const { queryPg } = await import('../config/db-pg.js');
-    await queryPg('UPDATE group_subjects SET teacher_id = $1 WHERE id = $2 RETURNING 1', [professorId, courseId]);
+    await queryPg('UPDATE group_subjects SET teacher_id = $1 WHERE id = $2 RETURNING 1', [professorId, gsId]);
     const subject = await findSubjectById(gs.subject_id);
     await logAdminAction({
       userId: req.user!.id!,
       role: req.user?.rol ?? 'admin-general-colegio',
       action: 'assign_professor',
       entityType: 'course',
-      entityId: courseId,
+      entityId: gsId,
       colegioId: gs.institution_id,
-      requestData: { courseId, professorId, courseName: subject?.name },
+      requestData: { courseId: gsId, professorId, courseName: subject?.name },
     }).catch(() => {});
     res.status(200).json({ message: `Profesor asignado correctamente al curso ${subject?.name}.`, course: { _id: gs.id }, professor: { _id: professor.id, nombre: professor.full_name } });
   } catch (error: unknown) {
@@ -547,10 +1020,14 @@ router.put('/assign-professor', protect, checkAdminColegioOnly, async (req: Auth
 router.put('/enroll-students', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
   try {
     const { courseId, studentIds } = req.body;
+    const colegioId = req.user?.colegioId;
     if (!courseId || !Array.isArray(studentIds) || studentIds.length === 0) {
       return res.status(400).json({ message: 'Se requiere el ID del curso y una lista de IDs de estudiantes.' });
     }
-    const gs = await findGroupSubjectById(courseId);
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    const gsId = await resolveGroupSubjectId(String(courseId).trim(), colegioId);
+    if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const gs = await findGroupSubjectById(gsId);
     if (!gs) return res.status(404).json({ message: 'Curso no encontrado.' });
     const { createEnrollment } = await import('../repositories/enrollmentRepository.js');
     const { findActiveAcademicPeriodForInstitution } = await import('../repositories/academicPeriodRepository.js');
@@ -566,13 +1043,13 @@ router.put('/enroll-students', protect, checkAdminColegioOnly, async (req: AuthR
       role: req.user?.rol ?? 'admin-general-colegio',
       action: 'enroll_students',
       entityType: 'course',
-      entityId: courseId,
+      entityId: gsId,
       colegioId: gs.institution_id,
-      requestData: { courseId, studentIds },
+      requestData: { courseId: gsId, studentIds },
     }).catch(() => {});
     res.status(200).json({
-      message: `Estudiantes inscritos en el curso ${group?.name ?? courseId}.`,
-      course: { _id: courseId },
+      message: `Estudiantes inscritos en el curso ${group?.name ?? gsId}.`,
+      course: { _id: gs.id },
       studentIds,
     });
   } catch (error: unknown) {

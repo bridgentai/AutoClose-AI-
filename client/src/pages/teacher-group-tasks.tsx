@@ -34,6 +34,15 @@ export default function TeacherGroupTasksPage() {
   const [, params] = useRoute('/profesor/cursos/:cursoId/tareas');
   const cursoId = params?.cursoId || '';
 
+  // Nombre legible del grupo (evitar mostrar UUID)
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ['group', cursoId],
+    queryFn: () => apiRequest('GET', `/api/groups/${encodeURIComponent(cursoId)}`),
+    enabled: !!cursoId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const groupDisplayName = (groupInfo?.nombre?.trim() || cursoId).toUpperCase();
+
   // Obtener mes y año actuales
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -87,7 +96,7 @@ export default function TeacherGroupTasksPage() {
                   onClick={() => setLocation(`/course-detail/${cursoId}`)}
                   className="text-white/70 hover:text-white cursor-pointer"
                 >
-                  Grupo {cursoId}
+                  Grupo {groupDisplayName}
                 </BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator className="text-white/40" />
@@ -98,7 +107,7 @@ export default function TeacherGroupTasksPage() {
           </Breadcrumb>
           <div>
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
-              Tareas del Grupo {cursoId}
+              Tareas del Grupo {groupDisplayName}
             </h1>
             <p className="text-white/60">
               Gestiona y corrige las tareas asignadas a este grupo

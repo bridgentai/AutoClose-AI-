@@ -1,20 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { FileText, BookOpen, Loader2, CheckCircle } from "lucide-react";
+import { FileText, BookOpen, Loader2, CheckCircle, Eye } from "lucide-react";
 import { NavBackButton } from "@/components/nav-back-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { BoletinContent, type BoletinData } from "@/components/boletin/BoletinContent";
 
 interface GroupItem {
   _id: string;
   nombre: string;
+}
+
+/** Un boletín devuelto por POST /api/boletin/generar-por-curso (sin grupo; se añade al mostrar) */
+interface BoletinGenerado {
+  estudiante: { id: string; nombre: string; email: string };
+  promedioGeneral: number | null;
+  estado: string;
+  materias: BoletinData["materias"];
+  resumenIA: string;
 }
 
 interface BoletinItem {
@@ -34,6 +50,12 @@ export default function DirectivoReportesPage() {
   const [cursoSeleccionado, setCursoSeleccionado] = useState<string>("");
   const [periodo, setPeriodo] = useState("");
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
+  const [ultimosBoletines, setUltimosBoletines] = useState<{
+    grupo: string;
+    totalEstudiantes: number;
+    boletines: BoletinGenerado[];
+  } | null>(null);
+  const [selectedBoletin, setSelectedBoletin] = useState<(BoletinGenerado & { grupo: string }) | null>(null);
 
   const { data: grupos = [], isLoading: loadingGrupos } = useQuery<GroupItem[]>({
     queryKey: ["/api/groups/all"],
@@ -49,17 +71,19 @@ export default function DirectivoReportesPage() {
 
   const generarMutation = useMutation({
     mutationFn: (body: { grupoNombre: string; periodo?: string }) =>
-      apiRequest<{ message: string; boletinIds: string[]; estudiantes: number; periodo: string }>(
+      apiRequest<{ grupo: string; totalEstudiantes: number; boletines: BoletinGenerado[] }>(
         "POST",
         "/api/boletin/generar-por-curso",
         body
       ),
     onSuccess: (data) => {
-      setMensajeExito(data.message);
+      const msg = `Boletines generados para ${data.totalEstudiantes} estudiantes del grupo ${data.grupo}.`;
+      setMensajeExito(msg);
+      setUltimosBoletines(data);
       queryClient.invalidateQueries({ queryKey: ["/api/boletin"] });
       setCursoSeleccionado("");
       setPeriodo("");
-      setTimeout(() => setMensajeExito(null), 6000);
+      setTimeout(() => setMensajeExito(null), 8000);
     },
     onError: (err: any) => {
       const data = err?.response?.data;
@@ -84,8 +108,25 @@ export default function DirectivoReportesPage() {
     });
   };
 
-  if (!user || (user.rol !== "directivo" && user.rol !== "admin-general-colegio")) {
-    setLocation("/dashboard");
+  useEffect(() => {
+    if (user && user.rol !== "directivo" && user.rol !== "admin-general-colegio") {
+      setLocation("/dashboard");
+    }
+  }, [user, setLocation]);
+
+  if (!user) {
+    return (
+      <div className="p-4 sm:p-6 md:p-10 max-w-4xl mx-auto">
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-48 bg-white/10 rounded-md" />
+          <Skeleton className="h-32 w-full bg-white/10 rounded-xl" />
+          <Skeleton className="h-48 w-full bg-white/10 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (user.rol !== "directivo" && user.rol !== "admin-general-colegio") {
     return null;
   }
 
@@ -168,6 +209,44 @@ export default function DirectivoReportesPage() {
         </CardContent>
       </Card>
 
+      {ultimosBoletines && ultimosBoletines.boletines.length > 0 && (
+        <Card className={`${CARD_STYLE} mb-8`}>
+          <CardHeader>
+            <CardTitle className="text-white">Boletines generados para {ultimosBoletines.grupo}</CardTitle>
+            <CardDescription className="text-white/60">
+              {ultimosBoletines.totalEstudiantes} estudiante(s). Haz clic en &quot;Ver&quot; para abrir el boletín.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {ultimosBoletines.boletines.map((b, idx) => (
+                <li
+                  key={b.estudiante.id || idx}
+                  className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10"
+                >
+                  <div>
+                    <span className="font-medium text-white">{b.estudiante.nombre}</span>
+                    <span className="ml-2 text-white/60">
+                      Promedio: {b.promedioGeneral !== null ? b.promedioGeneral.toFixed(1) : "—"}
+                    </span>
+                    <span className="ml-2 text-xs text-white/50 capitalize">· {b.estado}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-[#00c8ff] hover:bg-[#00c8ff]/10"
+                    onClick={() => setSelectedBoletin({ ...b, grupo: ultimosBoletines.grupo })}
+                  >
+                    <Eye className="w-4 h-4 mr-1" />
+                    Ver
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className={CARD_STYLE}>
         <CardHeader>
           <CardTitle className="text-white">Boletines recientes</CardTitle>
@@ -237,6 +316,39 @@ export default function DirectivoReportesPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!selectedBoletin} onOpenChange={(open) => !open && setSelectedBoletin(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-[#0a0a2a] border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              {selectedBoletin ? selectedBoletin.estudiante.nombre : "Boletín"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 pr-2 -mr-2">
+            {selectedBoletin && (
+              <BoletinContent
+                data={{
+                  estudiante: selectedBoletin.estudiante,
+                  grupo: selectedBoletin.grupo,
+                  promedioGeneral: selectedBoletin.promedioGeneral,
+                  estado: selectedBoletin.estado,
+                  materias: selectedBoletin.materias,
+                  resumenIA: selectedBoletin.resumenIA,
+                }}
+              />
+            )}
+          </div>
+          <div className="pt-4 border-t border-white/10 flex justify-end">
+            <Button
+              variant="outline"
+              className="border-white/20 text-white hover:bg-white/10"
+              onClick={() => setSelectedBoletin(null)}
+            >
+              Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

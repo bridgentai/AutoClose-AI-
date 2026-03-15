@@ -2,8 +2,9 @@ import express from 'express';
 import { startOfDay, endOfDay } from 'date-fns';
 import { protect, AuthRequest } from '../middleware/auth.js';
 import { findUserById } from '../repositories/userRepository.js';
-import { findGroupSubjectById, findGroupSubjectsByGroup } from '../repositories/groupSubjectRepository.js';
-import { findGroupById, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { findGroupSubjectById, findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
+import { findGroupsByInstitution } from '../repositories/groupRepository.js';
+import { resolveGroupId, resolveGroupSubjectId } from '../utils/resolveLegacyCourse.js';
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { findUsersByIds } from '../repositories/userRepository.js';
 import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
@@ -31,23 +32,6 @@ function toEstatus(s: string): 'presente' | 'ausente' {
 
 function fromEstatus(s: string): 'present' | 'absent' {
   return s === 'presente' ? 'present' : 'absent';
-}
-
-async function resolveGroupSubjectId(cursoId: string, colegioId: string): Promise<string | null> {
-  if (cursoId.length === 36 && cursoId.includes('-')) {
-    const gs = await findGroupSubjectById(cursoId);
-    if (gs && gs.institution_id === colegioId) return gs.id;
-    const group = await findGroupById(cursoId);
-    if (group && group.institution_id === colegioId) {
-      const list = await findGroupSubjectsByGroup(group.id);
-      return list[0]?.id ?? null;
-    }
-    return null;
-  }
-  const group = await findGroupByNameAndInstitution(colegioId, cursoId.toUpperCase().trim());
-  if (!group || group.institution_id !== colegioId) return null;
-  const list = await findGroupSubjectsByGroup(group.id);
-  return list[0]?.id ?? null;
 }
 
 async function canParentViewStudent(parentId: string, studentId: string): Promise<boolean> {
@@ -123,34 +107,57 @@ router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'dire
   }
 });
 
-// GET /api/attendance/grupo/:grupoId/fecha/:fecha
+// GET /api/attendance/grupo/:grupoId/fecha/:fecha — vista directivo: todos los registros del grupo ese día, con materia y hora
 router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
   try {
-    const grupoParam = (req.params.grupoId || '').trim();
+    const grupoParam = decodeURIComponent((req.params.grupoId || '').trim());
     const fechaParam = req.params.fecha || '';
-    const colegioId = req.user?.colegioId;
-    if (!colegioId || !grupoParam || !fechaParam) return res.status(400).json({ message: 'Faltan grupoId o fecha.' });
-    const group = grupoParam.length === 36 && grupoParam.includes('-')
-      ? await findGroupById(grupoParam)
-      : await findGroupByNameAndInstitution(colegioId, grupoParam.toUpperCase().trim());
-    if (!group || group.institution_id !== colegioId) return res.json([]);
-    const gsList = await findGroupSubjectsByGroup(group.id);
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!institutionId || !grupoParam || !fechaParam) return res.status(400).json({ message: 'Faltan grupoId o fecha.' });
+
+    const resolved = await resolveGroupId(grupoParam, institutionId);
+    if (!resolved) return res.json([]);
+    const group = { id: resolved.id, institution_id: institutionId };
+
+    const gsListWithDetails = await findGroupSubjectsByGroupWithDetails(resolved.id, institutionId);
     const dateStr = startOfDay(new Date(fechaParam)).toISOString().slice(0, 10);
-    const all: Awaited<ReturnType<typeof findAttendanceByGroupSubjectAndDate>>[number][] = [];
-    for (const gs of gsList) {
+    const out: Array<{
+      _id: string;
+      estudianteId: string | { _id: string; nombre?: string; correo?: string; curso?: string };
+      cursoId: { _id: string; nombre: string };
+      fecha: string;
+      estado: 'presente' | 'ausente';
+      horaBloque?: string;
+      puntualidad?: 'on_time' | 'late';
+    }> = [];
+    for (const gs of gsListWithDetails) {
       const list = await findAttendanceByGroupSubjectAndDate(gs.id, dateStr);
-      all.push(...list);
+      for (const a of list) {
+        out.push({
+          _id: a.id,
+          estudianteId: a.user_id,
+          cursoId: { _id: gs.id, nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || 'Materia' },
+          fecha: a.date,
+          estado: toEstatus(a.status),
+          horaBloque: a.period_slot ?? undefined,
+          puntualidad: (a.punctuality === 'on_time' || a.punctuality === 'late' ? a.punctuality : undefined) as 'on_time' | 'late' | undefined,
+        });
+      }
     }
-    const userIds = [...new Set(all.map((a) => a.user_id))];
+    const userIds = [...new Set(out.map((o) => (typeof o.estudianteId === 'object' ? (o.estudianteId as { _id: string })._id : o.estudianteId)))];
     const users = userIds.length ? await findUsersByIds(userIds) : [];
     const byId = new Map(users.map((u) => [u.id, u]));
-    const out = all.map((a) => ({
-      _id: a.id,
-      estudianteId: byId.get(a.user_id) ? { _id: a.user_id, nombre: byId.get(a.user_id)!.full_name, correo: byId.get(a.user_id)!.email, curso: (byId.get(a.user_id)!.config as { curso?: string })?.curso } : a.user_id,
-      fecha: a.date,
-      estado: toEstatus(a.status),
-    }));
-    return res.json(out);
+    const outWithUsers = out.map((o) => {
+      const uid = typeof o.estudianteId === 'object' ? (o.estudianteId as { _id: string })._id : o.estudianteId;
+      const user = byId.get(uid);
+      return {
+        ...o,
+        estudianteId: user
+          ? { _id: user.id, nombre: user.full_name, correo: user.email, curso: (user.config as { curso?: string })?.curso }
+          : uid,
+      };
+    });
+    return res.json(outWithUsers);
   } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al listar asistencia del grupo.' });

@@ -656,7 +656,7 @@ export async function generateAcademicInsightsSummary(
     profesor:
       'Eres un asistente académico para un profesor. Genera un resumen breve (2 a 5 oraciones) en español (Colombia), claro, técnico‑pedagógico y orientado a acciones concretas en clase.',
     estudiante:
-      'Eres un tutor académico para un estudiante de colegio. Explica su situación en 2 a 5 oraciones, en lenguaje sencillo y motivador, resaltando fortalezas y una o dos recomendaciones claras para mejorar.',
+      'Eres un tutor académico enfocado en ayudar al estudiante a mejorar su desempeño. En 2 a 5 oraciones, en español (Colombia), usa lenguaje cercano y motivador. Destaca qué está haciendo bien, identifica la categoría o área que más debe reforzar según los datos, y da 1 o 2 acciones concretas para subir sus notas (por ejemplo: entregar a tiempo, repasar X, pedir ayuda en Y). El tono debe ser de apoyo y orientado a la mejora.',
     padre:
       'Eres un orientador académico que se comunica con familias. Resume en 2 a 5 oraciones la situación del estudiante en lenguaje muy claro, respetuoso y no técnico, destacando si requiere atención y qué pueden hacer en casa.',
     directivo:
@@ -684,5 +684,33 @@ export async function generateAcademicInsightsSummary(
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[OpenAI] generateAcademicInsightsSummary error:', msg);
     return 'Error al generar el análisis con IA. Verifica OPENAI_API_KEY.';
+  }
+}
+
+/**
+ * Genera el resumen de boletín con OpenAI (3-4 oraciones).
+ * Retorna null si no hay API key o hay error, para que la ruta use texto de respaldo.
+ */
+export async function generateBoletinResumen(prompt: string): Promise<string | null> {
+  const openaiClient = getOpenAIClient();
+  if (!openaiClient) return null;
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Eres un orientador académico. Genera un boletín personalizado en español en 3-4 oraciones. Menciona fortalezas, áreas de mejora y una recomendación concreta. Sé empático y constructivo.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      max_completion_tokens: 300,
+    });
+    return response.choices[0]?.message?.content?.trim() ?? null;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[OpenAI] generateBoletinResumen error:', msg);
+    return null;
   }
 }

@@ -1,7 +1,8 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
 import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
-import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
+import { findGradingSchemaByGroupSubject } from '../repositories/gradingSchemaRepository.js';
+import { resolveGroupSubjectId } from '../utils/resolveLegacyCourse.js';
 import {
   findGradingCategoriesBySchema,
   findGradingCategoryById,
@@ -24,31 +25,35 @@ async function getOrCreateSchemaForCourse(
   userId: string,
   colegioId: string
 ): Promise<{ id: string; group_id: string; institution_id: string } | null> {
-  const gs = await findGroupSubjectById(courseId);
+  const gsId = await resolveGroupSubjectId(courseId.trim(), colegioId);
+  if (!gsId) return null;
+  const gs = await findGroupSubjectById(gsId);
   if (!gs || gs.teacher_id !== userId) return null;
 
-  const existing = await findGradingSchemaByGroup(gs.group_id, gs.institution_id);
+  const existing = await findGradingSchemaByGroupSubject(gsId, gs.institution_id);
   if (existing) return existing;
 
   const r = await queryPg(
-    'INSERT INTO grading_schemas (group_id, institution_id, name, version, is_active) VALUES ($1, $2, $3, 1, true) RETURNING id, group_id, institution_id',
-    [gs.group_id, gs.institution_id, null]
+    'INSERT INTO grading_schemas (group_id, group_subject_id, institution_id, name, version, is_active) VALUES ($1, $2, $3, $4, 1, true) RETURNING id, group_id, institution_id',
+    [gs.group_id, gsId, gs.institution_id, null]
   );
   return r.rows[0] ?? null;
 }
 
-// GET /api/logros-calificacion?courseId=...
+// GET /api/logros-calificacion?courseId=... (courseId = group_subject_id o nombre legacy)
 router.get('/', protect, async (req: AuthRequest, res) => {
   try {
-    const courseId = req.query.courseId as string;
+    const courseIdParam = req.query.courseId as string;
     const colegioId = req.user?.colegioId;
-    if (!courseId) return res.status(400).json({ message: 'courseId es requerido.' });
+    if (!courseIdParam) return res.status(400).json({ message: 'courseId es requerido.' });
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
-    const gs = await findGroupSubjectById(courseId);
+    const gsId = await resolveGroupSubjectId(courseIdParam.trim(), colegioId);
+    if (!gsId) return res.json({ logros: [], totalPorcentaje: 0, completo: false });
+    const gs = await findGroupSubjectById(gsId);
     if (!gs) return res.json({ logros: [], totalPorcentaje: 0, completo: false });
 
-    const schema = await findGradingSchemaByGroup(gs.group_id, gs.institution_id);
+    const schema = await findGradingSchemaByGroupSubject(gsId, gs.institution_id);
     if (!schema) return res.json({ logros: [], totalPorcentaje: 0, completo: false });
 
     const categories = await findGradingCategoriesBySchema(schema.id);
@@ -79,7 +84,7 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'porcentaje debe estar entre 0 y 100.' });
     }
 
-    const schema = await getOrCreateSchemaForCourse(courseId, userId, colegioId);
+    const schema = await getOrCreateSchemaForCourse(String(courseId).trim(), userId, colegioId);
     if (!schema) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
 
     const categories = await findGradingCategoriesBySchema(schema.id);

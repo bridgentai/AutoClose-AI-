@@ -73,6 +73,17 @@ export default function DirectivoCursoDetailPage() {
 
   const hoy = new Date().toISOString().slice(0, 10);
 
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ["/api/groups", grupoId],
+    queryFn: () =>
+      apiRequest<{ _id: string; id: string; nombre: string }>(
+        "GET",
+        `/api/groups/${encodeURIComponent(grupoId)}`
+      ),
+    enabled: !!grupoId,
+  });
+  const groupDisplayName = groupInfo?.nombre?.trim() || grupoId;
+
   const { data: estudiantes = [], isLoading: loadingStudents } = useQuery<StudentInGroup[]>({
     queryKey: ["/api/groups", grupoId, "students"],
     queryFn: () =>
@@ -92,8 +103,9 @@ export default function DirectivoCursoDetailPage() {
         "GET",
         `/api/attendance/grupo/${encodeURIComponent(grupoId)}/fecha/${hoy}`
       ),
-    enabled: !!grupoId && tab === "asistencia",
+    enabled: !!grupoId,
     refetchInterval: 10000,
+    refetchOnWindowFocus: true,
   });
 
   const byStudent = (() => {
@@ -128,7 +140,7 @@ export default function DirectivoCursoDetailPage() {
       <div className="mt-4 mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
           <BookOpen className="w-8 h-8 text-[#00c8ff]" />
-          {grupoId}
+          {groupDisplayName}
         </h1>
         <p className="text-white/60 mt-1">Asistencia, análisis y estudiantes del curso.</p>
       </div>

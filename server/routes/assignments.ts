@@ -2,8 +2,8 @@ import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupByNameAndInstitution, findGroupById } from '../repositories/groupRepository.js';
-import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
-import { findGroupSubjectsByTeacher, findGroupSubjectsByGroup } from '../repositories/groupSubjectRepository.js';
+import { findGroupSubjectById, findGroupSubjectsByTeacher, findGroupSubjectsByGroup, findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
+import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 import {
   type AssignmentRow,
   findAssignmentById,
@@ -19,7 +19,7 @@ import {
   createSubmission,
   updateSubmission,
 } from '../repositories/submissionRepository.js';
-import { findGradeByAssignmentAndUser, upsertGrade } from '../repositories/gradeRepository.js';
+import { findGradeByAssignmentAndUser, findGradesByAssignment, upsertGrade } from '../repositories/gradeRepository.js';
 import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
 import { findEnrollmentsByStudent, getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
@@ -91,8 +91,17 @@ router.get('/', protect, async (req: AuthRequest, res) => {
     if (courseId && typeof courseId === 'string') {
       groupSubjectIds.push(courseId);
     } else if (user.role === 'profesor') {
-      const gsList = await findGroupSubjectsByTeacher(userId);
-      groupSubjectIds.push(...gsList.map((gs) => gs.id));
+      if (groupId && typeof groupId === 'string') {
+        const resolved = await resolveGroupId(groupId.trim(), user.institution_id ?? '');
+        if (resolved) {
+          const gsList = await findGroupSubjectsByGroupWithDetails(resolved.id, user.institution_id ?? undefined);
+          const byTeacher = gsList.filter((gs) => gs.teacher_id === userId);
+          groupSubjectIds.push(...byTeacher.map((gs) => gs.id));
+        }
+      } else {
+        const gsList = await findGroupSubjectsByTeacher(userId);
+        groupSubjectIds.push(...gsList.map((gs) => gs.id));
+      }
     } else if (user.role === 'estudiante') {
       let curso = (user.config as { curso?: string })?.curso;
       if (!curso) curso = await getFirstGroupNameForStudent(userId) ?? undefined;
@@ -146,11 +155,10 @@ router.get('/', protect, async (req: AuthRequest, res) => {
           logroCalificacionId: a.assignment_category_id ?? undefined,
         };
         if (user.role === 'profesor') {
-          const subs = await findSubmissionsByAssignment(a.id);
-          extra.submissions = subs.map((s) => ({
-            estudianteId: s.student_id,
-            calificacion: s.score != null ? s.score : undefined,
-            fechaEntrega: s.submitted_at ?? undefined,
+          const grades = await findGradesByAssignment(a.id);
+          extra.submissions = grades.map((g) => ({
+            estudianteId: g.user_id,
+            calificacion: g.score,
           }));
         }
         return assignmentToApi(a, extra);

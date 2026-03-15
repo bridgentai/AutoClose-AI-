@@ -10,9 +10,20 @@ import { NavBackButton } from "@/components/nav-back-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+interface MateriaItem {
+  group_subject_id: string;
+  subject_id: string;
+  subject_name: string;
+  teacher_id: string;
+  teacher_name: string;
+}
+
 interface GroupItem {
   _id: string;
+  id: string;
   nombre: string;
+  materias?: MateriaItem[];
+  cantidadEstudiantes?: number;
 }
 
 const CARD_STYLE = "bg-white/5 border-white/10 backdrop-blur-md hover-elevate";
@@ -70,16 +81,28 @@ export default function DirectivoCursosPage() {
                 <button
                   key={g._id}
                   type="button"
-                  onClick={() => setLocation(`/directivo/cursos/${encodeURIComponent(g.nombre)}`)}
+                  onClick={() => setLocation(`/directivo/cursos/${encodeURIComponent(g._id)}`)}
                   className="flex items-center justify-between w-full p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-colors text-left"
                 >
                   <span className="flex items-center gap-3">
                     <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#00c8ff]/20 text-[#00c8ff]">
                       <Users className="w-5 h-5" />
                     </span>
-                    <span className="font-semibold text-white">{g.nombre}</span>
+                    <span className="text-left">
+                      <span className="font-semibold text-white block">{g.nombre}</span>
+                      {Array.isArray(g.materias) && g.materias.length > 0 && (
+                        <span className="text-xs text-white/60 mt-0.5 block">
+                          {g.materias.map((m) => m.subject_name).join(", ")}
+                        </span>
+                      )}
+                    </span>
                   </span>
-                  <ChevronRight className="w-5 h-5 text-white/50" />
+                  <span className="flex items-center gap-2">
+                    {typeof g.cantidadEstudiantes === "number" && (
+                      <span className="text-sm text-white/70">{g.cantidadEstudiantes} estudiantes</span>
+                    )}
+                    <ChevronRight className="w-5 h-5 text-white/50" />
+                  </span>
                 </button>
               ))}
             </div>

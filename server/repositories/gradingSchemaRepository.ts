@@ -3,6 +3,7 @@ import { queryPg } from '../config/db-pg.js';
 export interface GradingSchemaRow {
   id: string;
   group_id: string;
+  group_subject_id?: string;
   institution_id: string;
   name: string | null;
   version: number;
@@ -33,6 +34,17 @@ export async function findGradingSchemaByGroup(
   const r = await queryPg<GradingSchemaRow>(
     'SELECT * FROM grading_schemas WHERE group_id = $1 AND is_active = true ORDER BY version DESC LIMIT 1',
     [groupId]
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function findGradingSchemaByGroupSubject(
+  groupSubjectId: string,
+  institutionId: string
+): Promise<GradingSchemaRow | null> {
+  const r = await queryPg<GradingSchemaRow>(
+    'SELECT * FROM grading_schemas WHERE group_subject_id = $1 AND institution_id = $2 AND is_active = true LIMIT 1',
+    [groupSubjectId, institutionId]
   );
   return r.rows[0] ?? null;
 }

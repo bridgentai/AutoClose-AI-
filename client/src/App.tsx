@@ -370,7 +370,7 @@ function AppRouter() {
               <AuthGuard><StudentProfilePage /></AuthGuard>
             </Route>
             <Route path="/profesor/cursos/:cursoId/estudiantes/:estudianteId/boletin-inteligente">
-              <AuthGuard><DeprecatedModulePage /></AuthGuard>
+              <AuthGuard><BoletinInteligentePage /></AuthGuard>
             </Route>
 
             <Route path="/group-assignment">
