@@ -51,6 +51,10 @@ import {
   FileSpreadsheet,
   Presentation,
   X,
+  Check,
+  Star,
+  Trash2,
+  Pencil,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -360,10 +364,10 @@ export default function EvoDrivePage() {
 
   const handleCreateNewDoc = () => {
     if (!group || !cursoId || !createNewNombre.trim()) return;
-    if (courseSubjects.length > 0 && !selectedGroupSubjectId) {
+    if (!selectedGroupSubjectId) {
       toast({
         title: 'Elige una materia',
-        description: 'Selecciona la materia para que el documento aparezca en la carpeta correcta.',
+        description: 'Debes seleccionar una materia antes de crear un documento.',
         variant: 'destructive',
       });
       return;
@@ -373,7 +377,7 @@ export default function EvoDrivePage() {
       tipo: createNewType,
       cursoId,
       cursoNombre: group.name,
-      ...(selectedGroupSubjectId ? { groupSubjectId: selectedGroupSubjectId } : {}),
+      groupSubjectId: selectedGroupSubjectId,
     });
   };
 
@@ -428,10 +432,10 @@ export default function EvoDrivePage() {
       });
       return;
     }
-    if (courseSubjects.length > 0 && !selectedGroupSubjectId) {
+    if (!selectedGroupSubjectId) {
       toast({
         title: 'Elige una materia',
-        description: 'Selecciona la materia (ej. Física, Matemáticas) para que el archivo aparezca en la carpeta correcta.',
+        description: 'Debes seleccionar una materia antes de agregar un archivo.',
         variant: 'destructive',
       });
       return;
@@ -444,7 +448,7 @@ export default function EvoDrivePage() {
       origen: 'google',
       cursoId,
       cursoNombre: group.name,
-      ...(selectedGroupSubjectId ? { groupSubjectId: selectedGroupSubjectId } : {}),
+      groupSubjectId: selectedGroupSubjectId,
       googleFileId: gfile.id,
       googleWebViewLink: webViewLink,
       googleMimeType: gfile.mimeType,
@@ -455,10 +459,10 @@ export default function EvoDrivePage() {
 
   const handleAddFromEvo = () => {
     if (!cursoId || !group || !evoLinkName.trim()) return;
-    if (courseSubjects.length > 0 && !selectedGroupSubjectId) {
+    if (!selectedGroupSubjectId) {
       toast({
         title: 'Elige una materia',
-        description: 'Selecciona la materia para que el archivo aparezca en la carpeta correcta.',
+        description: 'Debes seleccionar una materia antes de agregar un enlace.',
         variant: 'destructive',
       });
       return;
@@ -469,7 +473,7 @@ export default function EvoDrivePage() {
       origen: 'material',
       cursoId,
       cursoNombre: group.name,
-      ...(selectedGroupSubjectId ? { groupSubjectId: selectedGroupSubjectId } : {}),
+      groupSubjectId: selectedGroupSubjectId,
       evoStorageUrl: evoLinkUrl.trim() || undefined,
     });
   };
@@ -510,248 +514,234 @@ export default function EvoDrivePage() {
   };
 
   return (
-    <div className="flex-1 overflow-auto p-6">
-      <div className="max-w-5xl mx-auto">
-        <NavBackButton
-          to={user?.rol === 'profesor' ? '/profesor/academia' : '/dashboard'}
-          label={user?.rol === 'profesor' ? 'Academia' : 'Dashboard'}
-        />
-
-        {/* Módulo Evo Drive — contenedor con fondo terciario, 24px padding, esquinas redondeadas */}
-        <div className="rounded-2xl bg-white/5 border border-white/10 p-6 mt-4">
-          {/* Barra superior */}
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-[#1a73e8] flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-[18px] font-semibold text-white tracking-tight" style={{ letterSpacing: '-0.01em' }}>
-                  Evo Drive
-                </h1>
-                <p className="text-xs text-white/60 mt-0.5">
-                  {isTeacher ? 'Archivos del curso en un solo lugar' : 'Tus materias y archivos por curso'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5">
-              {isTeacher && (
-                <>
-                  <Select value={cursoId} onValueChange={setCursoId}>
-                    <SelectTrigger className="w-[200px] h-9 bg-white/5 border border-white/10 rounded-md py-[7px] px-3 text-[13px] font-medium text-white gap-2">
-                      <FileText className="w-4 h-4 text-white/60 shrink-0" />
-                      <SelectValue placeholder="Selecciona un curso" />
-                      <ChevronDown className="w-4 h-4 text-white/60" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {groups.map((g) => (
-                        <SelectItem key={g.id} value={g.id}>
-                          {g.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {courseSubjects.length > 0 && (
-                    <Select value={selectedGroupSubjectId} onValueChange={setSelectedGroupSubjectId}>
-                      <SelectTrigger className="w-[180px] h-9 bg-white/5 border border-white/10 rounded-md py-[7px] px-3 text-[13px] font-medium text-white gap-2">
-                        <FolderOpen className="w-4 h-4 text-white/60 shrink-0" />
-                        <SelectValue placeholder="Materia" />
-                        <ChevronDown className="w-4 h-4 text-white/60" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {courseSubjects.map((s) => (
-                          <SelectItem key={s._id || s.id} value={s._id || s.id}>
-                            {s.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  {!googleStatus.connected && (
-                    <Button
-                      onClick={connectGoogle}
-                      variant="outline"
-                      size="sm"
-                      className="h-9 rounded-md border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20"
-                    >
-                      Conectar Google Drive
-                    </Button>
-                  )}
-                  {googleStatus.connected && (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-400">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        Google Drive conectado
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={connectGoogle}
-                        className="h-8 rounded-md border-[#4DBBFF]/40 bg-transparent px-2.5 text-[11px] font-medium text-[#4DBBFF]/90 hover:bg-[#4DBBFF]/10 hover:text-[#4DBBFF]"
-                      >
-                        Reconectar Drive
-                      </Button>
-                    </span>
-                  )}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        size="sm"
-                        className="h-9 rounded-full bg-[#4DBBFF]/[0.13] border-[1.5px] border-[#4DBBFF]/50 text-[#4DBBFF] text-[13px] font-medium hover:bg-[#4DBBFF]/20 px-4"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Añadir o crear
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" sideOffset={8} className="w-[230px] rounded-[14px] border-[#4DBBFF]/20 bg-[#0f1c35] shadow-xl shadow-black/40 p-0 overflow-hidden">
-                      <div className="py-2.5">
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            if (googleStatus.connected) setTimeout(() => setAddFromGoogleOpen(true), 50);
-                          }}
-                          disabled={!googleStatus.connected}
-                          className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
-                        >
-                          <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
-                            <Cloud className="w-4 h-4 text-[#4DBBFF]" />
-                          </div>
-                          Google Drive
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setTimeout(() => setAddFromEvoOpen(true), 50)}
-                          className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
-                        >
-                          <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
-                            <Link2 className="w-4 h-4 text-[#4DBBFF]" />
-                          </div>
-                          Enlace
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
-                          <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
-                            <FileText className="w-4 h-4 text-[#4DBBFF]" />
-                          </div>
-                          Archivo
-                        </DropdownMenuItem>
-                      </div>
-                      <div className="border-t border-[#4DBBFF]/10" />
-                      <div className="py-2">
-                        <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#4DBBFF]/50">Crear</p>
-                        <DropdownMenuItem
-                          onSelect={() => setTimeout(() => { setCreateNewType('doc'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)}
-                          className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
-                        >
-                          <div className="w-8 h-8 rounded-[9px] bg-[#1a56d6] flex items-center justify-center shrink-0">
-                            <FileText className="w-4 h-4 text-white" />
-                          </div>
-                          Documentos
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setTimeout(() => { setCreateNewType('slide'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)}
-                          className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
-                        >
-                          <div className="w-8 h-8 rounded-[9px] bg-[#d97706] flex items-center justify-center shrink-0">
-                            <Presentation className="w-4 h-4 text-white" />
-                          </div>
-                          Presentaciones
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => setTimeout(() => { setCreateNewType('sheet'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)}
-                          className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
-                        >
-                          <div className="w-8 h-8 rounded-[9px] bg-[#16a34a] flex items-center justify-center shrink-0">
-                            <FileSpreadsheet className="w-4 h-4 text-white" />
-                          </div>
-                          Hojas de cálculo
-                        </DropdownMenuItem>
-                      </div>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Barra de búsqueda (solo profesor con curso seleccionado) */}
-          {isTeacher && cursoId && (
-            <div className="mb-5">
-              <div className="flex items-center gap-2 w-full rounded-md border border-white/10 bg-white/5 py-2 px-3 focus-within:border-[#3B82F6] focus-within:bg-white/5 transition-colors">
-                <Search className="w-4 h-4 text-white/50 shrink-0" />
-                <input
-                  type="text"
-                  value={fileSearch}
-                  onChange={(e) => setFileSearch(e.target.value)}
-                  placeholder="Buscar archivos del curso..."
-                  className="flex-1 min-w-0 bg-transparent text-[13px] text-white placeholder:text-white/50 outline-none"
-                />
-              </div>
-            </div>
-          )}
-
-          {isTeacher ? (
-            <>
-              {/* Encabezado de sección */}
-              <div className="flex items-center justify-between gap-4 mb-4">
-                <h2 className="text-sm font-medium uppercase tracking-wider text-white/60 flex items-center gap-2">
-                  <FolderOpen className="w-4 h-4 text-white/50" />
-                  Archivos del curso
-                </h2>
-                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/50">
-                  {allFiles.length} {allFiles.length === 1 ? 'archivo' : 'archivos'}
+    <>
+    <div className="flex-1 overflow-auto flex">
+      <aside className="w-[220px] shrink-0 min-h-[calc(100vh-6rem)] flex flex-col border-r border-white/[0.06] bg-[#0a0a18] py-4">
+        <section className="mb-4">
+          <p className="text-[10px] uppercase font-bold text-white/20 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Navegación</p>
+          <button type="button" className="w-full flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
+            <span className="flex items-center gap-2">
+              <FolderOpen className="w-4 h-4 text-white/45" />
+              Todos los archivos
+            </span>
+            <span className="bg-[#00c8ff]/15 text-[#00c8ff] border border-[#00c8ff]/20 text-[10px] font-semibold px-2 rounded-full">{allFiles.length}</span>
+          </button>
+          <button type="button" className="w-full flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
+            <FileText className="w-4 h-4 text-white/45" />
+            Recientes
+          </button>
+          <button type="button" className="w-full flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
+            <Star className="w-4 h-4 text-white/45" />
+            Destacados
+          </button>
+          <button type="button" className="w-full flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
+            <Trash2 className="w-4 h-4 text-white/45" />
+            Papelera
+          </button>
+        </section>
+        <section className="mb-4">
+          <p className="text-[10px] uppercase font-bold text-white/20 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Cursos</p>
+          {isTeacher && groups.map((g) => {
+            const isActive = cursoId === g.id;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => setCursoId(g.id)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${isActive ? 'bg-[#00c8ff]/10 border border-[#00c8ff]/20 text-[#00c8ff]/90' : 'text-white/45 hover:bg-white/[0.05]'}`}
+              >
+                <span className="flex items-center gap-2 min-w-0 truncate">
+                  <FolderOpen className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#00c8ff]' : 'text-white/45'}`} />
+                  <span className="truncate">{g.name}</span>
                 </span>
-              </div>
+                <span className="bg-[#00c8ff]/15 text-[#00c8ff] border border-[#00c8ff]/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{cursoId === g.id ? allFiles.length : 0}</span>
+              </button>
+            );
+          })}
+          {!isTeacher && subjectFolders.map((folder) => (
+            <button key={folder.id} type="button" className="w-full flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
+              <span className="truncate">{folder.name}</span>
+              <span className="bg-[#00c8ff]/15 text-[#00c8ff] border border-[#00c8ff]/20 text-[10px] font-semibold px-2 rounded-full shrink-0">0</span>
+            </button>
+          ))}
+        </section>
+        <section className="mt-auto pt-4 border-t border-white/[0.06]">
+          <div className="flex items-center gap-2 px-3 py-2 mx-2 text-white/45">
+            <Cloud className="w-4 h-4 shrink-0" />
+            <span>Google Drive</span>
+            {googleStatus.connected && <span className="w-[6px] h-[6px] rounded-full bg-[#22c55e] shrink-0 ml-auto" />}
+          </div>
+        </section>
+      </aside>
 
+      <main className="flex-1 min-w-0 flex flex-col overflow-auto">
+        <NavBackButton to="/dashboard" label="Dashboard" className="px-6 pt-4 shrink-0" />
+
+        {isTeacher && cursoId && (
+          <div className="shrink-0 flex items-center gap-4 px-6 py-3 border-b border-white/[0.06]">
+            <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-white/[0.06] border border-white/[0.08] py-2 px-3">
+              <Search className="w-4 h-4 text-white/25 shrink-0" />
+              <input
+                type="text"
+                value={fileSearch}
+                onChange={(e) => setFileSearch(e.target.value)}
+                placeholder={group ? `Buscar en ${group.name}...` : 'Buscar en curso...'}
+                className="flex-1 min-w-0 bg-transparent text-[13px] text-white placeholder:text-white/20 outline-none"
+              />
+            </div>
+            <div className="flex items-center gap-1 rounded-xl p-0.5">
+              <button type="button" onClick={() => setViewMode('grid')} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${viewMode === 'grid' ? 'bg-white/10 text-white/80' : 'text-white/25 hover:text-white/50'}`}>
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => setViewMode('list')} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${viewMode === 'list' ? 'bg-white/10 text-white/80' : 'text-white/25 hover:text-white/50'}`}>
+                <List className="w-4 h-4" />
+              </button>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white/70 hover:bg-white/[0.06] text-sm">
+                  Más reciente primero
+                  <ChevronDown className="w-4 h-4 text-white/25" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-[#0f172a] border border-white/10 rounded-xl p-1 min-w-[180px]">
+                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/90 focus:bg-white/[0.06] focus:text-white">
+                  <Check className="w-4 h-4 text-[#00c8ff]" />
+                  Más reciente primero
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">Más antiguo primero</DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">Nombre A–Z</DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">Nombre Z–A</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
+        {isTeacher && cursoId && (
+          <div className="shrink-0 flex flex-wrap items-center gap-2.5 px-6 py-2 border-b border-white/[0.06]">
+            {courseSubjects.length > 0 && (
+              <Select value={selectedGroupSubjectId} onValueChange={setSelectedGroupSubjectId}>
+                <SelectTrigger className="w-[180px] h-9 bg-white/[0.06] border border-white/[0.08] rounded-xl py-[7px] px-3 text-[13px] font-medium text-white gap-2">
+                  <FolderOpen className="w-4 h-4 text-white/60 shrink-0" />
+                  <SelectValue placeholder="Materia" />
+                  <ChevronDown className="w-4 h-4 text-white/60" />
+                </SelectTrigger>
+                <SelectContent>
+                  {courseSubjects.map((s) => (
+                    <SelectItem key={s._id || s.id} value={s._id || s.id}>
+                      {s.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!googleStatus.connected && (
+              <Button onClick={connectGoogle} variant="outline" size="sm" className="h-9 rounded-xl border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] text-xs font-medium hover:bg-[#22c55e]/20">
+                Conectar Google Drive
+              </Button>
+            )}
+            {googleStatus.connected && (
+              <Button type="button" variant="outline" size="sm" onClick={connectGoogle} className="h-8 rounded-xl border-[#00c8ff]/40 bg-transparent px-2.5 text-[11px] font-medium text-[#00c8ff]/90 hover:bg-[#00c8ff]/10 hover:text-[#00c8ff]">
+                Reconectar Drive
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" disabled={!selectedGroupSubjectId} title={!selectedGroupSubjectId ? 'Selecciona una materia primero' : ''} className={`h-9 rounded-full bg-[#00c8ff]/20 border border-[#00c8ff]/50 text-[#00c8ff] text-[13px] font-medium hover:bg-[#00c8ff]/30 px-4 ${!selectedGroupSubjectId ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Añadir o crear
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8} className="w-[230px] rounded-xl border-[#00c8ff]/20 bg-[#0f172a] shadow-xl p-0 overflow-hidden">
+                <div className="py-2.5">
+                  <DropdownMenuItem onSelect={() => { if (googleStatus.connected) setTimeout(() => setAddFromGoogleOpen(true), 50); }} disabled={!googleStatus.connected} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
+                    <div className="w-8 h-8 rounded-lg bg-[#00c8ff]/20 flex items-center justify-center shrink-0"><Cloud className="w-4 h-4 text-[#00c8ff]" /></div>
+                    Google Drive
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setTimeout(() => setAddFromEvoOpen(true), 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
+                    <div className="w-8 h-8 rounded-lg bg-[#00c8ff]/20 flex items-center justify-center shrink-0"><Link2 className="w-4 h-4 text-[#00c8ff]" /></div>
+                    Enlace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
+                    <div className="w-8 h-8 rounded-lg bg-[#00c8ff]/20 flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-[#00c8ff]" /></div>
+                    Archivo
+                  </DropdownMenuItem>
+                </div>
+                <div className="border-t border-[#00c8ff]/10" />
+                <div className="py-2">
+                  <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#00c8ff]/50">Crear</p>
+                  <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('doc'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
+                    <div className="w-8 h-8 rounded-lg bg-[#1a56d6] flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-white" /></div>
+                    Documentos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('slide'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
+                    <div className="w-8 h-8 rounded-lg bg-[#d97706] flex items-center justify-center shrink-0"><Presentation className="w-4 h-4 text-white" /></div>
+                    Presentaciones
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('sheet'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
+                    <div className="w-8 h-8 rounded-lg bg-[#16a34a] flex items-center justify-center shrink-0"><FileSpreadsheet className="w-4 h-4 text-white" /></div>
+                    Hojas de cálculo
+                  </DropdownMenuItem>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
+
+        {isTeacher ? (
+          <>
+            <div className="flex-1 p-6 overflow-auto">
               {filesLoading ? (
                 <div className="space-y-3">
                   <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
                   <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
                 </div>
+              ) : viewMode === 'grid' ? (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-4">
+                  {allFiles.map((f) => (
+                    <FileRow key={f.id} file={f} variant="grid" />
+                  ))}
+                </div>
               ) : (
-                <>
-                  <ul className="space-y-3">
-                    {allFiles.map((f) => (
-                      <FileRow key={f.id} file={f} />
-                    ))}
-                  </ul>
-                  {/* Zona de arrastre */}
-                  {isTeacher && (
-                    <div className="mt-6 rounded-xl border-2 border-dashed border-white/20 py-7 px-6 flex flex-col items-center justify-center gap-2 hover:border-[#4DBBFF]/50 hover:text-white/70 transition-colors cursor-pointer">
-                      <Upload className="w-[22px] h-[22px] text-white/50" />
-                      <p className="text-[13px] text-white/50">Arrastra archivos aquí o haz clic para subir</p>
-                    </div>
-                  )}
-                </>
+                <div className="w-full">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Nombre</th>
+                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Curso</th>
+                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Tipo</th>
+                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Modificado</th>
+                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Tamaño</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allFiles.map((f) => (
+                        <FileRow key={f.id} file={f} variant="list" />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-
-              {/* Pie del módulo */}
-              <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-20 h-1 rounded-full bg-white/10 overflow-hidden">
-                    <div className="h-full w-[35%] rounded-full bg-[#3B82F6]" />
-                  </div>
-                  <span className="text-xs text-white/60">3.5 MB de 10 MB usados</span>
+              {!filesLoading && (
+                <div className="mt-6 rounded-xl border-2 border-dashed border-white/20 py-7 px-6 flex flex-col items-center justify-center gap-2 hover:border-[#00c8ff]/50 hover:text-white/70 transition-colors cursor-pointer">
+                  <Upload className="w-[22px] h-[22px] text-white/50" />
+                  <p className="text-[13px] text-white/50">Arrastra archivos aquí o haz clic para subir</p>
                 </div>
-                <div className="flex rounded-md border border-white/10 bg-white/5 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('grid')}
-                    className={`h-7 w-7 rounded-[6px] flex items-center justify-center transition-colors ${viewMode === 'grid' ? 'bg-white/10 border border-white/10 text-white' : 'text-white/50 hover:text-white/70'}`}
-                  >
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('list')}
-                    className={`h-7 w-7 rounded-[6px] flex items-center justify-center transition-colors ${viewMode === 'list' ? 'bg-white/10 border border-white/10 text-white' : 'text-white/50 hover:text-white/70'}`}
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="space-y-3">
-              {/* Mi carpeta: estilo distinto (dorado/ámbar) y opción Añadir o crear */}
+              )}
+            </div>
+            <div className="shrink-0 flex items-center justify-between px-6 py-2 border-t border-white/[0.06] text-[11px] text-white/25">
+              <span>{allFiles.length} {allFiles.length === 1 ? 'archivo' : 'archivos'}</span>
+              <span className="flex items-center gap-2">
+                {googleStatus.connected && <span className="w-[5px] h-[5px] rounded-full bg-[#22c55e]" />}
+                {googleStatus.connected && 'Google Drive conectado'}
+                {group && <span className="ml-2">{group.name}</span>}
+              </span>
+            </div>
+          </>
+        ) : (
+            <>
+              <div className="flex-1 p-6 overflow-auto space-y-3">
+                {/* Mi carpeta: estilo distinto (dorado/ámbar) y opción Añadir o crear */}
               <Card className="overflow-hidden border-[#ffd700]/30 bg-gradient-to-br from-[#ffd700]/10 to-amber-950/20">
                 <Collapsible defaultOpen>
                   <CollapsibleTrigger asChild>
@@ -909,18 +899,26 @@ export default function EvoDrivePage() {
               ) : (
                 subjectFolders.map((folder) => <SubjectFolder key={folder.id} folder={folder} />)
               )}
-            </div>
+              </div>
+              <div className="shrink-0 flex items-center justify-between px-6 py-2 border-t border-white/[0.06] text-[11px] text-white/25">
+                <span>{myFolderFiles.length + subjectFolders.length} elementos</span>
+                <span className="flex items-center gap-2">
+                  {googleStatus.connected && <span className="w-[5px] h-[5px] rounded-full bg-[#22c55e]" />}
+                  {googleStatus.connected && 'Google Drive conectado'}
+                </span>
+              </div>
+            </>
           )}
-        </div>
-      </div>
+        </main>
+    </div>
 
-      {/* Agregar desde Google Drive — modal con overlay 45% y estilo del prompt */}
+    {/* Agregar desde Google Drive */}
       <Dialog open={addFromGoogleOpen} onOpenChange={setAddFromGoogleOpen}>
-        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 overflow-hidden [&+[data-radix-dialog-overlay]]:bg-black/45">
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 overflow-hidden [&+[data-radix-dialog-overlay]]:bg-black/45">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
-                <Cloud className="w-5 h-5 text-[#4DBBFF]" />
+              <div className="w-10 h-10 rounded-[11px] bg-[#00c8ff]/20 flex items-center justify-center shrink-0">
+                <Cloud className="w-5 h-5 text-[#00c8ff]" />
               </div>
               <div>
                 <span className="text-base font-semibold text-white block">Agregar desde Google Drive</span>
@@ -934,7 +932,7 @@ export default function EvoDrivePage() {
             </p>
           ) : !cursoId || !group ? (
             <p className="text-white/60 text-sm py-4">
-              Selecciona un curso en el selector de la barra superior (ej. 10C) para poder agregar archivos de Google Drive a ese curso.
+              Selecciona un curso en el sidebar (ej. 10C) para poder agregar archivos de Google Drive a ese curso.
             </p>
           ) : (
             <>
@@ -944,10 +942,10 @@ export default function EvoDrivePage() {
                   value={googleSearch}
                   onChange={(e) => setGoogleSearch(e.target.value)}
                   placeholder="Nombre del archivo..."
-                  className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#3B82F6] focus:bg-white/5"
+                  className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#00c8ff]/50"
                 />
               </div>
-              <ScrollArea className="h-[280px] rounded-md border border-white/10">
+              <ScrollArea className="h-[280px] rounded-xl border border-white/[0.08]">
                 {googleFilesLoading ? (
                   <div className="p-4 space-y-2">
                     <Skeleton className="h-12 w-full bg-white/10 rounded-lg" />
@@ -967,7 +965,7 @@ export default function EvoDrivePage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="shrink-0 border-[#4DBBFF]/50 bg-[#4DBBFF]/10 text-[#4DBBFF] hover:bg-[#4DBBFF]/20 font-medium"
+                          className="shrink-0 border-[#00c8ff]/50 bg-[#00c8ff]/20 text-[#00c8ff] hover:bg-[#00c8ff]/30 font-medium"
                           onClick={() => handleAddFromGoogle(gf)}
                           disabled={addFileMutation.isPending}
                         >
@@ -990,11 +988,11 @@ export default function EvoDrivePage() {
 
       {/* Agregar enlace (Evo) — modal estilo creación del prompt */}
       <Dialog open={addFromEvoOpen} onOpenChange={setAddFromEvoOpen}>
-        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 overflow-hidden [&+[data-radix-dialog-overlay]]:bg-black/45">
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 overflow-hidden [&+[data-radix-dialog-overlay]]:bg-black/45">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
-                <Link2 className="w-5 h-5 text-[#4DBBFF]" />
+              <div className="w-10 h-10 rounded-[11px] bg-[#00c8ff]/20 flex items-center justify-center shrink-0">
+                <Link2 className="w-5 h-5 text-[#00c8ff]" />
               </div>
               <div>
                 <span className="text-base font-semibold text-white block">Agregar enlace (Evo)</span>
@@ -1009,7 +1007,7 @@ export default function EvoDrivePage() {
                 value={evoLinkName}
                 onChange={(e) => setEvoLinkName(e.target.value)}
                 placeholder="Ej: Guía de estudio"
-                className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#3B82F6] focus:bg-white/5"
+                className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#00c8ff]/50"
               />
             </div>
             <div className="space-y-2">
@@ -1018,19 +1016,19 @@ export default function EvoDrivePage() {
                 value={evoLinkUrl}
                 onChange={(e) => setEvoLinkUrl(e.target.value)}
                 placeholder="https://..."
-                className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#3B82F6] focus:bg-white/5"
+                className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#00c8ff]/50"
               />
             </div>
             {group && (
               <div className="space-y-2">
                 <Label className="text-xs font-medium text-white/60">Curso</Label>
-                <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/5 py-2.5 px-3">
+                <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.06] py-2.5 px-3">
                   <FileText className="w-4 h-4 text-white/50 shrink-0" />
                   <span className="text-[13px] text-white/80">{group.name}</span>
                 </div>
                 <p className="text-[11px] text-white/50 flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span className="w-4 h-4 rounded-full bg-[#22c55e]/20 flex items-center justify-center shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e]" />
                   </span>
                   Se guardará en la carpeta Evo / {group.name} de tu Drive
                 </p>
@@ -1044,7 +1042,7 @@ export default function EvoDrivePage() {
             <Button
               onClick={handleAddFromEvo}
               disabled={!evoLinkName.trim() || addFileMutation.isPending}
-              className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium"
+              className="bg-[#00c8ff]/20 border border-[#00c8ff]/50 text-[#00c8ff] hover:bg-[#00c8ff]/30 text-[13px] font-medium"
             >
               Crear
             </Button>
@@ -1121,7 +1119,7 @@ export default function EvoDrivePage() {
             </Button>
             <Button
               onClick={handleCreateNewDoc}
-              disabled={!createNewNombre.trim() || createNewDocMutation.isPending || !group || !cursoId}
+              disabled={!createNewNombre.trim() || !selectedGroupSubjectId || createNewDocMutation.isPending || !group || !cursoId}
               className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium"
             >
               {createNewDocMutation.isPending ? 'Creando…' : 'Crear'}
@@ -1297,28 +1295,76 @@ export default function EvoDrivePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 
-const FILE_TYPE_STYLES: Record<string, { bg: string; icon: React.ReactNode; color: string }> = {
-  doc: { bg: 'bg-blue-500/15', icon: <FileText className="w-5 h-5 text-[#1a73e8]" />, color: '#1a73e8' },
-  slide: { bg: 'bg-orange-500/15', icon: <Presentation className="w-5 h-5 text-[#d97706]" />, color: '#d97706' },
-  sheet: { bg: 'bg-emerald-500/15', icon: <FileSpreadsheet className="w-5 h-5 text-[#16a34a]" />, color: '#16a34a' },
-  pdf: { bg: 'bg-red-500/15', icon: <FileText className="w-5 h-5 text-red-500" />, color: '#ef4444' },
-  link: { bg: 'bg-white/10', icon: <Link2 className="w-5 h-5 text-white/70" />, color: 'rgba(255,255,255,0.7)' },
+const FILE_TYPE_STYLES: Record<string, { bg: string; icon: React.ReactNode; color: string; hex: string }> = {
+  doc: { bg: 'bg-[#4a90ff]/15', icon: <FileText className="w-5 h-5 text-[#4a90ff]" />, color: '#4a90ff', hex: '#4a90ff' },
+  slide: { bg: 'bg-[#f59e0b]/15', icon: <Presentation className="w-5 h-5 text-[#f59e0b]" />, color: '#f59e0b', hex: '#f59e0b' },
+  sheet: { bg: 'bg-[#22c55e]/15', icon: <FileSpreadsheet className="w-5 h-5 text-[#22c55e]" />, color: '#22c55e', hex: '#22c55e' },
+  pdf: { bg: 'bg-[#ef4444]/15', icon: <FileText className="w-5 h-5 text-[#ef4444]" />, color: '#ef4444', hex: '#ef4444' },
+  link: { bg: 'bg-[#00c8ff]/15', icon: <Link2 className="w-5 h-5 text-[#00c8ff]" />, color: '#00c8ff', hex: '#00c8ff' },
 };
-const defaultStyle = { bg: 'bg-amber-500/15', icon: <FileText className="w-5 h-5 text-amber-500" />, color: '#f59e0b' };
+const defaultStyle = { bg: 'bg-[#f59e0b]/15', icon: <FileText className="w-5 h-5 text-[#f59e0b]" />, color: '#f59e0b', hex: '#f59e0b' };
 
-function FileRow({ file, isNew }: { file: EvoFile; isNew?: boolean }) {
+function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; variant?: 'grid' | 'list' }) {
   const link = file.googleWebViewLink || file.evoStorageUrl || '#';
   const isGoogle = file.origen === 'google';
   const style = FILE_TYPE_STYLES[file.tipo] || defaultStyle;
+  const hex = style.hex || style.color;
+
+  if (variant === 'grid') {
+    return (
+      <div className="flex flex-col items-center gap-1.5">
+        <div
+          className="relative w-16 h-16 rounded-2xl bg-white/[0.07] border transition-colors group/icon hover:bg-white/[0.12]"
+          style={{ borderColor: `${hex}47` }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center" style={{ color: hex }}>
+            {style.icon && React.cloneElement(style.icon as React.ReactElement<{ className?: string }>, { className: 'w-7 h-7' })}
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center gap-0.5 opacity-0 group-hover/icon:opacity-100 transition-opacity bg-[#0f172a]/90 rounded-2xl">
+            {link !== '#' && (
+              <a href={link} target="_blank" rel="noopener noreferrer" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Abrir en Drive">
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+            <button type="button" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Renombrar">
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button type="button" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Eliminar">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <p className="text-[12px] text-white/72 font-medium text-center leading-tight truncate max-w-[90px]">{file.nombre}</p>
+        <p className="text-[10.5px] text-white/28 text-center">{file.cursoNombre}</p>
+      </div>
+    );
+  }
+
+  if (variant === 'list') {
+    return (
+      <tr className="border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors">
+        <td className="py-2.5 px-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${style.bg}`}>{style.icon}</div>
+            <span className="text-white font-medium truncate">{file.nombre}</span>
+          </div>
+        </td>
+        <td className="py-2.5 px-4 text-white/50">{file.cursoNombre}</td>
+        <td className="py-2.5 px-4 text-white/50">{file.tipo}</td>
+        <td className="py-2.5 px-4 text-white/50">—</td>
+        <td className="py-2.5 px-4 text-white/50">—</td>
+      </tr>
+    );
+  }
 
   return (
     <li
       className={`group flex items-center justify-between gap-4 py-[13px] px-4 rounded-xl border bg-white/5 hover:bg-white/10 transition-colors ${
-        isNew ? 'border-[#4DBBFF]/40 bg-[#4DBBFF]/5 animate-in fade-in slide-in-from-top-2 duration-300' : 'border-white/10 hover:border-white/20'
+        isNew ? 'border-[#00c8ff]/40 bg-[#00c8ff]/5 animate-in fade-in slide-in-from-top-2 duration-300' : 'border-white/10 hover:border-white/20'
       }`}
     >
       <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -1336,7 +1382,7 @@ function FileRow({ file, isNew }: { file: EvoFile; isNew?: boolean }) {
               </span>
             )}
             {isNew && (
-              <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-[#4DBBFF]/15 text-[#4DBBFF]">
+              <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-[#00c8ff]/15 text-[#00c8ff]">
                 Recién creado
               </span>
             )}
@@ -1349,7 +1395,7 @@ function FileRow({ file, isNew }: { file: EvoFile; isNew?: boolean }) {
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] hover:underline"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#00c8ff] hover:underline"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             Abrir en Drive

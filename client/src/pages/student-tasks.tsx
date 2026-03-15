@@ -116,7 +116,12 @@ export default function StudentTasksPage() {
     return ['', ...Array.from(set).sort()];
   }, [assignments]);
 
-  const [materiaFiltro, setMateriaFiltro] = useState<string>('');
+  // Inicializar filtro desde URL (ej. /mi-aprendizaje/tareas?materia=Física)
+  const [materiaFiltro, setMateriaFiltro] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const p = new URLSearchParams(window.location.search);
+    return p.get('materia') || '';
+  });
 
   const coincideMateria = (a: Assignment) => {
     if (!materiaFiltro) return true;

@@ -193,6 +193,8 @@ export default function StudentNotesPage() {
     queryFn: () => apiRequest('GET', '/api/student/notes'),
     enabled: !!user?.id && isEstudiante,
     staleTime: 0,
+    retry: 1,
+    retryDelay: 2000,
   });
 
   const { data: notesDataHijo, isLoading: loadingHijo, isError: errorHijo, refetch: refetchHijo } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
@@ -239,6 +241,8 @@ export default function StudentNotesPage() {
     queryKey: ['/api/users/me/courses'],
     queryFn: () => apiRequest('GET', '/api/users/me/courses'),
     enabled: !!user?.id && isEstudiante,
+    retry: 1,
+    retryDelay: 2000,
   });
   const { data: coursesHijo, isLoading: loadingCoursesHijo } = useQuery<CourseItem[]>({
     queryKey: ['/api/student/hijo', primerHijoId, 'courses'],
@@ -248,7 +252,8 @@ export default function StudentNotesPage() {
   const coursesRaw = isEstudiante ? coursesEstudiante : coursesHijo;
   const allCourses = Array.isArray(coursesRaw) ? coursesRaw : [];
   const loadingCourses = isEstudiante ? loadingCoursesEstudiante : (!!primerHijoId && loadingCoursesHijo);
-  const isLoading = isLoadingNotes || loadingCourses;
+  // Para estudiante no bloquear en courses: mostrar contenido en cuanto carguen las notas (evita pantalla azul infinita)
+  const isLoading = isEstudiante ? isLoadingNotes : (isLoadingNotes || loadingCourses);
 
   const groupSubjectIds = useMemo(
     () => [...new Set((notesData?.materias ?? []).map((m) => m.groupSubjectId).filter(Boolean))] as string[],
@@ -272,12 +277,13 @@ export default function StudentNotesPage() {
     return map;
   }, [groupSubjectIds, logrosQueries]);
 
-  // Todas las materias del estudiante: de allCourses, con notas cuando existan (si no, N/A). Color único por materia.
+  // Todas las materias del estudiante: de allCourses, con notas cuando existan (si no, N/A). Si courses aún no cargó, usar solo materias con notas.
   const subjects: SubjectGrade[] = useMemo(() => {
     const materiasConNotas = notesData?.materias ?? [];
     const byId = new Map<string, MateriaConNotas>();
     for (const m of materiasConNotas) byId.set(m._id, m);
-    return allCourses.map((course, index) => {
+    const coursesToShow = allCourses.length > 0 ? allCourses : materiasConNotas.map((m) => ({ _id: m._id, nombre: m.nombre }));
+    return coursesToShow.map((course, index) => {
       const color = SUBJECT_COLORS[index % SUBJECT_COLORS.length];
       const m = byId.get(course._id);
       if (m) {

@@ -191,7 +191,7 @@ interface CourseSubject {
         nombre: string;
     };
     // Campo que el estudiante usa para ver su grupo asignado
-    cursoAsignado?: string; 
+    cursoAsignado?: string;
 }
 
 interface Student {
@@ -234,7 +234,7 @@ const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
         // Normalizar groupId a mayúsculas para consistencia
         const grupoIdNormalizado = groupId.toUpperCase().trim();
         console.log(`[FRONTEND] Buscando estudiantes para grupo: ${grupoIdNormalizado}`);
-        
+
         // Obtener estudiantes del grupo desde el endpoint
         const response = await apiRequest('GET', `/api/groups/${grupoIdNormalizado}/students`);
         const students = Array.isArray(response) ? response : [];
@@ -253,8 +253,8 @@ const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
 
 export default function CourseDetailPage() {
     // La ruta es dinámica. cursoId puede ser: ID de materia o Nombre del Grupo
-    const [, params] = useRoute('/course-detail/:cursoId'); 
-    const cursoId = params?.cursoId || ''; 
+    const [, params] = useRoute('/course-detail/:cursoId');
+    const cursoId = params?.cursoId || '';
     const { user } = useAuth();
     const userRole = user?.rol;
 
@@ -323,7 +323,7 @@ export default function CourseDetailPage() {
     const currentYear = now.getFullYear();
 
     // Lógica para determinar si se maneja un grupo (siempre TRUE para el Profesor)
-    const isHandlingGroup = isProfessor; 
+    const isHandlingGroup = isProfessor;
 
     // Query 1: Detalles de la Materia (Solo para Estudiante desde esta ruta)
     const { data: courseDetails, isLoading: isLoadingDetails, error: courseDetailsError } = useQuery<CourseSubject>({
@@ -613,12 +613,12 @@ export default function CourseDetailPage() {
             if (materialTitle?.trim()) {
                 try {
                     await apiRequest('POST', '/api/materials', { assignmentId: created._id, titulo: materialTitle.trim() });
-                } catch (_) {}
+                } catch (_) { }
             }
             for (const m of materials) {
                 try {
                     await apiRequest('POST', '/api/assignment-materials', { assignmentId: created._id, type: m.type, url: m.url, fileName: m.fileName });
-                } catch (_) {}
+                } catch (_) { }
             }
             return created;
         },
@@ -766,7 +766,7 @@ export default function CourseDetailPage() {
                 {/* 6 Tarjetas: Fila 1 — Estudiantes, Tareas, Notas. Fila 2 — Asistencia, Evo Send, Evo Drive */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 max-w-6xl mx-auto">
                     {/* Carta 1: Estudiantes */}
-                    <Card 
+                    <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
                         onClick={() => setLocation(`/course-detail/${cursoId}/estudiantes`)}
                     >
@@ -783,7 +783,7 @@ export default function CourseDetailPage() {
                     </Card>
 
                     {/* Carta 2: Tareas */}
-                    <Card 
+                    <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-orange-500/20"
                         onClick={() => setLocation(`/profesor/cursos/${cursoId}/tareas`)}
                     >
@@ -800,7 +800,7 @@ export default function CourseDetailPage() {
                     </Card>
 
                     {/* Carta 3: Notas — tabla de calificaciones del grupo */}
-                    <Card 
+                    <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20"
                         onClick={() => setLocation(`/course/${cursoId}/grades`)}
                     >
@@ -817,7 +817,7 @@ export default function CourseDetailPage() {
                     </Card>
 
                     {/* Carta 4: Asistencia */}
-                    <Card 
+                    <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20"
                         onClick={() => setLocation(`/course/${cursoId}/asistencia`)}
                     >
@@ -834,18 +834,18 @@ export default function CourseDetailPage() {
                     </Card>
 
                     {/* Carta 5: Evo Send — atajo al chat del curso */}
-                    <Card 
+                    <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-red-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-red-500/20"
                         onClick={() => {
-                        try {
-                          sessionStorage.setItem('evo-send-return-path', `/course-detail/${cursoId}`);
-                        } catch {
-                          /* ignore */
-                        }
-                        const params = new URLSearchParams();
-                        if (evoSendThreadId) params.set('thread', evoSendThreadId);
-                        setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
-                      }}
+                            try {
+                                sessionStorage.setItem('evo-send-return-path', `/course-detail/${cursoId}`);
+                            } catch {
+                                /* ignore */
+                            }
+                            const params = new URLSearchParams();
+                            if (evoSendThreadId) params.set('thread', evoSendThreadId);
+                            setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
+                        }}
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-red-500 via-red-600 to-rose-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-red-500/30">
@@ -860,7 +860,7 @@ export default function CourseDetailPage() {
                     </Card>
 
                     {/* Carta 6: Evo Drive */}
-                    <Card 
+                    <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-sky-400/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-sky-400/20"
                         onClick={() => setLocation('/evo-drive')}
                     >
@@ -899,68 +899,68 @@ export default function CourseDetailPage() {
 
                 {showAssignmentForm && (
                     <Card className="bg-[#0a0a2a]/80 border border-white/10 backdrop-blur-md mb-8 rounded-[14px] shadow-xl transition-colors duration-150 ease-in-out">
-                           <CardHeader className="pb-2">
-                                <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva Asignación</CardTitle>
-                                <p className="text-white/50 text-sm mt-0.5">Crear tarea o recordatorio para el curso</p>
-                            </CardHeader>
-                            <CardContent className="pt-4">
-                                {!assignmentType ? (
-                                    <div className="space-y-4">
-                                        <p className="text-white/70 mb-4">Selecciona el tipo de tarea:</p>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <Button
-                                                type="button"
-                                                onClick={() => setAssignmentType('recordatorio')}
-                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
-                                            >
-                                                <Bell className="w-8 h-8 text-[#00c8ff]" />
-                                                <span className="text-white font-semibold">Recordatorio</span>
-                                                <span className="text-white/60 text-sm">No entregable, sin nota. Puede tener adjuntos.</span>
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                onClick={() => setAssignmentType('assignment')}
-                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
-                                            >
-                                                <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
-                                                <span className="text-white font-semibold">Asignación</span>
-                                                <span className="text-white/60 text-sm">Entregable, puede generar nota. Requiere logro.</span>
-                                            </Button>
-                                        </div>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva Asignación</CardTitle>
+                            <p className="text-white/50 text-sm mt-0.5">Crear tarea o recordatorio para el curso</p>
+                        </CardHeader>
+                        <CardContent className="pt-4">
+                            {!assignmentType ? (
+                                <div className="space-y-4">
+                                    <p className="text-white/70 mb-4">Selecciona el tipo de tarea:</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <Button
+                                            type="button"
+                                            onClick={() => setAssignmentType('recordatorio')}
+                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
+                                        >
+                                            <Bell className="w-8 h-8 text-[#00c8ff]" />
+                                            <span className="text-white font-semibold">Recordatorio</span>
+                                            <span className="text-white/60 text-sm">No entregable, sin nota. Puede tener adjuntos.</span>
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            onClick={() => setAssignmentType('assignment')}
+                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
+                                        >
+                                            <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
+                                            <span className="text-white font-semibold">Asignación</span>
+                                            <span className="text-white/60 text-sm">Entregable, puede generar nota. Requiere logro.</span>
+                                        </Button>
                                     </div>
-                                ) : (
-                                    // Formulario de tarea
-                                    <>
-                                        <div className="flex items-center justify-between mb-6">
-                                            <div className="flex items-center gap-2">
-                                                <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 rounded-[10px] transition-colors duration-150 ease-in-out">
-                                                    {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Asignación'}
-                                                </Badge>
-                                            </div>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => setAssignmentType(null)}
-                                                className="text-white/70 hover:text-white rounded-[10px] transition-colors duration-150 ease-in-out"
-                                            >
-                                                <X className="w-4 h-4 mr-1" />
-                                                Cambiar tipo
-                                            </Button>
+                                </div>
+                            ) : (
+                                // Formulario de tarea
+                                <>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center gap-2">
+                                            <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 rounded-[10px] transition-colors duration-150 ease-in-out">
+                                                {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Asignación'}
+                                            </Badge>
                                         </div>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setAssignmentType(null)}
+                                            className="text-white/70 hover:text-white rounded-[10px] transition-colors duration-150 ease-in-out"
+                                        >
+                                            <X className="w-4 h-4 mr-1" />
+                                            Cambiar tipo
+                                        </Button>
+                                    </div>
 
-                                        {subjects.length === 0 && (
-                                            <Alert className="mb-4 bg-red-500/10 border-red-500/50">
-                                                <AlertCircle className="h-4 w-4 text-red-400" />
-                                                <AlertDescription className="text-red-200">
-                                                    No tienes materias asignadas a este curso ({displayGroupId}). Por favor contacta al administrador.
-                                                </AlertDescription>
-                                            </Alert>
-                                        )}
+                                    {subjects.length === 0 && (
+                                        <Alert className="mb-4 bg-red-500/10 border-red-500/50">
+                                            <AlertCircle className="h-4 w-4 text-red-400" />
+                                            <AlertDescription className="text-red-200">
+                                                No tienes materias asignadas a este curso ({displayGroupId}). Por favor contacta al administrador.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
 
-                                        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-start">
-                                    {/* Columna izquierda: contenido principal */}
-                                    <div className="space-y-6">
+                                    <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-start">
+                                        {/* Columna izquierda: contenido principal */}
+                                        <div className="space-y-6">
                                             <div>
                                                 <Label htmlFor="titulo" className="text-white text-xs font-medium uppercase tracking-wider text-white/70">Nombre</Label>
                                                 <Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="mt-1.5 text-lg font-semibold text-white bg-transparent border-0 border-b border-white/10 rounded-none px-0 py-3 focus-visible:ring-0 focus-visible:border-[#4DBBFF]/50 placeholder:text-white/40 transition-colors duration-150 ease-in-out" placeholder="Nombre de la tarea" />
@@ -1067,78 +1067,78 @@ export default function CourseDetailPage() {
                                             <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0 || ((assignmentType === 'assignment' || assignmentType === 'recordatorio') && logros.length > 0 && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
                                                 {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
                                             </Button>
-                                    </div>
-
-                                    {/* Columna derecha: configuración */}
-                                    <div className="rounded-[12px] border border-white/10 bg-white/[0.03] p-5 space-y-5 lg:sticky lg:top-4 transition-colors duration-150 ease-in-out">
-                                        <p className="text-xs font-semibold uppercase tracking-wider text-[#4DBBFF]/70">Configuración</p>
-                                        {subjects.length > 1 && (
-                                            <div>
-                                                <Label htmlFor="materia" className="text-white text-xs font-medium">Materia *</Label>
-                                                <Select
-                                                    value={formData.courseId}
-                                                    onValueChange={(value) => setFormData({ ...formData, courseId: value })}
-                                                    required
-                                                >
-                                                    <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {subjects.map((subject) => (
-                                                            <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        )}
-                                        {subjects.length === 1 && (
-                                            <div>
-                                                <Label className="text-white text-xs font-medium mb-2 block">Materia</Label>
-                                                <div className="flex items-center gap-2">
-                                                    <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2 rounded-[10px]">
-                                                        {subjects[0].nombre}
-                                                    </Badge>
-                                                    <span className="text-white/50 text-sm">(auto-seleccionada)</span>
-                                                </div>
-                                            </div>
-                                        )}
-                                        {logros.length > 0 && (assignmentType === 'assignment' || assignmentType === 'recordatorio') && (
-                                            <div>
-                                                <Label htmlFor="logro" className="text-white text-xs font-medium">Logro de Calificación *</Label>
-                                                <Select
-                                                    value={logroCalificacionId}
-                                                    onValueChange={setLogroCalificacionId}
-                                                    required
-                                                >
-                                                    <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20">
-                                                        <SelectValue placeholder="Selecciona el tipo de logro (ej: Tareas, Exámenes, Proyectos)" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {logros.map((logro) => (
-                                                            <SelectItem key={logro._id} value={logro._id}>
-                                                                {logro.nombre} ({logro.porcentaje}%)
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                                <p className="text-white/50 text-xs mt-1">Categoría de calificación</p>
-                                            </div>
-                                        )}
-                                        {logros.length === 0 && courseIdForLogros && !isLoadingLogros && (
-                                            <Alert className="bg-amber-500/10 border-amber-500/50 rounded-[10px]">
-                                                <AlertCircle className="h-4 w-4 text-amber-400" />
-                                                <AlertDescription className="text-amber-200">
-                                                    Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a <Button variant="link" className="p-0 h-auto text-amber-300 underline" onClick={() => setLocation('/profesor/academia/calificacion/logros')}>Logros de Calificación</Button>
-                                                </AlertDescription>
-                                            </Alert>
-                                        )}
-                                        <div>
-                                            <Label htmlFor="fechaEntrega" className="text-white text-xs font-medium">Fecha de Entrega</Label>
-                                            <Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20" />
                                         </div>
-                                    </div>
-                                        </form>
-                                    </>
-                                )}
-                            </CardContent>
+
+                                        {/* Columna derecha: configuración */}
+                                        <div className="rounded-[12px] border border-white/10 bg-white/[0.03] p-5 space-y-5 lg:sticky lg:top-4 transition-colors duration-150 ease-in-out">
+                                            <p className="text-xs font-semibold uppercase tracking-wider text-[#4DBBFF]/70">Configuración</p>
+                                            {subjects.length > 1 && (
+                                                <div>
+                                                    <Label htmlFor="materia" className="text-white text-xs font-medium">Materia *</Label>
+                                                    <Select
+                                                        value={formData.courseId}
+                                                        onValueChange={(value) => setFormData({ ...formData, courseId: value })}
+                                                        required
+                                                    >
+                                                        <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {subjects.map((subject) => (
+                                                                <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            )}
+                                            {subjects.length === 1 && (
+                                                <div>
+                                                    <Label className="text-white text-xs font-medium mb-2 block">Materia</Label>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2 rounded-[10px]">
+                                                            {subjects[0].nombre}
+                                                        </Badge>
+                                                        <span className="text-white/50 text-sm">(auto-seleccionada)</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {logros.length > 0 && (assignmentType === 'assignment' || assignmentType === 'recordatorio') && (
+                                                <div>
+                                                    <Label htmlFor="logro" className="text-white text-xs font-medium">Logro de Calificación *</Label>
+                                                    <Select
+                                                        value={logroCalificacionId}
+                                                        onValueChange={setLogroCalificacionId}
+                                                        required
+                                                    >
+                                                        <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20">
+                                                            <SelectValue placeholder="Selecciona el tipo de logro (ej: Tareas, Exámenes, Proyectos)" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {logros.map((logro) => (
+                                                                <SelectItem key={logro._id} value={logro._id}>
+                                                                    {logro.nombre} ({logro.porcentaje}%)
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <p className="text-white/50 text-xs mt-1">Categoría de calificación</p>
+                                                </div>
+                                            )}
+                                            {logros.length === 0 && courseIdForLogros && !isLoadingLogros && (
+                                                <Alert className="bg-amber-500/10 border-amber-500/50 rounded-[10px]">
+                                                    <AlertCircle className="h-4 w-4 text-amber-400" />
+                                                    <AlertDescription className="text-amber-200">
+                                                        Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a <Button variant="link" className="p-0 h-auto text-amber-300 underline" onClick={() => setLocation('/profesor/academia/calificacion/logros')}>Logros de Calificación</Button>
+                                                    </AlertDescription>
+                                                </Alert>
+                                            )}
+                                            <div>
+                                                <Label htmlFor="fechaEntrega" className="text-white text-xs font-medium">Fecha de Entrega</Label>
+                                                <Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20" />
+                                            </div>
+                                        </div>
+                                    </form>
+                                </>
+                            )}
+                        </CardContent>
                     </Card>
                 )}
 
@@ -1351,10 +1351,10 @@ export default function CourseDetailPage() {
         // Manejar errores de la query
         if (courseDetailsError) {
             // Extraer el mensaje de error del objeto Error
-            const errorMessage = courseDetailsError instanceof Error 
-                ? courseDetailsError.message 
+            const errorMessage = courseDetailsError instanceof Error
+                ? courseDetailsError.message
                 : 'Error al cargar la materia';
-            
+
             return (
                 <div className="space-y-4">
                     <Alert className="bg-red-500/10 border-red-500/50">
@@ -1372,13 +1372,13 @@ export default function CourseDetailPage() {
         if (!details) {
             return (
                 <div className="space-y-4">
-                <Alert className="bg-red-500/10 border-red-500/50">
-                    <AlertCircle className="h-4 w-4 text-red-400" />
-                    <AlertTitle className="text-red-200">Materia no encontrada</AlertTitle>
-                    <AlertDescription className="text-red-200">
+                    <Alert className="bg-red-500/10 border-red-500/50">
+                        <AlertCircle className="h-4 w-4 text-red-400" />
+                        <AlertTitle className="text-red-200">Materia no encontrada</AlertTitle>
+                        <AlertDescription className="text-red-200">
                             El ID de materia proporcionado es inválido o no tienes acceso a esta materia.
-                    </AlertDescription>
-                </Alert>
+                        </AlertDescription>
+                    </Alert>
                     <NavBackButton to="/courses" label="Materias" />
                 </div>
             );
@@ -1386,7 +1386,7 @@ export default function CourseDetailPage() {
 
         const titleColor = details.colorAcento || '#1e3cff';
         const cursoAsignado = details.cursoAsignado || user?.curso || 'N/A';
-        
+
         // Calcular estadísticas de la materia
         const now = new Date();
         const tareasPendientes = assignments.filter(a => {
@@ -1539,102 +1539,75 @@ export default function CourseDetailPage() {
                             </div>
                             <div className="flex flex-col gap-3">
                                 <NavBackButton to="/courses" label="Materias" />
-                                <Button
-                                    className="bg-[#3B82F6] hover:bg-[#2563EB] text-white border-0 transition-all duration-200 hover:shadow-lg hover:shadow-[#3B82F6]/30"
-                                    onClick={() => setLocation('/mi-aprendizaje/tareas')}
-                                >
-                                    <ClipboardList className="w-4 h-4 mr-2" />
-                                    Ver Tareas
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    className="border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30 backdrop-blur-sm transition-all duration-200"
-                                    onClick={() => setLocation('/mi-aprendizaje/notas')}
-                                >
-                                    <Award className="w-4 h-4 mr-2" />
-                                    Ver Notas
-                                </Button>
-                                {isStudent && (
-                                    <Button
-                                        variant="outline"
-                                        className="border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10 hover:border-[#3B82F6] backdrop-blur-sm transition-all duration-200"
-                                        onClick={() => setLocation(`/course/${cursoId}/analytics`)}
-                                    >
-                                        <BarChart3 className="w-4 h-4 mr-2" />
-                                        Vista analítica
-                                    </Button>
-                                )}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Resumen General: mismo estilo que tarjetas vista profesor (glass, hover, iconos animados) + Evo Send */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8 max-w-6xl mx-auto">
+                {/* Resumen General: mismo estilo que vista profesor — 2 filas de 3 tarjetas (grid lg:grid-cols-3) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 max-w-6xl mx-auto">
+                    {/* 1. Promedio */}
                     <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20">
-                        <CardContent className="p-6 text-center">
+                        <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#1e3cff] via-[#002366] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#1e3cff]/30">
                                 <TrendingUp className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/70 text-sm mb-1">Promedio</p>
-                            <p className="text-3xl font-bold text-[#E2E8F0]">
-                                {promedioReal != null ? (Math.round(promedioReal * 10) / 10).toFixed(1) : '—'}
-                            </p>
-                            <p className="text-white/50 text-xs mt-1">/ 100</p>
-                        </CardContent>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Promedio</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                {promedioReal != null ? `${(Math.round(promedioReal * 10) / 10).toFixed(1)} / 100` : '—'}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
                     </Card>
+                    {/* 2. Última Nota */}
                     <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20">
-                        <CardContent className="p-6 text-center">
+                        <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#002366] via-[#003d7a] to-[#1e3cff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#002366]/40">
                                 <Award className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/70 text-sm mb-1">Última Nota</p>
-                            <p className="text-3xl font-bold text-[#E2E8F0]">
-                                {ultimaNotaReal != null ? (Math.round(ultimaNotaReal * 10) / 10).toFixed(1) : '—'}
-                            </p>
-                            <p className="text-white/50 text-xs mt-1">/ 100</p>
-                        </CardContent>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Última Nota</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                {ultimaNotaReal != null ? `${(Math.round(ultimaNotaReal * 10) / 10).toFixed(1)} / 100` : '—'}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
                     </Card>
+                    {/* 3. Estado */}
                     <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20">
-                        <CardContent className="p-6 text-center">
+                        <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#059669] via-[#10B981] to-emerald-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
-                                <Gauge className="w-10 h-10 text-white" />
+                                <CheckCircle className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/70 text-sm mb-1">Estado</p>
-                            {estadoReal ? (
-                                <Badge className={`${getEstadoColor(estadoReal)} text-base px-3 py-1 transition-transform duration-200 hover:scale-105`}>
-                                    {estadoReal.charAt(0).toUpperCase() + estadoReal.slice(1)}
-                                </Badge>
-                            ) : (
-                                <span className="text-white/50 text-sm">Sin datos</span>
-                            )}
-                        </CardContent>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Estado</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                {estadoReal ? (estadoReal.charAt(0).toUpperCase() + estadoReal.slice(1)) : 'Sin datos'}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
                     </Card>
-                    <Card className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-orange-500/20">
-                        <CardContent className="p-6 text-center">
+                    {/* 4. Asignaciones — lleva a Mi aprendizaje > Tareas con filtro de esta materia */}
+                    <Card
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all duration-300 group shadow-lg hover:shadow-xl hover:shadow-orange-500/20 cursor-pointer"
+                        onClick={() => {
+                            const q = new URLSearchParams();
+                            q.set('materia', details.nombre);
+                            setLocation(`/mi-aprendizaje/tareas?${q.toString()}`);
+                        }}
+                    >
+                        <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-amber-500 via-orange-500 to-yellow-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-orange-500/30">
                                 <Clock className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/70 text-sm mb-1">Próxima Tarea</p>
-                            {proximaTarea ? (
-                                <>
-                                    <p className="text-lg font-semibold text-[#E2E8F0] line-clamp-1">{proximaTarea.titulo}</p>
-                                    <p className="text-white/50 text-xs mt-1">
-                                        {new Date(proximaTarea.fechaEntrega).toLocaleDateString('es-CO', {
-                                            day: 'numeric',
-                                            month: 'short'
-                                        })}
-                                    </p>
-                                </>
-                            ) : (
-                                <p className="text-white/60 text-sm">Sin tareas pendientes</p>
-                            )}
-                        </CardContent>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Asignaciones</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                Ver tareas de esta materia
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
                     </Card>
-
-                    {/* Tarjeta Evo Send: atajo al chat del grupo de la materia */}
+                    {/* 5. Evo Send */}
                     <Card
-                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-emerald-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20"
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-red-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-red-500/20"
                         onClick={() => {
                             try {
                                 sessionStorage.setItem('evo-send-return-path', `/course/${cursoId}`);
@@ -1646,18 +1619,36 @@ export default function CourseDetailPage() {
                             setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
                         }}
                     >
-                        <CardContent className="p-6 text-center">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-emerald-500 via-[#10B981] to-teal-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-red-500 via-red-600 to-rose-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-red-500/30">
                                 <Send className="w-10 h-10 text-white" />
                             </div>
-                            <p className="text-white/70 text-sm mb-1">Evo Send</p>
-                            <p className="text-lg font-semibold text-[#E2E8F0]">Chat del curso</p>
-                            <p className="text-white/50 text-xs mt-1">Comunicación en tiempo real</p>
-                        </CardContent>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Send</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                Chat del curso, tipo WhatsApp
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
+                    </Card>
+                    {/* 6. Evo Drive — carpeta de la materia (misma lógica: /evo-drive, el estudiante ve sus carpetas por materia) */}
+                    <Card
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-sky-400/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-sky-400/20"
+                        onClick={() => setLocation('/evo-drive')}
+                    >
+                        <CardHeader className="text-center pb-4">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-sky-400 via-[#00c8ff] to-cyan-300 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-sky-400/30">
+                                <Cloud className="w-10 h-10 text-white" />
+                            </div>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Drive</CardTitle>
+                            <CardDescription className="text-white/70 text-lg">
+                                Acceder al drive de la plataforma
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-center pt-0" />
                     </Card>
                 </div>
 
-                {/* Secciones con Pestañas: mismo estilo que vista profesor (#3B82F6, panel glass) */}
+                {/* Sección Tareas (solo calendario) y Notas */}
                 <Tabs defaultValue="tareas" className="w-full">
                     <TabsList className="panel-grades border border-white/10 rounded-xl mb-6 p-1 gap-1 transition-all duration-200">
                         <TabsTrigger
@@ -1665,7 +1656,7 @@ export default function CourseDetailPage() {
                             className="data-[state=active]:bg-[#3B82F6] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#3B82F6] data-[state=active]:to-[#1D4ED8] transition-all duration-200 rounded-lg"
                         >
                             <ClipboardList className="w-4 h-4 mr-2" />
-                            Tareas ({assignments.length})
+                            Calendario
                         </TabsTrigger>
                         <TabsTrigger
                             value="notas"
@@ -1674,116 +1665,25 @@ export default function CourseDetailPage() {
                             <Award className="w-4 h-4 mr-2" />
                             Notas
                         </TabsTrigger>
-                        <TabsTrigger
-                            value="materiales"
-                            className="data-[state=active]:bg-[#3B82F6] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#3B82F6] data-[state=active]:to-[#1D4ED8] transition-all duration-200 rounded-lg"
-                        >
-                            <FileText className="w-4 h-4 mr-2" />
-                            Materiales
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="anuncios"
-                            className="data-[state=active]:bg-[#3B82F6] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#3B82F6] data-[state=active]:to-[#1D4ED8] transition-all duration-200 rounded-lg"
-                        >
-                            <Bell className="w-4 h-4 mr-2" />
-                            Anuncios
-                        </TabsTrigger>
                     </TabsList>
 
-                    {/* Pestaña de Tareas */}
+                    {/* Pestaña de Tareas — solo calendario (la lista de tareas está en Mi aprendizaje → Tareas) */}
                     <TabsContent value="tareas" className="space-y-6 mt-0">
                         {assignments.length > 0 ? (
-                            <>
-                                <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
-                                    <CardHeader>
-                                        <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
-                                            <CalendarIcon className="w-5 h-5 text-[#3B82F6]" />
-                                            Calendario de Tareas
-                                        </CardTitle>
-                                        <CardDescription className="text-white/60">
-                                            Tareas asignadas para {details.nombre}
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <Calendar assignments={assignments} onDayClick={handleDayClick} />
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
-                                    <CardHeader>
-                                        <CardTitle className="text-[#E2E8F0]">Lista de Tareas</CardTitle>
-                                        <CardDescription className="text-white/60">
-                                            {assignments.length} {assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'}
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="space-y-3">
-                                            {assignments
-                                                .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
-                                                .map((assignment) => {
-                                                    const fechaEntrega = new Date(assignment.fechaEntrega);
-                                                    const diasRestantes = Math.ceil((fechaEntrega.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                                                    const isVencida = fechaEntrega < now;
-                                                    return (
-                                                        <div
-                                                            key={assignment._id}
-                                                            className="p-5 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/10 hover:shadow-lg hover:shadow-[#3B82F6]/10 transition-all duration-200 cursor-pointer group"
-                                                            onClick={() => setLocation(`/assignment/${assignment._id}`)}
-                                                        >
-                                                            <div className="flex items-start justify-between gap-4">
-                                                                <div className="flex-1">
-                                                                    <div className="flex items-center gap-3 mb-2">
-                                                                        <h4 className="font-semibold text-[#E2E8F0] text-lg group-hover:text-[#3B82F6] transition-colors">
-                                                                            {assignment.titulo}
-                                                                        </h4>
-                                                                        {isVencida ? (
-                                                                            <Badge className="bg-red-500/20 text-red-400 border-red-500/40">
-                                                                                Vencida
-                                                                            </Badge>
-                                                                        ) : diasRestantes <= 3 ? (
-                                                                            <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/40">
-                                                                                Próxima
-                                                                            </Badge>
-                                                                        ) : null}
-                                                                    </div>
-                                                                    <p className="text-sm text-white/70 mb-3 line-clamp-2">
-                                                                        {assignment.descripcion}
-                                                                    </p>
-                                                                    <div className="flex flex-wrap items-center gap-4 text-sm text-white/60">
-                                                                        <div className="flex items-center gap-2">
-                                                                            <User className="w-4 h-4" />
-                                                                            <span>{assignment.profesorNombre}</span>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <CalendarIcon className="w-4 h-4" />
-                                                                            <span>
-                                                                                {fechaEntrega.toLocaleDateString('es-CO', {
-                                                                                    day: 'numeric',
-                                                                                    month: 'long',
-                                                                                    year: 'numeric'
-                                                                                })}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <Clock className="w-4 h-4" />
-                                                                            <span>
-                                                                                {fechaEntrega.toLocaleTimeString('es-CO', {
-                                                                                    hour: '2-digit',
-                                                                                    minute: '2-digit'
-                                                                                })}
-                                                                            </span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <ChevronRight className="w-5 h-5 text-white/40 group-hover:text-[#3B82F6] group-hover:translate-x-0.5 transition-all duration-200 flex-shrink-0 mt-1" />
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </>
+                            <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
+                                <CardHeader>
+                                    <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
+                                        <CalendarIcon className="w-5 h-5 text-[#3B82F6]" />
+                                        Calendario de Tareas
+                                    </CardTitle>
+                                    <CardDescription className="text-white/60">
+                                        Tareas asignadas para {details.nombre}
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Calendar assignments={assignments} onDayClick={handleDayClick} />
+                                </CardContent>
+                            </Card>
                         ) : (
                             <Card className="panel-grades border border-white/10 rounded-2xl">
                                 <CardContent className="p-12 text-center">
@@ -1802,14 +1702,27 @@ export default function CourseDetailPage() {
                     {/* Pestaña de Notas — mismas notas de la materia que en la página de notas general */}
                     <TabsContent value="notas" className="space-y-6 mt-0">
                         <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
-                            <CardHeader>
-                                <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
-                                    <Award className="w-5 h-5 text-[#3B82F6]" />
-                                    Notas de {details.nombre}
-                                </CardTitle>
-                                <CardDescription className="text-white/60">
-                                    Revisa tu rendimiento académico en esta materia
-                                </CardDescription>
+                            <CardHeader className="flex flex-row items-start justify-between gap-4">
+                                <div>
+                                    <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
+                                        <Award className="w-5 h-5 text-[#3B82F6]" />
+                                        Notas de {details.nombre}
+                                    </CardTitle>
+                                    <CardDescription className="text-white/60">
+                                        Revisa tu rendimiento académico en esta materia
+                                    </CardDescription>
+                                </div>
+                                {isStudent && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10 hover:border-[#3B82F6] backdrop-blur-sm transition-all duration-200 shrink-0"
+                                        onClick={() => setLocation(`/course/${cursoId}/analytics`)}
+                                    >
+                                        <BarChart3 className="w-4 h-4 mr-2" />
+                                        Vista analítica
+                                    </Button>
+                                )}
                             </CardHeader>
                             <CardContent>
                                 {categoriasNotas.length > 0 ? (
@@ -1848,7 +1761,7 @@ export default function CourseDetailPage() {
                                                                 </div>
                                                             </div>
                                                             {nota.comentario && (
-                                                                    <div className="mt-3 p-3 rounded-lg border border-white/10 bg-white/[0.03]">
+                                                                <div className="mt-3 p-3 rounded-lg border border-white/10 bg-white/[0.03]">
                                                                     <div className="flex items-start gap-2">
                                                                         <MessageSquare className="w-4 h-4 text-[#3B82F6] mt-0.5 flex-shrink-0" />
                                                                         <p className="text-sm text-white/80">{nota.comentario}</p>
@@ -1878,66 +1791,6 @@ export default function CourseDetailPage() {
                                         </Button>
                                     </div>
                                 )}
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    {/* Pestaña de Materiales */}
-                    <TabsContent value="materiales" className="mt-0">
-                        <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
-                            <CardHeader>
-                                <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
-                                    <FileText className="w-5 h-5 text-[#3B82F6]" />
-                                    Materiales de {details.nombre}
-                                </CardTitle>
-                                <CardDescription className="text-white/60">
-                                    Documentos, recursos y materiales del curso
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-center py-12">
-                                    <FileText className="w-16 h-16 text-[#3B82F6]/50 mx-auto mb-4 transition-transform duration-200 hover:scale-110" />
-                                    <h3 className="text-xl font-semibold text-[#E2E8F0] mb-2">
-                                        Materiales del curso
-                                    </h3>
-                                    <p className="text-white/60 mb-6">
-                                        Los materiales y recursos estarán disponibles próximamente.
-                                    </p>
-                                    <Button
-                                        variant="outline"
-                                        className="border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30 transition-all duration-200"
-                                        onClick={() => setLocation('/materials')}
-                                    >
-                                        <FileText className="w-4 h-4 mr-2" />
-                                        Ver Materiales Generales
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-
-                    {/* Pestaña de Anuncios */}
-                    <TabsContent value="anuncios" className="mt-0">
-                        <Card className="panel-grades border border-white/10 rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-[0_0_40px_rgba(37,99,235,0.2)]">
-                            <CardHeader>
-                                <CardTitle className="text-[#E2E8F0] flex items-center gap-2">
-                                    <Bell className="w-5 h-5 text-[#3B82F6]" />
-                                    Anuncios del Profesor
-                                </CardTitle>
-                                <CardDescription className="text-white/60">
-                                    Comunicaciones importantes de {details.profesor?.nombre || 'tu profesor'}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-center py-12">
-                                    <Bell className="w-16 h-16 text-[#3B82F6]/50 mx-auto mb-4 transition-transform duration-200 hover:scale-110" />
-                                    <h3 className="text-xl font-semibold text-[#E2E8F0] mb-2">
-                                        Sin anuncios
-                                    </h3>
-                                    <p className="text-white/60">
-                                        No hay anuncios nuevos del profesor en este momento.
-                                    </p>
-                                </div>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1974,7 +1827,7 @@ export default function CourseDetailPage() {
     const renderContent = () => {
         if (isProfessor) {
             return renderProfessorView();
-        } 
+        }
 
         // Estudiante, Padre, y ahora Directivo (solo para visualización) usan renderStudentView
         if (isStudentOrParent || userRole === 'directivo') {

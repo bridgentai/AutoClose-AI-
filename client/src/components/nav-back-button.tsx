@@ -201,17 +201,33 @@ export function NavBackButton({ to, label, className }: NavBackButtonProps) {
 
   const backPath = getBackPath(location);
 
-  // Si no hay ruta de retorno, no mostrar el botón
-  if (!backPath) {
+  // Si no hay ruta de retorno (y no hay historial), no mostrar el botón
+  const canGoBack = typeof window !== "undefined" && window.history.length > 1;
+  if (!backPath && !canGoBack) {
     return null;
   }
 
-  const backLabel = getRouteLabel(backPath);
+  // Destino de fallback según jerarquía (módulo → página → etc.)
+  const fallbackDestination = backPath ?? "/dashboard";
+  const fallbackLabel = getRouteLabel(fallbackDestination);
+  // Solo "Página anterior" cuando el destino jerárquico es Dashboard; el resto "Volver a {padre}"
+  const displayLabel =
+    fallbackDestination === "/dashboard" ? "Página anterior" : `Volver a ${fallbackLabel}`;
+
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
+    } else if (backPath) {
+      setLocation(backPath);
+    } else {
+      setLocation("/dashboard");
+    }
+  };
 
   return (
     <Button
       variant="ghost"
-      onClick={() => setLocation(backPath)}
+      onClick={handleBack}
       className={cn(
         "flex items-center gap-2",
         "text-[#3B82F6] hover:text-[#2563EB]",
@@ -222,7 +238,7 @@ export function NavBackButton({ to, label, className }: NavBackButtonProps) {
       )}
     >
       <ArrowLeft className="w-4 h-4" />
-      <span className="text-sm font-medium">Volver a {backLabel}</span>
+      <span className="text-sm font-medium">{displayLabel}</span>
     </Button>
   );
 }

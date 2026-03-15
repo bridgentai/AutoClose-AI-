@@ -208,12 +208,16 @@ router.post('/google/create', protect, restrictTo(...ROLES_WRITE), async (req: A
   const { nombre, tipo, cursoId, cursoNombre, groupSubjectId } = req.body as { nombre?: string; tipo?: string; cursoId?: string; cursoNombre?: string; groupSubjectId?: string };
   if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
   if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
+  if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
+    return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
+  }
   const mimeType = tipo && GOOGLE_CREATE_MIME[tipo] ? GOOGLE_CREATE_MIME[tipo] : GOOGLE_CREATE_MIME.doc;
   const resolved = await resolveGroupId(String(cursoId).trim(), colegioId);
   if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
+  const trimmedGroupSubjectId = String(groupSubjectId).trim();
   let validGroupSubjectId: string | null = null;
-  if (groupSubjectId && String(groupSubjectId).trim()) {
-    const gs = await findGroupSubjectById(String(groupSubjectId).trim());
+  {
+    const gs = await findGroupSubjectById(trimmedGroupSubjectId);
     if (!gs || gs.group_id !== resolved.id || gs.institution_id !== colegioId) {
       return res.status(400).json({ message: 'Materia (groupSubjectId) no válida para este curso.' });
     }
@@ -393,10 +397,10 @@ router.get('/my-folder', protect, async (req: AuthRequest, res) => {
   } catch (err) {
     const msg = (err as Error).message || '';
     if (msg.includes('evo_personal_files') && (msg.includes('does not exist') || msg.includes('no existe'))) {
-      return res.status(503).json({ message: 'Mi carpeta no está disponible. Ejecuta la migración: server/db/evo-drive-subject-and-personal.sql' });
+      return res.status(503).json({ message: 'Mi carpeta no está disponible. Contacta al administrador del sistema.' });
     }
     if (msg.includes('institution_id') && msg.includes('does not exist')) {
-      return res.status(503).json({ message: 'Mi carpeta no está disponible. Ejecuta: ALTER TABLE evo_personal_files ADD COLUMN IF NOT EXISTS institution_id UUID REFERENCES institutions(id) ON DELETE CASCADE;' });
+      return res.status(503).json({ message: 'Mi carpeta no está disponible. Contacta al administrador del sistema.' });
     }
     throw err;
   }
@@ -440,10 +444,10 @@ router.post('/my-folder', protect, async (req: AuthRequest, res) => {
   } catch (err) {
     const msg = (err as Error).message || '';
     if (msg.includes('evo_personal_files') && (msg.includes('does not exist') || msg.includes('no existe'))) {
-      return res.status(503).json({ message: 'Mi carpeta no está disponible. Ejecuta la migración: server/db/evo-drive-subject-and-personal.sql' });
+      return res.status(503).json({ message: 'Mi carpeta no está disponible. Contacta al administrador del sistema.' });
     }
     if (msg.includes('institution_id') && msg.includes('does not exist')) {
-      return res.status(503).json({ message: 'Mi carpeta no está disponible. Ejecuta: ALTER TABLE evo_personal_files ADD COLUMN IF NOT EXISTS institution_id UUID REFERENCES institutions(id) ON DELETE CASCADE;' });
+      return res.status(503).json({ message: 'Mi carpeta no está disponible. Contacta al administrador del sistema.' });
     }
     throw err;
   }
@@ -505,12 +509,16 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
   };
   if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
   if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
+  if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
+    return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
+  }
   const resolved = await resolveGroupId(String(cursoId).trim(), colegioId);
   if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
   const groupId = resolved.id;
+  const trimmedGroupSubjectId = String(groupSubjectId).trim();
   let validGroupSubjectId: string | null = null;
-  if (groupSubjectId && String(groupSubjectId).trim()) {
-    const gs = await findGroupSubjectById(String(groupSubjectId).trim());
+  {
+    const gs = await findGroupSubjectById(trimmedGroupSubjectId);
     if (!gs || gs.group_id !== groupId || gs.institution_id !== colegioId) {
       return res.status(400).json({ message: 'Materia (groupSubjectId) no válida para este curso.' });
     }
