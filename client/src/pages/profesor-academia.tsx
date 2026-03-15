@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, Globe, ClipboardList, Percent } from "lucide-react";
+import { BookOpen, Globe, ClipboardList } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
@@ -8,7 +8,6 @@ import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   { title: "Cursos", path: "/profesor/academia/cursos", icon: BookOpen },
-  { title: "Calificación", path: "/profesor/academia/calificacion", icon: Percent },
   { title: "Horario", path: "/profesor/academia/horario", icon: ClipboardList },
   { title: "Plataformas", path: "/profesor/academia/plataformas", icon: Globe },
 ];

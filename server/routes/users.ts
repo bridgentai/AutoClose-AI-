@@ -99,6 +99,9 @@ router.get('/me/courses', protect, async (req: AuthRequest, res) => {
         icono: string;
         profesorIds: Array<{ _id: string; nombre: string; email: string }>;
         cursos: string[];
+        groupId?: string;
+        groupName?: string;
+        subjectName?: string;
       }> = [];
       for (const g of courseGroups) {
         const details = await findGroupSubjectsByGroupWithDetails(g.id, colegioId ?? undefined);
@@ -111,6 +114,9 @@ router.get('/me/courses', protect, async (req: AuthRequest, res) => {
             icono: '',
             profesorIds: [{ _id: gs.teacher_id, nombre: gs.teacher_name, email: gs.teacher_email }],
             cursos: [g.name],
+            groupId: g.id,
+            groupName: g.name,
+            subjectName: gs.subject_name,
           });
         }
       }

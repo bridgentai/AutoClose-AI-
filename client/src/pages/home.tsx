@@ -109,7 +109,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen w-full relative overflow-hidden" style={{ color: '#E2E8F0' }}>
-      {/* Fondo igual que el resto de la plataforma (body en index.css) */}
+      {/* Fondo base con gradiente */}
       <div
         className="fixed inset-0 -z-10"
         style={{
@@ -119,6 +119,33 @@ export default function Home() {
         }}
         aria-hidden
       />
+      {/* Capa de gradiente animado (movimiento suave) */}
+      <div
+        className="fixed inset-0 -z-10 opacity-40"
+        style={{
+          background: 'radial-gradient(circle at 30% 30%, rgba(59, 130, 246, 0.35) 0%, transparent 50%), radial-gradient(circle at 70% 70%, rgba(29, 78, 216, 0.25) 0%, transparent 50%)',
+          backgroundSize: '200% 200%',
+          minHeight: '100vh',
+          backgroundAttachment: 'fixed',
+          animation: 'gradient-flow 20s ease-in-out infinite',
+        }}
+        aria-hidden
+      />
+      {/* Orbes flotantes animados */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div
+          className="absolute top-20 left-10 w-[28rem] h-[28rem] rounded-full blur-3xl opacity-25 animate-float-slow"
+          style={{ backgroundColor: PLATFORM.primary }}
+        />
+        <div
+          className="absolute bottom-20 right-20 w-80 h-80 rounded-full blur-3xl opacity-20 animate-float-slow"
+          style={{ backgroundColor: PLATFORM.primaryDark, animationDelay: '2s' }}
+        />
+        <div
+          className="absolute top-1/2 left-1/2 w-96 h-96 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl opacity-10 animate-float-slow"
+          style={{ backgroundColor: '#1E40AF', animationDelay: '4s' }}
+        />
+      </div>
 
       <header className="fixed top-0 left-0 right-0 w-full backdrop-blur-xl bg-black/30 border-b border-white/10 z-50" style={{ color: '#E2E8F0' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">

@@ -588,10 +588,12 @@ CREATE TABLE IF NOT EXISTS evo_files (
   size_bytes BIGINT,
   etiquetas TEXT[] DEFAULT '{}',
   destacado BOOLEAN DEFAULT false,
+  group_subject_id UUID REFERENCES group_subjects(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_evo_files_institution_group ON evo_files(institution_id, group_id);
+CREATE INDEX IF NOT EXISTS idx_evo_files_group_subject ON evo_files(group_subject_id) WHERE group_subject_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_evo_files_updated ON evo_files(updated_at DESC);
 
 -- Categorías dentro de cada curso en Evo Drive

@@ -246,17 +246,12 @@ export default function CourseAnalyticsPage() {
                       <p className="text-white/50 text-xs mt-1">/ 100</p>
                     </div>
                     <div>
-                      <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Percentil y ranking</p>
+                      <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Ranking</p>
                       <p className="text-xl font-semibold tabular-nums text-white">
-                        {groupComparison?.percentile != null
-                          ? `${groupComparison.percentile.toFixed(1)}° percentil`
+                        {groupComparison?.rank != null && groupComparison.totalStudents > 0
+                          ? `Puesto ${groupComparison.rank} de ${groupComparison.totalStudents}`
                           : '—'}
                       </p>
-                      {groupComparison?.rank != null && groupComparison.totalStudents > 0 && (
-                        <p className="text-white/60 text-xs mt-1">
-                          Puesto {groupComparison.rank} de {groupComparison.totalStudents}
-                        </p>
-                      )}
                     </div>
                     <div>
                       <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Índice de compromiso</p>
@@ -328,20 +323,20 @@ export default function CourseAnalyticsPage() {
                         <YAxis
                           type="category"
                           dataKey="categoria"
-                          width={120}
-                          tick={{ fill: 'rgba(255,255,255,0.85)', fontSize: 12 }}
+                          width={160}
+                          tick={({ x, y, payload }) => {
+                            const item = categoryImpactBreakdown.find((d) => d.categoria === payload?.value);
+                            const pts = item && typeof item.impact === 'number' ? item.impact.toFixed(1) : '0';
+                            return (
+                              <g transform={`translate(${x},${y})`}>
+                                <text x={0} y={0} dy={4} textAnchor="start" fill="rgba(255,255,255,0.85)" fontSize={12}>
+                                  {payload?.value} {pts} pts
+                                </text>
+                              </g>
+                            );
+                          }}
                           axisLine={false}
                           tickLine={false}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: 'rgba(12, 27, 48, 0.95)',
-                            border: '1px solid rgba(59, 130, 246, 0.3)',
-                            borderRadius: '8px',
-                          }}
-                          labelStyle={{ color: 'rgba(255,255,255,0.9)' }}
-                          formatter={(value: number) => [`${value.toFixed(1)} pts`, 'Impacto']}
-                          labelFormatter={(label) => `Categoría: ${label}`}
                         />
                         <Bar
                           dataKey="impact"
@@ -357,17 +352,6 @@ export default function CourseAnalyticsPage() {
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
-                    <div className="flex flex-wrap gap-4 mt-2 text-xs text-white/60">
-                      {categoryImpactBreakdown.map((item, i) => (
-                        <span key={item.name}>
-                          <span
-                            className="inline-block w-3 h-3 rounded-sm mr-1.5 align-middle"
-                            style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
-                          />
-                          {item.name}: {typeof item.impact === 'number' ? item.impact.toFixed(1) : '0'} pts
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 ) : (
                   <p className="text-white/50 text-sm">No hay datos por categoría.</p>

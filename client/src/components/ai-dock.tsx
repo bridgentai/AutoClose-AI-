@@ -11,17 +11,14 @@ import {
   Home,
   BookOpen,
   GraduationCap,
-  Calendar,
   Users,
   Globe,
-  Settings,
   User,
   LogOut,
   Command,
   Send,
   Loader2,
   Mail,
-  UsersRound,
   FileCheck,
   Bell,
   FolderOpen
@@ -87,8 +84,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"], action: "chat" },
       { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
       { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["estudiante"] },
-      { icon: UsersRound, label: "Comunidad", path: "/comunidad", roles: ["estudiante", "profesor", "padre"] },
-      { icon: UsersRound, label: "Comunidad", path: "/directivo/comunidad", roles: ["directivo"] },
       { 
         icon: FolderOpen, 
         label: "Evo Drive", 
@@ -104,20 +99,13 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           "super_admin"
         ]
       },
-      // Módulos principales del profesor
       { icon: BookOpen, label: "Academia", path: "/profesor/academia", roles: ["profesor"] },
-      // Academia y acceso a módulo directivo en el panel (no solo Acceso Rápido)
       { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
       { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["profesor"] },
-      { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
-      // Otros roles
-      { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
       { icon: FileCheck, label: "Permisos", path: "/permisos", roles: ["padre"] },
       { icon: Users, label: "Asignación de Horarios", path: "/asignacion-horarios", roles: ["directivo"] },
       { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["directivo", "padre"] },
       { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
-      { icon: User, label: "Mi Perfil", path: "/mi-perfil", roles: ["estudiante", "profesor", "directivo", "padre"] },
-      { icon: Bell, label: "Notificaciones", path: "/notificaciones", roles: ["estudiante", "profesor", "directivo", "padre"] },
     ];
 
     return baseItems.filter(item => item.roles.includes(user?.rol || ""));
@@ -125,7 +113,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
 
   const navigationItems = getNavigationItems();
 
-  // Badge de notificaciones no leídas (estudiante y padre principalmente; visible para todos los roles con Notificaciones)
   const { data: notifData } = useQuery<{ unreadCount: number }>({
     queryKey: ['notifications-unread'],
     queryFn: async () => {
@@ -517,11 +504,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                                 )}>
                                   {item.label}
                                 </span>
-                                {item.path === '/notificaciones' && unreadNotifCount > 0 && (
-                                  <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#3B82F6] px-1.5 text-xs font-medium text-white">
-                                    {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
-                                  </span>
-                                )}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent side="left">
@@ -558,7 +540,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
               )}
             </>
           ) : (
-            /* Collapsed State - 3 Buttons Only */
+            /* Collapsed State - Sparkles, Chat, Command */
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -589,10 +571,8 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                         setIsExpanded(true);
                         setIsChatOpen(true);
                       } else if (isChatPage) {
-                        // If on chat page, just navigate to it
                         setLocation("/chat");
                       } else {
-                        // If on dashboard, just expand (but don't open chat to avoid duplication)
                         setIsExpanded(true);
                       }
                     }}
@@ -632,6 +612,49 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                 </TooltipTrigger>
                 <TooltipContent side="left">
                   <p>Acceso Rápido (⌘K)</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setLocation("/notificaciones")}
+                    className={cn(
+                      "relative p-2.5 rounded-full",
+                      "hover:bg-white/10 transition-colors",
+                      "text-white/70 hover:text-white",
+                      "group",
+                    )}
+                    aria-label="Notificaciones"
+                  >
+                    <Bell className="w-5 h-5 group-hover:text-[#ffd700] transition-colors" />
+                    {unreadNotifCount > 0 && (
+                      <span className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#3B82F6] px-1 text-[10px] font-medium text-white">
+                        {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
+                      </span>
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>Notificaciones</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setLocation("/mi-perfil")}
+                    className={cn(
+                      "p-2.5 rounded-full",
+                      "hover:bg-white/10 transition-colors",
+                      "text-white/70 hover:text-white",
+                      "group",
+                    )}
+                    aria-label="Mi Perfil"
+                  >
+                    <User className="w-5 h-5 group-hover:text-[#ffd700] transition-colors" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>Mi Perfil</p>
                 </TooltipContent>
               </Tooltip>
             </div>

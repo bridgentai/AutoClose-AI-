@@ -41,8 +41,16 @@ export default function RegistroAsistenciaPage() {
   const horaParam = searchParams.get("hora") || "7:00";
   const materiaNombre = searchParams.get("materia") || "Clase";
 
-  const grupoDisplay = grupoId.toUpperCase().trim();
-  const titulo = `Registro de Asistencia – ${grupoDisplay} ${materiaNombre} – ${horaParam}`;
+  const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
+    queryKey: ["/api/groups", grupoId],
+    queryFn: () => apiRequest("GET", `/api/groups/${encodeURIComponent(grupoId)}`),
+    enabled: !!grupoId,
+    staleTime: 5 * 60 * 1000,
+  });
+  const grupoDisplay = (groupInfo?.nombre?.trim() || "Grupo").trim();
+  const materiaSinGrupo = materiaNombre.replace(new RegExp(`\\s*${grupoDisplay.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i"), "").trim() || materiaNombre;
+
+  const titulo = `Registro de Asistencia – ${grupoDisplay} ${materiaSinGrupo} – ${horaParam}`;
 
   const courseId = courseIdFromQuery || grupoId;
 

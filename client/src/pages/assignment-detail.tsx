@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX } from 'lucide-react';
+import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX, ExternalLink, Presentation, FileSpreadsheet, Cloud, Plus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useLocation, useParams } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -33,6 +36,16 @@ interface Submission {
   fechaEntrega: string;
   calificacion?: number;
   retroalimentacion?: string;
+}
+
+interface AssignmentMaterialRow {
+  _id: string;
+  assignmentId: string;
+  type: 'file' | 'link' | 'gdoc';
+  url: string;
+  fileName?: string;
+  mimeType?: string;
+  uploadedAt?: string;
 }
 
 interface Assignment {
@@ -67,6 +80,15 @@ export default function AssignmentDetailPage() {
   const [submitArchivos, setSubmitArchivos] = useState<Attachment[]>([]);
   const [newSubmitAttachment, setNewSubmitAttachment] = useState<Attachment>({ tipo: 'link', nombre: '', url: '' });
   const [isEditingMySubmission, setIsEditingMySubmission] = useState(false);
+  // Estado para "Añadir o crear" en entrega (estudiante)
+  const [submitAddFromGoogleOpen, setSubmitAddFromGoogleOpen] = useState(false);
+  const [submitAddFromEvoOpen, setSubmitAddFromEvoOpen] = useState(false);
+  const [submitCreateNewOpen, setSubmitCreateNewOpen] = useState(false);
+  const [submitCreateNewNombre, setSubmitCreateNewNombre] = useState('');
+  const [submitCreateNewType, setSubmitCreateNewType] = useState<'doc' | 'slide' | 'sheet'>('doc');
+  const [submitGoogleSearch, setSubmitGoogleSearch] = useState('');
+  const [submitEvoLinkUrl, setSubmitEvoLinkUrl] = useState('');
+  const [submitEvoLinkName, setSubmitEvoLinkName] = useState('');
 
   // Estados para calificación (profesor)
   const [gradingStudent, setGradingStudent] = useState<string | null>(null);
@@ -94,6 +116,44 @@ export default function AssignmentDetailPage() {
     enabled: !!params.id,
     staleTime: 0,
     refetchInterval: isProfesor ? 15000 : false, // Actualizar cada 15s para ver nuevas entregas al instante
+  });
+
+  const { data: assignmentMaterials = [] } = useQuery<AssignmentMaterialRow[]>({
+    queryKey: ['assignment-materials', params.id],
+    queryFn: () => apiRequest('GET', `/api/assignment-materials?assignmentId=${encodeURIComponent(params.id!)}`),
+    enabled: !!params.id && !!assignment?._id,
+  });
+
+  // Google Drive para entrega del estudiante (Añadir o crear)
+  const { data: submitGoogleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
+    queryKey: ['evo-drive', 'google-status'],
+    queryFn: () => apiRequest('GET', '/api/evo-drive/google/status'),
+    enabled: !!params.id && !isProfesor && !!assignment,
+  });
+  interface GoogleDriveFileSubmit { id: string; name: string; mimeType?: string; webViewLink?: string }
+  const { data: submitGoogleFilesRes, isLoading: submitGoogleFilesLoading } = useQuery<{ files: GoogleDriveFileSubmit[] }>({
+    queryKey: ['evo-drive', 'google-files-submit', submitGoogleSearch],
+    queryFn: () => apiRequest('GET', `/api/evo-drive/google/files?q=${encodeURIComponent(submitGoogleSearch)}`),
+    enabled: submitAddFromGoogleOpen && !!submitGoogleStatus.connected,
+  });
+  const submitGoogleFiles = submitGoogleFilesRes?.files ?? [];
+
+  const createPersonalDocMutation = useMutation({
+    mutationFn: async (payload: { nombre: string; tipo: 'doc' | 'slide' | 'sheet' }) =>
+      apiRequest<{ googleWebViewLink?: string; nombre?: string }>('POST', '/api/evo-drive/google/create-personal', payload),
+    onSuccess: (data) => {
+      const url = data?.googleWebViewLink;
+      const name = data?.nombre || submitCreateNewNombre;
+      if (url) {
+        setSubmitArchivos((prev) => [...prev, { tipo: 'documento', nombre: name || 'Documento', url }]);
+        toast({ title: 'Documento creado', description: 'Se añadió a tu entrega. Ábrelo, complétalo y envía.' });
+      }
+      setSubmitCreateNewOpen(false);
+      setSubmitCreateNewNombre('');
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Error', description: e.message || 'No se pudo crear el documento.', variant: 'destructive' });
+    },
   });
 
   const updateAssignmentMutation = useMutation({
@@ -187,6 +247,38 @@ export default function AssignmentDetailPage() {
       setSubmitArchivos([...submitArchivos, newSubmitAttachment]);
       setNewSubmitAttachment({ tipo: 'link', nombre: '', url: '' });
     }
+  };
+
+  const driveViewLink = (id: string, mimeType?: string) => {
+    const m = (mimeType || '').toLowerCase();
+    if (m.includes('document')) return `https://docs.google.com/document/d/${id}/edit`;
+    if (m.includes('spreadsheet')) return `https://docs.google.com/spreadsheets/d/${id}/edit`;
+    if (m.includes('presentation')) return `https://docs.google.com/presentation/d/${id}/edit`;
+    return `https://drive.google.com/file/d/${id}/view`;
+  };
+
+  const handleSubmitAddFromGoogle = (gfile: GoogleDriveFileSubmit) => {
+    const url = gfile.webViewLink || driveViewLink(gfile.id, gfile.mimeType);
+    setSubmitArchivos((prev) => [...prev, { tipo: 'documento', nombre: gfile.name, url }]);
+    setSubmitAddFromGoogleOpen(false);
+    setSubmitGoogleSearch('');
+    toast({ title: 'Archivo añadido', description: 'Se añadió a tu entrega.' });
+  };
+
+  const handleSubmitAddFromEvo = () => {
+    const url = submitEvoLinkUrl.trim();
+    const name = submitEvoLinkName.trim();
+    if (!url) return;
+    setSubmitArchivos((prev) => [...prev, { tipo: 'link', nombre: name || url, url }]);
+    setSubmitAddFromEvoOpen(false);
+    setSubmitEvoLinkUrl('');
+    setSubmitEvoLinkName('');
+    toast({ title: 'Enlace añadido', description: 'Se añadió a tu entrega.' });
+  };
+
+  const handleSubmitCreateNew = () => {
+    if (!submitCreateNewNombre.trim()) return;
+    createPersonalDocMutation.mutate({ nombre: submitCreateNewNombre.trim(), tipo: submitCreateNewType });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -511,21 +603,64 @@ export default function AssignmentDetailPage() {
                               </div>
                             </div>
                           ) : (
-                            assignment.adjuntos && assignment.adjuntos.length > 0 ? (
-                              <div className="space-y-2">
-                                {assignment.adjuntos.map((adj, index) => (
+                            (assignment.adjuntos?.length > 0 || assignmentMaterials.length > 0) ? (
+                              <div className="space-y-3">
+                                {assignment.adjuntos?.map((adj, index) => (
                                   <a
-                                    key={index}
+                                    key={`legacy-${index}`}
                                     href={adj.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-2 p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
+                                    className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
                                     data-testid={`adjunto-${index}`}
                                   >
-                                    {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#1e3cff]" /> : <FileText className="w-4 h-4 text-[#1e3cff]" />}
-                                    <span className="text-white">{adj.nombre}</span>
+                                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                                      <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 bg-white/10">
+                                        {adj.tipo === 'link' ? <Link2 className="w-5 h-5 text-white/70" /> : <FileText className="w-5 h-5 text-[#1a73e8]" />}
+                                      </div>
+                                      <span className="text-sm font-medium text-white truncate">{adj.nombre}</span>
+                                    </div>
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                      <ExternalLink className="w-3.5 h-3.5" /> Abrir enlace
+                                    </span>
                                   </a>
                                 ))}
+                                {assignmentMaterials.map((m) => {
+                                  const isGoogle = m.type === 'gdoc';
+                                  const displayName = m.fileName || m.url;
+                                  const u = (m.url || '').toLowerCase();
+                                  const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
+                                  const iconBg = isGoogle ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
+                                  const Icon = isGoogle ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
+                                  const iconColor = isGoogle ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
+                                  return (
+                                    <a
+                                      key={m._id}
+                                      href={m.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
+                                      data-testid={`material-${m._id}`}
+                                    >
+                                      <div className="flex items-center gap-4 min-w-0 flex-1">
+                                        <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
+                                          <Icon className={`w-5 h-5 ${iconColor}`} />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                            {isGoogle && (
+                                              <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400">Google</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                        <ExternalLink className="w-3.5 h-3.5" /> {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
+                                      </span>
+                                    </a>
+                                  );
+                                })}
                               </div>
                             ) : (
                               <p className="text-white/50">Sin adjuntos</p>
@@ -776,30 +911,71 @@ export default function AssignmentDetailPage() {
                     </Card>
                   )}
 
-                  {/* Recursos adjuntos */}
-                  {assignment.adjuntos && Array.isArray(assignment.adjuntos) && assignment.adjuntos.length > 0 && (
+                  {/* Recursos adjuntos (legacy + Evo Drive materials) */}
+                  {((assignment.adjuntos && Array.isArray(assignment.adjuntos) && assignment.adjuntos.length > 0) || assignmentMaterials.length > 0) && (
                     <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                       <CardHeader>
-                        <CardTitle className="text-white text-lg">Recursos Adicionales</CardTitle>
+                        <CardTitle className="text-white text-lg">Archivos de la tarea</CardTitle>
+                        <CardDescription className="text-white/60">Materiales y enlaces adjuntos a esta asignación</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="space-y-2">
-                          {assignment.adjuntos.map((adj, index) => {
-                            // Manejar tanto objetos Attachment como strings
-                            const adjunto = typeof adj === 'string' 
+                        <div className="space-y-3">
+                          {assignment.adjuntos?.map((adj, index) => {
+                            const adjunto = typeof adj === 'string'
                               ? { tipo: 'link' as const, nombre: adj, url: adj }
                               : adj;
                             return (
                               <a
-                                key={index}
+                                key={`legacy-${index}`}
                                 href={adjunto.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-2 p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
+                                className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
                                 data-testid={`adjunto-${index}`}
                               >
-                                {adjunto.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#1e3cff]" /> : <FileText className="w-4 h-4 text-[#1e3cff]" />}
-                                <span className="text-white">{adjunto.nombre}</span>
+                                <div className="flex items-center gap-4 min-w-0 flex-1">
+                                  <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 bg-white/10">
+                                    {adjunto.tipo === 'link' ? <Link2 className="w-5 h-5 text-white/70" /> : <FileText className="w-5 h-5 text-[#1a73e8]" />}
+                                  </div>
+                                  <span className="text-sm font-medium text-white truncate">{adjunto.nombre}</span>
+                                </div>
+                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                  <ExternalLink className="w-3.5 h-3.5" /> Abrir enlace
+                                </span>
+                              </a>
+                            );
+                          })}
+                          {assignmentMaterials.map((m) => {
+                            const isGoogle = m.type === 'gdoc';
+                            const displayName = m.fileName || m.url;
+                            const u = (m.url || '').toLowerCase();
+                            const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
+                            const iconBg = isGoogle ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
+                            const Icon = isGoogle ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
+                            const iconColor = isGoogle ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
+                            return (
+                              <a
+                                key={m._id}
+                                href={m.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
+                                data-testid={`material-${m._id}`}
+                              >
+                                <div className="flex items-center gap-4 min-w-0 flex-1">
+                                  <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
+                                    <Icon className={`w-5 h-5 ${iconColor}`} />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                                    {isGoogle && (
+                                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400 mt-1">Google</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                  <ExternalLink className="w-3.5 h-3.5" /> {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
+                                </span>
                               </a>
                             );
                           })}
@@ -932,62 +1108,87 @@ export default function AssignmentDetailPage() {
                             />
                           </div>
 
-                          <div>
-                            <Label className="text-white/60 mb-2 block">Archivos</Label>
+                          <div className="space-y-3">
+                            <Label className="text-white/60 mb-2 block">Archivos de tu entrega</Label>
+                            <p className="text-white/50 text-xs">Añade enlaces, archivos de Google Drive o crea un documento nuevo para entregar.</p>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button type="button" variant="outline" size="sm" className="h-9 rounded-[12px] bg-[#4DBBFF]/[0.13] border-[1.5px] border-[#4DBBFF]/50 text-[#4DBBFF] text-[13px] font-medium hover:bg-[#4DBBFF]/20 hover:border-[#4DBBFF]/60 px-4 transition-all duration-150 ease-in-out">
+                                  <Plus className="w-4 h-4 mr-2" />
+                                  Añadir o crear
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" sideOffset={8} className="w-[230px] rounded-[14px] border-[#4DBBFF]/20 bg-[#0f1c35] shadow-xl shadow-black/40 p-0 overflow-hidden">
+                                <div className="py-2.5">
+                                  <DropdownMenuItem
+                                    onSelect={() => submitGoogleStatus.connected && setTimeout(() => setSubmitAddFromGoogleOpen(true), 50)}
+                                    disabled={!submitGoogleStatus.connected}
+                                    className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                                  >
+                                    <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Cloud className="w-4 h-4 text-[#4DBBFF]" /></div>
+                                    Google Drive
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => setTimeout(() => { setSubmitEvoLinkUrl(''); setSubmitEvoLinkName(''); setSubmitAddFromEvoOpen(true); }, 50)}
+                                    className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                                  >
+                                    <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Link2 className="w-4 h-4 text-[#4DBBFF]" /></div>
+                                    Enlace
+                                  </DropdownMenuItem>
+                                </div>
+                                <div className="border-t border-[#4DBBFF]/10" />
+                                <div className="py-2">
+                                  <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#4DBBFF]/50">Crear en mi Drive</p>
+                                  <DropdownMenuItem onSelect={() => setTimeout(() => { setSubmitCreateNewType('doc'); setSubmitCreateNewNombre(''); setSubmitCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                    <div className="w-8 h-8 rounded-[9px] bg-[#1a56d6] flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-white" /></div>
+                                    Documentos
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => setTimeout(() => { setSubmitCreateNewType('slide'); setSubmitCreateNewNombre(''); setSubmitCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                    <div className="w-8 h-8 rounded-[9px] bg-[#d97706] flex items-center justify-center shrink-0"><Presentation className="w-4 h-4 text-white" /></div>
+                                    Presentaciones
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => setTimeout(() => { setSubmitCreateNewType('sheet'); setSubmitCreateNewNombre(''); setSubmitCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                    <div className="w-8 h-8 rounded-[9px] bg-[#16a34a] flex items-center justify-center shrink-0"><FileSpreadsheet className="w-4 h-4 text-white" /></div>
+                                    Hojas de cálculo
+                                  </DropdownMenuItem>
+                                </div>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             {submitArchivos.length > 0 && (
-                              <div className="space-y-2 mb-3">
-                                {submitArchivos.map((archivo, index) => (
-                                  <div key={index} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-                                    <FileText className="w-4 h-4 text-[#1e3cff]" />
-                                    <span className="flex-1 text-sm text-white truncate">{archivo.nombre}</span>
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      onClick={() => setSubmitArchivos(submitArchivos.filter((_, i) => i !== index))}
-                                      className="h-6 w-6 text-white/50 hover:text-white"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
+                              <ul className="space-y-3 mt-2">
+                                {submitArchivos.map((archivo, index) => {
+                                  const isGoogle = archivo.tipo === 'documento' && archivo.url.includes('google');
+                                  const u = (archivo.url || '').toLowerCase();
+                                  const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
+                                  const iconBg = isGoogle ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
+                                  const Icon = isGoogle ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
+                                  const iconColor = isGoogle ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
+                                  return (
+                                    <li key={index} className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out">
+                                      <div className="flex items-center gap-4 min-w-0 flex-1">
+                                        <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
+                                          <Icon className={`w-5 h-5 ${iconColor}`} />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-medium text-white truncate">{archivo.nombre}</p>
+                                          {isGoogle && <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400 mt-1">Google</span>}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        {archivo.url && (
+                                          <a href={archivo.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] hover:underline opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                            <ExternalLink className="w-3.5 h-3.5" /> {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
+                                          </a>
+                                        )}
+                                        <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:text-white h-8 w-8 p-0 shrink-0" onClick={() => setSubmitArchivos((prev) => prev.filter((_, i) => i !== index))} aria-label="Quitar">
+                                          <X className="w-4 h-4" />
+                                        </Button>
+                                      </div>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
                             )}
-                            <div className="flex gap-2">
-                              <Select
-                                value={newSubmitAttachment.tipo}
-                                onValueChange={(value) => setNewSubmitAttachment({ ...newSubmitAttachment, tipo: value as 'pdf' | 'link' | 'imagen' | 'documento' | 'otro' })}
-                              >
-                                <SelectTrigger className="w-28 bg-white/5 border-white/10 text-white">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-[#0a0a2a] border-white/10">
-                                  <SelectItem value="link" className="text-white">Link</SelectItem>
-                                  <SelectItem value="pdf" className="text-white">PDF</SelectItem>
-                                  <SelectItem value="documento" className="text-white">Doc</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Input
-                                placeholder="Nombre"
-                                value={newSubmitAttachment.nombre}
-                                onChange={(e) => setNewSubmitAttachment({ ...newSubmitAttachment, nombre: e.target.value })}
-                                className="bg-white/5 border-white/10 text-white"
-                              />
-                              <Input
-                                placeholder="URL"
-                                value={newSubmitAttachment.url}
-                                onChange={(e) => setNewSubmitAttachment({ ...newSubmitAttachment, url: e.target.value })}
-                                className="bg-white/5 border-white/10 text-white flex-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={handleAddSubmitAttachment}
-                                className="border-white/10 text-white hover:bg-white/10"
-                              >
-                                <Paperclip className="w-4 h-4" />
-                              </Button>
-                            </div>
                           </div>
 
                           <div className="flex gap-2">
@@ -1021,6 +1222,113 @@ export default function AssignmentDetailPage() {
                   </Card>
                 </div>
               )}
+
+      {/* Modales Añadir o crear (entrega del estudiante) */}
+      <Dialog open={submitAddFromGoogleOpen} onOpenChange={setSubmitAddFromGoogleOpen}>
+        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Cloud className="w-5 h-5 text-[#4DBBFF]" /></div>
+              <div>
+                <span className="text-base font-semibold text-white block">Agregar desde Google Drive</span>
+                <span className="text-xs text-white/60 mt-0.5 block">Elige un archivo para adjuntar a tu entrega</span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          {!submitGoogleStatus.connected ? (
+            <p className="text-white/60 text-sm py-4">Conecta Google Drive desde Evo Drive primero para usar tus archivos.</p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-white/60">Buscar en Drive</Label>
+                <Input value={submitGoogleSearch} onChange={(e) => setSubmitGoogleSearch(e.target.value)} placeholder="Nombre del archivo..." className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+              </div>
+              <ScrollArea className="h-[280px] rounded-md border border-white/10">
+                {submitGoogleFilesLoading ? (
+                  <p className="text-white/50 text-sm p-4">Cargando archivos…</p>
+                ) : submitGoogleFiles.length === 0 ? (
+                  <p className="text-white/50 text-sm p-4">Escribe para buscar o no hay archivos.</p>
+                ) : (
+                  <ul className="p-2 space-y-1">
+                    {submitGoogleFiles.map((gf) => (
+                      <li key={gf.id} className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/10 text-white border border-transparent hover:border-white/10">
+                        <span className="truncate text-sm flex-1 min-w-0">{gf.name}</span>
+                        <Button type="button" size="sm" variant="outline" className="shrink-0 border-[#4DBBFF]/50 bg-[#4DBBFF]/10 text-[#4DBBFF] hover:bg-[#4DBBFF]/20 font-medium" onClick={() => handleSubmitAddFromGoogle(gf)}>Agregar</Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </ScrollArea>
+              <DialogFooter className="gap-2 mt-4">
+                <Button variant="outline" onClick={() => setSubmitAddFromGoogleOpen(false)} className="flex-1 border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cerrar</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={submitAddFromEvoOpen} onOpenChange={setSubmitAddFromEvoOpen}>
+        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-3">
+              <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Link2 className="w-5 h-5 text-[#4DBBFF]" /></div>
+              <div>
+                <span className="text-base font-semibold text-white block">Añadir enlace</span>
+                <span className="text-xs text-white/60 mt-0.5 block">URL del recurso que quieres entregar</span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-white/60">Nombre (opcional)</Label>
+              <Input value={submitEvoLinkName} onChange={(e) => setSubmitEvoLinkName(e.target.value)} placeholder="Ej: Mi trabajo" className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-white/60">URL *</Label>
+              <Input value={submitEvoLinkUrl} onChange={(e) => setSubmitEvoLinkUrl(e.target.value)} placeholder="https://..." className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+            <Button variant="outline" onClick={() => setSubmitAddFromEvoOpen(false)} className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cancelar</Button>
+            <Button onClick={handleSubmitAddFromEvo} disabled={!submitEvoLinkUrl.trim()} className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium">Añadir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={submitCreateNewOpen} onOpenChange={setSubmitCreateNewOpen}>
+        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${submitCreateNewType === 'doc' ? 'bg-[#1a56d6]' : submitCreateNewType === 'slide' ? 'bg-[#d97706]' : 'bg-[#16a34a]'}`}>
+                {submitCreateNewType === 'doc' && <FileText className="w-5 h-5 text-white" />}
+                {submitCreateNewType === 'slide' && <Presentation className="w-5 h-5 text-white" />}
+                {submitCreateNewType === 'sheet' && <FileSpreadsheet className="w-5 h-5 text-white" />}
+              </div>
+              <div>
+                <span className="text-base font-semibold text-white block">
+                  {submitCreateNewType === 'doc' && 'Nuevo documento'}
+                  {submitCreateNewType === 'slide' && 'Nueva presentación'}
+                  {submitCreateNewType === 'sheet' && 'Nueva hoja de cálculo'}
+                </span>
+                <span className="text-xs text-white/60 mt-0.5 block">Se creará en tu Google Drive y se añadirá a la entrega</span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-white/60">Nombre del archivo</Label>
+              <Input value={submitCreateNewNombre} onChange={(e) => setSubmitCreateNewNombre(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSubmitCreateNew()} placeholder="Ej: Mi tarea" className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" autoFocus />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+            <Button variant="outline" onClick={() => { setSubmitCreateNewOpen(false); setSubmitCreateNewNombre(''); }} className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cancelar</Button>
+            <Button onClick={handleSubmitCreateNew} disabled={!submitCreateNewNombre.trim() || createPersonalDocMutation.isPending} className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium">
+              {createPersonalDocMutation.isPending ? 'Creando…' : 'Crear'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       </div>
     </div>
   );

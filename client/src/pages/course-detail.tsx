@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3 } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3, FolderOpen, Cloud, Link2, Presentation, FileSpreadsheet, ExternalLink } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useLocation, useRoute } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -304,10 +306,16 @@ export default function CourseDetailPage() {
         courseId: '', // ID de la materia
     });
     const [logroCalificacionId, setLogroCalificacionId] = useState('');
-    const [newMaterialTitle, setNewMaterialTitle] = useState('');
     const [assignmentMaterials, setAssignmentMaterials] = useState<{ type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[]>([]);
-    const [materialLinkInput, setMaterialLinkInput] = useState('');
-    const [creatingGdoc, setCreatingGdoc] = useState(false);
+    // Evo Drive (materiales desde Añadir o crear)
+    const [addFromGoogleOpen, setAddFromGoogleOpen] = useState(false);
+    const [addFromEvoOpen, setAddFromEvoOpen] = useState(false);
+    const [createNewOpen, setCreateNewOpen] = useState(false);
+    const [createNewNombre, setCreateNewNombre] = useState('');
+    const [createNewType, setCreateNewType] = useState<'doc' | 'slide' | 'sheet'>('doc');
+    const [googleSearch, setGoogleSearch] = useState('');
+    const [evoLinkUrl, setEvoLinkUrl] = useState('');
+    const [evoLinkName, setEvoLinkName] = useState('');
 
     // Obtener mes y año actuales
     const now = new Date();
@@ -535,15 +543,33 @@ export default function CourseDetailPage() {
     });
     const logros = logrosData?.logros ?? [];
 
+    // Evo Drive: estado de conexión y archivos de Google (para modales en formulario de asignación)
+    const { data: googleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
+        queryKey: ['evo-drive', 'google-status'],
+        queryFn: () => apiRequest('GET', '/api/evo-drive/google/status'),
+        enabled: showAssignmentForm,
+    });
+    interface GoogleDriveFile { id: string; name: string; mimeType?: string; webViewLink?: string; size?: string }
+    const { data: googleFilesRes, isLoading: googleFilesLoading } = useQuery<{ files: GoogleDriveFile[] }>({
+        queryKey: ['evo-drive', 'google-files-assign', googleSearch],
+        queryFn: () => apiRequest('GET', `/api/evo-drive/google/files?q=${encodeURIComponent(googleSearch)}`),
+        enabled: addFromGoogleOpen && !!googleStatus.connected,
+    });
+    const googleFilesForAssign = googleFilesRes?.files ?? [];
+
     // Efecto para resetear el formulario
     useEffect(() => {
         if (!showAssignmentForm) {
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setAssignmentType(null);
             setLogroCalificacionId('');
-            setNewMaterialTitle('');
             setAssignmentMaterials([]);
-            setMaterialLinkInput('');
+            setAddFromGoogleOpen(false);
+            setAddFromEvoOpen(false);
+            setCreateNewOpen(false);
+            setGoogleSearch('');
+            setEvoLinkUrl('');
+            setEvoLinkName('');
         }
     }, [showAssignmentForm]);
 
@@ -568,18 +594,19 @@ export default function CourseDetailPage() {
         mutationFn: async (payload: { data: typeof formData; newMaterialTitle?: string; materials?: { type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[] }) => {
             const { data, newMaterialTitle: materialTitle, materials = [] } = payload;
             if (!data.courseId) throw new Error('Debes seleccionar una materia');
-            if (assignmentType === 'assignment' && logros.length > 0 && !logroCalificacionId) {
+            const needsLogro = (assignmentType === 'assignment' || assignmentType === 'recordatorio') && logros.length > 0;
+            if (needsLogro && !logroCalificacionId) {
                 throw new Error('Debes seleccionar el logro de calificación para esta asignación');
             }
-            const type = assignmentType === 'reminder' ? 'reminder' : 'assignment';
+            const type = assignmentType === 'recordatorio' ? 'reminder' : 'assignment';
             const created = await apiRequest<{ _id: string }>('POST', '/api/assignments', {
                 titulo: data.titulo,
                 descripcion: data.descripcion,
                 curso: cursoId,
                 courseId: data.courseId,
                 fechaEntrega: data.fechaEntrega,
-                categoryId: assignmentType === 'assignment' ? (logroCalificacionId || undefined) : undefined,
-                logroCalificacionId: assignmentType === 'assignment' ? (logroCalificacionId || undefined) : undefined,
+                categoryId: (assignmentType === 'assignment' || assignmentType === 'recordatorio') ? (logroCalificacionId || undefined) : undefined,
+                logroCalificacionId: (assignmentType === 'assignment' || assignmentType === 'recordatorio') ? (logroCalificacionId || undefined) : undefined,
                 type,
                 isGradable: type === 'assignment',
             });
@@ -602,13 +629,35 @@ export default function CourseDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['materials'] });
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setLogroCalificacionId('');
-            setNewMaterialTitle('');
             setAssignmentMaterials([]);
-            setMaterialLinkInput('');
             setShowAssignmentForm(false);
         },
         onError: (error: any) => {
             toast({ title: 'Error', description: error.message || 'No se pudo crear la asignación', variant: 'destructive' });
+        },
+    });
+
+    // Crear Doc/Slide/Sheet en Google desde formulario de asignación (Evo Drive) y añadir enlace a materiales
+    const createNewDocForAssignMutation = useMutation({
+        mutationFn: async (payload: { nombre: string; tipo: 'doc' | 'slide' | 'sheet'; cursoId: string; cursoNombre: string }) => {
+            return apiRequest<{ googleWebViewLink?: string; nombre?: string }>('POST', '/api/evo-drive/google/create', {
+                nombre: payload.nombre,
+                tipo: payload.tipo,
+                cursoId: payload.cursoId,
+                cursoNombre: payload.cursoNombre,
+            });
+        },
+        onSuccess: (data, variables) => {
+            const url = data?.googleWebViewLink;
+            if (url) {
+                setAssignmentMaterials((prev) => [...prev, { type: 'gdoc', url, fileName: data?.nombre || variables.nombre }]);
+                toast({ title: 'Documento creado', description: 'Se añadió el enlace a los materiales de la asignación.' });
+            }
+            setCreateNewOpen(false);
+            setCreateNewNombre('');
+        },
+        onError: (e: Error) => {
+            toast({ title: 'Error', description: e.message || 'No se pudo crear el documento.', variant: 'destructive' });
         },
     });
 
@@ -631,28 +680,38 @@ export default function CourseDetailPage() {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        createAssignmentMutation.mutate({ data: formData, newMaterialTitle, materials: assignmentMaterials });
+        createAssignmentMutation.mutate({ data: formData, materials: assignmentMaterials });
     };
 
-    const handleAddMaterialLink = () => {
-        const url = materialLinkInput.trim();
+    // Evo Drive: añadir archivo de Google a materiales de la asignación (solo enlace, no se registra en Evo Drive)
+    const handleAddFromGoogleAssign = (gfile: GoogleDriveFile) => {
+        const url = gfile.webViewLink || `https://drive.google.com/file/d/${gfile.id}/view`;
+        setAssignmentMaterials((prev) => [...prev, { type: 'gdoc', url, fileName: gfile.name }]);
+        setAddFromGoogleOpen(false);
+        setGoogleSearch('');
+        toast({ title: 'Enlace añadido', description: 'Se añadió el archivo a los materiales de la asignación.' });
+    };
+
+    const handleAddFromEvoAssign = () => {
+        const url = evoLinkUrl.trim();
+        const name = evoLinkName.trim();
         if (!url) return;
         const type = url.includes('docs.google.com') ? 'gdoc' : 'link';
-        setAssignmentMaterials((prev) => [...prev, { type, url, fileName: url.split('/').pop() || undefined }]);
-        setMaterialLinkInput('');
+        setAssignmentMaterials((prev) => [...prev, { type, url, fileName: name || url.split('/').pop() || undefined }]);
+        setAddFromEvoOpen(false);
+        setEvoLinkUrl('');
+        setEvoLinkName('');
+        toast({ title: 'Enlace añadido', description: 'Se añadió a los materiales de la asignación.' });
     };
 
-    const handleCreateGoogleDoc = async () => {
-        setCreatingGdoc(true);
-        try {
-            const res = await apiRequest<{ url: string; documentId?: string }>('POST', '/api/integrations/google/create-doc', { title: formData.titulo || 'Documento' });
-            setAssignmentMaterials((prev) => [...prev, { type: 'gdoc', url: res.url, fileName: 'Documento Google' }]);
-            toast({ title: 'Documento creado', description: 'Se ha añadido el enlace a los materiales.' });
-        } catch (err: unknown) {
-            toast({ title: 'Error', description: (err as { message?: string })?.message || 'No se pudo crear el documento.', variant: 'destructive' });
-        } finally {
-            setCreatingGdoc(false);
-        }
+    const handleCreateNewDocForAssign = () => {
+        if (!createNewNombre.trim() || !cursoId || !groupDisplayName) return;
+        createNewDocForAssignMutation.mutate({
+            nombre: createNewNombre.trim(),
+            tipo: createNewType,
+            cursoId,
+            cursoNombre: groupDisplayName,
+        });
     };
 
     const handleDayClick = (assignment: Assignment) => {
@@ -704,7 +763,7 @@ export default function CourseDetailPage() {
                     </p>
                 </div>
 
-                {/* 6 Tarjetas: Estudiantes, Tareas, Materiales, Asistencia, Evo Send, Notas */}
+                {/* 6 Tarjetas: Fila 1 — Estudiantes, Tareas, Notas. Fila 2 — Asistencia, Evo Send, Evo Drive */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8 max-w-6xl mx-auto">
                     {/* Carta 1: Estudiantes */}
                     <Card 
@@ -729,10 +788,10 @@ export default function CourseDetailPage() {
                         onClick={() => setLocation(`/profesor/cursos/${cursoId}/tareas`)}
                     >
                         <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#002366] via-[#003d7a] to-[#1e3cff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#002366]/40">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-violet-500/30">
                                 <ClipboardList className="w-10 h-10 text-white" />
                             </div>
-                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Tareas</CardTitle>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Asignaciones</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
                                 {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} asignadas
                             </CardDescription>
@@ -740,18 +799,18 @@ export default function CourseDetailPage() {
                         <CardContent className="text-center pt-0" />
                     </Card>
 
-                    {/* Carta 3: Materiales */}
+                    {/* Carta 3: Notas — tabla de calificaciones del grupo */}
                     <Card 
-                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl"
-                        onClick={() => setLocation(`/course-detail/${cursoId}/materiales`)}
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20"
+                        onClick={() => setLocation(`/course/${cursoId}/grades`)}
                     >
                         <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#003d7a] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg">
-                                <FileText className="w-10 h-10 text-white" />
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-amber-500 via-[#ffd700] to-yellow-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-amber-500/30">
+                                <Award className="w-10 h-10 text-white" />
                             </div>
-                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Materiales</CardTitle>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Notas</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
-                                Ver y gestionar materiales del curso
+                                Ver y editar tabla de calificaciones
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="text-center pt-0" />
@@ -776,7 +835,7 @@ export default function CourseDetailPage() {
 
                     {/* Carta 5: Evo Send — atajo al chat del curso */}
                     <Card 
-                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-emerald-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20"
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-red-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-red-500/20"
                         onClick={() => {
                         try {
                           sessionStorage.setItem('evo-send-return-path', `/course-detail/${cursoId}`);
@@ -789,7 +848,7 @@ export default function CourseDetailPage() {
                       }}
                     >
                         <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-emerald-500 via-[#10B981] to-teal-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-red-500 via-red-600 to-rose-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-red-500/30">
                                 <Send className="w-10 h-10 text-white" />
                             </div>
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Send</CardTitle>
@@ -800,18 +859,18 @@ export default function CourseDetailPage() {
                         <CardContent className="text-center pt-0" />
                     </Card>
 
-                    {/* Carta 6: Notas — tabla de calificaciones del grupo */}
+                    {/* Carta 6: Evo Drive */}
                     <Card 
-                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20"
-                        onClick={() => setLocation(`/course/${cursoId}/grades`)}
+                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-sky-400/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-sky-400/20"
+                        onClick={() => setLocation('/evo-drive')}
                     >
                         <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#3B82F6] via-[#2563EB] to-[#1D4ED8] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#3B82F6]/30">
-                                <Award className="w-10 h-10 text-white" />
+                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-sky-400 via-[#00c8ff] to-cyan-300 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-sky-400/30">
+                                <FolderOpen className="w-10 h-10 text-white" />
                             </div>
-                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Notas</CardTitle>
+                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Drive</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
-                                Ver y editar tabla de calificaciones
+                                Acceder al drive de la plataforma
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="text-center pt-0" />
@@ -823,23 +882,28 @@ export default function CourseDetailPage() {
                 {renderCalendarAndAssignmentList(assignments, `Grupo ${groupDisplayName}`)}
 
                 {/* Botones de acción y Formulario para asignar asignación (Movido debajo del calendario) */}
-                <div className="flex gap-4 mb-8 mt-8">
+                <div className="flex flex-row items-center justify-between gap-4 mb-6 mt-8 flex-wrap">
+                    <div>
+                        <h2 className="text-2xl font-bold text-white font-['Poppins'] tracking-tight">Asignaciones</h2>
+                        <p className="text-white/60 text-sm mt-0.5">Grupo {groupDisplayName}</p>
+                    </div>
                     <Button
                         onClick={() => setShowAssignmentForm(!showAssignmentForm)}
-                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
+                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out rounded-xl px-5 py-2.5"
                         data-testid="button-assign-task"
                     >
                         <ClipboardList className="w-4 h-4 mr-2" />
-                        {showAssignmentForm ? 'Cancelar' : 'Asignar Nueva Asignación'}
+                        {showAssignmentForm ? 'Cancelar' : 'Nueva Asignación'}
                     </Button>
                 </div>
 
                 {showAssignmentForm && (
-                    <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
-                           <CardHeader>
-                                <CardTitle className="text-white">Nueva Asignación</CardTitle>
+                    <Card className="bg-[#0a0a2a]/80 border border-white/10 backdrop-blur-md mb-8 rounded-[14px] shadow-xl transition-colors duration-150 ease-in-out">
+                           <CardHeader className="pb-2">
+                                <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva Asignación</CardTitle>
+                                <p className="text-white/50 text-sm mt-0.5">Crear tarea o recordatorio para el curso</p>
                             </CardHeader>
-                            <CardContent>
+                            <CardContent className="pt-4">
                                 {!assignmentType ? (
                                     <div className="space-y-4">
                                         <p className="text-white/70 mb-4">Selecciona el tipo de tarea:</p>
@@ -847,7 +911,7 @@ export default function CourseDetailPage() {
                                             <Button
                                                 type="button"
                                                 onClick={() => setAssignmentType('recordatorio')}
-                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#1e3cff]/60 transition-all"
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
                                             >
                                                 <Bell className="w-8 h-8 text-[#00c8ff]" />
                                                 <span className="text-white font-semibold">Recordatorio</span>
@@ -856,7 +920,7 @@ export default function CourseDetailPage() {
                                             <Button
                                                 type="button"
                                                 onClick={() => setAssignmentType('assignment')}
-                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#1e3cff]/60 transition-all"
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
                                             >
                                                 <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
                                                 <span className="text-white font-semibold">Asignación</span>
@@ -867,9 +931,9 @@ export default function CourseDetailPage() {
                                 ) : (
                                     // Formulario de tarea
                                     <>
-                                        <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center justify-between mb-6">
                                             <div className="flex items-center gap-2">
-                                                <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40">
+                                                <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 rounded-[10px] transition-colors duration-150 ease-in-out">
                                                     {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Asignación'}
                                                 </Badge>
                                             </div>
@@ -878,7 +942,7 @@ export default function CourseDetailPage() {
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => setAssignmentType(null)}
-                                                className="text-white/70 hover:text-white"
+                                                className="text-white/70 hover:text-white rounded-[10px] transition-colors duration-150 ease-in-out"
                                             >
                                                 <X className="w-4 h-4 mr-1" />
                                                 Cambiar tipo
@@ -894,122 +958,295 @@ export default function CourseDetailPage() {
                                             </Alert>
                                         )}
 
-                                        <form onSubmit={handleSubmit} className="space-y-4">
-                                    {/* Selector de Materia */}
-                                    {subjects.length > 1 && (
-                                        <div>
-                                            <Label htmlFor="materia" className="text-white">Materia *</Label>
-                                            <Select
-                                                value={formData.courseId}
-                                                onValueChange={(value) => setFormData({ ...formData, courseId: value })}
-                                                required
-                                            >
-                                                <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
-                                                <SelectContent>
-                                                    {subjects.map((subject) => (
-                                                        <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    )}
-
-                                    {/* Badge de Materia auto-seleccionada */}
-                                    {subjects.length === 1 && (
-                                        <div>
-                                            <Label className="text-white mb-2 block">Materia</Label>
-                                            <div className="flex items-center gap-2">
-                                                <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2">
-                                                    {subjects[0].nombre}
-                                                </Badge>
-                                                <span className="text-white/50 text-sm">(auto-seleccionada)</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Selector de Logro (obligatorio solo para Asignación entregable) */}
-                                    {logros.length > 0 && assignmentType === 'assignment' && (
-                                        <div>
-                                            <Label htmlFor="logro" className="text-white">Logro de Calificación *</Label>
-                                            <Select
-                                                value={logroCalificacionId}
-                                                onValueChange={setLogroCalificacionId}
-                                                required={assignmentType === 'assignment'}
-                                            >
-                                                <SelectTrigger className="bg-white/5 border-white/10 text-white">
-                                                    <SelectValue placeholder="Selecciona el tipo de logro (ej: Tareas, Exámenes, Proyectos)" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {logros.map((logro) => (
-                                                        <SelectItem key={logro._id} value={logro._id}>
-                                                            {logro.nombre} ({logro.porcentaje}%)
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            <p className="text-white/50 text-xs mt-1">Selecciona a qué categoría de calificación pertenece esta asignación</p>
-                                        </div>
-                                    )}
-
-                                    {logros.length === 0 && courseIdForLogros && !isLoadingLogros && (
-                                        <Alert className="mb-4 bg-amber-500/10 border-amber-500/50">
-                                            <AlertCircle className="h-4 w-4 text-amber-400" />
-                                            <AlertDescription className="text-amber-200">
-                                                Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a <Button variant="link" className="p-0 h-auto text-amber-300 underline" onClick={() => setLocation('/profesor/academia/calificacion/logros')}>Logros de Calificación</Button>
-                                            </AlertDescription>
-                                        </Alert>
-                                    )}
-
-                                            <div><Label htmlFor="titulo" className="text-white">Nombre</Label><Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Nombre de la tarea" /></div>
-                                            <div><Label htmlFor="instrucciones" className="text-white">Instrucciones</Label><Textarea id="instrucciones" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="bg-white/5 border-white/10 text-white" placeholder="Instrucciones para el estudiante" rows={4} /></div>
-                                            <div><Label htmlFor="fechaEntrega" className="text-white">Fecha de Entrega</Label><Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="bg-white/5 border-white/10 text-white" /></div>
+                                        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-start">
+                                    {/* Columna izquierda: contenido principal */}
+                                    <div className="space-y-6">
                                             <div>
-                                                <Label htmlFor="newMaterialTitle" className="text-white">Crear material nuevo (opcional)</Label>
-                                                <Input id="newMaterialTitle" value={newMaterialTitle} onChange={(e) => setNewMaterialTitle(e.target.value)} className="bg-white/5 border-white/10 text-white" placeholder="Título del material para vincular a esta tarea" />
-                                                <p className="text-white/50 text-xs mt-1">Se creará un material en Materiales y se vinculará a esta asignación</p>
+                                                <Label htmlFor="titulo" className="text-white text-xs font-medium uppercase tracking-wider text-white/70">Nombre</Label>
+                                                <Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="mt-1.5 text-lg font-semibold text-white bg-transparent border-0 border-b border-white/10 rounded-none px-0 py-3 focus-visible:ring-0 focus-visible:border-[#4DBBFF]/50 placeholder:text-white/40 transition-colors duration-150 ease-in-out" placeholder="Nombre de la tarea" />
+                                            </div>
+                                            <div>
+                                                <Label htmlFor="instrucciones" className="text-white text-xs font-medium uppercase tracking-wider text-white/70">Instrucciones</Label>
+                                                <Textarea id="instrucciones" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="mt-1.5 min-h-[180px] bg-white/[0.04] border border-white/10 rounded-xl text-white placeholder:text-white/40 py-4 px-4 focus-visible:ring-2 focus-visible:ring-[#4DBBFF]/30 focus-visible:border-[#4DBBFF]/40 transition-all duration-150 ease-in-out" placeholder="Instrucciones para el estudiante" rows={6} />
                                             </div>
 
                                             <div className="space-y-3">
-                                                <h3 className="text-sm font-semibold text-white">Materiales</h3>
-                                                <div className="flex gap-2">
-                                                    <Input
-                                                        value={materialLinkInput}
-                                                        onChange={(e) => setMaterialLinkInput(e.target.value)}
-                                                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddMaterialLink())}
-                                                        className="bg-white/5 border-white/10 text-white flex-1"
-                                                        placeholder="URL (PDF, DOCX, enlace, Google Docs…)"
-                                                    />
-                                                    <Button type="button" variant="outline" size="sm" className="border-white/20 text-white shrink-0" onClick={handleAddMaterialLink}>
-                                                        Añadir enlace
-                                                    </Button>
-                                                </div>
-                                                <Button type="button" variant="outline" size="sm" className="w-full border-white/20 text-white" onClick={handleCreateGoogleDoc} disabled={creatingGdoc}>
-                                                    <FileUp className="w-4 h-4 mr-2" />
-                                                    {creatingGdoc ? 'Creando…' : 'Crear Documento en Google'}
-                                                </Button>
+                                                <h3 className="text-sm font-semibold uppercase tracking-wider text-white/90">Materiales (Evo Drive)</h3>
+                                                <p className="text-white/50 text-xs">Añade enlaces, archivos de Google Drive o crea documentos nuevos. Se vincularán a esta asignación.</p>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button type="button" variant="outline" size="sm" className="h-9 rounded-[12px] bg-[#4DBBFF]/[0.13] border-[1.5px] border-[#4DBBFF]/50 text-[#4DBBFF] text-[13px] font-medium hover:bg-[#4DBBFF]/20 hover:border-[#4DBBFF]/60 px-4 transition-all duration-150 ease-in-out">
+                                                            <Plus className="w-4 h-4 mr-2" />
+                                                            Añadir o crear
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="start" sideOffset={8} className="w-[230px] rounded-[14px] border-[#4DBBFF]/20 bg-[#0f1c35] shadow-xl shadow-black/40 p-0 overflow-hidden">
+                                                        <div className="py-2.5">
+                                                            <DropdownMenuItem
+                                                                onSelect={() => googleStatus.connected && setTimeout(() => setAddFromGoogleOpen(true), 50)}
+                                                                disabled={!googleStatus.connected}
+                                                                className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
+                                                                    <Cloud className="w-4 h-4 text-[#4DBBFF]" />
+                                                                </div>
+                                                                Google Drive
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem
+                                                                onSelect={() => setTimeout(() => { setEvoLinkUrl(''); setEvoLinkName(''); setAddFromEvoOpen(true); }, 50)}
+                                                                className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
+                                                                    <Link2 className="w-4 h-4 text-[#4DBBFF]" />
+                                                                </div>
+                                                                Enlace
+                                                            </DropdownMenuItem>
+                                                        </div>
+                                                        <div className="border-t border-[#4DBBFF]/10" />
+                                                        <div className="py-2">
+                                                            <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#4DBBFF]/50">Crear</p>
+                                                            <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('doc'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                                                <div className="w-8 h-8 rounded-[9px] bg-[#1a56d6] flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-white" /></div>
+                                                                Documentos
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('slide'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                                                <div className="w-8 h-8 rounded-[9px] bg-[#d97706] flex items-center justify-center shrink-0"><Presentation className="w-4 h-4 text-white" /></div>
+                                                                Presentaciones
+                                                            </DropdownMenuItem>
+                                                            <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('sheet'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                                                <div className="w-8 h-8 rounded-[9px] bg-[#16a34a] flex items-center justify-center shrink-0"><FileSpreadsheet className="w-4 h-4 text-white" /></div>
+                                                                Hojas de cálculo
+                                                            </DropdownMenuItem>
+                                                        </div>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                                 {assignmentMaterials.length > 0 && (
-                                                    <ul className="space-y-1.5 mt-2">
-                                                        {assignmentMaterials.map((m, i) => (
-                                                            <li key={i} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-white/5 border border-white/10 text-white text-sm">
-                                                                <span className="truncate">{m.fileName || m.url}</span>
-                                                                <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:text-white shrink-0 h-7 w-7 p-0" onClick={() => setAssignmentMaterials((prev) => prev.filter((_, j) => j !== i))}>
-                                                                    <X className="w-4 h-4" />
-                                                                </Button>
-                                                            </li>
-                                                        ))}
+                                                    <ul className="space-y-3 mt-2">
+                                                        {assignmentMaterials.map((m, i) => {
+                                                            const isGoogle = m.type === 'gdoc';
+                                                            const displayName = m.fileName || m.url;
+                                                            const u = (m.url || '').toLowerCase();
+                                                            const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
+                                                            const iconBg = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
+                                                            const Icon = m.type === 'gdoc' ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
+                                                            const iconColor = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
+                                                            return (
+                                                                <li key={i} className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out">
+                                                                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                                        <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
+                                                                            <Icon className={`w-5 h-5 ${iconColor}`} />
+                                                                        </div>
+                                                                        <div className="min-w-0 flex-1">
+                                                                            <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                                                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                                                <span className="text-[11px] text-white/60">Material de la asignación</span>
+                                                                                {isGoogle && (
+                                                                                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400">Google</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 shrink-0">
+                                                                        {m.url && (
+                                                                            <a href={m.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] hover:underline opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out">
+                                                                                <ExternalLink className="w-3.5 h-3.5" />
+                                                                                {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
+                                                                            </a>
+                                                                        )}
+                                                                        <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:text-white h-8 w-8 p-0 shrink-0" onClick={() => setAssignmentMaterials((prev) => prev.filter((_, j) => j !== i))} aria-label="Quitar">
+                                                                            <X className="w-4 h-4" />
+                                                                        </Button>
+                                                                    </div>
+                                                                </li>
+                                                            );
+                                                        })}
                                                     </ul>
                                                 )}
                                             </div>
 
-                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0 || (assignmentType === 'assignment' && logros.length > 0 && !logroCalificacionId)} className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90">
+                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0 || ((assignmentType === 'assignment' || assignmentType === 'recordatorio') && logros.length > 0 && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
                                                 {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
                                             </Button>
+                                    </div>
+
+                                    {/* Columna derecha: configuración */}
+                                    <div className="rounded-[12px] border border-white/10 bg-white/[0.03] p-5 space-y-5 lg:sticky lg:top-4 transition-colors duration-150 ease-in-out">
+                                        <p className="text-xs font-semibold uppercase tracking-wider text-[#4DBBFF]/70">Configuración</p>
+                                        {subjects.length > 1 && (
+                                            <div>
+                                                <Label htmlFor="materia" className="text-white text-xs font-medium">Materia *</Label>
+                                                <Select
+                                                    value={formData.courseId}
+                                                    onValueChange={(value) => setFormData({ ...formData, courseId: value })}
+                                                    required
+                                                >
+                                                    <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {subjects.map((subject) => (
+                                                            <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        )}
+                                        {subjects.length === 1 && (
+                                            <div>
+                                                <Label className="text-white text-xs font-medium mb-2 block">Materia</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2 rounded-[10px]">
+                                                        {subjects[0].nombre}
+                                                    </Badge>
+                                                    <span className="text-white/50 text-sm">(auto-seleccionada)</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {logros.length > 0 && (assignmentType === 'assignment' || assignmentType === 'recordatorio') && (
+                                            <div>
+                                                <Label htmlFor="logro" className="text-white text-xs font-medium">Logro de Calificación *</Label>
+                                                <Select
+                                                    value={logroCalificacionId}
+                                                    onValueChange={setLogroCalificacionId}
+                                                    required
+                                                >
+                                                    <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20">
+                                                        <SelectValue placeholder="Selecciona el tipo de logro (ej: Tareas, Exámenes, Proyectos)" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {logros.map((logro) => (
+                                                            <SelectItem key={logro._id} value={logro._id}>
+                                                                {logro.nombre} ({logro.porcentaje}%)
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-white/50 text-xs mt-1">Categoría de calificación</p>
+                                            </div>
+                                        )}
+                                        {logros.length === 0 && courseIdForLogros && !isLoadingLogros && (
+                                            <Alert className="bg-amber-500/10 border-amber-500/50 rounded-[10px]">
+                                                <AlertCircle className="h-4 w-4 text-amber-400" />
+                                                <AlertDescription className="text-amber-200">
+                                                    Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a <Button variant="link" className="p-0 h-auto text-amber-300 underline" onClick={() => setLocation('/profesor/academia/calificacion/logros')}>Logros de Calificación</Button>
+                                                </AlertDescription>
+                                            </Alert>
+                                        )}
+                                        <div>
+                                            <Label htmlFor="fechaEntrega" className="text-white text-xs font-medium">Fecha de Entrega</Label>
+                                            <Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20" />
+                                        </div>
+                                    </div>
                                         </form>
                                     </>
                                 )}
                             </CardContent>
                     </Card>
                 )}
+
+                {/* Modales Evo Drive (materiales de la asignación) */}
+                <Dialog open={addFromGoogleOpen} onOpenChange={setAddFromGoogleOpen}>
+                    <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+                        <DialogHeader>
+                            <DialogTitle className="text-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Cloud className="w-5 h-5 text-[#4DBBFF]" /></div>
+                                <div>
+                                    <span className="text-base font-semibold text-white block">Agregar desde Google Drive</span>
+                                    <span className="text-xs text-white/60 mt-0.5 block">Selecciona un archivo para vincular a la asignación</span>
+                                </div>
+                            </DialogTitle>
+                        </DialogHeader>
+                        {!googleStatus.connected ? (
+                            <p className="text-white/60 text-sm py-4">Conecta Google Drive desde Evo Drive primero.</p>
+                        ) : (
+                            <>
+                                <div className="space-y-2">
+                                    <Label className="text-xs font-medium text-white/60">Buscar en Drive</Label>
+                                    <Input value={googleSearch} onChange={(e) => setGoogleSearch(e.target.value)} placeholder="Nombre del archivo..." className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+                                </div>
+                                <ScrollArea className="h-[280px] rounded-md border border-white/10">
+                                    {googleFilesLoading ? (
+                                        <div className="p-4 space-y-2"><Skeleton className="h-12 w-full bg-white/10 rounded-lg" /><Skeleton className="h-12 w-full bg-white/10 rounded-lg" /></div>
+                                    ) : googleFilesForAssign.length === 0 ? (
+                                        <p className="text-white/50 text-sm p-4">No se encontraron archivos o escribe para buscar.</p>
+                                    ) : (
+                                        <ul className="p-2 space-y-1">
+                                            {googleFilesForAssign.map((gf) => (
+                                                <li key={gf.id} className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-white/10 text-white">
+                                                    <span className="truncate text-sm">{gf.name}</span>
+                                                    <Button size="sm" variant="ghost" className="shrink-0 text-[#4DBBFF]" onClick={() => handleAddFromGoogleAssign(gf)}>Agregar</Button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </ScrollArea>
+                                <DialogFooter className="gap-2 mt-4">
+                                    <Button variant="outline" onClick={() => setAddFromGoogleOpen(false)} className="flex-1 border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cerrar</Button>
+                                </DialogFooter>
+                            </>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={addFromEvoOpen} onOpenChange={setAddFromEvoOpen}>
+                    <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+                        <DialogHeader>
+                            <DialogTitle className="text-white flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Link2 className="w-5 h-5 text-[#4DBBFF]" /></div>
+                                <div>
+                                    <span className="text-base font-semibold text-white block">Añadir enlace</span>
+                                    <span className="text-xs text-white/60 mt-0.5 block">URL o nombre del recurso para la asignación</span>
+                                </div>
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs font-medium text-white/60">Nombre (opcional)</Label>
+                                <Input value={evoLinkName} onChange={(e) => setEvoLinkName(e.target.value)} placeholder="Ej: Guía de estudio" className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+                            </div>
+                            <div className="space-y-2">
+                                <Label className="text-xs font-medium text-white/60">URL</Label>
+                                <Input value={evoLinkUrl} onChange={(e) => setEvoLinkUrl(e.target.value)} placeholder="https://..." className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+                            </div>
+                        </div>
+                        <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+                            <Button variant="outline" onClick={() => setAddFromEvoOpen(false)} className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cancelar</Button>
+                            <Button onClick={handleAddFromEvoAssign} disabled={!evoLinkUrl.trim()} className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium">Añadir</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog open={createNewOpen} onOpenChange={setCreateNewOpen}>
+                    <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+                        <DialogHeader>
+                            <DialogTitle className="text-white flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${createNewType === 'doc' ? 'bg-[#1a56d6]' : createNewType === 'slide' ? 'bg-[#d97706]' : 'bg-[#16a34a]'}`}>
+                                    {createNewType === 'doc' && <FileText className="w-5 h-5 text-white" />}
+                                    {createNewType === 'slide' && <Presentation className="w-5 h-5 text-white" />}
+                                    {createNewType === 'sheet' && <FileSpreadsheet className="w-5 h-5 text-white" />}
+                                </div>
+                                <div>
+                                    <span className="text-base font-semibold text-white block">
+                                        {createNewType === 'doc' && 'Nuevo documento'}
+                                        {createNewType === 'slide' && 'Nueva presentación'}
+                                        {createNewType === 'sheet' && 'Nueva hoja de cálculo'}
+                                    </span>
+                                    <span className="text-xs text-white/60 mt-0.5 block">Se creará en Google Drive y se añadirá a los materiales</span>
+                                </div>
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 mt-4">
+                            <div className="space-y-2">
+                                <Label className="text-xs font-medium text-white/60">Nombre del archivo</Label>
+                                <Input value={createNewNombre} onChange={(e) => setCreateNewNombre(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateNewDocForAssign()} placeholder="Ej: Guía del curso" className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" autoFocus />
+                            </div>
+                        </div>
+                        <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+                            <Button variant="outline" onClick={() => { setCreateNewOpen(false); setCreateNewNombre(''); }} className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cancelar</Button>
+                            <Button onClick={handleCreateNewDocForAssign} disabled={!createNewNombre.trim() || createNewDocForAssignMutation.isPending || !cursoId} className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium">
+                                {createNewDocForAssignMutation.isPending ? 'Creando…' : 'Crear'}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
 
                 {/* Dialog para Lista de Estudiantes */}
                 <Dialog open={showStudentsDialog} onOpenChange={setShowStudentsDialog}>
