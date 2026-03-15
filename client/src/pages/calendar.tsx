@@ -1,6 +1,9 @@
+import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useLocation } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +17,10 @@ interface Assignment {
   curso: string;
   fechaEntrega: string;
   profesorNombre: string;
+  courseId?: string;
+  materiaNombre?: string;
+  subjectId?: string;
+  groupId?: string;
 }
 
 export default function CalendarPage() {
@@ -44,6 +51,31 @@ export default function CalendarPage() {
   });
 
   const assignments = isPadre ? assignmentsHijo : assignmentsStudent;
+  const [filterMateria, setFilterMateria] = useState<string>('');
+
+  // Agrupar tareas por materia para el resumen (categorías)
+  const assignmentsByMateria = useMemo(() => {
+    const map = new Map<string, Assignment[]>();
+    for (const a of assignments) {
+      const key = (a.subjectId ?? a.materiaNombre ?? 'Sin materia').trim() || 'Sin materia';
+      const label = (a.materiaNombre ?? 'Sin materia').trim() || 'Sin materia';
+      const existing = map.get(key);
+      if (existing) existing.push(a);
+      else map.set(key, [a]);
+    }
+    // Ordenar tareas dentro de cada grupo por fecha
+    const entries = Array.from(map.entries()).map(([key, list]) => {
+      const label = list[0]?.materiaNombre?.trim() || 'Sin materia';
+      return { key, label, assignments: [...list].sort((x, y) => new Date(x.fechaEntrega).getTime() - new Date(y.fechaEntrega).getTime()) };
+    });
+    entries.sort((a, b) => a.label.localeCompare(b.label));
+    return entries;
+  }, [assignments]);
+
+  const materiasFiltradas = useMemo(() => {
+    if (!filterMateria) return assignmentsByMateria;
+    return assignmentsByMateria.filter((g) => g.key === filterMateria || g.label === filterMateria);
+  }, [assignmentsByMateria, filterMateria]);
 
   const handleDayClick = (assignment: Assignment) => {
     setLocation(`/assignment/${assignment._id}`);
@@ -81,55 +113,80 @@ export default function CalendarPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <Calendar assignments={assignments} onDayClick={handleDayClick} />
+                  <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
                 </CardContent>
               </Card>
 
-              {/* Lista de tareas del mes */}
+              {/* Lista de tareas del mes agrupadas por materia con filtro */}
               {assignments.length > 0 && (
                 <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
                   <CardHeader>
                     <CardTitle className="text-white">Tareas Próximas</CardTitle>
                     <CardDescription className="text-white/60">
-                      Todas las tareas de este mes
+                      Tareas de este mes. Filtra por materia.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {assignments
-                        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
-                        .map((assignment) => (
-                          <div
-                            key={assignment._id}
-                            className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                            onClick={() => setLocation(`/assignment/${assignment._id}`)}
-                            data-testid={`assignment-item-${assignment._id}`}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h4 className="font-semibold text-white mb-1">{assignment.titulo}</h4>
-                                <p className="text-sm text-white/70 mb-2 line-clamp-2">{assignment.descripcion}</p>
-                                <p className="text-xs text-white/50">
-                                  Profesor: {assignment.profesorNombre}
-                                </p>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Label className="text-white/80 text-sm shrink-0">Filtrar por materia:</Label>
+                      <Select value={filterMateria || 'todas'} onValueChange={(v) => setFilterMateria(v === 'todas' ? '' : v)}>
+                        <SelectTrigger className="w-[200px] bg-white/10 border-white/20 text-white">
+                          <SelectValue placeholder="Todas las materias" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#0a0a2a] border-white/10">
+                          <SelectItem value="todas" className="text-white focus:bg-white/10">
+                            Todas ({assignments.length})
+                          </SelectItem>
+                          {assignmentsByMateria.map(({ key, label, assignments: list }) => (
+                            <SelectItem key={key} value={key} className="text-white focus:bg-white/10">
+                              {label} ({list.length})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-6">
+                      {materiasFiltradas.map(({ label, assignments: list }) => (
+                        <div key={label}>
+                          <h3 className="text-sm font-semibold text-white/80 uppercase tracking-wider mb-3 pb-2 border-b border-white/10">
+                            {label}
+                          </h3>
+                          <div className="space-y-3">
+                            {list.map((assignment) => (
+                              <div
+                                key={assignment._id}
+                                className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                                onClick={() => setLocation(`/assignment/${assignment._id}`)}
+                                data-testid={`assignment-item-${assignment._id}`}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-white mb-1">{assignment.titulo}</h4>
+                                    <p className="text-sm text-white/70 mb-2 line-clamp-2">{assignment.descripcion}</p>
+                                    <p className="text-xs text-white/50">
+                                      Profesor: {assignment.profesorNombre}
+                                    </p>
+                                  </div>
+                                  <div className="text-right ml-4">
+                                    <p className="text-sm font-semibold text-[#00c8ff]">
+                                      {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO', { 
+                                        day: 'numeric',
+                                        month: 'short'
+                                      })}
+                                    </p>
+                                    <p className="text-xs text-white/50">
+                                      {new Date(assignment.fechaEntrega).toLocaleTimeString('es-CO', { 
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-right ml-4">
-                                <p className="text-sm font-semibold text-[#00c8ff]">
-                                  {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO', { 
-                                    day: 'numeric',
-                                    month: 'short'
-                                  })}
-                                </p>
-                                <p className="text-xs text-white/50">
-                                  {new Date(assignment.fechaEntrega).toLocaleTimeString('es-CO', { 
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })}
-                                </p>
-                              </div>
-                            </div>
+                            ))}
                           </div>
-                        ))}
+                        </div>
+                      ))}
                     </div>
                   </CardContent>
                 </Card>

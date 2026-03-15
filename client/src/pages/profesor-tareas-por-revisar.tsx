@@ -58,7 +58,7 @@ export default function ProfesorTareasPorRevisarPage() {
           <ClipboardList className="w-8 h-8 text-[#ffd700]" />
           <div>
             <h1 className="text-2xl font-bold text-white font-['Poppins']">
-              Tareas por revisar
+              Asignaciones
             </h1>
             <p className="text-white/60 text-sm mt-0.5">
               Agrupadas por curso · Pendientes de calificación

@@ -23,6 +23,9 @@ interface Assignment {
   fechaEntrega: string;
   profesorNombre: string;
   courseId?: string;
+  materiaNombre?: string;
+  subjectId?: string;
+  groupId?: string;
   adjuntos?: { tipo: string; nombre: string; url: string }[];
 }
 
@@ -61,6 +64,7 @@ export default function TeacherCalendarPage() {
   });
   const [adjuntos, setAdjuntos] = useState<Attachment[]>([]);
   const [newAttachment, setNewAttachment] = useState<Attachment>({ tipo: 'link', nombre: '', url: '' });
+  const [filterCurso, setFilterCurso] = useState<string>('');
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -82,6 +86,20 @@ export default function TeacherCalendarPage() {
       return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
     });
   }, [assignments, currentMonth, currentYear]);
+
+  const cursosDelMes = useMemo(() => {
+    const set = new Set<string>();
+    assignmentsThisMonth.forEach((a) => {
+      const c = (a.curso ?? '').trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort();
+  }, [assignmentsThisMonth]);
+
+  const tareasFiltradas = useMemo(() => {
+    if (!filterCurso) return assignmentsThisMonth;
+    return assignmentsThisMonth.filter((a) => (a.curso ?? '').trim() === filterCurso);
+  }, [assignmentsThisMonth, filterCurso]);
 
   const { data: professorGroups = [], isLoading: isLoadingGroups } = useQuery<ProfessorGroupAssignment[]>({
     queryKey: ['professorGroups'],
@@ -263,34 +281,66 @@ export default function TeacherCalendarPage() {
                   )}
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <Calendar assignments={assignments} onDayClick={handleDayClick} />
+                  <Calendar assignments={assignments} onDayClick={handleDayClick} variant="teacher" />
                 </CardContent>
               </Card>
 
-              {assignments.length > 0 && (
+              {assignmentsThisMonth.length > 0 && (
                 <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
                   <CardHeader>
                     <CardTitle className="text-white">Tareas del Mes</CardTitle>
                     <CardDescription className="text-white/60">
-                      Resumen organizado de todas las tareas asignadas
+                      {assignmentsThisMonth.length} {assignmentsThisMonth.length === 1 ? 'tarea' : 'tareas'} este mes. Filtra por curso.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
-                      <div>
-                        <p className="text-white font-medium mb-1">
-                          {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} en total
-                        </p>
-                        <p className="text-sm text-white/60">
-                          Ver resumen detallado y organizado
-                        </p>
-                      </div>
-                      <Button
-                        onClick={() => setLocation('/profesor/tareas/resumen')}
-                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
-                      >
-                        Ver Resumen
-                      </Button>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Label className="text-white/80 text-sm shrink-0">Filtrar por curso:</Label>
+                      <Select value={filterCurso || 'todas'} onValueChange={(v) => setFilterCurso(v === 'todas' ? '' : v)}>
+                        <SelectTrigger className="w-[180px] bg-white/10 border-white/20 text-white">
+                          <SelectValue placeholder="Todos los cursos" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#0a0a2a] border-white/10">
+                          <SelectItem value="todas" className="text-white focus:bg-white/10">
+                            Todas ({assignmentsThisMonth.length})
+                          </SelectItem>
+                          {cursosDelMes.map((curso) => {
+                            const n = assignmentsThisMonth.filter((a) => (a.curso ?? '').trim() === curso).length;
+                            return (
+                              <SelectItem key={curso} value={curso} className="text-white focus:bg-white/10">
+                                {curso} ({n})
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-3">
+                      {tareasFiltradas
+                        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
+                        .map((assignment) => (
+                          <div
+                            key={assignment._id}
+                            className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                            onClick={() => setLocation(`/assignment/${assignment._id}`)}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-white mb-1">{assignment.titulo}</h4>
+                                <p className="text-xs text-[#00c8ff] font-medium mb-1">{assignment.curso || 'Sin curso'}</p>
+                                <p className="text-sm text-white/70 mb-2 line-clamp-2">{assignment.descripcion}</p>
+                              </div>
+                              <div className="text-right ml-4 shrink-0">
+                                <p className="text-sm font-semibold text-[#00c8ff]">
+                                  {new Date(assignment.fechaEntrega).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                                </p>
+                                <p className="text-xs text-white/50">
+                                  {new Date(assignment.fechaEntrega).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                     </div>
                   </CardContent>
                 </Card>

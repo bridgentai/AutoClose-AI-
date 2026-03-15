@@ -178,6 +178,7 @@ export default function StudentNotesPage() {
 
   const isPadre = user?.rol === 'padre';
   const isEstudiante = user?.rol === 'estudiante';
+  const canAccessNotes = isEstudiante || isPadre;
 
   const { data: hijos = [] } = useQuery<{ _id: string; nombre: string }[]>({
     queryKey: ['/api/users/me/hijos'],
@@ -208,6 +209,30 @@ export default function StudentNotesPage() {
   const isLoadingNotes = isEstudiante ? loadingEstudiante : loadingHijo;
   const isError = isEstudiante ? errorEstudiante : errorHijo;
   const refetch = isEstudiante ? refetchEstudiante : refetchHijo;
+
+  // Si no hay usuario o el rol no puede ver notas, mostrar carga o mensaje (evita pantalla en blanco)
+  if (!user) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="mt-4 text-white/80">Cargando...</div>
+        </div>
+      </div>
+    );
+  }
+  if (!canAccessNotes) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <NavBackButton to="/dashboard" label="Dashboard" />
+          <div className="mt-4">
+            <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
+            <p className="text-white/60">Solo estudiantes y padres pueden ver esta página.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   type CourseItem = { _id: string; nombre: string };
   const { data: coursesEstudiante, isLoading: loadingCoursesEstudiante } = useQuery<CourseItem[]>({
@@ -937,6 +962,24 @@ export default function StudentNotesPage() {
     );
   }
 
-  return null;
+  // Fallback para evitar pantalla en blanco si ninguna rama anterior coincidió
+  return (
+    <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+      <div className="max-w-7xl mx-auto w-full">
+        <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
+        <div className="mt-4">
+          <h1 className="text-2xl font-bold text-white mb-2">{isPadre ? `Notas de ${nombreHijo}` : 'Mis Notas'}</h1>
+          <p className="text-white/60 mb-4">Revisa tu rendimiento académico por materia.</p>
+          <Button
+            variant="outline"
+            className="border-white/20 text-white hover:bg-white/10"
+            onClick={() => setSelectedSubject(null)}
+          >
+            Ver lista de materias
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 

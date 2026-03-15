@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { 
@@ -37,16 +37,20 @@ export default function TeacherTasksSummaryPage() {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // Query para obtener todas las tareas del profesor
-  const { data: assignments = [], isLoading } = useQuery<Assignment[]>({
-    queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
-    queryFn: async () => {
-      const result = await apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
-      return result;
-    },
-    enabled: !!user?.id,
-    staleTime: 0,
+  // Misma fuente que el calendario: GET /api/assignments, filtrar por mes/año en cliente
+  const { data: allAssignments = [], isLoading } = useQuery<Assignment[]>({
+    queryKey: ['teacherAssignments', user?.id],
+    queryFn: () => apiRequest<Assignment[]>('GET', '/api/assignments'),
+    enabled: !!user?.id && user?.rol === 'profesor',
+    staleTime: 60 * 1000,
   });
+
+  const assignments = useMemo(() => {
+    return allAssignments.filter((a) => {
+      const d = new Date(a.fechaEntrega);
+      return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+    });
+  }, [allAssignments, currentMonth, currentYear]);
 
   // Categorizar tareas
   const assignmentsByStatus = {

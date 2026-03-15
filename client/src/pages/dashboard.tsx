@@ -151,7 +151,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
       <CardHeader className="pb-3 flex-shrink-0">
         <CardTitle className="text-white flex items-center gap-2 text-lg text-expressive">
           <Bot className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
-          Asistente MindOS ({rol.toUpperCase()})
+          Kiwi Assist
         </CardTitle>
         <CardDescription className="text-white/60 text-sm text-expressive-subtitle">
           Pide tareas, revisa pendientes o crea materiales.
@@ -512,7 +512,7 @@ function EstudianteDashboard() {
               </div>
             ) : (
               <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
-                <Calendar assignments={assignments} onDayClick={handleDayClick} />
+                <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
               </div>
             )}
           </CardContent>
@@ -605,7 +605,7 @@ function ProfesorDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-white text-expressive">
               <ClipboardList className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
-              Tareas por revisar
+              Asignaciones
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -640,7 +640,7 @@ function ProfesorDashboard() {
               </div>
             ) : (
               <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
-                <Calendar assignments={assignments} onDayClick={handleDayClick} />
+                <Calendar assignments={assignments} onDayClick={handleDayClick} variant="teacher" />
               </div>
             )}
           </CardContent>
@@ -1488,7 +1488,7 @@ function PadreDashboard() {
           </CardHeader>
           <CardContent>
             <div onClick={(e) => e.stopPropagation()}>
-              <Calendar assignments={assignments} onDayClick={handleDayClick} />
+              <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
             </div>
           </CardContent>
         </Card>

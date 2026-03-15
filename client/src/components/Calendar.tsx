@@ -6,7 +6,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
-import { courseDisplayLabel } from '@/lib/assignmentUtils';
+import { courseDisplayLabel, calendarColorKey, calendarDisplayLabel, type CalendarVariant } from '@/lib/assignmentUtils';
 
 interface Assignment {
   _id: string;
@@ -16,13 +16,16 @@ interface Assignment {
   fechaEntrega: string;
   profesorNombre: string;
   courseId?: string;
-  /** Nombre de la materia (ej. Física, Matemáticas) para leyenda y color */
   materiaNombre?: string;
+  subjectId?: string;
+  groupId?: string;
 }
 
 interface CalendarProps {
   assignments: Assignment[];
   onDayClick?: (assignment: Assignment) => void;
+  /** Estudiante: diferenciar por materia y mostrar nombre de materia. Profesor: por curso. */
+  variant?: CalendarVariant;
 }
 
 // Paleta con colores muy diferenciados entre sí (ordenados por contraste visual)
@@ -45,8 +48,11 @@ const MATERIA_PALETTE = [
 const getColorForMateriaIndex = (index: number): string =>
   MATERIA_PALETTE[index % MATERIA_PALETTE.length];
 
-export function Calendar({ assignments, onDayClick }: CalendarProps) {
+export function Calendar({ assignments, onDayClick, variant = 'student' }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const isStudent = variant === 'student';
+  const legendTitle = isStudent ? 'Leyenda de materias' : 'Leyenda de cursos';
+  const multipleLabel = isStudent ? 'Varias materias' : 'Varios cursos';
 
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -71,24 +77,38 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
     setCurrentDate(new Date(year, month + 1, 1));
   };
 
-  // Lista única de materias para la leyenda (orden estable para asignar colores)
-  const uniqueMaterias = useMemo(() => {
-    const set = new Set<string>();
-    assignments.forEach((assignment) => {
-      const name = courseDisplayLabel(assignment);
-      if (name) set.add(name);
+  // Claves únicas para leyenda y color (materia en estudiante, curso en profesor)
+  const uniqueKeys = useMemo(() => {
+    const keys = new Set<string>();
+    assignments.forEach((a) => {
+      const key = calendarColorKey(a, variant);
+      if (key) keys.add(key);
     });
-    return Array.from(set).sort();
-  }, [assignments]);
+    return Array.from(keys).sort();
+  }, [assignments, variant]);
 
-  // Mapa de colores por materia: asignación por índice para colores bien diferenciados
-  const materiaColorsMap = useMemo(() => {
+  // Mapa clave -> etiqueta legible (nombre materia o curso)
+  const keyToLabel = useMemo(() => {
     const map = new Map<string, string>();
-    uniqueMaterias.forEach((materia, index) => {
-      map.set(materia, getColorForMateriaIndex(index));
+    assignments.forEach((a) => {
+      const key = calendarColorKey(a, variant);
+      const label = calendarDisplayLabel(a, variant);
+      if (key && !map.has(key)) map.set(key, label);
+    });
+    uniqueKeys.forEach((key) => {
+      if (!map.has(key)) map.set(key, key);
     });
     return map;
-  }, [uniqueMaterias]);
+  }, [assignments, variant, uniqueKeys]);
+
+  // Mapa de colores por clave (estable por subjectId/groupId o nombre)
+  const colorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    uniqueKeys.forEach((key, index) => {
+      map.set(key, getColorForMateriaIndex(index));
+    });
+    return map;
+  }, [uniqueKeys]);
 
   // Agrupar tareas por día
   const assignmentsByDay: Record<number, Assignment[]> = {};
@@ -119,28 +139,23 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
     const hasAssignments = dayAssignments.length > 0;
 
     if (hasAssignments) {
-      // Agrupar tareas por materia (asignatura) para color y leyenda
-      const assignmentsByMateria = new Map<string, Assignment[]>();
-      dayAssignments.forEach((assignment) => {
-        const key = courseDisplayLabel(assignment) || 'Sin materia';
-        if (!assignmentsByMateria.has(key)) {
-          assignmentsByMateria.set(key, []);
-        }
-        assignmentsByMateria.get(key)!.push(assignment);
+      // Agrupar por clave (materia en estudiante, curso en profesor)
+      const assignmentsByKey = new Map<string, Assignment[]>();
+      dayAssignments.forEach((a) => {
+        const key = calendarColorKey(a, variant) || (isStudent ? 'Sin materia' : 'Sin curso');
+        if (!assignmentsByKey.has(key)) assignmentsByKey.set(key, []);
+        assignmentsByKey.get(key)!.push(a);
       });
 
-      const materiasCount = assignmentsByMateria.size;
+      const keyCount = assignmentsByKey.size;
       const totalAssignments = dayAssignments.length;
-
-      // Un solo color por materia; si hay varias materias, gris neutro
-      const isMultipleMaterias = materiasCount > 1;
-      const singleMateriaColor = materiasCount === 1
-        ? (materiaColorsMap.get(Array.from(assignmentsByMateria.keys())[0]) || '#1e3cff')
-        : null;
-
-      const backgroundColor = isMultipleMaterias
-        ? '#6b7280'
-        : (singleMateriaColor || '#1e3cff');
+      const isMultiple = keyCount > 1;
+      const firstKey = Array.from(assignmentsByKey.keys())[0];
+      const singleColor = keyCount === 1 ? (colorMap.get(firstKey) || '#1e3cff') : null;
+      const backgroundColor = isMultiple ? '#6b7280' : (singleColor || '#1e3cff');
+      const dayLabel = keyCount === 1
+        ? (keyToLabel.get(firstKey) || firstKey)
+        : (isStudent ? `+${keyCount} materias` : `+${keyCount} cursos`);
 
       calendarDays.push(
         <HoverCard key={day} openDelay={200}>
@@ -154,16 +169,14 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
               className="aspect-square rounded-full text-white font-semibold hover:opacity-80 transition-opacity flex flex-col items-center justify-center cursor-pointer border-2 relative overflow-hidden"
               style={{
                 background: backgroundColor,
-                borderColor: isMultipleMaterias ? '#6b728099' : `${backgroundColor}99`,
+                borderColor: isMultiple ? '#6b728099' : `${backgroundColor}99`,
               }}
               data-testid={`calendar-day-${day}`}
             >
               <span className="z-10 text-sm">{day}</span>
-              {isMultipleMaterias && (
-                <span className="absolute bottom-1 text-[10px] font-bold text-white/90 z-10">
-                  +{materiasCount}
-                </span>
-              )}
+              <span className="z-10 text-[10px] font-medium text-white/95 mt-0.5 leading-tight px-0.5 text-center line-clamp-2">
+                {dayLabel}
+              </span>
             </button>
           </HoverCardTrigger>
           <HoverCardContent 
@@ -173,30 +186,30 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
             <div className="space-y-3">
               <div className="pb-2 border-b border-white/10">
                 <p className="text-sm font-semibold text-white">
-                  {totalAssignments} {totalAssignments === 1 ? 'tarea' : 'tareas'} • {materiasCount} {materiasCount === 1 ? 'materia' : 'materias'}
+                  {totalAssignments} {totalAssignments === 1 ? 'tarea' : 'tareas'} • {keyCount} {isStudent ? (keyCount === 1 ? 'materia' : 'materias') : (keyCount === 1 ? 'curso' : 'cursos')}
                 </p>
                 <p className="text-xs text-white/60 mt-1">
                   {day} de {monthNames[month]} {year}
                 </p>
               </div>
-              {Array.from(assignmentsByMateria.entries()).map(([materiaKey, materiaAssignments]) => {
-                const color = materiaColorsMap.get(materiaKey) || MATERIA_PALETTE[0];
-                const materiaName = materiaKey || 'Sin materia';
+              {Array.from(assignmentsByKey.entries()).map(([key, keyAssignments]) => {
+                const color = colorMap.get(key) || MATERIA_PALETTE[0];
+                const label = keyToLabel.get(key) || key;
                 return (
-                  <div key={materiaKey} className="space-y-2">
+                  <div key={key} className="space-y-2">
                     <div className="flex items-center gap-2 mb-1">
                       <div 
                         className="w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: color }}
                       />
                       <p className="text-xs font-semibold text-white/80 uppercase tracking-wider">
-                        {materiaName}
+                        {label}
                       </p>
                       <span className="text-xs text-white/50">
-                        ({materiaAssignments.length})
+                        ({keyAssignments.length})
                       </span>
                     </div>
-                    {materiaAssignments.map((assignment) => (
+                    {keyAssignments.map((assignment) => (
                       <div
                         key={assignment._id}
                         className="border-l-4 pl-3 py-2 cursor-pointer hover:bg-white/5 rounded-r transition-colors"
@@ -222,7 +235,7 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
                           </span>
                           <span className="text-white/30">•</span>
                           <span className="text-white/50" style={{ color }}>
-                            {courseDisplayLabel(assignment)}
+                            {calendarDisplayLabel(assignment, variant)}
                           </span>
                         </div>
                       </div>
@@ -281,29 +294,30 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
         </div>
       </div>
 
-      {/* Leyenda de materias (colores por asignatura) */}
-      {uniqueMaterias.length > 0 && (
+      {/* Leyenda (materias para estudiante, cursos para profesor) */}
+      {uniqueKeys.length > 0 && (
         <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
           <p className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
-            Leyenda de materias
+            {legendTitle}
           </p>
           <div className="flex flex-wrap gap-3">
-            {uniqueMaterias.map((materia) => {
-              const color = materiaColorsMap.get(materia) || '#1e3cff';
+            {uniqueKeys.map((key) => {
+              const color = colorMap.get(key) || '#1e3cff';
+              const label = keyToLabel.get(key) || key;
               return (
-                <div key={materia} className="flex items-center gap-2">
+                <div key={key} className="flex items-center gap-2">
                   <div 
                     className="w-4 h-4 rounded-full flex-shrink-0 border border-white/20"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="text-xs text-white/80 font-medium">{materia}</span>
+                  <span className="text-xs text-white/80 font-medium">{label}</span>
                 </div>
               );
             })}
-            {uniqueMaterias.length > 1 && (
+            {uniqueKeys.length > 1 && (
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded-full flex-shrink-0 bg-gray-500 border border-white/20" />
-                <span className="text-xs text-white/80 font-medium">Varias materias</span>
+                <span className="text-xs text-white/80 font-medium">{multipleLabel}</span>
               </div>
             )}
           </div>
@@ -331,12 +345,12 @@ export function Calendar({ assignments, onDayClick }: CalendarProps) {
       <div className="mt-6 flex items-center gap-4 text-sm">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-[#1e3cff] border-2 border-[#1e3cff]/30" />
-          <span className="text-white/70">Con tareas (una materia)</span>
+          <span className="text-white/70">{isStudent ? 'Con tareas (una materia)' : 'Con tareas (un curso)'}</span>
         </div>
-        {uniqueMaterias.length > 1 && (
+        {uniqueKeys.length > 1 && (
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-500 border-2 border-gray-500/30" />
-            <span className="text-white/70">Varias materias</span>
+            <span className="text-white/70">{multipleLabel}</span>
           </div>
         )}
         <div className="flex items-center gap-2">

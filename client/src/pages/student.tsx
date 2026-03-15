@@ -22,6 +22,10 @@ interface Assignment {
   curso: string;
   fechaEntrega: string;
   profesorNombre: string;
+  courseId?: string;
+  materiaNombre?: string;
+  subjectId?: string;
+  groupId?: string;
 }
 
 const fetchStudentCourses = async () => {
@@ -163,7 +167,7 @@ export default function StudentPage() {
                 <p className="text-white/60">Cargando calendario...</p>
               </div>
             ) : (
-              <Calendar assignments={assignments} onDayClick={handleDayClick} />
+              <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
             )}
           </CardContent>
         </Card>

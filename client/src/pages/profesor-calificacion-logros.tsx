@@ -151,7 +151,7 @@ export default function ProfesorCalificacionLogrosPage() {
   const totalPorcentaje = logrosData?.totalPorcentaje ?? 0;
   const completo = logrosData?.completo ?? false;
   const cursoActual = cursos.find((c) => c._id === cursoSeleccionado);
-  const cursoActualLabel = cursoActual?.cursos?.[0] ? `${cursoActual.nombre} (${cursoActual.cursos[0]})` : cursoActual?.nombre ?? "";
+  const cursoActualLabel = cursoActual?.nombre ?? "";
 
   return (
     <div className="p-4 sm:p-6 md:p-10 max-w-4xl mx-auto">
@@ -187,15 +187,11 @@ export default function ProfesorCalificacionLogrosPage() {
               className="w-full h-10 px-3 rounded-md bg-white/10 border border-white/20 text-white focus:ring-2 focus:ring-[#00c8ff]/50 focus:border-[#00c8ff]"
             >
               <option value="">✔ Selecciona materia y grupo</option>
-              {cursos.map((c) => {
-                const grupo = c.cursos?.[0];
-                const label = grupo ? `${c.nombre} — ${grupo}` : c.nombre;
-                return (
-                  <option key={c._id} value={c._id}>
-                    {label}
-                  </option>
-                );
-              })}
+              {cursos.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.nombre}
+                </option>
+              ))}
             </select>
           )}
         </CardContent>

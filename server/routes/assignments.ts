@@ -53,7 +53,7 @@ function assignmentToApi(a: {
   type: string;
   is_gradable: boolean;
   created_at: string;
-}, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; logroCalificacionId?: string } = {}) {
+}, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string } = {}) {
   return {
     _id: a.id,
     titulo: a.title,
@@ -148,10 +148,12 @@ router.get('/', protect, async (req: AuthRequest, res) => {
         const gs = await findGroupSubjectById(a.group_subject_id);
         const group = gs ? await findGroupById(gs.group_id) : null;
         const subject = gs ? await findSubjectById(gs.subject_id) : null;
-        const extra: { estado: string; submissions?: { estudianteId: string; calificacion?: number; fechaEntrega?: string }[]; curso?: string; materiaNombre?: string; logroCalificacionId?: string } = {
+        const extra: { estado: string; submissions?: { estudianteId: string; calificacion?: number; fechaEntrega?: string }[]; curso?: string; materiaNombre?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string } = {
           estado: state,
           curso: group?.name,
           materiaNombre: subject?.name ?? undefined,
+          groupId: gs?.group_id,
+          subjectId: gs?.subject_id,
           logroCalificacionId: a.assignment_category_id ?? undefined,
         };
         if (user.role === 'profesor') {
@@ -253,7 +255,7 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
         const gs = await findGroupSubjectById(a.group_subject_id);
         const subject = await findSubjectById(gs?.subject_id ?? '');
         const cursoNombre = groupIdToName.get(gs?.group_id ?? '') ?? 'Sin grupo';
-        return assignmentToApi(a, { estado: state, materiaNombre: subject?.name ?? 'Sin materia', curso: cursoNombre });
+        return assignmentToApi(a, { estado: state, materiaNombre: subject?.name ?? 'Sin materia', curso: cursoNombre, groupId: gs?.group_id, subjectId: gs?.subject_id });
       })
     );
 
@@ -301,8 +303,9 @@ router.get('/hijo/:estudianteId', protect, async (req: AuthRequest, res) => {
       list.map(async (a) => {
         const sub = await findSubmissionByAssignmentAndStudent(a.id, estudianteId);
         const state = submissionState(sub);
-        const subject = await findSubjectById((await findGroupSubjectById(a.group_subject_id))?.subject_id ?? '');
-        return assignmentToApi(a, { estado: state, materiaNombre: subject?.name ?? 'Sin materia', curso: group.name });
+        const gs = await findGroupSubjectById(a.group_subject_id);
+        const subject = await findSubjectById(gs?.subject_id ?? '');
+        return assignmentToApi(a, { estado: state, materiaNombre: subject?.name ?? 'Sin materia', curso: group.name, groupId: gs?.group_id, subjectId: gs?.subject_id });
       })
     );
 
@@ -573,7 +576,7 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
       estado = submissionState(sub);
     }
 
-    return res.json(assignmentToApi(assignment, { submissions, estado, curso, materiaNombre, groupId, logroCalificacionId: assignment.assignment_category_id ?? undefined }));
+    return res.json(assignmentToApi(assignment, { submissions, estado, curso, materiaNombre, groupId, subjectId: gsForInst?.subject_id, logroCalificacionId: assignment.assignment_category_id ?? undefined }));
   } catch (err: unknown) {
     console.error('Error al obtener tarea:', (err as Error).message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
