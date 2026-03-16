@@ -11,3 +11,6 @@ Client/.env
 test-results/
 playwright-report/
 playwright/.cache/
+
+# Claude worktrees / embedded repos
+.claude/
