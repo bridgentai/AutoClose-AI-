@@ -3,7 +3,6 @@ import { useLocation } from 'wouter';
 import kiwiMascot from '@/assets/Kiwi.png';
 import { Button } from '@/components/ui/button';
 import {
-  GraduationCap,
   BookOpen,
   MessageSquare,
   Users,
@@ -12,25 +11,164 @@ import {
   Sparkles,
   ArrowRight,
   CheckCircle2,
-  Compass,
-  Clock,
-  TrendingUp,
+  Bell,
   User,
-  Settings,
-  Truck,
-  Wallet,
-  Apple,
-  Coffee,
-  UserCog
+  Bot,
 } from 'lucide-react';
 
-/* Azules más claros para el landing: gradiente suave y luminoso */
-const PLATFORM = {
-  bgRadial: 'radial-gradient(circle at 20% 20%, #3B82F6 0%, #1D4ED8 25%, #1E40AF 50%, #1E3A8A 75%, #0F172A 100%)',
+const PALETTE = {
+  bg: '#050a12',
   primary: '#3B82F6',
-  primaryHover: '#2563EB',
-  primaryDark: '#1D4ED8',
+  accent: '#5B9BF8',
+  textMain: '#ffffff',
+  textSub: 'rgba(255,255,255,0.5)',
+  textTer: 'rgba(255,255,255,0.3)',
+  glassBorder: 'rgba(255,255,255,0.1)',
+  glassBg: 'rgba(15,23,42,0.5)',
 };
+
+const STYLES = `
+  @keyframes waveGradient {
+    0%   { background-position: 0% 50%; }
+    25%  { background-position: 50% 100%; }
+    50%  { background-position: 100% 50%; }
+    75%  { background-position: 50% 0%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes orb1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%       { transform: translate(60px, -40px) scale(1.08); }
+    66%       { transform: translate(-30px, 50px) scale(0.95); }
+  }
+  @keyframes orb2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    40%       { transform: translate(-70px, 60px) scale(1.1); }
+    80%       { transform: translate(40px, -30px) scale(0.92); }
+  }
+  @keyframes orb3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50%       { transform: translate(50px, 40px) scale(1.06); }
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+  @keyframes koalaFloat {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-14px); }
+  }
+  @keyframes shadowPulse {
+    0%, 100% { transform: scaleX(1); opacity: 0.45; }
+    50%       { transform: scaleX(0.78); opacity: 0.22; }
+  }
+  @keyframes koalaBgPulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+    50%       { transform: translate(-50%, -50%) scale(1.12); opacity: 0.9; }
+  }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .home-wave-bg { animation: waveGradient 12s ease-in-out infinite; background-size: 300% 300%; }
+  .home-orb1 { animation: orb1 14s ease-in-out infinite; }
+  .home-orb2 { animation: orb2 18s ease-in-out infinite; }
+  .home-orb3 { animation: orb3 22s ease-in-out infinite; }
+  .home-blink { animation: blink 1.8s ease-in-out infinite; }
+  .home-koala { animation: koalaFloat 3s ease-in-out infinite; }
+  .home-shadow { animation: shadowPulse 3s ease-in-out infinite; }
+  .home-koala-bg { }
+  .home-fadein { animation: fadeInUp 0.7s ease both; }
+  .home-fadein-d1 { animation: fadeInUp 0.7s 0.1s ease both; }
+  .home-fadein-d2 { animation: fadeInUp 0.7s 0.2s ease both; }
+  .home-fadein-d3 { animation: fadeInUp 0.7s 0.35s ease both; }
+  .home-fadein-d4 { animation: fadeInUp 0.7s 0.5s ease both; }
+
+  .feature-card {
+    background: linear-gradient(145deg, rgba(15,23,42,0.5), rgba(6,13,28,0.65));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 28px 24px;
+    box-shadow: 0 0 24px rgba(0,0,0,0.2);
+    transition: background 0.22s, border-color 0.22s, transform 0.22s, box-shadow 0.22s;
+    cursor: default;
+  }
+  .feature-card:hover {
+    background: linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6));
+    border-color: rgba(59,130,246,0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(59,130,246,0.12), 0 0 40px rgba(37,99,235,0.15);
+  }
+
+  .btn-primary {
+    background: #3B82F6;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 13px 28px;
+    font-size: 15px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.18s, box-shadow 0.18s, transform 0.14s;
+    text-decoration: none;
+    box-shadow: 0 0 20px rgba(59,130,246,0.25);
+  }
+  .btn-primary:hover {
+    background: #2563EB;
+    box-shadow: 0 0 28px rgba(59,130,246,0.35);
+    transform: translateY(-1px);
+  }
+  .btn-ghost {
+    background: rgba(15,23,42,0.4);
+    backdrop-filter: blur(8px);
+    color: rgba(255,255,255,0.7);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 13px 28px;
+    font-size: 15px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, color 0.18s;
+    text-decoration: none;
+  }
+  .btn-ghost:hover {
+    background: rgba(255,255,255,0.06);
+    border-color: rgba(255,255,255,0.2);
+    color: #fff;
+  }
+  .btn-dashboard-light {
+    background: linear-gradient(145deg, rgba(30,58,138,0.4), rgba(15,23,42,0.6));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 9px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: box-shadow 0.18s, transform 0.14s, border-color 0.18s;
+    box-shadow: 0 0 20px rgba(59,130,246,0.15);
+  }
+  .btn-dashboard-light:hover {
+    box-shadow: 0 0 28px rgba(59,130,246,0.25);
+    border-color: rgba(255,255,255,0.25);
+    transform: translateY(-1px);
+  }
+  @keyframes floatParticle {
+    0%, 100% { transform: translate(0, 0); opacity: 0.4; }
+    50% { transform: translate(8px, -12px); opacity: 0.8; }
+  }
+  .home-particle { animation: floatParticle 6s ease-in-out infinite; }
+`;
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -47,15 +185,15 @@ export default function Home() {
   const getRoleSpecificContent = () => {
     if (!isAuthenticated || !user) return null;
 
-    const roleContent = {
+    const roleContent: Record<string, { title: string; features: string[] }> = {
       estudiante: {
         title: "Tu Asistente de Estudio Personalizado",
         features: [
           "Asistencia 24/7 con tus tareas y estudios",
           "Acceso a materiales de todos tus cursos",
           "Seguimiento de tu progreso académico",
-          "Preparación para exámenes personalizadas"
-        ]
+          "Preparación para exámenes personalizadas",
+        ],
       },
       profesor: {
         title: "Potencia tu Enseñanza con IA",
@@ -63,8 +201,8 @@ export default function Home() {
           "Crea y gestiona cursos fácilmente",
           "Genera materiales educativos automáticamente",
           "Monitorea el progreso de tus estudiantes",
-          "Asistente IA para responder dudas frecuentes"
-        ]
+          "Asistente IA para responder dudas frecuentes",
+        ],
       },
       directivo: {
         title: "Gestión Académica Inteligente",
@@ -72,8 +210,8 @@ export default function Home() {
           "Análisis y métricas institucionales en tiempo real",
           "Gestión centralizada de toda la institución",
           "Configuración personalizada del sistema",
-          "Reportes automáticos de rendimiento"
-        ]
+          "Reportes automáticos de rendimiento",
+        ],
       },
       padre: {
         title: "Seguimiento del Progreso de tu Hijo",
@@ -81,341 +219,344 @@ export default function Home() {
           "Consulta el rendimiento académico en tiempo real",
           "Comunicación directa con profesores",
           "Acceso a materiales y tareas",
-          "Notificaciones de eventos importantes"
-        ]
-      }
+          "Notificaciones de eventos importantes",
+        ],
+      },
     };
 
-    const content = roleContent[user.rol as keyof typeof roleContent];
+    const content = roleContent[user.rol];
     if (!content) return null;
 
     return (
-      <div className="mt-16 max-w-2xl mx-auto backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
-        <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-          <Sparkles className="w-6 h-6" style={{ color: PLATFORM.primary }} />
+      <div
+        className="home-fadein-d3"
+        style={{
+          marginTop: 28,
+          maxWidth: 560,
+          background: 'linear-gradient(145deg, rgba(15,23,42,0.6), rgba(6,13,28,0.7))',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 14,
+          padding: '24px 28px 20px',
+          boxShadow: '0 0 24px rgba(0,0,0,0.25)',
+        }}
+      >
+        <p style={{ color: '#fff', fontWeight: 700, fontSize: 16, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Sparkles style={{ width: 18, height: 18, color: PALETTE.accent }} />
           {content.title}
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {content.features.map((feature, idx) => (
-            <div key={idx} className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: PLATFORM.primary }} />
-              <span className="text-white/80">{feature}</span>
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <CheckCircle2 style={{ width: 16, height: 16, color: PALETTE.accent }} />
             </div>
-          ))}
+            <span style={{ fontSize: 14, color: '#fff', lineHeight: 1.5 }}>{content.features[0]}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Bot style={{ width: 16, height: 16, color: PALETTE.accent }} />
+            </div>
+            <span style={{ fontSize: 14, color: '#fff', lineHeight: 1.5 }}>{content.features[1]}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <CheckCircle2 style={{ width: 16, height: 16, color: PALETTE.accent }} />
+            </div>
+            <span style={{ fontSize: 14, color: '#fff', lineHeight: 1.5 }}>{content.features[2]}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Bot style={{ width: 16, height: 16, color: PALETTE.accent }} />
+            </div>
+            <span style={{ fontSize: 14, color: '#fff', lineHeight: 1.5 }}>{content.features[3]}</span>
+          </div>
+        </div>
+        <div style={{ marginTop: 22 }}>
+          <button type="button" className="btn-primary" onClick={handleCTA} data-testid="button-cta-main" style={{ width: '100%', justifyContent: 'center' }}>
+            <MessageSquare style={{ width: 18, height: 18 }} /> Ir al Chat IA
+          </button>
         </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen w-full relative overflow-hidden" style={{ color: '#E2E8F0' }}>
-      {/* Fondo base con gradiente */}
-      <div
-        className="fixed inset-0 -z-10"
-        style={{
-          background: PLATFORM.bgRadial,
-          minHeight: '100vh',
-          backgroundAttachment: 'fixed',
-        }}
-        aria-hidden
-      />
-      {/* Capa de gradiente animado (movimiento suave) */}
-      <div
-        className="fixed inset-0 -z-10 opacity-40"
-        style={{
-          background: 'radial-gradient(circle at 30% 30%, rgba(59, 130, 246, 0.35) 0%, transparent 50%), radial-gradient(circle at 70% 70%, rgba(29, 78, 216, 0.25) 0%, transparent 50%)',
-          backgroundSize: '200% 200%',
-          minHeight: '100vh',
-          backgroundAttachment: 'fixed',
-          animation: 'gradient-flow 20s ease-in-out infinite',
-        }}
-        aria-hidden
-      />
-      {/* Orbes flotantes animados */}
-      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
-        <div
-          className="absolute top-20 left-10 w-[28rem] h-[28rem] rounded-full blur-3xl opacity-25 animate-float-slow"
-          style={{ backgroundColor: PLATFORM.primary }}
-        />
-        <div
-          className="absolute bottom-20 right-20 w-80 h-80 rounded-full blur-3xl opacity-20 animate-float-slow"
-          style={{ backgroundColor: PLATFORM.primaryDark, animationDelay: '2s' }}
-        />
-        <div
-          className="absolute top-1/2 left-1/2 w-96 h-96 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl opacity-10 animate-float-slow"
-          style={{ backgroundColor: '#1E40AF', animationDelay: '4s' }}
-        />
-      </div>
+    <>
+      <style>{STYLES}</style>
 
-      <header className="fixed top-0 left-0 right-0 w-full backdrop-blur-xl bg-black/30 border-b border-white/10 z-50" style={{ color: '#E2E8F0' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <div style={{ minHeight: '100vh', width: '100%', background: PALETTE.bg, color: PALETTE.textMain, overflowX: 'hidden', position: 'relative' }}>
+
+        {/* ── BACKGROUND ── */}
+        <div style={{ position: 'fixed', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+          {/* Wave gradient base — oscurecido */}
+          <div
+            className="home-wave-bg"
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(135deg, #050a12 0%, #071430 20%, #0a1628 35%, #061028 50%, #040a14 65%, #081830 80%, #050a12 100%)',
+              opacity: 0.95,
+            }}
+          />
+          {/* Orbs — más tenues y oscuros */}
+          <div className="home-orb1" style={{ position: 'absolute', top: '-10%', left: '-5%', width: 640, height: 640, borderRadius: '50%', background: 'radial-gradient(circle, rgba(59,130,246,0.14) 0%, transparent 68%)', filter: 'blur(80px)' }} />
+          <div className="home-orb2" style={{ position: 'absolute', bottom: '-15%', right: '-8%', width: 560, height: 560, borderRadius: '50%', background: 'radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 68%)', filter: 'blur(80px)' }} />
+          <div className="home-orb3" style={{ position: 'absolute', top: '42%', left: '38%', width: 380, height: 380, borderRadius: '50%', background: 'radial-gradient(circle, rgba(96,165,250,0.06) 0%, transparent 68%)', filter: 'blur(80px)' }} />
+          {/* Grid sutil (más visible arriba-izquierda) */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
+            backgroundSize: '48px 48px',
+            maskImage: 'linear-gradient(to bottom right, black 0%, transparent 55%)',
+            WebkitMaskImage: 'linear-gradient(to bottom right, black 0%, transparent 55%)',
+          }} />
+          {/* Ondas/glow inferior */}
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0, height: 280,
+            background: 'linear-gradient(to top, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 35%, transparent 70%)',
+            pointerEvents: 'none',
+          }} />
+          {/* Partículas sutiles */}
+          {[
+            [8, 22], [22, 45], [38, 18], [55, 62], [72, 38], [85, 75], [15, 78], [48, 88], [68, 28],
+          ].map(([x, y], i) => (
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: `linear-gradient(145deg, ${PLATFORM.primary}, ${PLATFORM.primaryDark})` }}
-            >
-              <span className="text-white font-bold text-lg">evo</span>
-            </div>
-            <span className="text-xl font-bold text-white font-['Poppins'] tracking-tight">Caobos</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {isAuthenticated ? (
-              <>
-                <span className="text-white/70 text-sm hidden md:block">
-                  Hola, <span className="text-white font-medium">{user?.nombre?.split(' ')[0] || 'Usuario'}</span>
-                </span>
-                <Button
-                  onClick={() => setLocation('/dashboard')}
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                  data-testid="button-dashboard"
-                >
-                  Dashboard
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  onClick={() => setLocation('/login')}
-                  variant="ghost"
-                  className="text-white hover:bg-white/10"
-                  data-testid="button-login-nav"
-                >
-                  Iniciar Sesión
-                </Button>
-                <Button
-                  onClick={() => setLocation('/register')}
-                  style={{ background: PLATFORM.primary, color: 'white' }}
-                  className="hover:opacity-90 rounded-lg"
-                  data-testid="button-register-nav"
-                >
-                  Registrarse
-                </Button>
-              </>
-            )}
-          </div>
+              key={i}
+              className="home-particle"
+              style={{
+                position: 'absolute',
+                left: `${x}%`,
+                top: `${y}%`,
+                width: 2,
+                height: 2,
+                borderRadius: '50%',
+                background: 'rgba(96,165,250,0.45)',
+                animationDelay: `${i * 0.4}s`,
+              }}
+            />
+          ))}
         </div>
-      </header>
 
-      {/* Hero: texto izquierda, Kiwi derecha */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 w-full" style={{ color: '#E2E8F0' }}>
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
-            <div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/10 mb-8">
-                <Compass className="w-4 h-4 text-white/80" />
-                <span className="text-white/90 text-sm font-medium">Desarrollado por Bridgent</span>
+        {/* ── NAV ── */}
+        <header style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          background: 'linear-gradient(145deg, rgba(15,23,42,0.6), rgba(6,13,28,0.75))',
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
+        }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 28px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            {/* Logo */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ background: PALETTE.primary, borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 16px rgba(59,130,246,0.35)' }}>
+                <span style={{ color: '#fff', fontWeight: 800, fontSize: 13, letterSpacing: '-0.3px' }}>evo</span>
               </div>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px' }}>Caobos</span>
+            </div>
 
-              <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-4 font-['Poppins'] text-left leading-tight">
-                <span className="text-white">La Plataforma Educativa</span>
-                <br />
-                <span className="text-white">del Futuro</span>
-              </h1>
+            {/* Nav actions */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {isAuthenticated ? (
+                <>
+                  <span style={{ color: '#fff', fontSize: 14 }}>
+                    Hola, <strong style={{ color: '#fff' }}>{user?.nombre?.split(' ')[0] || 'Usuario'}</strong>
+                  </span>
+                  <button className="btn-dashboard-light" onClick={() => setLocation('/dashboard')} data-testid="button-dashboard">
+                    Dashboard
+                  </button>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Bell style={{ width: 22, height: 22, color: '#fff', cursor: 'pointer' }} />
+                    <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>0</span>
+                  </div>
+                  <button type="button" onClick={() => setLocation('/account')} style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    <User style={{ width: 20, height: 20, color: '#fff' }} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="btn-ghost" onClick={() => setLocation('/login')} data-testid="button-login-nav" style={{ padding: '9px 20px', fontSize: 14 }}>
+                    Iniciar Sesión
+                  </button>
+                  <button className="btn-primary" onClick={() => setLocation('/register')} data-testid="button-register-nav" style={{ padding: '9px 20px', fontSize: 14 }}>
+                    Registrarse
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </header>
 
-              <p className="text-2xl md:text-3xl font-bold text-white/95 mb-4 font-['Poppins'] tracking-tight text-left">
-                Gimnasio Los Caobos
-              </p>
+        {/* ── HERO ── */}
+        <section style={{ position: 'relative', zIndex: 1, paddingTop: 120, paddingBottom: 100, minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
+          <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 32px', width: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) 560px', gap: 40, alignItems: 'center' }}>
 
-              <p className="text-lg md:text-xl text-white/70 mb-8 leading-relaxed text-left max-w-xl">
-                Centraliza todo el ecosistema educativo de tu institución en una sola plataforma
-                inteligente. Un asistente IA personalizado que conoce tu currículo específico.
-              </p>
+              {/* Texto: ocupa más espacio y está alineado hacia la derecha (junto al koala) */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ width: '100%', maxWidth: 620 }}>
+                  {/* Badge — glass */}
+                  <div className="home-fadein" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px', marginBottom: 28, boxShadow: '0 0 20px rgba(0,0,0,0.15)' }}>
+                    <span className="home-blink" style={{ width: 7, height: 7, borderRadius: '50%', background: PALETTE.accent, flexShrink: 0, display: 'inline-block', boxShadow: `0 0 6px ${PALETTE.accent}` }} />
+                    <span style={{ fontSize: 13, color: PALETTE.accent, fontWeight: 500 }}>Desarrollado por Bridgent</span>
+                  </div>
 
-              {getRoleSpecificContent()}
+                  {/* Title */}
+                  <h1 className="home-fadein-d1" style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-2.5px', margin: '0 0 12px 0' }}>
+                    <span style={{ color: '#fff' }}>La Plataforma<br />Educativa<br /></span>
+                    <span style={{ color: PALETTE.accent }}>del Futuro</span>
+                  </h1>
 
-              <div className="flex flex-col sm:flex-row items-start gap-4 mt-8">
-                <Button
-                  onClick={handleCTA}
-                  size="lg"
-                  style={{ background: PLATFORM.primary, color: 'white' }}
-                  className="hover:opacity-90 text-lg px-8 py-6 rounded-xl"
-                  data-testid="button-cta-main"
-                >
-                  {isAuthenticated ? (
-                    <>Ir al Chat IA <MessageSquare className="ml-2 w-5 h-5" /></>
-                  ) : (
-                    <>Comenzar Ahora <ArrowRight className="ml-2 w-5 h-5" /></>
+                  {/* Institution */}
+                  <p className="home-fadein-d2" style={{ fontSize: 20, fontWeight: 700, color: PALETTE.accent, marginBottom: 16, letterSpacing: '-0.3px' }}>
+                    Gimnasio Los Caobos
+                  </p>
+
+                  {/* Description */}
+                  <p className="home-fadein-d2" style={{ fontSize: 17, color: PALETTE.textSub, lineHeight: 1.65, maxWidth: 520, marginBottom: 0 }}>
+                    Centraliza todo el ecosistema educativo de tu institución en una sola plataforma
+                    inteligente. Un asistente IA personalizado que conoce tu currículo específico.
+                  </p>
+
+                  {/* Role content (incluye "Ir al Chat IA" dentro de la tarjeta cuando está logueado) */}
+                  {getRoleSpecificContent()}
+
+                  {/* CTAs solo cuando no está logueado */}
+                  {!isAuthenticated && (
+                    <div className="home-fadein-d4" style={{ display: 'flex', gap: 12, marginTop: 32, flexWrap: 'wrap' }}>
+                      <button className="btn-primary" onClick={handleCTA} data-testid="button-cta-main">
+                        Comenzar Ahora <ArrowRight style={{ width: 17, height: 17 }} />
+                      </button>
+                      <button className="btn-ghost" onClick={() => setLocation('/register')} data-testid="button-cta-register">
+                        Crear Cuenta Gratis
+                      </button>
+                    </div>
                   )}
-                </Button>
-                {!isAuthenticated && (
-                  <Button
-                    onClick={() => setLocation('/register')}
-                    size="lg"
-                    variant="outline"
-                    className="border-white/20 text-white hover:bg-white/10 text-lg px-8 py-6 rounded-xl"
-                    data-testid="button-cta-register"
-                  >
-                    Crear Cuenta Gratis
-                  </Button>
-                )}
+                </div>
               </div>
+
+              {/* Koala: columna más estrecha, no es el centro */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                {/* Fondo estático detrás del koala */}
+                <div
+                  className="home-koala-bg"
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 520,
+                    height: 520,
+                    borderRadius: '50%',
+                    background: 'conic-gradient(from 210deg, rgba(59,130,246,0.06), rgba(96,165,250,0.2), rgba(37,99,235,0.35), rgba(15,23,42,0.85), rgba(59,130,246,0.06))',
+                    filter: 'blur(6px)',
+                    opacity: 0.75,
+                    zIndex: 0,
+                  }}
+                />
+                {/* Glow */}
+                <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 320, height: 130, background: 'radial-gradient(ellipse, rgba(59,130,246,0.35) 0%, transparent 70%)', filter: 'blur(24px)', pointerEvents: 'none', zIndex: 0 }} />
+                {/* Image */}
+                <img
+                  src={kiwiMascot}
+                  alt="Kiwi - Mascota Caobos"
+                  className="home-koala"
+                  style={{ width: '100%', maxWidth: 580, objectFit: 'contain', userSelect: 'none', position: 'relative', zIndex: 1 }}
+                />
+                {/* Shadow */}
+                <div
+                  className="home-shadow"
+                  style={{ width: 160, height: 18, background: 'rgba(59,130,246,0.35)', borderRadius: '50%', filter: 'blur(12px)', marginTop: -8, position: 'relative', zIndex: 0 }}
+                />
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        {/* ── FEATURES ── */}
+        <section style={{ position: 'relative', zIndex: 1, padding: '100px 28px' }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: 56 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: PALETTE.accent, marginBottom: 14 }}>Plataforma</p>
+              <h2 style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-1.2px', color: '#fff', margin: '0 0 14px 0' }}>
+                Todo lo que Necesitas<br />en un Solo Lugar
+              </h2>
+              <p style={{ fontSize: 17, color: PALETTE.textSub, maxWidth: 400, margin: '0 auto' }}>
+                Reemplaza herramientas dispersas con una plataforma unificada
+              </p>
             </div>
 
-            <div className="flex justify-center lg:justify-end">
-              <img
-                src={kiwiMascot}
-                alt="Kiwi - Mascota Caobos"
-                className="w-full max-w-md lg:max-w-lg xl:max-w-xl h-auto object-contain select-none"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features - mismo estilo glass que la plataforma */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 w-full">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 font-['Poppins']">
-              Todo lo que Necesitas en un Solo Lugar
-            </h2>
-            <p className="text-white/70 text-lg max-w-2xl mx-auto">
-              Reemplaza herramientas dispersas con una plataforma unificada
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[
-              { icon: MessageSquare, title: "Asistente IA Personalizado", description: "IA que conoce tu currículo y responde consultas académicas 24/7" },
-              { icon: BookOpen, title: "Gestión de Cursos", description: "Organiza cursos, materiales y tareas en una interfaz intuitiva" },
-              { icon: Users, title: "Multi-Rol", description: "Interfaces para estudiantes, profesores, directivos y padres" },
-              { icon: BarChart3, title: "Análisis en Tiempo Real", description: "Métricas y reportes automáticos del rendimiento académico" },
-              { icon: Shield, title: "Seguro y Privado", description: "Datos protegidos con encriptación y controles por rol" },
-              { icon: Sparkles, title: "Personalización Total", description: "Configura logo, colores y nombre del asistente de tu institución" }
-            ].map((feature, idx) => {
-              const Icon = feature.icon;
-              return (
-                <div
-                  key={idx}
-                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all group"
-                >
-                  <div
-                    className="w-14 h-14 rounded-xl flex items-center justify-center mb-4 group-hover:scale-105 transition-transform"
-                    style={{ background: `linear-gradient(145deg, ${PLATFORM.primary}, ${PLATFORM.primaryDark})` }}
-                  >
-                    <Icon className="w-7 h-7 text-white" />
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-3">{feature.title}</h3>
-                  <p className="text-white/70 leading-relaxed">{feature.description}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Beneficios por rol */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 w-full">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 font-['Poppins']">
-              Diseñado para Todos
-            </h2>
-            <p className="text-white/70 text-lg">Cada rol tiene una experiencia optimizada</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {[
-              { role: "Estudiantes", icon: GraduationCap, benefits: ["Asistencia personalizada", "Materiales organizados", "Seguimiento de progreso"] },
-              { role: "Profesores", icon: BookOpen, benefits: ["Gestión de cursos", "Creación de materiales", "Análisis de estudiantes"] },
-              { role: "Directivos", icon: BarChart3, benefits: ["Métricas institucionales", "Configuración global", "Reportes automáticos"] },
-              { role: "Padres", icon: User, benefits: ["Seguimiento en tiempo real", "Comunicación directa", "Notificaciones"] },
-              { role: "Administrador General", icon: Settings, benefits: ["Gestión del colegio", "Configuración del sistema", "Control de usuarios"] },
-              { role: "Transporte", icon: Truck, benefits: ["Gestión de rutas", "Control de permisos", "Seguimiento de vehículos"] },
-              { role: "Tesorería", icon: Wallet, benefits: ["Gestión de pagos", "Reportes financieros", "Facturación"] },
-              { role: "Nutrición", icon: Apple, benefits: ["Planificación de menús", "Seguimiento nutricional", "Control de dietas"] },
-              { role: "Cafetería", icon: Coffee, benefits: ["Gestión de pedidos", "Control de inventario", "Reportes de ventas"] },
-              { role: "Asistente", icon: UserCog, benefits: ["Apoyo administrativo", "Gestión de secciones", "Coordinación académica"] }
-            ].map((roleCard, idx) => {
-              const Icon = roleCard.icon;
-              return (
-                <div
-                  key={idx}
-                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-all"
-                >
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: `${PLATFORM.primary}20` }}>
-                    <Icon className="w-6 h-6" style={{ color: PLATFORM.primary }} />
-                  </div>
-                  <h3 className="text-lg font-bold text-white mb-4">{roleCard.role}</h3>
-                  <ul className="space-y-2">
-                    {roleCard.benefits.map((benefit, bidx) => (
-                      <li key={bidx} className="flex items-start gap-2 text-white/70 text-sm">
-                        <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: PLATFORM.primary }} />
-                        <span>{benefit}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Stats */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 w-full">
-        <div className="max-w-7xl mx-auto">
-          <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-12">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+            {/* Cards grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
               {[
-                { icon: Clock, value: "24/7", label: "Disponibilidad del Asistente IA" },
-                { icon: TrendingUp, value: "100%", label: "Centralización de Herramientas" },
-                { icon: Shield, value: "10+ Roles", label: "Perfiles de Usuario" }
-              ].map((stat, idx) => {
-                const Icon = stat.icon;
-                return (
-                  <div key={idx}>
-                    <Icon className="w-12 h-12 mx-auto mb-4" style={{ color: PLATFORM.primary }} />
-                    <div className="text-4xl font-bold text-white mb-2">{stat.value}</div>
-                    <div className="text-white/70">{stat.label}</div>
+                { icon: MessageSquare, title: "Asistente IA Personalizado", desc: "IA que conoce tu currículo y responde consultas académicas 24/7" },
+                { icon: BookOpen,      title: "Gestión de Cursos",          desc: "Organiza cursos, materiales y tareas en una interfaz intuitiva" },
+                { icon: Users,         title: "Multi-Rol",                  desc: "Interfaces para estudiantes, profesores, directivos y padres" },
+                { icon: BarChart3,     title: "Análisis en Tiempo Real",    desc: "Métricas y reportes automáticos del rendimiento académico" },
+                { icon: Shield,        title: "Seguro y Privado",           desc: "Datos protegidos con encriptación y controles por rol" },
+                { icon: Sparkles,      title: "Personalización Total",      desc: "Configura logo, colores y nombre del asistente de tu institución" },
+              ].map(({ icon: Icon, title, desc }, idx) => (
+                <div key={idx} className="feature-card">
+                  <div style={{ width: 44, height: 44, borderRadius: 10, background: 'linear-gradient(145deg, #3B82F6, #2563EB)', border: '1px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, boxShadow: '0 4px 12px rgba(59,130,246,0.25)' }}>
+                    <Icon style={{ width: 22, height: 22, color: '#fff' }} />
                   </div>
-                );
-              })}
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 8, letterSpacing: '-0.2px' }}>{title}</h3>
+                  <p style={{ fontSize: 14, color: PALETTE.textSub, lineHeight: 1.6, margin: 0 }}>{desc}</p>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA final */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 w-full">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 font-['Poppins']">
-            ¿Listo para Transformar tu Experiencia Educativa?
-          </h2>
-          <p className="text-white/70 text-lg mb-10 max-w-2xl mx-auto">
-            {isAuthenticated
-              ? "Comienza a explorar todas las funcionalidades de la plataforma"
-              : "Únete y lleva tu institución educativa al siguiente nivel"
-            }
-          </p>
-          <Button
-            onClick={handleCTA}
-            size="lg"
-            style={{ background: PLATFORM.primary, color: 'white' }}
-            className="hover:opacity-90 text-xl px-12 py-8 rounded-2xl"
-            data-testid="button-cta-bottom"
-          >
-            {isAuthenticated ? (
-              <>Ir al Chat IA <MessageSquare className="ml-3 w-6 h-6" /></>
-            ) : (
-              <>Comenzar Gratis <ArrowRight className="ml-3 w-6 h-6" /></>
-            )}
-          </Button>
-        </div>
-      </section>
+        {/* ── CTA FINAL ── */}
+        <section style={{ position: 'relative', zIndex: 1, padding: '0 28px 120px' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            <div style={{
+              background: 'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 16,
+              padding: '64px 48px',
+              textAlign: 'center',
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: '0 0 40px rgba(37,99,235,0.2)',
+            }}>
+              {/* Glow central */}
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 400, height: 200, background: 'radial-gradient(ellipse, rgba(59,130,246,0.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-      <footer className="border-t border-white/10 py-8 px-4 sm:px-6 lg:px-8 w-full bg-black/40">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-white/50 text-sm">
-            © 2025 - Desarrollado por <span className="font-medium text-white/70">Bridgent</span>
-          </p>
-          <p className="text-white/40 text-xs mt-2">
-            Plataforma educativa inteligente para instituciones académicas
-          </p>
-        </div>
-      </footer>
-    </div>
+              <h2 style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-1px', color: '#fff', marginBottom: 14, position: 'relative' }}>
+                Empieza hoy sin costo
+              </h2>
+              <p style={{ fontSize: 16, color: PALETTE.textSub, marginBottom: 36, maxWidth: 440, margin: '0 auto 36px', position: 'relative' }}>
+                {isAuthenticated
+                  ? "Comienza a explorar todas las funcionalidades de la plataforma"
+                  : "Únete y lleva tu institución educativa al siguiente nivel"}
+              </p>
+              <button className="btn-primary" onClick={handleCTA} data-testid="button-cta-bottom" style={{ fontSize: 16, padding: '15px 36px', position: 'relative' }}>
+                {isAuthenticated ? (
+                  <><MessageSquare style={{ width: 18, height: 18 }} /> Ir al Chat IA</>
+                ) : (
+                  <>Comenzar Gratis <ArrowRight style={{ width: 18, height: 18 }} /></>
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── FOOTER ── */}
+        <footer style={{ position: 'relative', zIndex: 1, borderTop: '1px solid rgba(255,255,255,0.08)', padding: '28px 28px', textAlign: 'center' }}>
+          <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: PALETTE.textTer }}>© 2026 Bridgent · Evo.OS</span>
+            <span style={{ color: 'rgba(255,255,255,0.1)' }}>·</span>
+            <a href="#" style={{ fontSize: 13, color: PALETTE.textTer, textDecoration: 'none' }} onMouseEnter={e => (e.currentTarget.style.color = PALETTE.textSub)} onMouseLeave={e => (e.currentTarget.style.color = PALETTE.textTer)}>Privacidad</a>
+            <a href="#" style={{ fontSize: 13, color: PALETTE.textTer, textDecoration: 'none' }} onMouseEnter={e => (e.currentTarget.style.color = PALETTE.textSub)} onMouseLeave={e => (e.currentTarget.style.color = PALETTE.textTer)}>Términos</a>
+          </div>
+        </footer>
+
+      </div>
+    </>
   );
 }

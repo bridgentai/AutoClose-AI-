@@ -109,7 +109,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 
       const aiMessage: Message = { emisor: 'ai', contenido: response.response, timestamp: new Date() };
       setMessages(prev => [...prev, aiMessage]);
-      
+
       // Si se ejecutaron acciones, refrescar la página o mostrar notificación
       if (response.executedActions && response.executedActions.length > 0) {
         // Si se crearon logros de calificación, refrescar la página después de un breve delay
@@ -119,23 +119,23 @@ function AIChatBox({ rol }: AIChatBoxProps) {
           }, 1500);
         }
       }
-      
+
       // Scroll después de agregar el mensaje de AI
       setTimeout(() => scrollToBottom(), 100);
     } catch (error: any) {
       console.error('Error en chat:', error);
       let errorText = 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
-      
+
       if (error.message) {
         errorText = error.message;
       } else if (error.response) {
         errorText = error.response.message || error.response.error || errorText;
       }
-      
-      const errorMessage: Message = { 
-        emisor: 'ai', 
-        contenido: errorText, 
-        timestamp: new Date() 
+
+      const errorMessage: Message = {
+        emisor: 'ai',
+        contenido: errorText,
+        timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
       // Scroll después de agregar el mensaje de error
@@ -165,7 +165,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div 
+                <div
                   className="w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center badge-glow animate-float"
                   style={{
                     background: `linear-gradient(to bottom right, ${colorPrimario}, ${colorSecundario})`
@@ -186,9 +186,8 @@ function AIChatBox({ rol }: AIChatBoxProps) {
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
-                  className={`transition-smooth reveal-scale ${
-                    msg.emisor === 'user' ? 'flex justify-end' : 'w-full'
-                  }`}
+                  className={`transition-smooth reveal-scale ${msg.emisor === 'user' ? 'flex justify-end' : 'w-full'
+                    }`}
                   style={{ animationDelay: `${idx * 0.1}s` }}
                 >
                   {msg.emisor === 'user' ? (
@@ -291,10 +290,10 @@ function EstudianteDashboard() {
   const mySubmission = (assignment: Assignment) => submissions(assignment).find(
     (e: any) => e.estudianteId === user?.id
   );
-  
+
   const tareasPorEntregar = useMemo(() => {
     return assignments.filter(assignment => {
-      const estado = (assignment as any).estado || (mySubmission(assignment) 
+      const estado = (assignment as any).estado || (mySubmission(assignment)
         ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
         : 'pendiente');
       const fechaEntrega = new Date(assignment.fechaEntrega);
@@ -304,7 +303,7 @@ function EstudianteDashboard() {
 
   const tareasCompletadas = useMemo(() => {
     return assignments.filter(assignment => {
-      const estado = (assignment as any).estado || (mySubmission(assignment) 
+      const estado = (assignment as any).estado || (mySubmission(assignment)
         ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
         : 'pendiente');
       return estado === 'calificada' || estado === 'entregada';
@@ -862,7 +861,7 @@ function SuperAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
+
   // Obtener colores de la institución para usar en los botones
   const { colorPrimario, colorSecundario } = useInstitutionColors();
 
@@ -955,10 +954,10 @@ function SuperAdminDashboard() {
   const openAssignAdminDialog = (colegioId: string) => {
     const school = schools.find(s => s.colegioId === colegioId);
     setSelectedSchoolId(colegioId);
-    setNewAdmin({ 
-      nombre: school?.superAdmin?.nombre || '', 
-      email: school?.superAdmin?.email || '', 
-      password: '' 
+    setNewAdmin({
+      nombre: school?.superAdmin?.nombre || '',
+      email: school?.superAdmin?.email || '',
+      password: ''
     });
     setAssignAdminOpen(true);
   };
@@ -979,8 +978,8 @@ function SuperAdminDashboard() {
               <div className="bg-black/30 p-3 rounded border border-green-500/30">
                 <code className="text-green-300 font-mono text-xl font-bold block break-all text-center">
                   {(() => {
-                    const match = success.match(/Código de acceso generado: ([A-Z0-9_]+)/) || 
-                                 success.match(/Código de acceso: ([A-Z0-9_]+)/);
+                    const match = success.match(/Código de acceso generado: ([A-Z0-9_]+)/) ||
+                      success.match(/Código de acceso: ([A-Z0-9_]+)/);
                     return match ? match[1] : 'No encontrado';
                   })()}
                 </code>
@@ -1043,7 +1042,7 @@ function SuperAdminDashboard() {
       <div className="flex gap-4">
         <Dialog open={createSchoolOpen} onOpenChange={setCreateSchoolOpen}>
           <DialogTrigger asChild>
-            <Button 
+            <Button
               className="hover:opacity-90 text-white"
               style={{
                 background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
@@ -1134,7 +1133,7 @@ function SuperAdminDashboard() {
                       />
                     </div>
                   </div>
-                  
+
                   {/* Paleta de colores predefinidos */}
                   <div>
                     <Label className="text-white/80 text-sm mb-2 block">Colores Predefinidos (clic para seleccionar)</Label>
@@ -1160,15 +1159,15 @@ function SuperAdminDashboard() {
                         <button
                           key={idx}
                           type="button"
-                          onClick={() => setNewSchool({ 
-                            ...newSchool, 
-                            colorPrimario: color.primary, 
-                            colorSecundario: color.secondary 
+                          onClick={() => setNewSchool({
+                            ...newSchool,
+                            colorPrimario: color.primary,
+                            colorSecundario: color.secondary
                           })}
                           className="group relative"
                           title={color.name}
                         >
-                          <div 
+                          <div
                             className="w-full h-12 rounded-lg border-2 border-white/20 hover:border-white/40 transition-all"
                             style={{
                               background: `linear-gradient(135deg, ${color.primary}, ${color.secondary})`
@@ -1192,14 +1191,14 @@ function SuperAdminDashboard() {
                 >
                   Cancelar
                 </Button>
-                  <Button
-                    type="submit"
-                    disabled={creatingSchool}
-                    className="hover:opacity-90 text-white"
-                    style={{
-                      background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
-                    }}
-                  >
+                <Button
+                  type="submit"
+                  disabled={creatingSchool}
+                  className="hover:opacity-90 text-white"
+                  style={{
+                    background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
+                  }}
+                >
                   {creatingSchool ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1290,7 +1289,7 @@ function SuperAdminDashboard() {
                           {school.superAdmin ? 'Cambiar Super Admin del Colegio' : 'Asignar Super Admin del Colegio'}
                         </DialogTitle>
                         <DialogDescription className="text-white/60">
-                          {school.superAdmin 
+                          {school.superAdmin
                             ? 'Actualiza la información del super administrador del colegio'
                             : 'Crea un nuevo super administrador para este colegio'}
                         </DialogDescription>
