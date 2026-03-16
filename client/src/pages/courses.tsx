@@ -300,12 +300,91 @@ style={{
 };
 
 
-// VISTA PARA ESTUDIANTE / DIRECTIVO (SIN CAMBIOS Mayores)
+// VISTA PARA ESTUDIANTE: mismo estilo que Mis Grupos Asignados (profesor) — solo título e icono
 const renderCourseListView = (isDirectivo = false) => {
 const title = isDirectivo ? 'Catálogo de Cursos (Directivo)' : 'Mis Materias Asignadas';
 const description = isDirectivo
 ? 'Lista de todas las materias creadas en el sistema.'
 : 'Explora tus materias, revisa tareas y mantente al día.';
+
+// Estilo de tarjeta igual al del profesor (colored border + glow, icono con borde/glow)
+const renderStudentCard = (course: Course) => {
+  const displayColor = course.colorAcento || generateColorFromId(course._id);
+  return (
+    <Card
+      key={course._id}
+      className="relative flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:bg-white/[0.07] overflow-hidden"
+      style={{
+        boxShadow: '0 0 0 0px transparent',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = `0 8px 32px -4px ${displayColor}40, 0 0 0 1px ${displayColor}30`;
+        e.currentTarget.style.borderColor = `${displayColor}50`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 0 0 0px transparent';
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+      }}
+      onClick={() => handleCourseClick(course._id)}
+    >
+      <div
+        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{
+          background: `radial-gradient(circle at 50% 0%, ${displayColor}08 0%, transparent 70%)`,
+        }}
+      />
+      <CardHeader className="relative flex-1 flex flex-col p-6 pb-2">
+        <div className="flex items-center justify-between mb-4 min-h-[56px]">
+          <div
+            className="relative w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-105"
+            style={{
+              backgroundColor: `${displayColor}20`,
+              borderColor: displayColor,
+              borderWidth: '2px',
+              boxShadow: `0 0 16px ${displayColor}30`,
+            }}
+          >
+            <BookOpen className="w-7 h-7" style={{ color: displayColor }} />
+          </div>
+          <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300 flex-shrink-0" />
+        </div>
+        <CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{course.nombre}</CardTitle>
+        <p className="text-sm text-white/60 font-['Inter'] line-clamp-2">
+          <span className="text-white/70">Grupo(s):</span> {course.cursos?.join(', ') || 'N/A'}
+        </p>
+      </CardHeader>
+    </Card>
+  );
+};
+
+// Vista directivo mantiene el estilo anterior (más información por card)
+const renderDirectivoCard = (course: Course) => {
+  const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
+  const displayColor = course.colorAcento || generateColorFromId(course._id);
+  return (
+    <Card
+      key={course._id}
+      className="flex flex-col min-h-0 bg-white/5 border border-white/10 backdrop-blur-md hover-elevate cursor-pointer group transition-all duration-300 hover:bg-white/[0.07]"
+      onClick={() => handleCourseClick(course._id)}
+    >
+      <CardHeader className="flex flex-col p-6">
+        <div className="flex items-center justify-between mb-4 min-h-[56px]">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
+            <BookOpen className="w-7 h-7 text-white" />
+          </div>
+          <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
+        </div>
+        <CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{course.nombre}</CardTitle>
+        <CardDescription className="text-white/60 line-clamp-2 flex-1">
+          {course.descripcion || 'Sin descripción.'}
+        </CardDescription>
+        <p className="text-sm text-white/50 mt-2 truncate">Profesor: {primaryProfessor}</p>
+        <p className="text-xs text-white/40 truncate mt-0.5">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
+      </CardHeader>
+    </Card>
+  );
+};
 
 return (
 <>
@@ -314,34 +393,7 @@ return (
 <p className="text-white/60 mb-8">{description}</p>
 
 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-{courses.map((course, index) => {
-const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
-const displayColor = course.colorAcento || generateColorFromId(course._id);
-
-return (
-<Card
-key={course._id}
-className="flex flex-col min-h-0 bg-white/5 border border-white/10 backdrop-blur-md hover-elevate cursor-pointer group transition-all duration-300 hover:bg-white/[0.07]"
-onClick={() => handleCourseClick(course._id)}
->
-<CardHeader className="flex flex-col p-6">
-<div className="flex items-center justify-between mb-4 min-h-[56px]">
-<div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
-<BookOpen className="w-7 h-7 text-white" />
-</div>
-<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
-</div>
-
-<CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{course.nombre}</CardTitle>
-<CardDescription className="text-white/60 line-clamp-2 flex-1">
-{course.descripcion || 'Sin descripción.'}
-</CardDescription>
-<p className="text-sm text-white/50 mt-2 truncate">Profesor: {primaryProfessor}</p>
-<p className="text-xs text-white/40 truncate mt-0.5">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
-</CardHeader>
-</Card>
-);
-})}
+{isDirectivo ? courses.map(renderDirectivoCard) : courses.map(renderStudentCard)}
 </div>
 </>
 );

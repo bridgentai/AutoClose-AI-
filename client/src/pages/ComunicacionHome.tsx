@@ -143,9 +143,12 @@ const EvoSendCard: React.FC<{ onClick: () => void }> = ({ onClick }) => (
 );
 
 const ComunicacionHome: React.FC = () => {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user } = useAuth();
   const showEvoSend = user?.rol && EVO_SEND_ROLES.includes(user.rol);
+  const isDirectivoView = location.startsWith('/directivo/comunicacion');
+  const backTo = isDirectivoView ? '/directivo/academia' : '/dashboard';
+  const backLabel = isDirectivoView ? 'Academia' : 'Dashboard';
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ['communication-summary'],
@@ -169,7 +172,7 @@ const ComunicacionHome: React.FC = () => {
 
   return (
     <div data-testid="comunicacion-page">
-      <NavBackButton to="/dashboard" label="Dashboard" />
+      <NavBackButton to={backTo} label={backLabel} />
       <div className="mb-10">
         <h1 className="text-4xl font-extrabold tracking-tight text-white">Centro de Comunicacion</h1>
         <p className="text-lg text-white/70 mt-2">Selecciona tu area de interes para gestionar conversaciones academicas o comunitarias.</p>

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle } from 'lucide-react';
+import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, FolderOpen, Mail, FileText, ArrowUp, ArrowDown, Bell } from 'lucide-react';
+import { XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
+import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -661,8 +663,11 @@ function DirectivoDashboard() {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // Obtener estadísticas reales del colegio
-  const { data: stats, isLoading: isLoadingStats } = useQuery<{ estudiantes: number; profesores: number; padres: number; directivos: number; cursos: number; materias: number }>({
+  // Obtener estadísticas reales del colegio (incl. asistencia del mes)
+  const { data: stats, isLoading: isLoadingStats } = useQuery<{
+    estudiantes: number; profesores: number; padres: number; directivos: number; cursos: number; materias: number;
+    asistenciaResumen?: { totalRegistros: number; presentes: number; porcentajePromedio: number };
+  }>({
     queryKey: ['adminStats', user?.colegioId],
     queryFn: () => apiRequest('GET', '/api/users/stats'),
     enabled: !!user?.colegioId && user?.rol === 'directivo',
@@ -687,6 +692,13 @@ function DirectivoDashboard() {
     staleTime: 0,
   });
 
+  const { data: resumenCursos = [], isLoading: isLoadingResumenCursos } = useQuery<{ _id: string; nombre: string; promedio: number | null; cantidadNotas: number }[]>({
+    queryKey: ['reports/cursos/resumen', user?.colegioId],
+    queryFn: () => apiRequest('GET', '/api/reports/cursos/resumen'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
+    staleTime: 60 * 1000,
+  });
+
   const eventsThisMonth = useMemo(() => {
     const m = now.getMonth();
     const y = now.getFullYear();
@@ -696,107 +708,148 @@ function DirectivoDashboard() {
     });
   }, [calendarEvents, now]);
 
-  const handleEventClick = (event: any) => {
-    // Navegar al calendario de eventos completo
-    setLocation('/comunidad/calendario');
-  };
+  const handleEventClick = () => setLocation('/comunidad/calendario');
+
+  const trimestreNum = Math.min(4, Math.ceil((now.getMonth() + 1) / 3));
+  const promedioGeneral = useMemo(() => {
+    if (!resumenCursos.length) return null;
+    const sum = resumenCursos.reduce((s, c) => s + (c.promedio ?? 0), 0);
+    const count = resumenCursos.filter((c) => c.promedio != null).length;
+    return count > 0 ? Math.round((sum / count) * 10) / 10 : null;
+  }, [resumenCursos]);
+
+  const tendenciaMock = useMemo(() => {
+    const base = stats?.asistenciaResumen?.porcentajePromedio ?? 88;
+    return ['L', 'M', 'X', 'J', 'V', 'L', 'M', 'X', 'J', 'V'].map((dia, i) => ({ dia, pct: Math.min(100, Math.max(82, base + (i % 3 === 0 ? 4 : -2))) }));
+  }, [stats?.asistenciaResumen?.porcentajePromedio]);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
-          style={{ animationDelay: '0.1s' }}
-          onClick={() => setLocation('/directivo')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white text-sm text-expressive-subtitle">Profesores</CardTitle>
+      {/* 4 KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/estudiantes')}>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Estudiantes activos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">
-              {isLoadingStats ? '—' : (stats?.profesores ?? '—')}
+            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingStats ? '—' : (stats?.estudiantes ?? 0)}</div>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">+0 hoy</Badge>
+              <span className="text-white/50 text-sm">{stats?.cursos ?? 0} cursos</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
-          style={{ animationDelay: '0.2s' }}
-          onClick={() => setLocation('/directivo')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white text-sm text-expressive-subtitle">Estudiantes</CardTitle>
+        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/cursos')}>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Asistencia hoy</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
-              {isLoadingStats ? '—' : (stats?.estudiantes ?? '—')}
+              {isLoadingStats ? '—' : (stats?.asistenciaResumen?.porcentajePromedio ?? 0)}%
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-emerald-400 text-sm">
+              <ArrowUp className="w-4 h-4" /> <span>{stats?.asistenciaResumen?.presentes ?? 0} presentes</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
-          style={{ animationDelay: '0.3s' }}
-          onClick={() => setLocation('/directivo/cursos')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white text-sm text-expressive-subtitle">Cursos Activos</CardTitle>
+        <Card className={`${CARD_STYLE}`}>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Promedio general</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
-              {isLoadingStats ? '—' : (stats?.cursos ?? '—')}
+              {promedioGeneral != null ? promedioGeneral.toFixed(1) : (isLoadingResumenCursos ? '—' : '—')}
+            </div>
+            <div className="flex items-center gap-2 mt-1 text-amber-400/90 text-sm">
+              <ArrowDown className="w-4 h-4" /> <span>Trimestre {trimestreNum}</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card 
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue hover-glow`}
-          style={{ animationDelay: '0.4s' }}
-          onClick={() => setLocation('/directivo/cursos')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white text-sm text-expressive-subtitle">Materias</CardTitle>
+        <Card className={`${CARD_STYLE}`}>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Alertas</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">
-              {isLoadingStats ? '—' : (stats?.materias ?? '—')}
+            <div className="flex items-center justify-between">
+              <span className="text-3xl font-bold text-white font-['Poppins']">0</span>
+              <Button size="sm" className="bg-red-500/80 hover:bg-red-500 text-white text-xs rounded-full">Revisar</Button>
             </div>
-            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Cursos / grupos</p>
+            <p className="text-white/50 text-sm mt-1">0 críticas</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Fila: Chat IA | Calendario */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue`}
-          style={{ animationDelay: '0.5s' }}
-          onClick={() => setLocation('/comunidad/calendario')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white text-expressive">Calendario de Eventos</CardTitle>
-            <CardDescription className="text-white/60 text-expressive-subtitle">
-              {isLoadingEvents
-                ? 'Cargando eventos...'
-                : `${eventsThisMonth.length} ${eventsThisMonth.length === 1 ? 'evento programado' : 'eventos programados'} este mes`
-              }
-            </CardDescription>
+        <div className="reveal-slide flex flex-col min-h-[420px]">
+          <AIChatBox rol="directivo" />
+        </div>
+
+        <Card className={`${CARD_STYLE} cursor-pointer reveal-slide`} onClick={() => setLocation('/comunidad/calendario')}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-white text-base">Calendario — {now.toLocaleDateString('es', { month: 'long' })}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoadingEvents ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-white/60">Cargando calendario...</p>
-              </div>
+              <div className="h-48 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-white/50" /></div>
             ) : (
-              <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
+              <div onClick={(e) => e.stopPropagation()}>
                 <CalendarGeneral events={calendarEvents} onDayClick={handleEventClick} />
               </div>
             )}
+            <ul className="mt-3 space-y-1 text-sm text-white/70">
+              {eventsThisMonth.slice(0, 3).map((e: any) => (
+                <li key={e._id || e.id || e.fecha}>· {e.titulo ?? e.title ?? 'Evento'} — {new Date(e.fecha).toLocaleDateString('es')}</li>
+              ))}
+              {eventsThisMonth.length === 0 && <li>· Sin eventos este mes</li>}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Fila: Tendencia de asistencia | Acceso rápido */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className={`${CARD_STYLE} reveal-slide`}>
+          <CardHeader>
+            <CardTitle className="text-white text-base">Tendencia de asistencia — últimas 2 semanas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={{ pct: { label: 'Asistencia %', color: '#3B82F6' } }} className="h-[200px] w-full">
+              <LineChart data={tendenciaMock} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="dia" tick={{ fill: '#E2E8F0', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
+                <YAxis domain={[80, 100]} tick={{ fill: '#E2E8F0', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
+                <Tooltip content={<ChartTooltipContent />} formatter={(v: number) => [v + '%', 'Asistencia']} />
+                <Line type="monotone" dataKey="pct" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6' }} name="pct" />
+              </LineChart>
+            </ChartContainer>
           </CardContent>
         </Card>
 
-        <div className="reveal-slide flex flex-col min-h-[500px]" style={{ animationDelay: '0.6s' }}>
-          <AIChatBox rol="directivo" />
-        </div>
+        <Card className={`${CARD_STYLE} reveal-slide`}>
+          <CardHeader>
+            <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <button type="button" onClick={() => setLocation('/evo-drive')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Evo Drive</span>
+              </button>
+              <button type="button" onClick={() => setLocation('/evo-send')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                <Mail className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Evo Send</span>
+              </button>
+              <button type="button" onClick={() => setLocation('/directivo/cursos')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                <FileText className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Calificaciones</span>
+              </button>
+              <button type="button" onClick={() => setLocation('/directivo/estudiantes')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                <Users className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Estudiantes</span>
+              </button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

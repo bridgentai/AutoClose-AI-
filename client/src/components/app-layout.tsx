@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useState } from "react";
+import { useLocation } from "wouter";
 import { CommandPalette, useCommandPalette } from "./command-palette";
 import { AIDock } from "./ai-dock";
 import { cn } from "@/lib/utils";
@@ -11,19 +12,14 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
+  const [location] = useLocation();
   const { open: commandOpen, setOpen: setCommandOpen } = useCommandPalette();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isDockExpanded, setIsDockExpanded] = useState(false);
+  const isEvoDrive = location === "/evo-drive";
 
   return (
     <div className="min-h-screen w-full relative overflow-hidden">
-      {/* Caobos en esquina */}
-      <div className="fixed top-4 left-4 z-20 pointer-events-none">
-        <span className="text-xl font-bold text-white/90 font-['Poppins'] tracking-tight drop-shadow-sm">
-          Caobos
-        </span>
-      </div>
-
       {/* Escudo (arriba derecha) */}
       <div className="fixed top-4 right-4 z-20 pointer-events-none">
         <img
@@ -61,13 +57,20 @@ export function AppLayout({ children }: AppLayoutProps) {
         <div
           className={cn(
             "transition-all duration-500 ease-in-out",
-            isChatOpen ? "pr-96" : isDockExpanded ? "pr-80" : "pr-16"
+            isChatOpen ? "pr-96" : isDockExpanded ? "pr-80" : "pr-16",
+            isEvoDrive && "flex flex-col min-h-screen"
           )}
         >
-          <main className="story-section">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
-              {children}
-            </div>
+          <main className={cn("story-section", isEvoDrive && "flex flex-col flex-1 min-h-0")}>
+            {isEvoDrive ? (
+              <div className="flex flex-col flex-1 min-h-0 w-full">
+                {children}
+              </div>
+            ) : (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
+                {children}
+              </div>
+            )}
           </main>
         </div>
       </div>

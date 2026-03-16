@@ -39,7 +39,7 @@ export function TopNavigation() {
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },
     { icon: FolderOpen, label: "Evo Drive", path: "/evo-drive", roles: ["profesor", "directivo"] },
 
-    { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
+    { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
     { icon: Settings, label: "Configuracion", path: "/settings", roles: ["directivo"] },
 
     { icon: User, label: "Mi Perfil", path: "/mi-perfil", roles: ["estudiante", "profesor", "directivo", "padre"] }

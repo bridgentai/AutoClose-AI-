@@ -1,17 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/authContext';
-import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -118,20 +110,20 @@ function SubjectFolder({ folder }: { folder: SubjectFolder }) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <Card className="bg-white/5 border-white/10 overflow-hidden">
+      <Card className="bg-[#1E3A8A]/25 border-white/10 overflow-hidden">
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/5 transition-colors"
+            className="w-full flex items-center gap-3 p-4 text-left hover:bg-[#1E3A8A]/40 transition-colors"
           >
             {open ? (
-              <ChevronDown className="w-5 h-5 text-[#00c8ff] shrink-0" />
+              <ChevronDown className="w-5 h-5 text-[#3B82F6] shrink-0" />
             ) : (
-              <ChevronRight className="w-5 h-5 text-[#00c8ff] shrink-0" />
+              <ChevronRight className="w-5 h-5 text-[#3B82F6] shrink-0" />
             )}
-            <FolderOpen className="w-6 h-6 text-[#00c8ff] shrink-0" />
+            <FolderOpen className="w-6 h-6 text-[#3B82F6] shrink-0" />
             <span className="font-semibold text-white">{folder.name}</span>
-            <span className="text-white/50 text-sm ml-auto">
+            <span className="text-[#E2E8F0]/70 text-sm ml-auto">
               {files.length} {files.length === 1 ? 'archivo' : 'archivos'}
             </span>
           </button>
@@ -140,11 +132,11 @@ function SubjectFolder({ folder }: { folder: SubjectFolder }) {
           <CardContent className="pt-0 pb-4">
             {isLoading ? (
               <div className="space-y-2 pl-12">
-                <Skeleton className="h-12 w-full bg-white/10" />
-                <Skeleton className="h-12 w-full bg-white/10" />
+                <Skeleton className="h-12 w-full bg-[#1E3A8A]/30" />
+                <Skeleton className="h-12 w-full bg-[#1E3A8A]/30" />
               </div>
             ) : sorted.length === 0 ? (
-              <p className="text-white/50 text-sm pl-12 py-2">No hay archivos en esta materia aún.</p>
+              <p className="text-[#E2E8F0]/70 text-sm pl-12 py-2">No hay archivos en esta materia aún.</p>
             ) : (
               <ul className="space-y-2 pl-12">
                 {sorted.map((f) => (
@@ -413,6 +405,7 @@ export default function EvoDrivePage() {
       )
     : allFilesSorted;
   const group = groups.find((g) => g.id === cursoId);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Enlace para abrir en Drive cuando la API no devuelve webViewLink
   const driveViewLink = (id: string, mimeType?: string) => {
@@ -515,32 +508,41 @@ export default function EvoDrivePage() {
 
   return (
     <>
-    <div className="flex-1 overflow-auto flex">
-      <aside className="w-[220px] shrink-0 min-h-[calc(100vh-6rem)] flex flex-col border-r border-white/[0.06] bg-[#0a0a18] py-4">
+    <div className="flex-1 min-h-0 flex overflow-hidden min-w-0">
+      <aside
+        className="w-[220px] shrink-0 self-stretch flex flex-col border-r border-white/[0.08] overflow-y-auto"
+        style={{ background: 'linear-gradient(180deg, #1E3A8A 0%, #0F172A 50%, #020617 100%)' }}
+      >
+        <div className="pt-5 pb-4 px-4 flex items-center gap-2 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+            <FileText className="w-5 h-5 text-white" />
+          </div>
+          <span className="text-white font-semibold text-base tracking-tight">Evo Drive</span>
+        </div>
         <section className="mb-4">
-          <p className="text-[10px] uppercase font-bold text-white/20 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Navegación</p>
-          <button type="button" className="w-full flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
+          <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Navegación</p>
+          <button type="button" className="w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
             <span className="flex items-center gap-2">
-              <FolderOpen className="w-4 h-4 text-white/45" />
+              <FolderOpen className="w-4 h-4 text-white" />
               Todos los archivos
             </span>
-            <span className="bg-[#00c8ff]/15 text-[#00c8ff] border border-[#00c8ff]/20 text-[10px] font-semibold px-2 rounded-full">{allFiles.length}</span>
+            <span className="bg-[#3B82F6]/30 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full">{allFiles.length}</span>
           </button>
-          <button type="button" className="w-full flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
-            <FileText className="w-4 h-4 text-white/45" />
+          <button type="button" className="w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
+            <FileText className="w-4 h-4 text-white" />
             Recientes
           </button>
-          <button type="button" className="w-full flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
-            <Star className="w-4 h-4 text-white/45" />
+          <button type="button" className="w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
+            <Star className="w-4 h-4 text-white" />
             Destacados
           </button>
-          <button type="button" className="w-full flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
-            <Trash2 className="w-4 h-4 text-white/45" />
+          <button type="button" className="w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
+            <Trash2 className="w-4 h-4 text-white" />
             Papelera
           </button>
         </section>
         <section className="mb-4">
-          <p className="text-[10px] uppercase font-bold text-white/20 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Cursos</p>
+          <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Cursos</p>
           {isTeacher && groups.map((g) => {
             const isActive = cursoId === g.id;
             return (
@@ -548,63 +550,66 @@ export default function EvoDrivePage() {
                 key={g.id}
                 type="button"
                 onClick={() => setCursoId(g.id)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${isActive ? 'bg-[#00c8ff]/10 border border-[#00c8ff]/20 text-[#00c8ff]/90' : 'text-white/45 hover:bg-white/[0.05]'}`}
+                className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'}`}
               >
                 <span className="flex items-center gap-2 min-w-0 truncate">
-                  <FolderOpen className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#00c8ff]' : 'text-white/45'}`} />
+                  <FolderOpen className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-white'}`} />
                   <span className="truncate">{g.name}</span>
                 </span>
-                <span className="bg-[#00c8ff]/15 text-[#00c8ff] border border-[#00c8ff]/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{cursoId === g.id ? allFiles.length : 0}</span>
+                <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{cursoId === g.id ? allFiles.length : 0}</span>
               </button>
             );
           })}
           {!isTeacher && subjectFolders.map((folder) => (
-            <button key={folder.id} type="button" className="w-full flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/45 hover:bg-white/[0.05] transition-colors text-left">
+            <button key={folder.id} type="button" className="w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
               <span className="truncate">{folder.name}</span>
-              <span className="bg-[#00c8ff]/15 text-[#00c8ff] border border-[#00c8ff]/20 text-[10px] font-semibold px-2 rounded-full shrink-0">0</span>
+              <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0">0</span>
             </button>
           ))}
         </section>
-        <section className="mt-auto pt-4 border-t border-white/[0.06]">
-          <div className="flex items-center gap-2 px-3 py-2 mx-2 text-white/45">
-            <Cloud className="w-4 h-4 shrink-0" />
-            <span>Google Drive</span>
-            {googleStatus.connected && <span className="w-[6px] h-[6px] rounded-full bg-[#22c55e] shrink-0 ml-auto" />}
+        <section className="mt-auto pt-4 border-t border-white/10">
+          <div className="mx-2 mb-2 rounded-xl p-3 border border-white/10 bg-[#0F172A]/60">
+            <div className="flex items-center gap-2 text-white/90 mb-1">
+              <Cloud className="w-4 h-4 shrink-0" />
+              <span className="text-sm font-medium">Google Drive</span>
+              {googleStatus.connected && <span className="w-2 h-2 rounded-full bg-[#22c55e] shrink-0 ml-auto" />}
+            </div>
+            <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-2">
+              <div className="h-full rounded-full bg-[#3B82F6]" style={{ width: '12%' }} />
+            </div>
           </div>
         </section>
       </aside>
 
-      <main className="flex-1 min-w-0 flex flex-col overflow-auto">
-        <NavBackButton to="/dashboard" label="Dashboard" className="px-6 pt-4 shrink-0" />
-
+      <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto relative">
         {isTeacher && cursoId && (
-          <div className="shrink-0 flex items-center gap-4 px-6 py-3 border-b border-white/[0.06]">
-            <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-white/[0.06] border border-white/[0.08] py-2 px-3">
-              <Search className="w-4 h-4 text-white/25 shrink-0" />
+          <div className="shrink-0 flex items-center gap-4 px-6 py-3 border-b border-white/10">
+            <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-[#1E3A8A]/40 border border-white/10 py-2 px-3">
+              <Search className="w-4 h-4 text-white/50 shrink-0" />
               <input
                 type="text"
                 value={fileSearch}
                 onChange={(e) => setFileSearch(e.target.value)}
                 placeholder={group ? `Buscar en ${group.name}...` : 'Buscar en curso...'}
-                className="flex-1 min-w-0 bg-transparent text-[13px] text-white placeholder:text-white/20 outline-none"
+                className="flex-1 min-w-0 bg-transparent text-[13px] text-[#E2E8F0] placeholder:text-white/40 outline-none"
               />
             </div>
-            <div className="flex items-center gap-1 rounded-xl p-0.5">
-              <button type="button" onClick={() => setViewMode('grid')} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${viewMode === 'grid' ? 'bg-white/10 text-white/80' : 'text-white/25 hover:text-white/50'}`}>
+            <div className="flex items-center gap-1 rounded-xl p-0.5 bg-[#1E3A8A]/30 border border-white/10">
+              <button type="button" onClick={() => setViewMode('grid')} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${viewMode === 'grid' ? 'bg-[#3B82F6]/50 text-white' : 'text-white/60 hover:text-white'}`}>
                 <LayoutGrid className="w-4 h-4" />
               </button>
-              <button type="button" onClick={() => setViewMode('list')} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${viewMode === 'list' ? 'bg-white/10 text-white/80' : 'text-white/25 hover:text-white/50'}`}>
+              <button type="button" onClick={() => setViewMode('list')} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${viewMode === 'list' ? 'bg-[#3B82F6]/50 text-white' : 'text-white/60 hover:text-white'}`}>
                 <List className="w-4 h-4" />
               </button>
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white/70 hover:bg-white/[0.06] text-sm">
+                <button type="button" className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[#E2E8F0] hover:bg-[#1E3A8A]/40 border border-white/10 text-sm">
                   Más reciente primero
-                  <ChevronDown className="w-4 h-4 text-white/25" />
+                  <ChevronDown className="w-4 h-4 text-white/50" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-[#0f172a] border border-white/10 rounded-xl p-1 min-w-[180px]">
+              <DropdownMenuContent align="end" className="bg-[#0F172A] border border-white/10 rounded-xl p-1 min-w-[180px]">
                 <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/90 focus:bg-white/[0.06] focus:text-white">
                   <Check className="w-4 h-4 text-[#00c8ff]" />
                   Más reciente primero
@@ -618,41 +623,25 @@ export default function EvoDrivePage() {
         )}
 
         {isTeacher && cursoId && (
-          <div className="shrink-0 flex flex-wrap items-center gap-2.5 px-6 py-2 border-b border-white/[0.06]">
-            {courseSubjects.length > 0 && (
-              <Select value={selectedGroupSubjectId} onValueChange={setSelectedGroupSubjectId}>
-                <SelectTrigger className="w-[180px] h-9 bg-white/[0.06] border border-white/[0.08] rounded-xl py-[7px] px-3 text-[13px] font-medium text-white gap-2">
-                  <FolderOpen className="w-4 h-4 text-white/60 shrink-0" />
-                  <SelectValue placeholder="Materia" />
-                  <ChevronDown className="w-4 h-4 text-white/60" />
-                </SelectTrigger>
-                <SelectContent>
-                  {courseSubjects.map((s) => (
-                    <SelectItem key={s._id || s.id} value={s._id || s.id}>
-                      {s.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+          <div className="shrink-0 flex flex-wrap items-center gap-2.5 px-6 py-2 border-b border-white/10">
             {!googleStatus.connected && (
               <Button onClick={connectGoogle} variant="outline" size="sm" className="h-9 rounded-xl border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] text-xs font-medium hover:bg-[#22c55e]/20">
                 Conectar Google Drive
               </Button>
             )}
             {googleStatus.connected && (
-              <Button type="button" variant="outline" size="sm" onClick={connectGoogle} className="h-8 rounded-xl border-[#00c8ff]/40 bg-transparent px-2.5 text-[11px] font-medium text-[#00c8ff]/90 hover:bg-[#00c8ff]/10 hover:text-[#00c8ff]">
+              <Button type="button" variant="outline" size="sm" onClick={connectGoogle} className="h-8 rounded-xl border-white/10 bg-transparent px-2.5 text-[11px] font-medium text-white/90 hover:bg-white/10 hover:text-white">
                 Reconectar Drive
               </Button>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" disabled={!selectedGroupSubjectId} title={!selectedGroupSubjectId ? 'Selecciona una materia primero' : ''} className={`h-9 rounded-full bg-[#00c8ff]/20 border border-[#00c8ff]/50 text-[#00c8ff] text-[13px] font-medium hover:bg-[#00c8ff]/30 px-4 ${!selectedGroupSubjectId ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <Button size="sm" title={!selectedGroupSubjectId ? 'Selecciona una materia primero' : ''} className="h-9 rounded-full bg-white/10 border border-white/20 text-white text-[13px] font-medium hover:bg-white/15 px-4">
                   <Plus className="w-4 h-4 mr-2" />
                   Añadir o crear
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" sideOffset={8} className="w-[230px] rounded-xl border-[#00c8ff]/20 bg-[#0f172a] shadow-xl p-0 overflow-hidden">
+              <DropdownMenuContent align="end" sideOffset={8} className="w-[230px] rounded-xl border border-white/10 bg-[#0f172a] shadow-xl p-0 overflow-hidden">
                 <div className="py-2.5">
                   <DropdownMenuItem onSelect={() => { if (googleStatus.connected) setTimeout(() => setAddFromGoogleOpen(true), 50); }} disabled={!googleStatus.connected} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
                     <div className="w-8 h-8 rounded-lg bg-[#00c8ff]/20 flex items-center justify-center shrink-0"><Cloud className="w-4 h-4 text-[#00c8ff]" /></div>
@@ -667,7 +656,7 @@ export default function EvoDrivePage() {
                     Archivo
                   </DropdownMenuItem>
                 </div>
-                <div className="border-t border-[#00c8ff]/10" />
+                <div className="border-t border-white/10" />
                 <div className="py-2">
                   <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#00c8ff]/50">Crear</p>
                   <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('doc'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
@@ -693,8 +682,8 @@ export default function EvoDrivePage() {
             <div className="flex-1 p-6 overflow-auto">
               {filesLoading ? (
                 <div className="space-y-3">
-                  <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
-                  <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
+                  <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+                  <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
                 </div>
               ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-4">
@@ -703,15 +692,15 @@ export default function EvoDrivePage() {
                   ))}
                 </div>
               ) : (
-                <div className="w-full">
+                <div className="w-full overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03]">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-white/[0.06]">
-                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Nombre</th>
-                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Curso</th>
-                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Tipo</th>
-                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Modificado</th>
-                        <th className="text-[11px] uppercase text-white/25 font-semibold py-2.5 px-4 text-left">Tamaño</th>
+                      <tr className="border-b border-white/10">
+                        <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Nombre</th>
+                        <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Curso</th>
+                        <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Tipo</th>
+                        <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Modificado</th>
+                        <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Tamaño</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -723,26 +712,43 @@ export default function EvoDrivePage() {
                 </div>
               )}
               {!filesLoading && (
-                <div className="mt-6 rounded-xl border-2 border-dashed border-white/20 py-7 px-6 flex flex-col items-center justify-center gap-2 hover:border-[#00c8ff]/50 hover:text-white/70 transition-colors cursor-pointer">
-                  <Upload className="w-[22px] h-[22px] text-white/50" />
-                  <p className="text-[13px] text-white/50">Arrastra archivos aquí o haz clic para subir</p>
+                <div
+                  className="mt-6 rounded-xl border-2 border-dashed border-white/10 py-7 px-6 flex flex-col items-center justify-center gap-2 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06] transition-colors cursor-pointer"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }}
+                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const files = e.dataTransfer.files;
+                    if (files?.length) toast({ title: 'Archivos listos', description: `${files.length} archivo(s) recibido(s). Usa "Añadir o crear" para vincular desde Google Drive.` });
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = e.target.files;
+                      if (files?.length) toast({ title: 'Archivos listos', description: `${files.length} archivo(s) recibido(s). Usa "Añadir o crear" para vincular desde Google Drive.` });
+                      e.target.value = '';
+                    }}
+                  />
+                  <Upload className="w-[22px] h-[22px] text-[#3B82F6]" />
+                  <p className="text-[13px] text-[#E2E8F0]/80">Arrastra archivos aquí o haz clic para subir</p>
                 </div>
               )}
-            </div>
-            <div className="shrink-0 flex items-center justify-between px-6 py-2 border-t border-white/[0.06] text-[11px] text-white/25">
-              <span>{allFiles.length} {allFiles.length === 1 ? 'archivo' : 'archivos'}</span>
-              <span className="flex items-center gap-2">
-                {googleStatus.connected && <span className="w-[5px] h-[5px] rounded-full bg-[#22c55e]" />}
-                {googleStatus.connected && 'Google Drive conectado'}
-                {group && <span className="ml-2">{group.name}</span>}
-              </span>
             </div>
           </>
         ) : (
             <>
               <div className="flex-1 p-6 overflow-auto space-y-3">
-                {/* Mi carpeta: estilo distinto (dorado/ámbar) y opción Añadir o crear */}
-              <Card className="overflow-hidden border-[#ffd700]/30 bg-gradient-to-br from-[#ffd700]/10 to-amber-950/20">
+                {/* Mi carpeta: acento dorado sobre azul de plataforma */}
+              <Card className="overflow-hidden border-white/10 bg-white/[0.04]">
                 <Collapsible defaultOpen>
                   <CollapsibleTrigger asChild>
                     <button
@@ -891,21 +897,14 @@ export default function EvoDrivePage() {
 
               {/* Carpetas por materia (siempre todas, vacías o no) */}
               {subjectFolders.length === 0 ? (
-                <div className="rounded-xl border border-white/10 bg-white/5 py-8 px-6">
-                  <p className="text-white/50 text-sm text-center">
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] py-8 px-6">
+                  <p className="text-[#E2E8F0]/70 text-sm text-center">
                     No tienes materias asignadas aún. Cuando te inscriban en cursos, verás aquí una carpeta por cada materia con los archivos que suba tu profesor.
                   </p>
                 </div>
               ) : (
                 subjectFolders.map((folder) => <SubjectFolder key={folder.id} folder={folder} />)
               )}
-              </div>
-              <div className="shrink-0 flex items-center justify-between px-6 py-2 border-t border-white/[0.06] text-[11px] text-white/25">
-                <span>{myFolderFiles.length + subjectFolders.length} elementos</span>
-                <span className="flex items-center gap-2">
-                  {googleStatus.connected && <span className="w-[5px] h-[5px] rounded-full bg-[#22c55e]" />}
-                  {googleStatus.connected && 'Google Drive conectado'}
-                </span>
               </div>
             </>
           )}
@@ -942,7 +941,7 @@ export default function EvoDrivePage() {
                   value={googleSearch}
                   onChange={(e) => setGoogleSearch(e.target.value)}
                   placeholder="Nombre del archivo..."
-                  className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#00c8ff]/50"
+                  className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-white/20"
                 />
               </div>
               <ScrollArea className="h-[280px] rounded-xl border border-white/[0.08]">
@@ -965,7 +964,7 @@ export default function EvoDrivePage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          className="shrink-0 border-[#00c8ff]/50 bg-[#00c8ff]/20 text-[#00c8ff] hover:bg-[#00c8ff]/30 font-medium"
+                          className="shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 font-medium"
                           onClick={() => handleAddFromGoogle(gf)}
                           disabled={addFileMutation.isPending}
                         >
@@ -1007,7 +1006,7 @@ export default function EvoDrivePage() {
                 value={evoLinkName}
                 onChange={(e) => setEvoLinkName(e.target.value)}
                 placeholder="Ej: Guía de estudio"
-                className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#00c8ff]/50"
+                className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-white/20"
               />
             </div>
             <div className="space-y-2">
@@ -1016,7 +1015,7 @@ export default function EvoDrivePage() {
                 value={evoLinkUrl}
                 onChange={(e) => setEvoLinkUrl(e.target.value)}
                 placeholder="https://..."
-                className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#00c8ff]/50"
+                className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-white/20"
               />
             </div>
             {group && (
@@ -1042,7 +1041,7 @@ export default function EvoDrivePage() {
             <Button
               onClick={handleAddFromEvo}
               disabled={!evoLinkName.trim() || addFileMutation.isPending}
-              className="bg-[#00c8ff]/20 border border-[#00c8ff]/50 text-[#00c8ff] hover:bg-[#00c8ff]/30 text-[13px] font-medium"
+              className="bg-white/10 border border-white/20 text-white hover:bg-white/15 text-[13px] font-medium"
             >
               Crear
             </Button>
@@ -1052,7 +1051,7 @@ export default function EvoDrivePage() {
 
       {/* Modal Crear documento nuevo (Google Doc / Presentación / Hoja de cálculo) */}
       <Dialog open={createNewOpen} onOpenChange={setCreateNewOpen}>
-        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 overflow-hidden [&+[data-radix-dialog-overlay]]:bg-black/45">
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-3">
               <div
@@ -1087,7 +1086,7 @@ export default function EvoDrivePage() {
                 onChange={(e) => setCreateNewNombre(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateNewDoc()}
                 placeholder="Ej: Guía del curso"
-                className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-[#3B82F6] focus:bg-white/5"
+                className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-white/20 focus:bg-white/5"
                 autoFocus
               />
             </div>
@@ -1130,7 +1129,7 @@ export default function EvoDrivePage() {
 
       {/* Modales Mi carpeta (estudiante) */}
       <Dialog open={myFolderAddGoogleOpen} onOpenChange={setMyFolderAddGoogleOpen}>
-        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-3">
               <div className="w-10 h-10 rounded-[11px] bg-amber-500/20 flex items-center justify-center shrink-0">
@@ -1194,7 +1193,7 @@ export default function EvoDrivePage() {
       </Dialog>
 
       <Dialog open={myFolderAddEvoOpen} onOpenChange={setMyFolderAddEvoOpen}>
-        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-3">
               <div className="w-10 h-10 rounded-[11px] bg-amber-500/20 flex items-center justify-center shrink-0">
@@ -1242,7 +1241,7 @@ export default function EvoDrivePage() {
       </Dialog>
 
       <Dialog open={myFolderCreateNewOpen} onOpenChange={setMyFolderCreateNewOpen}>
-        <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-3">
               <div
@@ -1299,14 +1298,14 @@ export default function EvoDrivePage() {
   );
 }
 
-const FILE_TYPE_STYLES: Record<string, { bg: string; icon: React.ReactNode; color: string; hex: string }> = {
-  doc: { bg: 'bg-[#4a90ff]/15', icon: <FileText className="w-5 h-5 text-[#4a90ff]" />, color: '#4a90ff', hex: '#4a90ff' },
-  slide: { bg: 'bg-[#f59e0b]/15', icon: <Presentation className="w-5 h-5 text-[#f59e0b]" />, color: '#f59e0b', hex: '#f59e0b' },
-  sheet: { bg: 'bg-[#22c55e]/15', icon: <FileSpreadsheet className="w-5 h-5 text-[#22c55e]" />, color: '#22c55e', hex: '#22c55e' },
-  pdf: { bg: 'bg-[#ef4444]/15', icon: <FileText className="w-5 h-5 text-[#ef4444]" />, color: '#ef4444', hex: '#ef4444' },
-  link: { bg: 'bg-[#00c8ff]/15', icon: <Link2 className="w-5 h-5 text-[#00c8ff]" />, color: '#00c8ff', hex: '#00c8ff' },
+const FILE_TYPE_STYLES: Record<string, { icon: React.ReactNode; color: string; hex: string }> = {
+  doc: { icon: <FileText className="w-5 h-5 text-[#4a90ff]" />, color: '#4a90ff', hex: '#4a90ff' },
+  slide: { icon: <Presentation className="w-5 h-5 text-[#f59e0b]" />, color: '#f59e0b', hex: '#f59e0b' },
+  sheet: { icon: <FileSpreadsheet className="w-5 h-5 text-[#22c55e]" />, color: '#22c55e', hex: '#22c55e' },
+  pdf: { icon: <FileText className="w-5 h-5 text-[#ef4444]" />, color: '#ef4444', hex: '#ef4444' },
+  link: { icon: <Link2 className="w-5 h-5 text-[#00c8ff]" />, color: '#00c8ff', hex: '#00c8ff' },
 };
-const defaultStyle = { bg: 'bg-[#f59e0b]/15', icon: <FileText className="w-5 h-5 text-[#f59e0b]" />, color: '#f59e0b', hex: '#f59e0b' };
+const defaultStyle = { icon: <FileText className="w-5 h-5 text-[#f59e0b]" />, color: '#f59e0b', hex: '#f59e0b' };
 
 function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; variant?: 'grid' | 'list' }) {
   const link = file.googleWebViewLink || file.evoStorageUrl || '#';
@@ -1318,13 +1317,13 @@ function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; var
     return (
       <div className="flex flex-col items-center gap-1.5">
         <div
-          className="relative w-16 h-16 rounded-2xl bg-white/[0.07] border transition-colors group/icon hover:bg-white/[0.12]"
+          className="relative w-16 h-16 rounded-2xl bg-[#1E3A8A]/40 border border-white/10 transition-colors group/icon hover:bg-[#1E3A8A]/60"
           style={{ borderColor: `${hex}47` }}
         >
           <div className="absolute inset-0 flex items-center justify-center" style={{ color: hex }}>
-            {style.icon && React.cloneElement(style.icon as React.ReactElement<{ className?: string }>, { className: 'w-7 h-7' })}
+            {style.icon && React.cloneElement(style.icon as React.ReactElement<{ className?: string }>, { className: 'w-8 h-8' })}
           </div>
-          <div className="absolute inset-0 flex items-center justify-center gap-0.5 opacity-0 group-hover/icon:opacity-100 transition-opacity bg-[#0f172a]/90 rounded-2xl">
+          <div className="absolute inset-0 flex items-center justify-center gap-0.5 opacity-0 group-hover/icon:opacity-100 transition-opacity bg-[#0F172A]/95 rounded-2xl">
             {link !== '#' && (
               <a href={link} target="_blank" rel="noopener noreferrer" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Abrir en Drive">
                 <ExternalLink className="w-4 h-4" />
@@ -1338,43 +1337,43 @@ function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; var
             </button>
           </div>
         </div>
-        <p className="text-[12px] text-white/72 font-medium text-center leading-tight truncate max-w-[90px]">{file.nombre}</p>
-        <p className="text-[10.5px] text-white/28 text-center">{file.cursoNombre}</p>
+        <p className="text-[12px] text-white/70 font-medium text-center leading-tight truncate max-w-[90px]">{file.nombre}</p>
+        <p className="text-[10.5px] text-white/30 text-center">{file.cursoNombre}</p>
       </div>
     );
   }
 
   if (variant === 'list') {
     return (
-      <tr className="border-b border-white/[0.04] hover:bg-white/[0.04] transition-colors">
+      <tr className="border-b border-white/10 hover:bg-[#1E3A8A]/30 transition-colors">
         <td className="py-2.5 px-4">
           <div className="flex items-center gap-2 min-w-0">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${style.bg}`}>{style.icon}</div>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${hex}26` }}>{style.icon}</div>
             <span className="text-white font-medium truncate">{file.nombre}</span>
           </div>
         </td>
-        <td className="py-2.5 px-4 text-white/50">{file.cursoNombre}</td>
-        <td className="py-2.5 px-4 text-white/50">{file.tipo}</td>
-        <td className="py-2.5 px-4 text-white/50">—</td>
-        <td className="py-2.5 px-4 text-white/50">—</td>
+        <td className="py-2.5 px-4 text-[#E2E8F0]/70">{file.cursoNombre}</td>
+        <td className="py-2.5 px-4 text-[#E2E8F0]/70">{file.tipo}</td>
+        <td className="py-2.5 px-4 text-[#E2E8F0]/70">—</td>
+        <td className="py-2.5 px-4 text-[#E2E8F0]/70">—</td>
       </tr>
     );
   }
 
   return (
     <li
-      className={`group flex items-center justify-between gap-4 py-[13px] px-4 rounded-xl border bg-white/5 hover:bg-white/10 transition-colors ${
-        isNew ? 'border-[#00c8ff]/40 bg-[#00c8ff]/5 animate-in fade-in slide-in-from-top-2 duration-300' : 'border-white/10 hover:border-white/20'
+      className={`group flex items-center justify-between gap-4 py-[13px] px-4 rounded-xl border transition-colors ${
+        isNew ? 'border-white/20 bg-white/[0.06] animate-in fade-in slide-in-from-top-2 duration-300' : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20'
       }`}
     >
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${style.bg}`}>
+        <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0" style={{ backgroundColor: `${hex}26` }}>
           {style.icon}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-white truncate">{file.nombre}</p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-[11px] text-white/60">{file.cursoNombre}</span>
+            <span className="text-[11px] text-[#E2E8F0]/70">{file.cursoNombre}</span>
             <span className="w-0.5 h-0.5 rounded-full bg-white/40 shrink-0" />
             {isGoogle && (
               <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
@@ -1382,7 +1381,7 @@ function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; var
               </span>
             )}
             {isNew && (
-              <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-[#00c8ff]/15 text-[#00c8ff]">
+              <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-[#3B82F6]/30 text-[#93C5FD]">
                 Recién creado
               </span>
             )}
@@ -1395,7 +1394,7 @@ function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; var
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#00c8ff] hover:underline"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#3B82F6] hover:text-[#60A5FA] hover:underline"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             Abrir en Drive
@@ -1403,7 +1402,7 @@ function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; var
         )}
         <button
           type="button"
-          className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors"
+          className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-[#E2E8F0]/70 hover:bg-[#1E3A8A]/50 hover:text-white transition-colors"
           aria-label="Más opciones"
         >
           <MoreVertical className="w-4 h-4" />

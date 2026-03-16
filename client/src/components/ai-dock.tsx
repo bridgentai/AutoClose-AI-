@@ -79,6 +79,17 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
 
   // Navigation items based on role
   const getNavigationItems = () => {
+    // Vista directivo: Dashboard, Comunicación, Academia, Evo Drive
+    if (user?.rol === "directivo") {
+      return [
+        { icon: Home, label: "Dashboard", path: "/dashboard", roles: ["directivo"] },
+        { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["directivo"], action: "chat" },
+        { icon: Mail, label: "Comunicación", path: "/directivo/comunicacion", roles: ["directivo"] },
+        { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
+        { icon: FolderOpen, label: "Evo Drive", path: "/evo-drive", roles: ["directivo"] },
+      ];
+    }
+
     const baseItems = [
       { icon: Home, label: "Dashboard", path: "/dashboard", roles: ["estudiante", "profesor", "directivo", "padre"] },
       { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"], action: "chat" },
@@ -91,7 +102,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
         roles: [
           "estudiante",
           "profesor",
-          "directivo",
           "padre",
           "administrador-general",
           "admin-general-colegio",
@@ -100,12 +110,9 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
         ]
       },
       { icon: BookOpen, label: "Academia", path: "/profesor/academia", roles: ["profesor"] },
-      { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
       { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["profesor"] },
       { icon: FileCheck, label: "Permisos", path: "/permisos", roles: ["padre"] },
-      { icon: Users, label: "Asignación de Horarios", path: "/asignacion-horarios", roles: ["directivo"] },
-      { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["directivo", "padre"] },
-      { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
+      { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["padre"] },
     ];
 
     return baseItems.filter(item => item.roles.includes(user?.rol || ""));

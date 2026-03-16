@@ -119,10 +119,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           roles: ["profesor"]
         },
         { 
-          icon: Users, 
-          label: "Profesores", 
-          path: "/directivo",
-          keywords: ["profesores", "docentes", "maestros", "directivo"],
+          icon: BookOpen, 
+          label: "Academia", 
+          path: "/directivo/academia",
+          keywords: ["academia", "cursos", "directivo"],
           roles: ["directivo"]
         },
         { 
@@ -232,10 +232,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       group: "Módulos Directivo",
       items: [
         { 
-          icon: Users, 
-          label: "Profesores", 
-          path: "/directivo",
-          keywords: ["profesores", "docentes", "asignacion", "grupos"],
+          icon: BookOpen, 
+          label: "Academia", 
+          path: "/directivo/academia",
+          keywords: ["academia", "cursos", "directivo"],
           roles: ["directivo"]
         },
         { 
@@ -265,7 +265,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       group: "Academia - Directivo (subcategorías)",
       items: [
         { icon: BookOpen, label: "Cursos y estudiantes", path: "/directivo/cursos", keywords: ["cursos", "estudiantes", "grupos", "academia"], roles: ["directivo"] },
-        { icon: Users, label: "Asignación de Profesores", path: "/directivo", keywords: ["profesores", "asignacion", "docentes"], roles: ["directivo"] },
+        { icon: Users, label: "Asignación de Horarios", path: "/asignacion-horarios", keywords: ["horarios", "asignacion", "profesores", "docentes"], roles: ["directivo"] },
         { icon: BarChart3, label: "Análisis de Rendimiento", path: "/directivo/academia/rendimiento", keywords: ["rendimiento", "analisis", "estadisticas", "academia"], roles: ["directivo"] },
         { icon: FileText, label: "Reportes Académicos", path: "/directivo/academia/reportes", keywords: ["reportes", "boletines", "academia"], roles: ["directivo"] },
         { icon: Settings, label: "Configuración Académica", path: "/directivo/academia/configuracion", keywords: ["configuracion", "academia"], roles: ["directivo"] },

@@ -108,9 +108,9 @@ test.describe('Prueba piloto MVP - Requisitos completos', () => {
     await expect(page).toHaveURL(/\/boletin/);
   });
 
-  test('3.4 Ruta /directivo (vista directivo) existe', async ({ page }) => {
+  test('3.4 Ruta /directivo redirige a Academia', async ({ page }) => {
     await page.goto('/directivo');
-    await expect(page).toHaveURL(/\/directivo/);
+    await expect(page).toHaveURL(/\/directivo\/academia/);
   });
 
   test('3.5 Ruta /mi-aprendizaje existe (estudiante)', async ({ page }) => {
@@ -165,16 +165,16 @@ test.describe('Prueba piloto MVP - Requisitos completos', () => {
     ).toBeVisible({ timeout: 8000 });
   });
 
-  test('5.5 Vista directivo: texto solo lectura o Resumen por curso visible', async ({ page }) => {
-    await page.goto('/directivo');
+  test('5.5 Vista directivo: Academia muestra Gestión Académica o Cursos y estudiantes', async ({ page }) => {
+    await page.goto('/directivo/academia');
     await expect(
-      page.getByText(/solo lectura|Resumen por curso|Vista Directivo/i).first()
+      page.getByText(/Academia|Gestión Académica|Cursos y estudiantes/i).first()
     ).toBeVisible({ timeout: 8000 });
   });
 
-  test('5.6 Vista directivo: no debe haber botón Guardar Asignación (solo lectura)', async ({ page }) => {
+  test('5.6 Vista directivo: ruta /directivo redirige a academia', async ({ page }) => {
     await page.goto('/directivo');
-    await expect(page.getByTestId('button-save-assignment')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/directivo\/academia/);
   });
 
   test('5.7 Login redirige a /dashboard o /consent tras éxito (con credenciales)', async ({ page }) => {

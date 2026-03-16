@@ -45,7 +45,7 @@ export default function DirectivoComunidadLayout() {
 
   return (
     <div className="p-6" data-testid="directivo-comunidad-layout">
-      <NavBackButton to="/directivo" label="Vista Directivo" />
+      <NavBackButton to="/directivo/academia" label="Academia" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Comunidad: Gestión Institucional
       </h1>

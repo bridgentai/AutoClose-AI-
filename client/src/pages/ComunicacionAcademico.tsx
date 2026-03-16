@@ -149,9 +149,11 @@ const ComunicacionAcademico: React.FC = () => {
     );
   }
 
+  const comunicacionBackTo = user?.rol === 'directivo' ? '/directivo/comunicacion' : user?.rol === 'profesor' ? '/profesor/comunicacion' : '/comunicacion';
+
   return (
     <div className="space-y-6">
-      <NavBackButton to="/comunicacion" label="Comunicación" />
+      <NavBackButton to={comunicacionBackTo} label="Comunicación" />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

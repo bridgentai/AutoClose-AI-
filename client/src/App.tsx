@@ -47,7 +47,6 @@ import ConsentPage from "@/pages/consent";
 import TeacherCalendarPage from "@/pages/teacher-calendar";
 import TeacherTasksSummaryPage from "@/pages/teacher-tasks-summary";
 import AssignmentDetailPage from "@/pages/assignment-detail";
-import DirectivoPage from "@/pages/directivo";
 import DirectivoCursosPage from "@/pages/directivo-cursos";
 import DirectivoCursoDetailPage from "@/pages/directivo-curso-detail";
 import DirectivoEstudiantesPage from "@/pages/directivo-estudiantes";
@@ -117,7 +116,6 @@ import CafeteriaPage from "@/pages/cafeteria";
 import DirectivoComunidadLayout from "@/pages/directivo-comunidad";
 import DirectivoAcademiaLayout from "@/pages/directivo-academia";
 import DirectivoReportesPage from "@/pages/directivo-reportes";
-import DirectivoComunicacionLayout from "@/pages/directivo-comunicacion";
 
 // Módulos de Administrador General
 import AdministradorGeneralComunidadLayout from "@/pages/administrador-general-comunidad";
@@ -207,7 +205,7 @@ function AppRouter() {
               <AuthGuard><ParentCourseAnalyticsPage /></AuthGuard>
             </Route>
             <Route path="/directivo">
-              <AuthGuard><DirectivoPage /></AuthGuard>
+              <AuthGuard><Redirect to="/directivo/academia" /></AuthGuard>
             </Route>
             <Route path="/administrador-general">
               <AuthGuard><AdministradorGeneralPage /></AuthGuard>
@@ -519,7 +517,7 @@ function AppRouter() {
               <AuthGuard><DirectivoCursoDetailPage /></AuthGuard>
             </Route>
             <Route path="/directivo/comunicacion">
-              <AuthGuard><DirectivoComunicacionLayout /></AuthGuard>
+              <AuthGuard><ComunicacionHome /></AuthGuard>
             </Route>
 
             {/* Módulos de Administrador General */}

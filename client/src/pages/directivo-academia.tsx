@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, Users, BarChart3, FileText, GraduationCap, Settings } from "lucide-react";
+import { BookOpen, Users, BarChart3, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
@@ -13,8 +13,8 @@ const navigationItems = [
     icon: BookOpen,
   },
   {
-    title: "Asignación de Profesores",
-    path: "/directivo",
+    title: "Asignación de Horarios",
+    path: "/asignacion-horarios",
     icon: Users,
   },
   {
@@ -26,16 +26,6 @@ const navigationItems = [
     title: "Reportes Académicos",
     path: "/directivo/academia/reportes",
     icon: FileText,
-  },
-  {
-    title: "Configuración Académica",
-    path: "/directivo/academia/configuracion",
-    icon: Settings,
-  },
-  {
-    title: "Materiales Institucionales",
-    path: "/materials",
-    icon: GraduationCap,
   },
 ];
 
@@ -55,7 +45,7 @@ export default function DirectivoAcademiaLayout() {
 
   return (
     <div className="p-6" data-testid="directivo-academia-layout">
-      <NavBackButton to="/directivo" label="Vista Directivo" />
+      <NavBackButton to="/dashboard" label="Dashboard" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Academia: Gestión Académica Global
       </h1>

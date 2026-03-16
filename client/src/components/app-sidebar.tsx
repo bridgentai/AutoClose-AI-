@@ -56,7 +56,7 @@ export function AppSidebar() {
       ] 
     },
 
-    { icon: Users, label: "Profesores", path: "/directivo", roles: ["directivo"] },
+    { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
     { icon: Settings, label: "Configuración", path: "/settings", roles: ["directivo"] },
 
     { icon: User, label: "Mi Perfil", path: "/mi-perfil", roles: ["estudiante", "profesor", "directivo", "padre"] }

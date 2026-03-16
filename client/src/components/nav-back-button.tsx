@@ -12,13 +12,15 @@ interface NavBackButtonProps {
   label?: string;
   /** Clases adicionales */
   className?: string;
+  /** Si true, no muestra el ícono de flecha */
+  hideIcon?: boolean;
 }
 
 /**
  * Componente de navegación contextual que muestra un botón "Volver a..."
  * Si no se proporcionan `to` o `label`, los calcula automáticamente según la ruta actual
  */
-export function NavBackButton({ to, label, className }: NavBackButtonProps) {
+export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonProps) {
   const [location, setLocation] = useLocation();
 
   // Función para obtener la ruta de retorno basada en la jerarquía
@@ -154,7 +156,6 @@ export function NavBackButton({ to, label, className }: NavBackButtonProps) {
       "/profesor/academia/cursos": "Cursos",
       "/profesor/academia/tareas": "Asignaciones",
       "/profesor/comunicacion": "Comunicación",
-      "/directivo": "Directivo",
       "/directivo/academia": "Academia",
       "/directivo/comunicacion": "Comunicación",
       "/directivo/comunidad": "Comunidad",
@@ -237,7 +238,7 @@ export function NavBackButton({ to, label, className }: NavBackButtonProps) {
         className
       )}
     >
-      <ArrowLeft className="w-4 h-4" />
+      {!hideIcon && <ArrowLeft className="w-4 h-4" />}
       <span className="text-sm font-medium">{displayLabel}</span>
     </Button>
   );

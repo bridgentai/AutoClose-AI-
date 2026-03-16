@@ -169,8 +169,9 @@ export default function HorariosProfesorPage() {
         <div
           className="rounded-2xl overflow-hidden border border-white/10 shadow-xl"
           style={{
-            background: "rgba(255,255,255,0.02)",
-            backdropFilter: "blur(12px)",
+            background: "linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))",
+            backdropFilter: "blur(20px)",
+            boxShadow: "0 0 40px rgba(37,99,235,0.25)",
           }}
         >
           <div
