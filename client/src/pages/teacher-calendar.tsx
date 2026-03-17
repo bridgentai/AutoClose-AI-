@@ -1,13 +1,16 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, Plus, X, Paperclip, Link2, FileText } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, X, Link2, FileText, Cloud, Presentation, FileSpreadsheet, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useLocation } from 'wouter';
 import { Calendar } from '@/components/Calendar';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -32,21 +35,14 @@ interface Assignment {
 interface Course {
   _id: string;
   nombre: string;
-  cursos: string[];
+  cursos?: string[];
 }
 
 interface ProfessorGroupAssignment {
   groupId: string;
+  groupName: string;
   subjects: Course[];
   totalStudents: number;
-}
-
-type AttachmentType = 'pdf' | 'link' | 'imagen' | 'documento' | 'otro';
-
-interface Attachment {
-  tipo: AttachmentType;
-  nombre: string;
-  url: string;
 }
 
 export default function TeacherCalendarPage() {
@@ -62,8 +58,15 @@ export default function TeacherCalendarPage() {
     fechaEntrega: '',
     horaEntrega: '23:59',
   });
-  const [adjuntos, setAdjuntos] = useState<Attachment[]>([]);
-  const [newAttachment, setNewAttachment] = useState<Attachment>({ tipo: 'link', nombre: '', url: '' });
+  const [assignmentMaterials, setAssignmentMaterials] = useState<{ type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[]>([]);
+  const [addFromGoogleOpen, setAddFromGoogleOpen] = useState(false);
+  const [addFromEvoOpen, setAddFromEvoOpen] = useState(false);
+  const [createNewOpen, setCreateNewOpen] = useState(false);
+  const [createNewNombre, setCreateNewNombre] = useState('');
+  const [createNewType, setCreateNewType] = useState<'doc' | 'slide' | 'sheet'>('doc');
+  const [googleSearch, setGoogleSearch] = useState('');
+  const [evoLinkUrl, setEvoLinkUrl] = useState('');
+  const [evoLinkName, setEvoLinkName] = useState('');
   const [filterCurso, setFilterCurso] = useState<string>('');
 
   const now = new Date();
@@ -128,9 +131,80 @@ export default function TeacherCalendarPage() {
   });
   const logros = logrosData?.logros ?? [];
 
+  const { data: googleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
+    queryKey: ['evo-drive', 'google-status'],
+    queryFn: () => apiRequest('GET', '/api/evo-drive/google/status'),
+    enabled: isDialogOpen,
+  });
+  interface GoogleDriveFile { id: string; name: string; mimeType?: string; webViewLink?: string; size?: string }
+  const { data: googleFilesRes, isLoading: googleFilesLoading, isError: googleFilesError } = useQuery<{ files: GoogleDriveFile[] }>({
+    queryKey: ['evo-drive', 'google-files-assign', googleSearch],
+    queryFn: () => apiRequest('GET', `/api/evo-drive/google/files?q=${encodeURIComponent(googleSearch)}`),
+    enabled: addFromGoogleOpen && !!googleStatus.connected,
+    retry: false,
+  });
+  const googleFilesForAssign = googleFilesRes?.files ?? [];
+  const googleDriveDisconnected = !googleStatus.connected || (!!googleStatus.connected && googleFilesError);
+
+  const reconnectGoogleDrive = async () => {
+    try {
+      const data = await apiRequest<{ url: string }>('GET', '/api/evo-drive/google/auth-url');
+      if (data?.url && typeof data.url === 'string') window.location.href = data.url;
+      else toast({ title: 'Error', description: 'No se pudo obtener el enlace de conexión.', variant: 'destructive' });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo conectar con Google Drive.', variant: 'destructive' });
+    }
+  };
+
+  const createNewDocForAssignMutation = useMutation({
+    mutationFn: async (payload: { nombre: string; tipo: 'doc' | 'slide' | 'sheet'; cursoId: string; cursoNombre: string }) => {
+      // Deducimos el group_subject (materia) a partir del curso + materias del profesor
+      const subjects = getSubjectsForGroup(payload.cursoId);
+      const groupSubjectId = subjects[0]?._id || courseIdForLogros || '';
+      return apiRequest<{ googleWebViewLink?: string; nombre?: string }>('POST', '/api/evo-drive/google/create', {
+        nombre: payload.nombre,
+        tipo: payload.tipo,
+        cursoId: payload.cursoId,
+        cursoNombre: payload.cursoNombre,
+        groupSubjectId: groupSubjectId || undefined,
+      });
+    },
+    onSuccess: (data, variables) => {
+      const url = data?.googleWebViewLink;
+      if (url) {
+        setAssignmentMaterials((prev) => [...prev, { type: 'gdoc', url, fileName: data?.nombre || variables.nombre }]);
+        toast({ title: 'Documento creado', description: 'Se añadió el enlace a los materiales de la asignación.' });
+      }
+      setCreateNewOpen(false);
+      setCreateNewNombre('');
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Error', description: e.message || 'No se pudo crear el documento.', variant: 'destructive' });
+    },
+  });
+
   const createAssignmentMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (payload: {
+      titulo: string;
+      descripcion: string;
+      curso: string;
+      courseId: string;
+      fechaEntrega: string;
+      adjuntos?: string[];
+      categoryId?: string;
+      logroCalificacionId?: string;
+      materials?: { type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[];
+    }) => {
+      const { materials = [], ...data } = payload;
       const res = await apiRequest<{ _id: string }>('POST', '/api/assignments', data);
+      for (const m of materials) {
+        await apiRequest('POST', '/api/assignment-materials', {
+          assignmentId: res._id,
+          type: m.type,
+          url: m.url,
+          fileName: m.fileName,
+        });
+      }
       return res;
     },
     onSuccess: () => {
@@ -138,7 +212,6 @@ export default function TeacherCalendarPage() {
       setIsDialogOpen(false);
       resetForm();
 
-      // Invalidar y refetch explícito del calendario del profesor (misma clave que useQuery)
       const queryKey = ['teacherAssignments', user?.id, currentMonth, currentYear];
       queryClient.invalidateQueries({ queryKey });
       refetchAssignments();
@@ -162,7 +235,13 @@ export default function TeacherCalendarPage() {
       fechaEntrega: '',
       horaEntrega: '23:59',
     });
-    setAdjuntos([]);
+    setAssignmentMaterials([]);
+    setAddFromGoogleOpen(false);
+    setAddFromEvoOpen(false);
+    setCreateNewOpen(false);
+    setGoogleSearch('');
+    setEvoLinkUrl('');
+    setEvoLinkName('');
   };
 
   const handleDayClick = (assignment: Assignment) => {
@@ -172,15 +251,39 @@ export default function TeacherCalendarPage() {
     }
   };
 
-  const handleAddAttachment = () => {
-    if (newAttachment.nombre && newAttachment.url) {
-      setAdjuntos([...adjuntos, newAttachment]);
-      setNewAttachment({ tipo: 'link', nombre: '', url: '' });
-    }
+  const handleAddFromGoogleAssign = (gfile: GoogleDriveFile) => {
+    const url = gfile.webViewLink || `https://drive.google.com/file/d/${gfile.id}/view`;
+    setAssignmentMaterials((prev) => [...prev, { type: 'gdoc', url, fileName: gfile.name }]);
+    setAddFromGoogleOpen(false);
+    setGoogleSearch('');
+    toast({ title: 'Enlace añadido', description: 'Se añadió el archivo a los materiales de la asignación.' });
   };
 
-  const handleRemoveAttachment = (index: number) => {
-    setAdjuntos(adjuntos.filter((_, i) => i !== index));
+  const handleAddFromEvoAssign = () => {
+    const url = evoLinkUrl.trim();
+    const name = evoLinkName.trim();
+    if (!url) return;
+    const type = url.includes('docs.google.com') ? 'gdoc' : 'link';
+    setAssignmentMaterials((prev) => [...prev, { type, url, fileName: name || url.split('/').pop() || undefined }]);
+    setAddFromEvoOpen(false);
+    setEvoLinkUrl('');
+    setEvoLinkName('');
+    toast({ title: 'Enlace añadido', description: 'Se añadió a los materiales de la asignación.' });
+  };
+
+  const handleCreateNewDocForAssign = () => {
+    const group = formData.curso ? professorGroups.find(g => g.groupId === formData.curso) : null;
+    const subjectsForGroup = formData.curso ? getSubjectsForGroup(formData.curso) : [];
+    const groupSubjectId = subjectsForGroup[0]?._id;
+    const groupName = group?.groupName || formData.curso;
+    // cursoId debe ser el groupId/nombre del grupo (no el group_subject_id)
+    if (!createNewNombre.trim() || !formData.curso || !groupSubjectId || !groupName) return;
+    createNewDocForAssignMutation.mutate({
+      nombre: createNewNombre.trim(),
+      tipo: createNewType,
+      cursoId: formData.curso,
+      cursoNombre: groupName,
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -209,20 +312,15 @@ export default function TeacherCalendarPage() {
       return;
     }
 
-    // Backend espera adjuntos como string[] (URLs o JSON); convertir para no romper el esquema
-    const adjuntosPayload = adjuntos.map((a) =>
-      typeof a === 'string' ? a : JSON.stringify({ tipo: a.tipo, nombre: a.nombre, url: a.url })
-    );
-
     createAssignmentMutation.mutate({
       titulo: formData.titulo,
       descripcion: formData.descripcion,
       curso: formData.curso,
       courseId,
       fechaEntrega: fechaEntregaCompleta.toISOString(),
-      adjuntos: adjuntosPayload,
       categoryId: formData.logroCalificacionId || undefined,
       logroCalificacionId: formData.logroCalificacionId || undefined,
+      materials: assignmentMaterials.length > 0 ? assignmentMaterials : undefined,
     });
   };
 
@@ -396,31 +494,39 @@ export default function TeacherCalendarPage() {
                     availableGroups.length === 0 ? "Sin grupos asignados" : 
                     "Selecciona curso"
                   }>
-                    {formData.curso && getSubjectsForGroup(formData.curso).length > 0
-                      ? getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')
-                      : formData.curso || ''}
+                    {formData.curso && (() => {
+                      const group = professorGroups.find(g => g.groupId === formData.curso);
+                      const subjects = getSubjectsForGroup(formData.curso);
+                      const courseName = group?.groupName || formData.curso;
+                      const subjectNames = subjects.map(s => s.nombre).join(', ') || 'Sin materia';
+                      return subjectNames ? `${courseName} — ${subjectNames}` : courseName;
+                    })()}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-[#0a0a2a] border-white/10">
-                  {availableGroups.map((grupo) => {
-                    const subjects = getSubjectsForGroup(grupo);
+                  {professorGroups.map((g) => {
+                    const subjects = getSubjectsForGroup(g.groupId);
                     const subjectNames = subjects.map(s => s.nombre).join(', ') || 'Sin materia asignada';
+                    const courseLabel = g.groupName || g.groupId;
                     return (
-                      <SelectItem key={grupo} value={grupo} className="text-white hover:bg-white/10">
+                      <SelectItem key={g.groupId} value={g.groupId} className="text-white hover:bg-white/10">
                         <div className="flex flex-col items-start py-1">
-                          <span className="font-semibold">{subjectNames}</span>
-                          <span className="text-xs text-white/60">Grupo: {grupo}</span>
+                          <span className="font-semibold">{courseLabel}</span>
+                          <span className="text-xs text-white/60">{subjectNames}</span>
                         </div>
                       </SelectItem>
                     );
                   })}
                 </SelectContent>
               </Select>
-              {formData.curso && getSubjectsForGroup(formData.curso).length > 0 && (
-                <p className="text-xs text-white/50">
-                  Grupo: {formData.curso} • Materia: {getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')}
-                </p>
-              )}
+              {formData.curso && getSubjectsForGroup(formData.curso).length > 0 && (() => {
+                const group = professorGroups.find(g => g.groupId === formData.curso);
+                return (
+                  <p className="text-xs text-white/50">
+                    Curso: {group?.groupName || formData.curso} • Materia: {getSubjectsForGroup(formData.curso).map(s => s.nombre).join(', ')}
+                  </p>
+                );
+              })()}
               {!isLoadingGroups && availableGroups.length === 0 && (
                 <p className="text-xs text-amber-400">
                   Aún no tienes grupos asignados. El administrador del colegio te asignará a cursos desde su panel.
@@ -482,65 +588,98 @@ export default function TeacherCalendarPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <Label>Adjuntos (PDFs, Links, etc.)</Label>
-              
-              {adjuntos.length > 0 && (
-                <div className="space-y-2">
-                  {adjuntos.map((adj, index) => (
-                    <div key={index} className="flex items-center gap-2 p-2 bg-white/5 rounded-lg">
-                      {adj.tipo === 'link' ? <Link2 className="w-4 h-4 text-[#00c8ff]" /> : <FileText className="w-4 h-4 text-[#00c8ff]" />}
-                      <span className="flex-1 text-sm truncate">{adj.nombre}</span>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleRemoveAttachment(index)}
-                        className="h-6 w-6 text-white/50 hover:text-white"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-white/90">Materiales (Evo Drive)</h3>
+              <p className="text-white/50 text-xs">Añade enlaces, archivos de Google Drive o crea documentos nuevos. Se vincularán a esta asignación.</p>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-9 rounded-[12px] bg-[#4DBBFF]/[0.13] border-[1.5px] border-[#4DBBFF]/50 text-[#4DBBFF] text-[13px] font-medium hover:bg-[#4DBBFF]/20 hover:border-[#4DBBFF]/60 px-4 transition-all duration-150 ease-in-out">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Añadir o crear
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" sideOffset={8} className="w-[230px] rounded-[14px] border-[#4DBBFF]/20 bg-[#0f1c35] shadow-xl shadow-black/40 p-0 overflow-hidden">
+                  <div className="py-2.5">
+                    <DropdownMenuItem
+                      onSelect={() => googleStatus.connected && setTimeout(() => setAddFromGoogleOpen(true), 50)}
+                      disabled={!googleStatus.connected}
+                      className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                    >
+                      <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
+                        <Cloud className="w-4 h-4 text-[#4DBBFF]" />
+                      </div>
+                      Google Drive
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => setTimeout(() => { setEvoLinkUrl(''); setEvoLinkName(''); setAddFromEvoOpen(true); }, 50)}
+                      className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                    >
+                      <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
+                        <Link2 className="w-4 h-4 text-[#4DBBFF]" />
+                      </div>
+                      Enlace
+                    </DropdownMenuItem>
+                  </div>
+                  <div className="border-t border-[#4DBBFF]/10" />
+                  <div className="py-2">
+                    <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#4DBBFF]/50">Crear</p>
+                    <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('doc'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                      <div className="w-8 h-8 rounded-[9px] bg-[#1a56d6] flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-white" /></div>
+                      Documentos
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('slide'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                      <div className="w-8 h-8 rounded-[9px] bg-[#d97706] flex items-center justify-center shrink-0"><Presentation className="w-4 h-4 text-white" /></div>
+                      Presentaciones
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('sheet'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                      <div className="w-8 h-8 rounded-[9px] bg-[#16a34a] flex items-center justify-center shrink-0"><FileSpreadsheet className="w-4 h-4 text-white" /></div>
+                      Hojas de cálculo
+                    </DropdownMenuItem>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {assignmentMaterials.length > 0 && (
+                <ul className="space-y-3 mt-2">
+                  {assignmentMaterials.map((m, i) => {
+                    const isGoogle = m.type === 'gdoc';
+                    const displayName = m.fileName || m.url;
+                    const u = (m.url || '').toLowerCase();
+                    const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
+                    const iconBg = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
+                    const Icon = m.type === 'gdoc' ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
+                    const iconColor = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
+                    return (
+                      <li key={i} className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out">
+                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                          <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
+                            <Icon className={`w-5 h-5 ${iconColor}`} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <span className="text-[11px] text-white/60">Material de la asignación</span>
+                              {isGoogle && (
+                                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400">Google</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {m.url && (
+                            <a href={m.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] hover:underline opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
+                            </a>
+                          )}
+                          <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:text-white h-8 w-8 p-0 shrink-0" onClick={() => setAssignmentMaterials((prev) => prev.filter((_, j) => j !== i))} aria-label="Quitar">
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-
-              <div className="flex gap-2">
-                <Select
-                  value={newAttachment.tipo}
-                  onValueChange={(value) => setNewAttachment({ ...newAttachment, tipo: value as 'pdf' | 'link' | 'imagen' | 'documento' | 'otro' })}
-                >
-                  <SelectTrigger className="w-28 bg-white/5 border-white/10 text-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#0a0a2a] border-white/10">
-                    <SelectItem value="link" className="text-white hover:bg-white/10">Link</SelectItem>
-                    <SelectItem value="pdf" className="text-white hover:bg-white/10">PDF</SelectItem>
-                    <SelectItem value="documento" className="text-white hover:bg-white/10">Doc</SelectItem>
-                    <SelectItem value="imagen" className="text-white hover:bg-white/10">Imagen</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  placeholder="Nombre"
-                  value={newAttachment.nombre}
-                  onChange={(e) => setNewAttachment({ ...newAttachment, nombre: e.target.value })}
-                  className="bg-white/5 border-white/10 text-white"
-                />
-                <Input
-                  placeholder="URL"
-                  value={newAttachment.url}
-                  onChange={(e) => setNewAttachment({ ...newAttachment, url: e.target.value })}
-                  className="bg-white/5 border-white/10 text-white flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleAddAttachment}
-                  className="border-white/10 text-white hover:bg-white/10"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </Button>
-              </div>
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -562,6 +701,121 @@ export default function TeacherCalendarPage() {
               </Button>
             </div>
           </form>
+
+          {/* Modales Evo Drive (materiales de la asignación) */}
+          <Dialog open={addFromGoogleOpen} onOpenChange={setAddFromGoogleOpen}>
+            <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+              <DialogHeader>
+                <DialogTitle className="text-white flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Cloud className="w-5 h-5 text-[#4DBBFF]" /></div>
+                  <div>
+                    <span className="text-base font-semibold text-white block">Agregar desde Google Drive</span>
+                    <span className="text-xs text-white/60 mt-0.5 block">Selecciona un archivo para vincular a la asignación</span>
+                  </div>
+                </DialogTitle>
+              </DialogHeader>
+              {googleDriveDisconnected ? (
+                <div className="space-y-4 py-2">
+                  <p className="text-white/60 text-sm">
+                    {googleFilesError ? 'Google Drive se desconectó. Reconéctalo para seguir usando tus archivos.' : 'Conecta Google Drive para agregar archivos desde tu cuenta.'}
+                  </p>
+                  <Button type="button" onClick={reconnectGoogleDrive} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium">
+                    <Cloud className="w-4 h-4 mr-2" />
+                    Reconectar Google Drive
+                  </Button>
+                  <p className="text-white/40 text-xs">Serás redirigido a Google y volverás aquí sin cerrar sesión.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium text-white/60">Buscar en Drive</Label>
+                    <Input value={googleSearch} onChange={(e) => setGoogleSearch(e.target.value)} placeholder="Nombre del archivo..." className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+                  </div>
+                  <ScrollArea className="h-[280px] rounded-md border border-white/10">
+                    {googleFilesLoading ? (
+                      <div className="p-4 space-y-2"><Skeleton className="h-12 w-full bg-white/10 rounded-lg" /><Skeleton className="h-12 w-full bg-white/10 rounded-lg" /></div>
+                    ) : googleFilesForAssign.length === 0 ? (
+                      <p className="text-white/50 text-sm p-4">No se encontraron archivos o escribe para buscar.</p>
+                    ) : (
+                      <ul className="p-2 space-y-1">
+                        {googleFilesForAssign.map((gf) => (
+                          <li key={gf.id} className="flex items-center justify-between gap-2 p-2 rounded-lg hover:bg-white/10 text-white">
+                            <span className="truncate text-sm">{gf.name}</span>
+                            <Button size="sm" variant="ghost" className="shrink-0 text-[#4DBBFF]" onClick={() => handleAddFromGoogleAssign(gf)}>Agregar</Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </ScrollArea>
+                  <DialogFooter className="gap-2 mt-4">
+                    <Button variant="outline" onClick={() => setAddFromGoogleOpen(false)} className="flex-1 border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cerrar</Button>
+                  </DialogFooter>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={addFromEvoOpen} onOpenChange={setAddFromEvoOpen}>
+            <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+              <DialogHeader>
+                <DialogTitle className="text-white flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-[11px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0"><Link2 className="w-5 h-5 text-[#4DBBFF]" /></div>
+                  <div>
+                    <span className="text-base font-semibold text-white block">Añadir enlace</span>
+                    <span className="text-xs text-white/60 mt-0.5 block">URL o nombre del recurso para la asignación</span>
+                  </div>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-white/60">Nombre (opcional)</Label>
+                  <Input value={evoLinkName} onChange={(e) => setEvoLinkName(e.target.value)} placeholder="Ej: Guía de estudio" className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-white/60">URL</Label>
+                  <Input value={evoLinkUrl} onChange={(e) => setEvoLinkUrl(e.target.value)} placeholder="https://..." className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" />
+                </div>
+              </div>
+              <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+                <Button variant="outline" onClick={() => setAddFromEvoOpen(false)} className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cancelar</Button>
+                <Button onClick={handleAddFromEvoAssign} disabled={!evoLinkUrl.trim()} className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium">Añadir</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={createNewOpen} onOpenChange={setCreateNewOpen}>
+            <DialogContent className="bg-white/5 border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
+              <DialogHeader>
+                <DialogTitle className="text-white flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${createNewType === 'doc' ? 'bg-[#1a56d6]' : createNewType === 'slide' ? 'bg-[#d97706]' : 'bg-[#16a34a]'}`}>
+                    {createNewType === 'doc' && <FileText className="w-5 h-5 text-white" />}
+                    {createNewType === 'slide' && <Presentation className="w-5 h-5 text-white" />}
+                    {createNewType === 'sheet' && <FileSpreadsheet className="w-5 h-5 text-white" />}
+                  </div>
+                  <div>
+                    <span className="text-base font-semibold text-white block">
+                      {createNewType === 'doc' && 'Nuevo documento'}
+                      {createNewType === 'slide' && 'Nueva presentación'}
+                      {createNewType === 'sheet' && 'Nueva hoja de cálculo'}
+                    </span>
+                    <span className="text-xs text-white/60 mt-0.5 block">Se creará en Google Drive y se añadirá a los materiales</span>
+                  </div>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-white/60">Nombre del archivo</Label>
+                  <Input value={createNewNombre} onChange={(e) => setCreateNewNombre(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateNewDocForAssign()} placeholder="Ej: Guía del curso" className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50" autoFocus />
+                </div>
+              </div>
+              <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+                <Button variant="outline" onClick={() => { setCreateNewOpen(false); setCreateNewNombre(''); }} className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">Cancelar</Button>
+                <Button onClick={handleCreateNewDocForAssign} disabled={!createNewNombre.trim() || createNewDocForAssignMutation.isPending || !formData.curso} className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium">
+                  {createNewDocForAssignMutation.isPending ? 'Creando…' : 'Crear'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </DialogContent>
       </Dialog>
     </>

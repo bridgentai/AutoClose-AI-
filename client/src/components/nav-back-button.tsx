@@ -1,9 +1,8 @@
 "use client";
 
 import { useLocation } from "wouter";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 interface NavBackButtonProps {
   /** Ruta a la que volver. Si no se proporciona, se calcula automáticamente */
@@ -22,6 +21,9 @@ interface NavBackButtonProps {
  */
 export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonProps) {
   const [location, setLocation] = useLocation();
+
+  // Compat: si alguien sigue usando hideIcon, no romper TS.
+  void hideIcon;
 
   // Función para obtener la ruta de retorno basada en la jerarquía
   const getBackPath = (currentPath: string): string | null => {
@@ -197,7 +199,13 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
       "/plataformas": "Plataformas",
     };
 
-    return labels[path] || "Página anterior";
+    if (labels[path]) return labels[path];
+    // Fallback: humanizar el último segmento de la ruta.
+    const parts = path.split("/").filter(Boolean);
+    const last = parts[parts.length - 1] || "Dashboard";
+    return decodeURIComponent(last)
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\w/g, (m) => m.toUpperCase());
   };
 
   const backPath = getBackPath(location);
@@ -211,36 +219,17 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
   // Destino de fallback según jerarquía (módulo → página → etc.)
   const fallbackDestination = backPath ?? "/dashboard";
   const fallbackLabel = getRouteLabel(fallbackDestination);
-  // Solo "Página anterior" cuando el destino jerárquico es Dashboard; el resto "Volver a {padre}"
-  const displayLabel =
-    fallbackDestination === "/dashboard" ? "Página anterior" : `Volver a ${fallbackLabel}`;
 
-  const handleBack = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      window.history.back();
-    } else if (backPath) {
-      setLocation(backPath);
-    } else {
-      setLocation("/dashboard");
-    }
-  };
+  const currentLabel = getRouteLabel(location);
 
   return (
-    <Button
-      variant="ghost"
-      onClick={handleBack}
-      className={cn(
-        "flex items-center gap-2",
-        "text-[#3B82F6] hover:text-[#2563EB]",
-        "hover:bg-white/5",
-        "transition-colors duration-200",
-        "mb-4",
-        className
-      )}
-    >
-      {!hideIcon && <ArrowLeft className="w-4 h-4" />}
-      <span className="text-sm font-medium">{displayLabel}</span>
-    </Button>
+    <Breadcrumb
+      className={cn("mb-4", className)}
+      items={[
+        { label: fallbackLabel, href: fallbackDestination },
+        { label: currentLabel },
+      ]}
+    />
   );
 }
 

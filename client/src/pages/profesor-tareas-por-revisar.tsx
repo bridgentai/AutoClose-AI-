@@ -5,7 +5,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { ClipboardList, Calendar, ChevronRight, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { useMemo } from 'react';
 
 interface Assignment {
@@ -32,7 +32,9 @@ export default function ProfesorTareasPorRevisarPage() {
   const byCourse = useMemo(() => {
     const map = new Map<string, Assignment[]>();
     for (const a of pendingReview) {
-      const key = (a.courseId || a.curso || 'Sin curso').toString();
+      // `pending-review` ya entrega `curso` como nombre del grupo (ej. "11H").
+      // No usar `courseId` aquí porque es `group_subject_id` (UUID) y se ve feo en UI.
+      const key = (a.curso || 'Sin curso').toString();
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(a);
     }
@@ -52,7 +54,14 @@ export default function ProfesorTareasPorRevisarPage() {
       }}
     >
       <div className="max-w-4xl mx-auto">
-        <NavBackButton to="/dashboard" label="Dashboard" />
+        <Breadcrumb
+          className="mb-4"
+          items={[
+            { label: 'Dashboard', href: '/dashboard' },
+            { label: 'Tareas', href: '/profesor/academia/tareas' },
+            { label: 'Por revisar' },
+          ]}
+        />
 
         <div className="mt-6 flex items-center gap-3">
           <ClipboardList className="w-8 h-8 text-[#ffd700]" />
@@ -87,7 +96,7 @@ export default function ProfesorTareasPorRevisarPage() {
                 className="bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-xl"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Volver al dashboard
+                Ir al dashboard
               </Button>
             </CardContent>
           </Card>

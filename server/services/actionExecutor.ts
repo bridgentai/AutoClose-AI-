@@ -7,6 +7,7 @@ import * as syncService from './syncService';
 import { logAIAction } from './auditLogger';
 import type { ISubmission, IAttachment } from '../models/Assignment';
 import { createAssignment as createAssignmentService } from './assignmentService';
+import { queryPg } from '../config/db-pg.js';
 
 /**
  * Servicio que ejecuta acciones propuestas por el AI
@@ -18,6 +19,10 @@ export interface ActionResult {
   data?: any;
   error?: string;
   message?: string;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 /**
@@ -412,6 +417,56 @@ async function executeCreateAssignment(
     const grupoNormalizado = grupo.toUpperCase().trim();
     
     // Buscar el curso del profesor que incluye este grupo
+    // En modo PostgreSQL (UUID), resolver via group_subjects + groups (evita ObjectId)
+    if (isUuid(normalizedProfesorId) && isUuid(colegioId)) {
+      const r = await queryPg<{ id: string }>(
+        `SELECT gs.id
+         FROM group_subjects gs
+         JOIN groups g ON g.id = gs.group_id
+         JOIN users u ON u.id = gs.teacher_id
+         WHERE gs.institution_id = $1
+           AND gs.teacher_id = $2
+           AND UPPER(TRIM(g.name)) = UPPER(TRIM($3))
+         LIMIT 1`,
+        [colegioId, normalizedProfesorId, grupoNormalizado]
+      );
+      const groupSubjectId = r.rows[0]?.id ?? null;
+      if (!groupSubjectId) {
+        await logAIAction({
+          userId,
+          role: 'profesor',
+          action: 'asignar_tarea',
+          entityType: 'assignment',
+          colegioId,
+          result: 'denied',
+          error: `No se encontró una materia asignada que incluya el grupo ${grupo}. Verifica que el grupo esté correctamente asignado a tu materia.`,
+          requestData: params
+        });
+        return {
+          success: false,
+          error: `No se encontró una materia asignada que incluya el grupo ${grupo}. Verifica que el grupo esté correctamente asignado a tu materia.`
+        };
+      }
+
+      // Resuelto en PG, pero el flujo completo de creación por IA aún es legacy (Mongo).
+      // Evitamos continuar para no caer en consultas Mongo con UUIDs.
+      await logAIAction({
+        userId,
+        role: 'profesor',
+        action: 'asignar_tarea',
+        entityType: 'assignment',
+        colegioId,
+        result: 'denied',
+        error: `Se resolvió el curso en PostgreSQL (id ${groupSubjectId}), pero esta acción aún requiere cursoId explícito.`,
+        requestData: params
+      });
+      return {
+        success: false,
+        error: 'Para asignar tarea por IA, indica el cursoId explícitamente.',
+      };
+    }
+
+    // Legacy MongoDB
     // Usar $in para buscar en profesorIds (array de ObjectId) y convertir el string a ObjectId
     const profesorObjectId = new Types.ObjectId(normalizedProfesorId);
     const curso = await Course.findOne({

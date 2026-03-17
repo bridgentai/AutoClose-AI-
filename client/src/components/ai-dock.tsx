@@ -91,7 +91,21 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     }
 
     const baseItems = [
-      { icon: Home, label: "Dashboard", path: "/dashboard", roles: ["estudiante", "profesor", "directivo", "padre"] },
+      {
+        icon: Home,
+        label: "Dashboard",
+        path: "/dashboard",
+        roles: [
+          "estudiante",
+          "profesor",
+          "directivo",
+          "padre",
+          "administrador-general",
+          "admin-general-colegio",
+          "school_admin",
+          "super_admin",
+        ],
+      },
       { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"], action: "chat" },
       { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
       { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["estudiante"] },

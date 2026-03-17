@@ -2,7 +2,7 @@ import { useRoute, useLocation } from 'wouter';
 import { useAuth } from '@/lib/authContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InsightsBlock } from '@/components/grading/InsightsBlock';
@@ -71,7 +71,13 @@ export default function StudentCourseAnalyticsPage() {
     >
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <NavBackButton to="/mi-aprendizaje/cursos" label="Volver a mis cursos" />
+          <Breadcrumb
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Cursos', href: '/mi-aprendizaje/cursos' },
+              { label: 'Análisis' },
+            ]}
+          />
         </div>
 
         {isLoading ? (

@@ -39,6 +39,7 @@ import reportsRoutes from "./routes/reports";
 import assignmentMaterialsRoutes from "./routes/assignmentMaterials";
 import integrationsRoutes from "./routes/integrations";
 import scheduleRoutes from "./routes/schedule";
+import adminSqlRoutes, { adminSqlHandler } from "./routes/adminSql";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // CORS - Configuración explícita para permitir todas las solicitudes
@@ -83,6 +84,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/assignment-materials', assignmentMaterialsRoutes);
   app.use('/api/integrations', integrationsRoutes);
   app.use('/api/schedule', scheduleRoutes);
+  app.use('/api/admin', adminSqlRoutes);
+  // Ruta explícita para que la consola SQL (Neon) siempre esté disponible con la misma DB de la plataforma
+  app.post('/api/admin/sql', protect, requireRole('admin-general-colegio', 'school_admin', 'super_admin'), adminSqlHandler);
 
   // Ruta de health check (con verificación PG cuando USE_POSTGRES_ONLY)
   app.get('/api/health', async (req, res) => {

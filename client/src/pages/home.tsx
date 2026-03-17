@@ -1,7 +1,10 @@
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import kiwiMascot from '@/assets/Kiwi.png';
+import kiwiChill from '@/assets/kiwi chill.png';
 import { Button } from '@/components/ui/button';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import {
   BookOpen,
   MessageSquare,
@@ -173,6 +176,18 @@ const STYLES = `
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
+
+  const { data: unreadData } = useQuery({
+    queryKey: ['notifications-unread'],
+    queryFn: async () => {
+      const res = await apiRequest<{ list: unknown[]; unreadCount: number }>('GET', '/api/notifications?limit=1');
+      return { unreadCount: res?.unreadCount ?? 0 };
+    },
+    enabled: isAuthenticated,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+  });
+  const unreadCount = unreadData?.unreadCount ?? 0;
 
   const handleCTA = () => {
     if (isAuthenticated) {
@@ -364,10 +379,45 @@ export default function Home() {
                   <button className="btn-dashboard-light" onClick={() => setLocation('/dashboard')} data-testid="button-dashboard">
                     Dashboard
                   </button>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <Bell style={{ width: 22, height: 22, color: '#fff', cursor: 'pointer' }} />
-                    <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>0</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLocation('/notificaciones')}
+                    aria-label="Notificaciones"
+                    style={{
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      background: 'transparent',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Bell style={{ width: 22, height: 22, color: '#fff' }} />
+                    {unreadCount > 0 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          minWidth: 18,
+                          height: 18,
+                          borderRadius: '50%',
+                          background: '#ef4444',
+                          color: '#fff',
+                          fontSize: 11,
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '0 4px',
+                          boxShadow: '0 0 12px rgba(239,68,68,0.35)',
+                        }}
+                      >
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </button>
                   <button type="button" onClick={() => setLocation('/account')} style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                     <User style={{ width: 20, height: 20, color: '#fff' }} />
                   </button>
@@ -387,13 +437,13 @@ export default function Home() {
         </header>
 
         {/* ── HERO ── */}
-        <section style={{ position: 'relative', zIndex: 1, paddingTop: 120, paddingBottom: 100, minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
-          <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 32px', width: '100%' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) 560px', gap: 40, alignItems: 'center' }}>
+        <section style={{ position: 'relative', zIndex: 1, paddingTop: 120, paddingBottom: 110, minHeight: '100vh', display: 'flex', alignItems: 'center' }}>
+          <div style={{ maxWidth: 1360, margin: '0 auto', padding: '0 32px', width: '100%' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) 640px', gap: 46, alignItems: 'center' }}>
 
               {/* Texto: ocupa más espacio y está alineado hacia la derecha (junto al koala) */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <div style={{ width: '100%', maxWidth: 620 }}>
+                <div style={{ width: '100%', maxWidth: 700 }}>
                   {/* Badge — glass */}
                   <div className="home-fadein" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 999, padding: '6px 16px', marginBottom: 28, boxShadow: '0 0 20px rgba(0,0,0,0.15)' }}>
                     <span className="home-blink" style={{ width: 7, height: 7, borderRadius: '50%', background: PALETTE.accent, flexShrink: 0, display: 'inline-block', boxShadow: `0 0 6px ${PALETTE.accent}` }} />
@@ -401,18 +451,18 @@ export default function Home() {
                   </div>
 
                   {/* Title */}
-                  <h1 className="home-fadein-d1" style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.05, letterSpacing: '-2.5px', margin: '0 0 12px 0' }}>
+                  <h1 className="home-fadein-d1" style={{ fontSize: 84, fontWeight: 800, lineHeight: 1.04, letterSpacing: '-2.8px', margin: '0 0 14px 0' }}>
                     <span style={{ color: '#fff' }}>La Plataforma<br />Educativa<br /></span>
                     <span style={{ color: PALETTE.accent }}>del Futuro</span>
                   </h1>
 
                   {/* Institution */}
-                  <p className="home-fadein-d2" style={{ fontSize: 20, fontWeight: 700, color: PALETTE.accent, marginBottom: 16, letterSpacing: '-0.3px' }}>
+                  <p className="home-fadein-d2" style={{ fontSize: 22, fontWeight: 700, color: PALETTE.accent, marginBottom: 16, letterSpacing: '-0.3px' }}>
                     Gimnasio Los Caobos
                   </p>
 
                   {/* Description */}
-                  <p className="home-fadein-d2" style={{ fontSize: 17, color: PALETTE.textSub, lineHeight: 1.65, maxWidth: 520, marginBottom: 0 }}>
+                  <p className="home-fadein-d2" style={{ fontSize: 19, color: PALETTE.textSub, lineHeight: 1.65, maxWidth: 580, marginBottom: 0 }}>
                     Centraliza todo el ecosistema educativo de tu institución en una sola plataforma
                     inteligente. Un asistente IA personalizado que conoce tu currículo específico.
                   </p>
@@ -422,11 +472,11 @@ export default function Home() {
 
                   {/* CTAs solo cuando no está logueado */}
                   {!isAuthenticated && (
-                    <div className="home-fadein-d4" style={{ display: 'flex', gap: 12, marginTop: 32, flexWrap: 'wrap' }}>
-                      <button className="btn-primary" onClick={handleCTA} data-testid="button-cta-main">
-                        Comenzar Ahora <ArrowRight style={{ width: 17, height: 17 }} />
+                    <div className="home-fadein-d4" style={{ display: 'flex', gap: 12, marginTop: 36, flexWrap: 'wrap' }}>
+                      <button className="btn-primary" onClick={handleCTA} data-testid="button-cta-main" style={{ fontSize: 16, padding: '14px 30px' }}>
+                        Comenzar Ahora <ArrowRight style={{ width: 18, height: 18 }} />
                       </button>
-                      <button className="btn-ghost" onClick={() => setLocation('/register')} data-testid="button-cta-register">
+                      <button className="btn-ghost" onClick={() => setLocation('/register')} data-testid="button-cta-register" style={{ fontSize: 16, padding: '14px 26px' }}>
                         Crear Cuenta Gratis
                       </button>
                     </div>
@@ -436,36 +486,19 @@ export default function Home() {
 
               {/* Koala: columna más estrecha, no es el centro */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                {/* Fondo estático detrás del koala */}
-                <div
-                  className="home-koala-bg"
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: 520,
-                    height: 520,
-                    borderRadius: '50%',
-                    background: 'conic-gradient(from 210deg, rgba(59,130,246,0.06), rgba(96,165,250,0.2), rgba(37,99,235,0.35), rgba(15,23,42,0.85), rgba(59,130,246,0.06))',
-                    filter: 'blur(6px)',
-                    opacity: 0.75,
-                    zIndex: 0,
-                  }}
-                />
                 {/* Glow */}
-                <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 320, height: 130, background: 'radial-gradient(ellipse, rgba(59,130,246,0.35) 0%, transparent 70%)', filter: 'blur(24px)', pointerEvents: 'none', zIndex: 0 }} />
+                <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', width: 380, height: 150, background: 'radial-gradient(ellipse, rgba(59,130,246,0.35) 0%, transparent 70%)', filter: 'blur(26px)', pointerEvents: 'none', zIndex: 0 }} />
                 {/* Image */}
                 <img
                   src={kiwiMascot}
                   alt="Kiwi - Mascota Caobos"
                   className="home-koala"
-                  style={{ width: '100%', maxWidth: 580, objectFit: 'contain', userSelect: 'none', position: 'relative', zIndex: 1 }}
+                  style={{ width: '100%', maxWidth: 680, objectFit: 'contain', userSelect: 'none', position: 'relative', zIndex: 1 }}
                 />
                 {/* Shadow */}
                 <div
                   className="home-shadow"
-                  style={{ width: 160, height: 18, background: 'rgba(59,130,246,0.35)', borderRadius: '50%', filter: 'blur(12px)', marginTop: -8, position: 'relative', zIndex: 0 }}
+                  style={{ width: 200, height: 20, background: 'rgba(59,130,246,0.35)', borderRadius: '50%', filter: 'blur(12px)', marginTop: -10, position: 'relative', zIndex: 0 }}
                 />
               </div>
 
@@ -511,37 +544,120 @@ export default function Home() {
 
         {/* ── CTA FINAL ── */}
         <section style={{ position: 'relative', zIndex: 1, padding: '0 28px 120px' }}>
-          <div style={{ maxWidth: 800, margin: '0 auto' }}>
-            <div style={{
-              background: 'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 16,
-              padding: '64px 48px',
-              textAlign: 'center',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 0 40px rgba(37,99,235,0.2)',
-            }}>
-              {/* Glow central */}
-              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 400, height: 200, background: 'radial-gradient(ellipse, rgba(59,130,246,0.12) 0%, transparent 70%)', pointerEvents: 'none' }} />
+          <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                gap: 24,
+                alignItems: 'center',
+              }}
+            >
+              {/* Card a la izquierda */}
+              <div
+                style={{
+                  background: 'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 16,
+                  padding: '64px 48px',
+                  textAlign: 'left',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: '0 0 40px rgba(37,99,235,0.2)',
+                }}
+              >
+                {/* Glow central */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '55%',
+                    transform: 'translate(-50%,-50%)',
+                    width: 420,
+                    height: 220,
+                    background: 'radial-gradient(ellipse, rgba(59,130,246,0.12) 0%, transparent 70%)',
+                    pointerEvents: 'none',
+                  }}
+                />
 
-              <h2 style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-1px', color: '#fff', marginBottom: 14, position: 'relative' }}>
-                Empieza hoy sin costo
-              </h2>
-              <p style={{ fontSize: 16, color: PALETTE.textSub, marginBottom: 36, maxWidth: 440, margin: '0 auto 36px', position: 'relative' }}>
-                {isAuthenticated
-                  ? "Comienza a explorar todas las funcionalidades de la plataforma"
-                  : "Únete y lleva tu institución educativa al siguiente nivel"}
-              </p>
-              <button className="btn-primary" onClick={handleCTA} data-testid="button-cta-bottom" style={{ fontSize: 16, padding: '15px 36px', position: 'relative' }}>
-                {isAuthenticated ? (
-                  <><MessageSquare style={{ width: 18, height: 18 }} /> Ir al Chat IA</>
-                ) : (
-                  <>Comenzar Gratis <ArrowRight style={{ width: 18, height: 18 }} /></>
-                )}
-              </button>
+                <h2
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 800,
+                    letterSpacing: '-1px',
+                    color: '#fff',
+                    marginBottom: 14,
+                    position: 'relative',
+                  }}
+                >
+                  Empieza hoy sin costo
+                </h2>
+                <p
+                  style={{
+                    fontSize: 16,
+                    color: PALETTE.textSub,
+                    marginBottom: 36,
+                    maxWidth: 440,
+                    position: 'relative',
+                  }}
+                >
+                  {isAuthenticated
+                    ? 'Comienza a explorar todas las funcionalidades de la plataforma'
+                    : 'Únete y lleva tu institución educativa al siguiente nivel'}
+                </p>
+                <button
+                  className="btn-primary"
+                  onClick={handleCTA}
+                  data-testid="button-cta-bottom"
+                  style={{ fontSize: 16, padding: '15px 36px', position: 'relative' }}
+                >
+                  {isAuthenticated ? (
+                    <>
+                      <MessageSquare style={{ width: 18, height: 18 }} /> Ir al Chat IA
+                    </>
+                  ) : (
+                    <>
+                      Comenzar Gratis <ArrowRight style={{ width: 18, height: 18 }} />
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Kiwi chill a la derecha */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  minHeight: 360,
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'radial-gradient(circle at 50% 60%, rgba(59,130,246,0.18) 0%, transparent 62%)',
+                    filter: 'blur(2px)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <img
+                  src={kiwiChill}
+                  alt="Kiwi"
+                  draggable={false}
+                  style={{
+                    width: 320,
+                    maxWidth: '92%',
+                    height: 'auto',
+                    userSelect: 'none',
+                    position: 'relative',
+                    filter: 'drop-shadow(0 14px 40px rgba(0,0,0,0.35))',
+                  }}
+                />
+              </div>
             </div>
           </div>
         </section>

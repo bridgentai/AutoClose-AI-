@@ -8,8 +8,26 @@ import { getFirstGroupNameForStudent, getAllCourseGroupsForStudent, findEnrollme
 import { findGroupById, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
 import { findGradesByUserAndGroup } from '../repositories/gradeRepository.js';
 import { findAssignmentById } from '../repositories/assignmentRepository.js';
+import { findUsersByInstitutionAndRoles, findUserById as findUserPgById } from '../repositories/userRepository.js';
+import { createNotification } from '../repositories/notificationRepository.js';
+import {
+  createDisciplinaryAction,
+  listDisciplinaryActionsByStudent,
+  type DisciplinarySeverity,
+} from '../repositories/disciplinaryActionRepository.js';
+import {
+  addAnnouncementRecipients,
+  createAnnouncement,
+  createAnnouncementMessage,
+  findDirectThreadBetweenUsers,
+} from '../repositories/announcementRepository.js';
+import { emitEvoMessage } from '../socket.js';
 
 const router = express.Router();
+
+const DISCIPLINE_ALLOWED_ROLES = ['profesor', 'directivo'] as const;
+const isValidSeverity = (s: unknown): s is DisciplinarySeverity =>
+  s === 'leve' || s === 'moderada' || s === 'grave' || s === 'muy grave';
 
 // GET /api/student/subjects
 router.get('/subjects', protect, async (req: AuthRequest, res) => {
@@ -38,6 +56,145 @@ router.get('/subjects', protect, async (req: AuthRequest, res) => {
   } catch (error: unknown) {
     console.error('Error al obtener materias del estudiante:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// GET /api/student/:estudianteId/disciplinary-actions (profesor/directivo)
+router.get('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequest, res) => {
+  try {
+    const { estudianteId } = req.params;
+    const requesterId = req.user?.id;
+    const institutionId = req.user?.colegioId;
+    if (!requesterId || !institutionId) return res.status(401).json({ message: 'No autorizado.' });
+
+    const requester = await findUserPgById(requesterId);
+    if (!requester || !DISCIPLINE_ALLOWED_ROLES.includes(requester.role as (typeof DISCIPLINE_ALLOWED_ROLES)[number])) {
+      return res.status(403).json({ message: 'No autorizado.' });
+    }
+
+    const estudiante = await findUserPgById(estudianteId);
+    if (!estudiante || estudiante.role !== 'estudiante' || estudiante.institution_id !== institutionId) {
+      return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    }
+
+    const rows = await listDisciplinaryActionsByStudent(institutionId, estudianteId, 100);
+    const creatorIds = Array.from(new Set(rows.map((r) => r.created_by_id)));
+    const creators = creatorIds.length ? await Promise.all(creatorIds.map((id) => findUserPgById(id))) : [];
+    const creatorMap = new Map(creators.filter(Boolean).map((u) => [u!.id, u!]));
+
+    return res.json(
+      rows.map((r) => {
+        const creator = creatorMap.get(r.created_by_id);
+        return {
+          _id: r.id,
+          gravedad: r.severity,
+          razon: r.reason,
+          fecha: r.created_at,
+          registradoPor: creator?.full_name ?? '',
+        };
+      })
+    );
+  } catch (e: unknown) {
+    console.error('Error al listar amonestaciones:', (e as Error).message);
+    return res.status(500).json({ message: 'Error al listar amonestaciones.' });
+  }
+});
+
+// POST /api/student/:estudianteId/disciplinary-actions (profesor)
+router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequest, res) => {
+  try {
+    const { estudianteId } = req.params;
+    const requesterId = req.user?.id;
+    const institutionId = req.user?.colegioId;
+    if (!requesterId || !institutionId) return res.status(401).json({ message: 'No autorizado.' });
+
+    const requester = await findUserPgById(requesterId);
+    if (!requester || requester.role !== 'profesor') {
+      return res.status(403).json({ message: 'Solo profesores pueden registrar amonestaciones.' });
+    }
+
+    const estudiante = await findUserPgById(estudianteId);
+    if (!estudiante || estudiante.role !== 'estudiante' || estudiante.institution_id !== institutionId) {
+      return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    }
+
+    const severityRaw = (req.body?.gravedad ?? req.body?.severity) as unknown;
+    const reasonRaw = (req.body?.razon ?? req.body?.reason) as unknown;
+    if (!isValidSeverity(severityRaw)) return res.status(400).json({ message: 'Gravedad inválida.' });
+    const reason = typeof reasonRaw === 'string' ? reasonRaw.trim() : '';
+    if (!reason) return res.status(400).json({ message: 'La razón es obligatoria.' });
+
+    const created = await createDisciplinaryAction({
+      institution_id: institutionId,
+      student_id: estudianteId,
+      created_by_id: requesterId,
+      severity: severityRaw,
+      reason,
+    });
+
+    // Notificar a directivos via Evo Send (hilo directo profesor <-> directivo) + notificación
+    const directivos = await findUsersByInstitutionAndRoles(institutionId, ['directivo']);
+    const grupoNombre = (await getFirstGroupNameForStudent(estudianteId)) ?? undefined;
+    const title = `Amonestación · ${estudiante.full_name}${grupoNombre ? ` (${grupoNombre})` : ''}`;
+    const content =
+      `Se registró una amonestación.\n\n` +
+      `Estudiante: ${estudiante.full_name}${grupoNombre ? ` · Grupo: ${grupoNombre}` : ''}\n` +
+      `Gravedad: ${severityRaw}\n` +
+      `Razón: ${reason}\n\n` +
+      `Registrado por: ${requester.full_name}`;
+
+    for (const d of directivos) {
+      let thread = await findDirectThreadBetweenUsers(d.id, requesterId, institutionId);
+      if (!thread) {
+        // Fallback (por si no existe aún): crear hilo directo
+        thread = await createAnnouncement({
+          institution_id: institutionId,
+          title: requester.full_name,
+          body: null,
+          type: 'evo_chat_direct',
+          group_id: null,
+          group_subject_id: null,
+          created_by_id: d.id,
+        });
+        await addAnnouncementRecipients(thread.id, [d.id, requesterId]);
+      }
+
+      const msg = await createAnnouncementMessage({
+        announcement_id: thread.id,
+        sender_id: requesterId,
+        sender_role: requester.role,
+        content: `${title}\n\n${content}`,
+        priority: severityRaw === 'grave' || severityRaw === 'muy grave' ? 'alta' : 'normal',
+      });
+
+      emitEvoMessage(thread.id, {
+        threadId: thread.id,
+        _id: msg.id,
+        contenido: msg.content,
+        prioridad: msg.priority,
+        fecha: msg.created_at,
+        remitenteId: { _id: requesterId, nombre: requester.full_name, rol: requester.role },
+        rolRemitente: requester.role,
+      });
+
+      await createNotification({
+        institution_id: institutionId,
+        user_id: d.id,
+        title,
+        body: content,
+      });
+    }
+
+    return res.status(201).json({
+      _id: created.id,
+      gravedad: created.severity,
+      razon: created.reason,
+      fecha: created.created_at,
+      registradoPor: requester.full_name,
+    });
+  } catch (e: unknown) {
+    console.error('Error al crear amonestación:', (e as Error).message);
+    return res.status(500).json({ message: 'Error al registrar la amonestación.' });
   }
 });
 

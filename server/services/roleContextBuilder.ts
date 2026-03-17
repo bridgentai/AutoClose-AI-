@@ -1,6 +1,12 @@
-import { User, Course, Assignment } from '../models';
-import { normalizeIdForQuery } from '../utils/idGenerator';
-import * as dataQuery from './dataQuery';
+import { queryPg } from '../config/db-pg.js';
+import { findUserById } from '../repositories/userRepository.js';
+import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
+import { getFirstGroupForStudent, getFirstGroupNameForStudent } from '../repositories/enrollmentRepository.js';
+import {
+  findGroupSubjectsByGroupWithDetails,
+  findGroupSubjectsByTeacherWithDetails,
+  type GroupSubjectWithDetails,
+} from '../repositories/groupSubjectRepository.js';
 
 /**
  * Servicio que construye contexto específico por rol
@@ -20,6 +26,32 @@ export interface RoleContext {
   resumenNotasProfesor?: { materiaNombre: string; grupo: string; notas: { estudianteNombre: string; tareaTitulo: string; nota: number; fecha?: string }[] }[];
 }
 
+function groupBySubject(rows: GroupSubjectWithDetails[]): Array<{
+  _id: string;
+  nombre: string;
+  descripcion?: string | null;
+  cursos: string[];
+  materiaId?: { _id: string; nombre: string };
+}> {
+  const map = new Map<string, { _id: string; nombre: string; descripcion?: string | null; cursos: string[]; materiaId?: { _id: string; nombre: string } }>();
+  for (const r of rows) {
+    const key = r.subject_id;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, {
+        _id: r.subject_id,
+        nombre: r.subject_name,
+        descripcion: r.subject_description,
+        cursos: [r.group_name],
+        materiaId: { _id: r.subject_id, nombre: r.subject_name },
+      });
+    } else if (!existing.cursos.includes(r.group_name)) {
+      existing.cursos.push(r.group_name);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+}
+
 /**
  * Construye el contexto específico para un estudiante
  */
@@ -27,32 +59,65 @@ export async function buildStudentContext(
   userId: string,
   colegioId: string
 ): Promise<RoleContext> {
-  const normalizedUserId = normalizeIdForQuery(userId);
-  const estudiante = await User.findById(normalizedUserId).select('curso').lean();
-  
-  if (!estudiante || !estudiante.curso) {
+  const estudiante = await findUserById(userId);
+  if (!estudiante) {
     return {
       role: 'estudiante',
       permisos: ['consultar_notas_estudiante', 'consultar_materias', 'consultar_tareas', 'entregar_tarea', 'consultar_calendario']
     };
   }
 
-  // Obtener materias del estudiante
-  const materias = await dataQuery.queryStudentSubjects(userId, colegioId);
-  
-  // Obtener tareas pendientes
-  const tareas = await dataQuery.queryStudentAssignments(userId, colegioId, 'pendiente');
-  
-  // Obtener notas recientes (últimas 5)
-  const notas = await dataQuery.queryStudentNotes(userId, colegioId);
-  const notasRecientes = notas.slice(0, 5);
+  const group = await getFirstGroupForStudent(userId, colegioId);
+  const cursoNombre = group?.name ?? null;
+  if (!cursoNombre || !group) {
+    return {
+      role: 'estudiante',
+      permisos: ['consultar_notas_estudiante', 'consultar_materias', 'consultar_tareas', 'entregar_tarea', 'consultar_calendario']
+    };
+  }
+
+  const materiasRows = await findGroupSubjectsByGroupWithDetails(group.id, colegioId);
+  const materias = materiasRows.map((r) => ({
+    _id: r.subject_id,
+    nombre: r.subject_name,
+    descripcion: r.subject_description,
+    profesor: { _id: r.teacher_id, nombre: r.teacher_name, email: r.teacher_email },
+    curso: r.group_name,
+    groupSubjectId: r.id,
+  }));
+
+  const tareasPendientesRes = await queryPg<{ c: number }>(
+    `SELECT COUNT(*)::int AS c
+     FROM assignments a
+     JOIN group_subjects gs ON gs.id = a.group_subject_id
+     WHERE gs.group_id = $1 AND gs.institution_id = $2
+       AND NOT EXISTS (
+         SELECT 1 FROM submissions s
+         WHERE s.assignment_id = a.id AND s.student_id = $3 AND s.status = 'submitted'
+       )`,
+    [group.id, colegioId, userId]
+  );
+  const tareasPendientes = tareasPendientesRes.rows[0]?.c ?? 0;
+
+  const notasRecientesRes = await queryPg<{ c: number }>(
+    `SELECT COUNT(*)::int AS c
+     FROM (
+       SELECT 1
+       FROM grades g
+       WHERE g.user_id = $1 AND g.recorded_at IS NOT NULL
+       ORDER BY g.recorded_at DESC
+       LIMIT 5
+     ) t`,
+    [userId]
+  );
+  const notasRecientes = notasRecientesRes.rows[0]?.c ?? 0;
 
   return {
     role: 'estudiante',
-    curso: estudiante.curso as string,
+    curso: cursoNombre,
     materias,
-    tareasPendientes: tareas.length,
-    notasRecientes: notasRecientes.length,
+    tareasPendientes,
+    notasRecientes,
     permisos: [
       'consultar_notas_estudiante',
       'consultar_materias',
@@ -71,25 +136,62 @@ export async function buildProfessorContext(
   userId: string,
   colegioId: string
 ): Promise<RoleContext> {
-  // Obtener cursos asignados al profesor
-  const cursos = await dataQuery.queryProfessorCourses(userId, colegioId);
-  
-  // Enriquecer cursos con información de grupos
-  const cursosConGrupos = cursos.map(curso => ({
-    ...curso,
-    grupos: curso.cursos || [], // Array de grupos asignados (ej: ["11D", "12H", "12C"])
-    courseId: curso._id.toString(), // ID del curso para usar en asignar_tarea
-    materiaId: curso.materiaId?._id?.toString() || curso.materiaId?.toString() || curso._id.toString()
-  }));
-  
-  // Contar estudiantes totales en todos los cursos
-  let totalEstudiantes = 0;
-  for (const curso of cursos) {
-    const estudiantes = await dataQuery.queryCourseStudents(userId, curso._id.toString(), colegioId);
-    totalEstudiantes += estudiantes.length;
+  const teacher = await findUserById(userId);
+  if (!teacher) {
+    return { role: 'profesor', permisos: [] };
   }
 
-  const resumenNotasProfesor = await dataQuery.queryProfessorNotesSummary(userId, colegioId);
+  const rows = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+  const cursos = groupBySubject(rows);
+
+  const cursosConGrupos = cursos.map((curso) => ({
+    ...curso,
+    grupos: curso.cursos || [],
+    courseId: curso._id,
+  }));
+
+  // Resumen ligero: últimas calificaciones registradas en tareas creadas por este profesor, agrupadas por materia+grupo.
+  const resumenRes = await queryPg<{
+    subject_name: string;
+    group_name: string;
+    student_name: string;
+    assignment_title: string;
+    score: number;
+    recorded_at: string;
+  }>(
+    `SELECT s.name AS subject_name,
+            g.name AS group_name,
+            stu.full_name AS student_name,
+            a.title AS assignment_title,
+            gr.score AS score,
+            gr.recorded_at AS recorded_at
+     FROM grades gr
+     JOIN assignments a ON a.id = gr.assignment_id
+     JOIN group_subjects gs ON gs.id = a.group_subject_id
+     JOIN subjects s ON s.id = gs.subject_id
+     JOIN groups g ON g.id = gs.group_id
+     JOIN users stu ON stu.id = gr.user_id
+     WHERE a.created_by = $1 AND gs.institution_id = $2
+     ORDER BY gr.recorded_at DESC
+     LIMIT 150`,
+    [userId, colegioId]
+  );
+  const resumenMap = new Map<string, { materiaNombre: string; grupo: string; notas: { estudianteNombre: string; tareaTitulo: string; nota: number; fecha?: string }[] }>();
+  for (const r of resumenRes.rows) {
+    const key = `${r.subject_name}@@${r.group_name}`;
+    const existing = resumenMap.get(key);
+    const entry = existing ?? { materiaNombre: r.subject_name, grupo: r.group_name, notas: [] as { estudianteNombre: string; tareaTitulo: string; nota: number; fecha?: string }[] };
+    entry.notas.push({
+      estudianteNombre: r.student_name,
+      tareaTitulo: r.assignment_title,
+      nota: r.score,
+      fecha: r.recorded_at ? new Date(r.recorded_at).toISOString().split('T')[0] : undefined,
+    });
+    resumenMap.set(key, entry);
+  }
+  const resumenNotasProfesor = Array.from(resumenMap.values())
+    .map((x) => ({ ...x, notas: x.notas.slice(0, 50) }))
+    .slice(0, 20);
 
   return {
     role: 'profesor',
@@ -119,22 +221,35 @@ export async function buildParentContext(
   userId: string,
   colegioId: string
 ): Promise<RoleContext> {
-  const normalizedUserId = normalizeIdForQuery(userId);
-  const padre = await User.findById(normalizedUserId).select('hijoId').lean();
-  
-  if (!padre || !padre.hijoId) {
+  const guardian = await findUserById(userId);
+  if (!guardian) {
     return {
       role: 'padre',
       permisos: ['consultar_informacion_hijo', 'crear_permiso', 'consultar_calendario', 'consultar_notificaciones']
     };
   }
 
-  // Obtener información del hijo
-  const hijoInfo = await dataQuery.queryChildInfo(userId, padre.hijoId, colegioId);
+  const links = await findGuardianStudentsByGuardian(userId);
+  const studentIds = links.map((l) => l.student_id);
+  if (studentIds.length === 0) {
+    return {
+      role: 'padre',
+      permisos: ['consultar_informacion_hijo', 'crear_permiso', 'consultar_calendario', 'consultar_notificaciones']
+    };
+  }
+
+  const childrenRes = await queryPg<{ id: string; full_name: string }>(
+    'SELECT id, full_name FROM users WHERE id = ANY($1::uuid[])',
+    [studentIds]
+  );
+  const hijos = await Promise.all(childrenRes.rows.map(async (c: { id: string; full_name: string }) => {
+    const curso = await getFirstGroupNameForStudent(c.id);
+    return { _id: c.id, nombre: c.full_name, curso: curso ?? undefined };
+  }));
 
   return {
     role: 'padre',
-    hijos: [hijoInfo.estudiante],
+    hijos,
     permisos: [
       'consultar_informacion_hijo',
       'crear_permiso',

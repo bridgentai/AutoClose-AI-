@@ -1,6 +1,7 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleAuth.js';
+import { queryPg } from '../config/db-pg.js';
 import {
   findAnnouncementsByInstitution,
   findAnnouncementById,
@@ -14,9 +15,10 @@ import {
   findSupportThreadByInstitution,
   addAnnouncementRecipients,
 } from '../repositories/announcementRepository.js';
-import { findUserById } from '../repositories/userRepository.js';
+import { findUserById, findUsersByIds } from '../repositories/userRepository.js';
 import { findGroupById } from '../repositories/groupRepository.js';
 import { findAssignmentById } from '../repositories/assignmentRepository.js';
+import { createNotification } from '../repositories/notificationRepository.js';
 import {
   findGroupSubjectsByTeacher,
   findGroupSubjectsByTeacherWithDetails,
@@ -29,6 +31,51 @@ import { emitEvoMessage } from '../socket.js';
 
 const router = express.Router();
 const EVO_SEND_ROLES = ['directivo', 'profesor', 'estudiante', 'asistente', 'admin-general-colegio'];
+
+async function resolveRecipientsForThread(args: {
+  announcement: { id: string; type: string; group_id: string | null; group_subject_id: string | null; created_by_id: string };
+  institutionId: string;
+}): Promise<string[]> {
+  const a = args.announcement;
+
+  // Staff / Direct / Support: recipients table is the source of truth.
+  if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct' || a.type === 'evo_chat_support') {
+    const r = await queryPg<{ user_id: string }>(
+      'SELECT user_id FROM announcement_recipients WHERE announcement_id = $1',
+      [a.id]
+    );
+    return r.rows.map((x: { user_id: string }) => x.user_id);
+  }
+
+  // Curso (evo_chat): infer recipients from group membership + assigned teacher.
+  if (a.type === 'evo_chat' && a.group_id) {
+    const r = await queryPg<{ student_id: string }>(
+      'SELECT student_id FROM enrollments WHERE group_id = $1',
+      [a.group_id]
+    );
+    const recipientMap: Record<string, true> = {};
+    for (const x of r.rows) recipientMap[x.student_id] = true;
+
+    if (a.group_subject_id) {
+      const t = await queryPg<{ teacher_id: string }>(
+        'SELECT teacher_id FROM group_subjects WHERE id = $1 AND institution_id = $2 LIMIT 1',
+        [a.group_subject_id, args.institutionId]
+      );
+      const teacherId = t.rows[0]?.teacher_id;
+      if (teacherId) recipientMap[teacherId] = true;
+    }
+
+    return Object.keys(recipientMap);
+  }
+
+  return [];
+}
+
+function truncateText(s: string, max = 240) {
+  const str = String(s ?? '');
+  if (str.length <= max) return str;
+  return `${str.slice(0, Math.max(0, max - 1))}…`;
+}
 
 async function buildThreadFromAnnouncement(a: {
   id: string;
@@ -166,7 +213,7 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
       return res.json({ threads, support_thread });
     }
 
-    // Admin general colegio: Chats GLC (por categoría) + Soporte (hilos evo_chat_support con mensajes)
+    // Admin general colegio: Chats GLC (por categoría) + Soporte (solo hilos evo_chat_support que ya tienen mensajes — bandeja limpia al inicio)
     if (rol === 'admin-general-colegio' && userId) {
       const allAnnouncements = await findAnnouncementsByInstitution(colegioId, tipo ? { type: tipo } : undefined);
       const evoChat: Awaited<ReturnType<typeof buildThreadFromAnnouncement>>[] = [];
@@ -180,10 +227,14 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
         else if (a.type === 'evo_chat_direct') evoChatDirect.push(t);
       }
       const supportAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_support'], colegioId);
-      const soporte = await Promise.all(supportAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
+      const soporteWithMessages: Awaited<ReturnType<typeof buildThreadFromAnnouncement>>[] = [];
+      for (const a of supportAnnouncements) {
+        const hasMessage = await getLastAnnouncementMessage(a.id);
+        if (hasMessage) soporteWithMessages.push(await buildThreadFromAnnouncement(a));
+      }
       return res.json({
         chats_glc: { evo_chat: evoChat, evo_chat_staff: evoChatStaff, evo_chat_direct: evoChatDirect },
-        soporte,
+        soporte: soporteWithMessages,
       });
     }
 
@@ -238,21 +289,24 @@ router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: 
     const { id } = req.params;
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
-    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+    // En evoSend, cualquier lectura de hilos requiere identidad de usuario estable.
+    // No se debe "saltar" validaciones por un userId faltante.
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
     const a = await findAnnouncementById(id);
     if (!a || a.institution_id !== colegioId) {
       return res.json({ thread: null, messages: [] });
     }
     if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') {
-      if (userId) {
-        const allowed = await isUserRecipientOfAnnouncement(id, userId);
-        if (!allowed) return res.json({ thread: null, messages: [] });
+      const allowed = await isUserRecipientOfAnnouncement(id, userId);
+      if (!allowed) return res.json({ thread: null, messages: [] });
+    } else if (a.type === 'evo_chat_support') {
+      const userRol = req.user?.rol ?? '';
+      const canOpenSupport = ['profesor', 'directivo', 'asistente', 'admin-general-colegio'].includes(userRol);
+      if (!canOpenSupport) {
+        const isRecipient = await isUserRecipientOfAnnouncement(id, userId);
+        if (!isRecipient) return res.json({ thread: null, messages: [] });
       }
-    } else if (a.type === 'evo_chat_support' && userId) {
-      const isRecipient = await isUserRecipientOfAnnouncement(id, userId);
-      const canOpenSupport = ['profesor', 'directivo', 'asistente', 'admin-general-colegio'].includes(rol ?? '');
-      if (!isRecipient && !canOpenSupport) return res.json({ thread: null, messages: [] });
     }
 
     const creator = await findUserById(a.created_by_id);
@@ -278,20 +332,23 @@ router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: 
     };
 
     const msgRows = await findAnnouncementMessages(id);
-    const messages = await Promise.all(
-      msgRows.map(async (m) => {
-        const sender = await findUserById(m.sender_id);
-        return {
-          _id: m.id,
-          contenido: m.content,
-          tipo: m.content_type,
-          prioridad: m.priority,
-          fecha: m.created_at,
-          remitenteId: { _id: m.sender_id, nombre: sender?.full_name ?? '', rol: sender?.role },
-          rolRemitente: m.sender_role,
-        };
-      })
-    );
+    const senderIdMap: Record<string, true> = {};
+    for (const m of msgRows) senderIdMap[m.sender_id] = true;
+    const senderIds = Object.keys(senderIdMap);
+    const senders = await findUsersByIds(senderIds);
+    const senderMap = new Map(senders.map((u) => [u.id, u]));
+    const messages = msgRows.map((m) => {
+      const sender = senderMap.get(m.sender_id);
+      return {
+        _id: m.id,
+        contenido: m.content,
+        tipo: m.content_type,
+        prioridad: m.priority,
+        fecha: m.created_at,
+        remitenteId: { _id: m.sender_id, nombre: sender?.full_name ?? '', rol: sender?.role },
+        rolRemitente: m.sender_role,
+      };
+    });
 
     return res.json({ thread, messages });
   } catch (e: unknown) {
@@ -348,7 +405,8 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
       const allowed = await isUserRecipientOfAnnouncement(id, userId);
       if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
     } else if (a.type === 'evo_chat_support') {
-      const canWrite = ['profesor', 'directivo', 'asistente', 'admin-general-colegio'].includes(rol ?? '');
+      const rol = req.user?.rol ?? '';
+      const canWrite = ['profesor', 'directivo', 'asistente', 'admin-general-colegio'].includes(rol);
       if (!canWrite) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
       const isRecipient = await isUserRecipientOfAnnouncement(id, userId);
       if (!isRecipient) await addAnnouncementRecipients(id, [userId]);
@@ -361,6 +419,24 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
       content: (contenido ?? '').trim() || '(mensaje vacío)',
       priority: prioridad ?? 'normal',
     });
+
+    // Notificaciones: cualquier mensaje entrante de EvoSend se refleja en la campana.
+    // (unifica "tarea/comunicado/etc." cuando esas features creen filas en `notifications`)
+    const recipientIds = await resolveRecipientsForThread({
+      announcement: { id: a.id, type: a.type, group_id: a.group_id, group_subject_id: a.group_subject_id, created_by_id: a.created_by_id },
+      institutionId: colegioId,
+    });
+    const recipientsWithoutSender = recipientIds.filter((rid) => rid !== userId);
+    await Promise.all(
+      recipientsWithoutSender.map((rid) =>
+        createNotification({
+          institution_id: colegioId,
+          user_id: rid,
+          title: `EvoSend · ${a.title}`,
+          body: truncateText((contenido ?? '').trim() || '(mensaje vacío)'),
+        })
+      )
+    );
 
     const sender = await findUserById(userId);
     emitEvoMessage(id, {

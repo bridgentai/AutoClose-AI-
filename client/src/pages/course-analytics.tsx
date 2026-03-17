@@ -26,6 +26,7 @@ import {
   ResponsiveContainer,
   Tooltip,
   Cell,
+  LabelList,
 } from 'recharts';
 
 interface CourseSubject {
@@ -40,7 +41,8 @@ interface Student {
 
 const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'padre', 'school_admin', 'super_admin', 'estudiante'];
 
-const BAR_COLORS = ['#3B82F6', '#00c8ff', '#8b5cf6', '#06b6d4', '#f59e0b'];
+// Paleta evoOS (azules + acento) para analíticas
+const BAR_COLORS = ['#3B82F6', '#00C8FF', '#1D4ED8', '#38BDF8', '#60A5FA', '#FFD700'];
 
 export default function CourseAnalyticsPage() {
   const [, params] = useRoute('/course/:cursoId/analytics');
@@ -143,6 +145,18 @@ export default function CourseAnalyticsPage() {
     }
     return [];
   }, [snapshot, categories, analyticsSummary]);
+
+  const impactChartHeight = useMemo(() => {
+    // Ajuste dinámico para evitar solape de labels en categorías largas o muchas filas.
+    const rows = categoryImpactBreakdown.length;
+    return Math.min(520, Math.max(260, rows * 42));
+  }, [categoryImpactBreakdown.length]);
+
+  const truncateLabel = (value: unknown, max = 22) => {
+    const s = String(value ?? '');
+    if (s.length <= max) return s;
+    return `${s.slice(0, Math.max(0, max - 1))}…`;
+  };
 
   const weightedAverage = analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage ?? null;
   const canAccess = user?.rol && allowedRoles.includes(user.rol);
@@ -308,40 +322,51 @@ export default function CourseAnalyticsPage() {
 
               {/* 2. Impacto por categoría — gráfico con nombres de categorías */}
               <div>
-                <h2 className="text-lg font-semibold text-white font-['Poppins'] mb-4">
+                <h2 className="text-xl font-semibold text-white font-['Poppins'] mb-4">
                   Impacto por categoría
                 </h2>
                 {categoryImpactBreakdown.length > 0 ? (
-                  <div className="h-64 w-full">
+                  <div
+                    className="w-full"
+                    style={{ height: impactChartHeight }}
+                  >
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={categoryImpactBreakdown}
-                        margin={{ top: 12, right: 12, bottom: 32, left: 8 }}
+                        margin={{ top: 12, right: 28, bottom: 12, left: 12 }}
                         layout="vertical"
                       >
-                        <XAxis type="number" hide />
+                        <XAxis type="number" hide domain={[0, 'dataMax']} />
                         <YAxis
                           type="category"
                           dataKey="categoria"
-                          width={160}
-                          tick={({ x, y, payload }) => {
-                            const item = categoryImpactBreakdown.find((d) => d.categoria === payload?.value);
-                            const pts = item && typeof item.impact === 'number' ? item.impact.toFixed(1) : '0';
-                            return (
-                              <g transform={`translate(${x},${y})`}>
-                                <text x={0} y={0} dy={4} textAnchor="start" fill="rgba(255,255,255,0.85)" fontSize={12}>
-                                  {payload?.value} {pts} pts
-                                </text>
-                              </g>
-                            );
-                          }}
+                          width={200}
+                          tick={{ fill: 'rgba(255,255,255,0.85)', fontSize: 13 }}
+                          tickFormatter={(v) => truncateLabel(v, 26)}
                           axisLine={false}
                           tickLine={false}
+                          interval={0}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.72))',
+                            border: '1px solid rgba(255,255,255,0.10)',
+                            borderRadius: 14,
+                            backdropFilter: 'blur(18px)',
+                            boxShadow: '0 0 40px rgba(37, 99, 235, 0.22), 0 10px 30px rgba(0,0,0,0.35)',
+                          }}
+                          labelStyle={{ color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: 600 }}
+                          formatter={(value: number, _name: string, props: any) => {
+                            const w = props?.payload?.weight;
+                            const wLabel = typeof w === 'number' ? ` (peso ${w}%)` : '';
+                            return [`${Number(value).toFixed(1)} pts${wLabel}`, 'Impacto'];
+                          }}
                         />
                         <Bar
                           dataKey="impact"
-                          radius={[0, 6, 6, 0]}
+                          radius={[6, 10, 10, 6]}
                           maxBarSize={28}
+                          barSize={24}
                           isAnimationActive
                           animationDuration={800}
                           animationEasing="ease-out"
@@ -349,6 +374,13 @@ export default function CourseAnalyticsPage() {
                           {categoryImpactBreakdown.map((_, i) => (
                             <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
                           ))}
+                          {/* Etiqueta numérica al final de cada barra para lectura rápida */}
+                          <LabelList
+                            dataKey="impact"
+                            position="right"
+                            formatter={(v: number) => `${Number(v).toFixed(1)} pts`}
+                            style={{ fill: 'rgba(255,255,255,0.90)', fontSize: 13, fontWeight: 600 }}
+                          />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>

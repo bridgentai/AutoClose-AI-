@@ -15,7 +15,7 @@ import { findGuardianStudentsByGuardian, findGuardianStudentsByStudent, findGuar
 import { createNotification } from '../repositories/notificationRepository.js';
 import { findGroupById } from '../repositories/groupRepository.js';
 import { getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
-import { findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
+import { findGroupSubjectsByGroupWithDetails, createGroupSubject } from '../repositories/groupSubjectRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
 import { findGroupsByInstitution, countGradeGroupsByInstitution, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
 import { createEnrollment } from '../repositories/enrollmentRepository.js';
@@ -320,13 +320,30 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Solo administradores del colegio pueden crear usuarios.' });
     }
     const {
-      nombre, email, rol, curso, telefono, celular,
-      materias: materiasBody, materia, cursos,
-      padre1Nombre, padre1Email, padre2Nombre, padre2Email,
+      nombre,
+      email,
+      rol,
+      curso,
+      telefono,
+      celular,
+      materias: materiasBody,
+      materia,
+      cursos,
+      padre1Nombre,
+      padre1Email,
+      padre2Nombre,
+      padre2Email,
     } = req.body;
-    const materias = rol === 'profesor' && (materia != null || materiasBody != null)
-      ? (Array.isArray(materiasBody) ? materiasBody : (materia != null ? [materia] : materiasBody ? [materiasBody] : []))
-      : undefined;
+    const materias =
+      rol === 'profesor' && (materia != null || materiasBody != null)
+        ? Array.isArray(materiasBody)
+          ? materiasBody
+          : materia != null
+          ? [materia]
+          : materiasBody
+          ? [materiasBody]
+          : []
+        : undefined;
 
     if (!nombre || !email || !rol) {
       return res.status(400).json({ message: 'Faltan campos obligatorios: nombre, email, rol' });
@@ -411,6 +428,33 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
         const existeVinculo = await findGs(padreUser.id, newUser.id);
         if (!existeVinculo) {
           await createGs(padreUser.id, newUser.id, colegioId);
+        }
+      }
+    }
+
+    // Para profesores: crear vínculos materia-curso-profesor en group_subjects si se seleccionaron materias y cursos
+    if (rol === 'profesor' && materias && Array.isArray(materias) && materias.length > 0 && Array.isArray(cursos) && cursos.length > 0) {
+      const colegioId = admin.institution_id;
+      if (colegioId) {
+        for (const cursoNombre of cursos) {
+          const nombreCurso = String(cursoNombre ?? '').toUpperCase().trim();
+          if (!nombreCurso) continue;
+          const group = await findGroupByNameAndInstitution(colegioId, nombreCurso);
+          if (!group) continue;
+          for (const subjectId of materias) {
+            const subjectIdStr = String(subjectId ?? '').trim();
+            if (!subjectIdStr) continue;
+            try {
+              await createGroupSubject({
+                institution_id: colegioId,
+                group_id: group.id,
+                subject_id: subjectIdStr,
+                teacher_id: newUser.id,
+              });
+            } catch (e) {
+              console.error('Error al crear group_subject para profesor:', (e as Error).message);
+            }
+          }
         }
       }
     }

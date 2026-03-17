@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation, useRoute } from 'wouter';
 import { 
@@ -19,9 +19,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
 
 // =========================================================
 // INTERFACES
@@ -51,7 +56,6 @@ interface StudentNote {
 
 interface Amonestacion {
   _id: string;
-  cantidad: number;
   gravedad: 'leve' | 'moderada' | 'grave' | 'muy grave';
   razon: string;
   fecha: string;
@@ -66,40 +70,25 @@ const fetchStudentPersonalInfo = async (estudianteId: string): Promise<StudentDe
   return apiRequest('GET', `/api/student/${estudianteId}/personal-info`);
 };
 
-const mockNotes: StudentNote[] = [
-  { actividad: 'Examen Parcial 1', nota: 85, fecha: '2024-01-15', comentario: 'Buen trabajo, sigue así', categoria: 'Exámenes' },
-  { actividad: 'Tarea de Álgebra', nota: 90, fecha: '2024-01-10', comentario: 'Bien hecho', categoria: 'Tareas' },
-  { actividad: 'Examen Parcial 2', nota: 88, fecha: '2024-02-20', comentario: 'Excelente progreso', categoria: 'Exámenes' },
-  { actividad: 'Proyecto Final', nota: 92, fecha: '2024-03-01', comentario: 'Buen proyecto, bien estructurado', categoria: 'Proyectos' },
-  { actividad: 'Tarea de Geometría', nota: 87, fecha: '2024-02-05', categoria: 'Tareas' }
-];
+const fetchSubjectsForGroup = async (groupId: string) => apiRequest('GET', `/api/courses/for-group/${groupId}`);
+const fetchGradeTableAssignments = async (groupId: string, courseId: string) =>
+  apiRequest('GET', `/api/assignments?groupId=${encodeURIComponent(groupId)}&courseId=${courseId}`);
 
-const mockAmonestaciones: Amonestacion[] = [
-  {
-    _id: '1',
-    cantidad: 2,
-    gravedad: 'moderada',
-    razon: 'Falta de respeto a compañeros durante la clase',
-    fecha: '2024-02-10',
-    registradoPor: 'Prof. María García'
-  },
-  {
-    _id: '2',
-    cantidad: 1,
-    gravedad: 'leve',
-    razon: 'Llegada tardía a clase sin justificación',
-    fecha: '2024-01-25',
-    registradoPor: 'Prof. Carlos Rodríguez'
-  },
-  {
-    _id: '3',
-    cantidad: 1,
-    gravedad: 'grave',
-    razon: 'Uso de dispositivos electrónicos durante examen',
-    fecha: '2024-03-05',
-    registradoPor: 'Prof. Ana Martínez'
-  }
-];
+interface LogroItem {
+  _id: string;
+  nombre: string;
+  porcentaje: number;
+  orden?: number;
+}
+
+interface AssignmentForNotes {
+  _id: string;
+  titulo: string;
+  fechaEntrega?: string;
+  logroCalificacionId?: string;
+  submissions?: { estudianteId: string; calificacion?: number }[];
+  entregas?: { estudianteId: string; calificacion?: number }[];
+}
 
 // =========================================================
 // COMPONENTE PRINCIPAL
@@ -108,6 +97,7 @@ const mockAmonestaciones: Amonestacion[] = [
 export default function StudentProfilePage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   
   // Rutas dinámicas
   const [, params] = useRoute('/profesor/cursos/:cursoId/estudiantes/:estudianteId');
@@ -122,17 +112,141 @@ export default function StudentProfilePage() {
     enabled: !!estudianteId,
   });
   
-  // Datos mock para notas y amonestaciones (en producción vendrían del backend)
-  const [notes] = useState<StudentNote[]>(mockNotes);
-  const [amonestaciones] = useState<Amonestacion[]>(mockAmonestaciones);
+  const displayGroupId =
+    cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId) ? cursoId : (cursoId || '').toUpperCase().trim();
 
-  // Calcular promedio de notas
-  const promedioFinal = notes.length > 0
-    ? Math.round(notes.reduce((acc, nota) => acc + nota.nota, 0) / notes.length)
-    : 0;
+  // Notas reales: mismas fuentes que la tabla de notas del profesor (teacher-notes.tsx)
+  const { data: subjectsForGroup = [] } = useQuery<{ _id: string; nombre?: string }[]>({
+    queryKey: ['subjectsForGroup', cursoId],
+    queryFn: () => fetchSubjectsForGroup(cursoId),
+    enabled: !!cursoId,
+    staleTime: 0,
+  });
+  const firstSubjectId = subjectsForGroup[0]?._id;
+  const courseIdForData = firstSubjectId ? firstSubjectId : '';
 
-  // Calcular total de amonestaciones
-  const totalAmonestaciones = amonestaciones.reduce((acc, am) => acc + am.cantidad, 0);
+  const { data: assignmentsRaw = [] } = useQuery<AssignmentForNotes[]>({
+    queryKey: ['gradeTableAssignments', cursoId, courseIdForData],
+    queryFn: () => fetchGradeTableAssignments(displayGroupId, courseIdForData),
+    enabled: !!cursoId && !!courseIdForData,
+    staleTime: 0,
+  });
+
+  const { data: logrosRaw } = useQuery<{ logros: LogroItem[] }>({
+    queryKey: ['logros', courseIdForData],
+    queryFn: () =>
+      fetch(`/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForData)}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('autoclose_token')}` },
+      }).then((r) => r.json()),
+    enabled: !!courseIdForData,
+    staleTime: 0,
+  });
+  const logros = logrosRaw?.logros ?? [];
+
+  const getNotaForStudent = (a: AssignmentForNotes, sid: string) => {
+    const subs = a.submissions || a.entregas || [];
+    const s = subs.find((x) => String(x.estudianteId) === String(sid));
+    const cal = s?.calificacion;
+    return cal != null && !Number.isNaN(Number(cal)) ? Number(cal) : null;
+  };
+
+  const assignmentsByLogro = useMemo(() => {
+    const grouped: Record<string, { logro: LogroItem; assignments: AssignmentForNotes[] }> = {};
+    const list = [...logros].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+    list.forEach((l) => {
+      grouped[l._id] = { logro: l, assignments: [] };
+    });
+    const sinLogro: AssignmentForNotes[] = [];
+    (assignmentsRaw as AssignmentForNotes[]).forEach((a) => {
+      const lid = a.logroCalificacionId as string | undefined;
+      if (lid && grouped[lid]) grouped[lid].assignments.push(a);
+      else sinLogro.push(a);
+    });
+    if (sinLogro.length) {
+      grouped['sin-logro'] = { logro: { _id: 'sin-logro', nombre: 'Sin categoría', porcentaje: 0 }, assignments: sinLogro };
+    }
+    return grouped;
+  }, [assignmentsRaw, logros]);
+
+  const notes: StudentNote[] = useMemo(() => {
+    if (!estudianteId) return [];
+    const byLogro = assignmentsByLogro;
+    const result: StudentNote[] = [];
+    Object.values(byLogro).forEach(({ logro, assignments }) => {
+      assignments.forEach((a) => {
+        const n = getNotaForStudent(a, estudianteId);
+        if (n == null) return;
+        result.push({
+          actividad: a.titulo,
+          nota: n,
+          fecha: a.fechaEntrega || new Date().toISOString(),
+          categoria: logro.nombre,
+        });
+      });
+    });
+    // Ordenar por fecha desc
+    result.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    return result;
+  }, [assignmentsByLogro, estudianteId]);
+
+  const promedioFinal = useMemo(() => {
+    if (!estudianteId) return 0;
+    let weightedSum = 0;
+    let totalPct = 0;
+
+    Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
+      if (logro._id === 'sin-logro') return;
+      const pct = Number(logro.porcentaje ?? 0);
+      if (!pct) return;
+      const notas: number[] = [];
+      assignments.forEach((a) => {
+        const n = getNotaForStudent(a, estudianteId);
+        if (n != null) notas.push(n);
+      });
+      if (!notas.length) {
+        totalPct += pct;
+        return;
+      }
+      const prom = notas.reduce((s, x) => s + x, 0) / notas.length;
+      weightedSum += (prom * pct) / 100;
+      totalPct += pct;
+    });
+
+    // Fallback: promedio simple si no hay pesos configurados
+    if (totalPct <= 0) {
+      if (!notes.length) return 0;
+      return Math.round(notes.reduce((acc, n) => acc + n.nota, 0) / notes.length);
+    }
+    return Math.round(weightedSum);
+  }, [assignmentsByLogro, estudianteId, notes]);
+
+  // Amonestaciones reales (sin datos inventados)
+  const { data: amonestaciones = [] } = useQuery<Amonestacion[]>({
+    queryKey: ['disciplinaryActions', estudianteId],
+    queryFn: () => apiRequest('GET', `/api/student/${estudianteId}/disciplinary-actions`),
+    enabled: !!estudianteId,
+    staleTime: 0,
+  });
+
+  const totalAmonestaciones = amonestaciones.length;
+
+  const [newAmonestacion, setNewAmonestacion] = useState<{ gravedad: Amonestacion['gravedad']; razon: string }>({
+    gravedad: 'leve',
+    razon: '',
+  });
+
+  const createAmonestacionMutation = useMutation({
+    mutationFn: (body: { gravedad: Amonestacion['gravedad']; razon: string }) =>
+      apiRequest('POST', `/api/student/${estudianteId}/disciplinary-actions`, body),
+    onSuccess: () => {
+      toast({ title: 'Amonestación registrada', description: 'Se notificó a directivos por Evo Send.' });
+      setNewAmonestacion({ gravedad: 'leve', razon: '' });
+      queryClient.invalidateQueries({ queryKey: ['disciplinaryActions', estudianteId] });
+    },
+    onError: (e: Error) => {
+      toast({ title: 'Error', description: e.message || 'No se pudo registrar la amonestación.', variant: 'destructive' });
+    },
+  });
 
   // Función para obtener el color de la gravedad
   const getGravedadColor = (gravedad: string) => {
@@ -393,6 +507,61 @@ export default function StudentProfilePage() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Formulario corto (sin datos falsos) */}
+            {user?.rol === 'profesor' && (
+              <div className="mb-6 p-4 rounded-lg border border-red-500/30 bg-red-500/10">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label className="text-red-100/80">Gravedad</Label>
+                    <Select
+                      value={newAmonestacion.gravedad}
+                      onValueChange={(v) => setNewAmonestacion((prev) => ({ ...prev, gravedad: v as Amonestacion['gravedad'] }))}
+                    >
+                      <SelectTrigger className="mt-1 bg-white/5 border-red-500/30 text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0a0a2a] border-red-500/30">
+                        <SelectItem value="leve" className="text-white">Leve</SelectItem>
+                        <SelectItem value="moderada" className="text-white">Moderada</SelectItem>
+                        <SelectItem value="grave" className="text-white">Grave</SelectItem>
+                        <SelectItem value="muy grave" className="text-white">Muy grave</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-red-100/80">Razón *</Label>
+                    <Textarea
+                      value={newAmonestacion.razon}
+                      onChange={(e) => setNewAmonestacion((prev) => ({ ...prev, razon: e.target.value }))}
+                      className="mt-1 bg-white/5 border-red-500/30 text-white"
+                      placeholder="Describe brevemente el motivo..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end mt-4 gap-2">
+                  <Button
+                    variant="outline"
+                    className="border-red-500/30 text-red-100 hover:bg-red-500/10"
+                    onClick={() => setNewAmonestacion({ gravedad: 'leve', razon: '' })}
+                    disabled={createAmonestacionMutation.isPending}
+                  >
+                    Limpiar
+                  </Button>
+                  <Button
+                    className="bg-red-500/80 hover:bg-red-500 text-white"
+                    disabled={!newAmonestacion.razon.trim() || createAmonestacionMutation.isPending}
+                    onClick={() => createAmonestacionMutation.mutate({ gravedad: newAmonestacion.gravedad, razon: newAmonestacion.razon.trim() })}
+                  >
+                    Notificar amonestación
+                  </Button>
+                </div>
+                <p className="text-xs text-red-200/60 mt-2">
+                  Se enviará a directivos como mensaje en Evo Send.
+                </p>
+              </div>
+            )}
+
             {amonestaciones.length > 0 ? (
               <div className="space-y-4">
                 {amonestaciones.map((amonestacion) => (
@@ -406,9 +575,6 @@ export default function StudentProfilePage() {
                           <Badge className={getGravedadColor(amonestacion.gravedad)}>
                             {amonestacion.gravedad.charAt(0).toUpperCase() + amonestacion.gravedad.slice(1)}
                           </Badge>
-                          <span className="text-red-300 font-semibold">
-                            Cantidad: {amonestacion.cantidad}
-                          </span>
                         </div>
                         <p className="text-red-200 font-medium mb-2">{amonestacion.razon}</p>
                         <div className="flex items-center gap-4 text-sm text-red-200/70">

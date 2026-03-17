@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import kiwiImg from '@/assets/Kiwi-chat.png';
+import kiwiImg from '@/assets/kiwi sentado.png';
 import {
   Dialog,
   DialogContent,
@@ -177,23 +177,24 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                   <img
                     src={kiwiImg}
                     alt="Kiwi"
-                    className="kiwi-float select-none"
-                    style={{ width: 160, height: 'auto' }}
+                    className="select-none"
+                    style={{ width: 220, height: 'auto' }}
                     draggable={false}
                   />
                   <div
-                    className="kiwi-shadow mt-2"
+                    className="mt-2"
                     style={{
-                      width: 140,
+                      width: 170,
                       height: 16,
                       borderRadius: 999,
                       background: 'rgba(37,99,235,0.30)',
                       filter: 'blur(12px)',
+                      opacity: 0.35,
                     }}
                   />
                 </div>
                 <h2 className="mt-5 text-[20px] font-bold text-white text-expressive">
-                  Hola, soy Kiwi <span aria-hidden="true">👋</span>
+                  Hola, soy Kiwi
                 </h2>
                 <p className="text-white/60 text-sm mt-2 text-expressive-subtitle">
                   {emptySubtitle}

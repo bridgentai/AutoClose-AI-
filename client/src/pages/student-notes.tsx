@@ -18,7 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -656,48 +656,64 @@ export default function StudentNotesPage() {
             </CardHeader>
             <CardContent className="p-4 md:p-6">
               {chartData.length > 0 && subjectsWithEvolucion.length > 0 ? (
-                <div className="w-full overflow-x-auto">
-                  <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
-                    <LineChart
-                      data={chartData}
-                      margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                      <XAxis
-                        dataKey="period"
-                        stroke="rgba(255,255,255,0.5)"
-                        tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                        angle={-45}
-                        textAnchor="end"
-                        height={60}
-                        interval={0}
-                      />
-                      <YAxis
-                        domain={[0, 100]}
-                        stroke="rgba(255,255,255,0.5)"
-                        tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                        width={40}
-                      />
-                      <ChartTooltip
-                        content={<ChartTooltipContent />}
-                        cursor={{ stroke: 'rgba(255,255,255,0.3)' }}
-                      />
-                      {subjectsWithEvolucion.map((s) => (
-                        <Line
-                          key={s._id}
-                          type="monotone"
-                          dataKey={s._id}
-                          name={s.nombre}
-                          stroke={s.colorAcento || '#00c8ff'}
-                          strokeWidth={2}
-                          dot={{ fill: s.colorAcento || '#00c8ff', r: 4 }}
-                          activeDot={{ r: 6 }}
-                          connectNulls
+                <div className="w-full flex flex-col md:flex-row gap-4">
+                  <div className="flex-1 overflow-x-auto">
+                    <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
+                      <LineChart data={chartData} margin={{ top: 20, right: 24, bottom: 40, left: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                        <XAxis
+                          dataKey="period"
+                          stroke="rgba(255,255,255,0.5)"
+                          tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
+                          interval={0}
                         />
-                      ))}
-                      <Legend wrapperStyle={{ paddingTop: 12 }} />
-                    </LineChart>
-                  </ChartContainer>
+                        <YAxis
+                          domain={[0, 100]}
+                          stroke="rgba(255,255,255,0.5)"
+                          tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                          width={40}
+                        />
+                        <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: 'rgba(255,255,255,0.3)' }} />
+                        {subjectsWithEvolucion.map((s) => (
+                          <Line
+                            key={s._id}
+                            type="monotone"
+                            dataKey={s._id}
+                            name={s.nombre}
+                            stroke={s.colorAcento || '#00c8ff'}
+                            strokeWidth={2}
+                            dot={{ fill: s.colorAcento || '#00c8ff', r: 4 }}
+                            activeDot={{ r: 6 }}
+                            connectNulls
+                          />
+                        ))}
+                      </LineChart>
+                    </ChartContainer>
+                  </div>
+
+                  {/* Llave de colores / materias */}
+                  <div className="md:w-[220px] md:shrink-0">
+                    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md p-3">
+                      <p className="text-xs font-medium uppercase tracking-wider text-white/60 mb-2">Materias</p>
+                      <div className="space-y-2">
+                        {subjectsWithEvolucion.map((s) => (
+                          <div key={s._id} className="flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 rounded-sm shrink-0"
+                              style={{ backgroundColor: s.colorAcento || '#00c8ff' }}
+                              aria-hidden="true"
+                            />
+                            <span className="text-sm text-white/85 leading-tight truncate" title={s.nombre}>
+                              {s.nombre}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="h-[280px] flex items-center justify-center text-white/50 text-sm">

@@ -435,6 +435,23 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 
+-- =========================================================
+-- Disciplina / Amonestaciones (perfil de estudiante)
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS disciplinary_actions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+  severity VARCHAR(20) NOT NULL CHECK (severity IN ('leve', 'moderada', 'grave', 'muy grave')),
+  reason TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_disciplinary_actions_student ON disciplinary_actions(student_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_disciplinary_actions_institution ON disciplinary_actions(institution_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS announcements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,

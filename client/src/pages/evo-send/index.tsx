@@ -14,6 +14,7 @@ import {
   Loader2,
   Star,
   ChevronRight,
+  ChevronDown,
   MessageSquare,
   ArrowLeft,
   Shield,
@@ -145,6 +146,8 @@ export default function EvoSendPage() {
   const isProfesorOrEstudiante = ['profesor', 'estudiante'].includes(user?.rol || '');
   const canCreateThread = !isProfesorOrEstudiante && ['directivo', 'admin-general-colegio'].includes(user?.rol || '');
   const isAsistente = user?.rol === 'asistente';
+  const isAdminColegio = user?.rol === 'admin-general-colegio';
+  const [adminChatsGlcCollapsed, setAdminChatsGlcCollapsed] = useState(true);
 
   type ThreadsResponse =
     | EvoThreadItem[]
@@ -468,6 +471,8 @@ export default function EvoSendPage() {
           emitTyping={emitTyping}
           selectedIdForTyping={selectedId}
           sections={sections}
+          chatsGlcCollapsed={isAdminColegio ? adminChatsGlcCollapsed : undefined}
+          onToggleChatsGlc={isAdminColegio ? () => setAdminChatsGlcCollapsed((c) => !c) : undefined}
         />
       )}
       </div>
@@ -641,6 +646,8 @@ interface EvoLayoutProps {
   emitTyping: (threadId: string, userName?: string) => void;
   selectedIdForTyping: string | null;
   sections?: { label: string; threads: EvoThreadItem[] }[] | null;
+  chatsGlcCollapsed?: boolean;
+  onToggleChatsGlc?: () => void;
 }
 
 function EvoLayout({
@@ -668,6 +675,8 @@ function EvoLayout({
   emitTyping,
   selectedIdForTyping,
   sections,
+  chatsGlcCollapsed,
+  onToggleChatsGlc,
 }: EvoLayoutProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 h-full">
@@ -715,7 +724,7 @@ function EvoLayout({
                 <Loader2 className="w-8 h-8 animate-spin text-white/50" />
               </div>
             ) : (
-              filteredThreadsList(threads, selectedId, setSelectedId, searchQ, sections)
+              filteredThreadsList(threads, selectedId, setSelectedId, searchQ, sections, chatsGlcCollapsed, onToggleChatsGlc)
             )}
           </div>
         </div>
@@ -842,7 +851,9 @@ function filteredThreadsList(
   selectedId: string | null,
   setSelectedId: (id: string | null) => void,
   searchQ?: string,
-  sections?: { label: string; threads: EvoThreadItem[] }[] | null
+  sections?: { label: string; threads: EvoThreadItem[] }[] | null,
+  chatsGlcCollapsed?: boolean,
+  onToggleChatsGlc?: () => void
 ) {
   const title = (t: EvoThreadItem) => t.displayTitle ?? t.asunto;
   const filterBySearch = (list: EvoThreadItem[]) =>
@@ -855,6 +866,9 @@ function filteredThreadsList(
       const dateB = b.ultimoMensaje?.fecha ? new Date(b.ultimoMensaje.fecha).getTime() : new Date(b.updatedAt).getTime();
       return dateB - dateA;
     });
+
+  const isChatsGlcSection = (label: string) => label === 'Chats GLC';
+  const showCollapseForSection = (label: string) => isChatsGlcSection(label) && onToggleChatsGlc != null;
 
   const renderThread = (t: EvoThreadItem) => {
     const isSelected = t._id === selectedId;
@@ -908,13 +922,32 @@ function filteredThreadsList(
       <>
         {sections.map((sec) => {
           const filtered = sortByDate(filterBySearch(sec.threads));
-          if (filtered.length === 0) return null;
+          const isCollapsible = showCollapseForSection(sec.label);
+          const collapsed = isCollapsible && chatsGlcCollapsed === true;
+          if (filtered.length === 0 && !isCollapsible) return null;
           return (
             <div key={sec.label}>
-              <p className="px-3 pt-3 pb-1 font-medium tracking-wider" style={SECTION_LABEL_STYLE}>
-                {sec.label}
-              </p>
-              {filtered.map((t) => renderThread(t))}
+              {isCollapsible ? (
+                <button
+                  type="button"
+                  onClick={onToggleChatsGlc}
+                  className="w-full px-3 pt-3 pb-1 font-medium tracking-wider flex items-center gap-2 text-left hover:bg-white/[0.04] rounded transition-colors"
+                  style={SECTION_LABEL_STYLE}
+                  aria-expanded={!collapsed}
+                >
+                  {collapsed ? (
+                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
+                  )}
+                  {sec.label}
+                </button>
+              ) : (
+                <p className="px-3 pt-3 pb-1 font-medium tracking-wider" style={SECTION_LABEL_STYLE}>
+                  {sec.label}
+                </p>
+              )}
+              {!collapsed && filtered.map((t) => renderThread(t))}
             </div>
           );
         })}

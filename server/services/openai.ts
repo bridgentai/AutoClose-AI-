@@ -714,3 +714,40 @@ export async function generateBoletinResumen(prompt: string): Promise<string | n
     return null;
   }
 }
+
+/**
+ * Genera análisis de asistencia para directivo (curso + mes).
+ * Recibe un resumen estructurado en texto y devuelve recomendaciones en prosa.
+ */
+export async function generateAttendanceAnalysis(
+  summaryText: string,
+  courseName: string,
+  monthLabel: string
+): Promise<string> {
+  const openaiClient = getOpenAIClient();
+  if (!openaiClient) {
+    return 'Configura OPENAI_API_KEY en .env para ver el análisis con IA.';
+  }
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Eres un analista académico. Analiza los datos de asistencia que te proporcionan. Identifica patrones, días problemáticos, estudiantes en riesgo y da recomendaciones concretas al directivo. Responde en español (Colombia), de forma clara y accionable. Usa párrafos breves, sin viñetas numeradas largas.',
+        },
+        {
+          role: 'user',
+          content: `Analiza estos datos de asistencia del curso ${courseName} del mes ${monthLabel}:\n\n${summaryText}\n\nIdentifica patrones, días problemáticos, estudiantes en riesgo y da recomendaciones concretas al directivo.`,
+        },
+      ],
+      max_tokens: 800,
+    });
+    return response.choices[0]?.message?.content?.trim() || 'No se pudo generar el análisis.';
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[OpenAI] generateAttendanceAnalysis error:', msg);
+    return 'Error al generar el análisis con IA. Verifica OPENAI_API_KEY.';
+  }
+}

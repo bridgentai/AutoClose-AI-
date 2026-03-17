@@ -11,7 +11,7 @@ import { TopStudentCard } from '@/components/chat/TopStudentCard';
 import { TasksOverviewCard } from '@/components/chat/TasksOverviewCard';
 import { TrendAnalyticsCard } from '@/components/chat/TrendAnalyticsCard';
 import { NotesOverviewCard } from '@/components/chat/NotesOverviewCard';
-import kiwiImg from '@/assets/Kiwi-chat.png';
+import kiwiImg from '@/assets/kiwi sentado.png';
 
 interface Message {
   emisor: 'user' | 'ai';
@@ -289,23 +289,24 @@ export default function Chat() {
                     <img
                       src={kiwiImg}
                       alt="Kiwi"
-                      className="kiwi-float select-none"
-                      style={{ width: 160, height: 'auto' }}
+                      className="select-none"
+                      style={{ width: 260, height: 'auto' }}
                       draggable={false}
                     />
                     <div
-                      className="kiwi-shadow mt-2"
+                      className="mt-3"
                       style={{
-                        width: 140,
-                        height: 16,
+                        width: 200,
+                        height: 18,
                         borderRadius: 999,
                         background: 'rgba(37,99,235,0.30)',
                         filter: 'blur(12px)',
+                        opacity: 0.35,
                       }}
                     />
                   </div>
                   <h2 className="mt-6 text-[20px] font-bold text-white">
-                    Hola, soy Kiwi <span aria-hidden="true">👋</span>
+                    Hola, soy Kiwi
                   </h2>
                   <p className="text-white/60 text-sm mt-2">
                     {emptySubtitle}
