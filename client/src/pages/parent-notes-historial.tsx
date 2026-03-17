@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
-import { ArrowLeft, BookOpen } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -60,14 +61,14 @@ export default function ParentNotesHistorialPage() {
     <div className="flex-1 overflow-y-auto p-6 md:p-10">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => setLocation('/mi-aprendizaje/notas')}
-            className="text-white/70 hover:text-white mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver a Notas de {nombreHijo}
-          </Button>
+          <Breadcrumb
+            className="mb-4"
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Notas', href: '/mi-aprendizaje/notas' },
+              { label: `Historial de ${nombreHijo}` },
+            ]}
+          />
           <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
             Historial de notas de {nombreHijo}
           </h1>

@@ -4,7 +4,7 @@ import { BookOpen, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 
 interface MateriaItem {
   _id: string;
@@ -39,7 +39,7 @@ export default function ParentMateriasPage() {
     <div className="flex-1 overflow-y-auto p-6 md:p-10">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <NavBackButton to="/dashboard" label="Dashboard" />
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Materias' }]} />
           <h1 className="text-3xl font-bold text-white mt-4 mb-2 font-['Poppins']">
             Materias de {nombreHijo}
           </h1>

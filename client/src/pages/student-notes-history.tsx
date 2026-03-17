@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { 
-  ArrowLeft, 
   BookOpen, 
   TrendingUp, 
   Award,
@@ -11,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -121,14 +121,14 @@ export default function StudentNotesHistoryPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => setLocation('/mi-aprendizaje/notas')}
-            className="text-white/70 hover:text-white mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Volver a Notas
-          </Button>
+          <Breadcrumb
+            className="mb-4"
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Notas', href: '/mi-aprendizaje/notas' },
+              { label: 'Historial' },
+            ]}
+          />
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">

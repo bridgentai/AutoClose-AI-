@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -226,7 +226,7 @@ export default function StudentNotesPage() {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          <NavBackButton to="/dashboard" label="Dashboard" />
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
           <div className="mt-4">
             <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
             <p className="text-white/60">Solo estudiantes y padres pueden ver esta página.</p>
@@ -437,7 +437,7 @@ export default function StudentNotesPage() {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          <NavBackButton to="/dashboard" label="Dashboard" />
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
           <div className="mt-4">
             <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
             <p className="text-white/60">Vincula un estudiante en tu perfil para ver sus notas.</p>
@@ -451,7 +451,7 @@ export default function StudentNotesPage() {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
           <div className="mt-4 text-white/80">Cargando notas...</div>
         </div>
       </div>
@@ -462,7 +462,7 @@ export default function StudentNotesPage() {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
           <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-4">
             <CardContent className="p-8 text-center">
               <p className="text-red-300 mb-4">Error al cargar las notas. Revisa tu conexión.</p>
@@ -571,7 +571,7 @@ export default function StudentNotesPage() {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
           <div className="max-w-7xl mx-auto w-full">
             <div className="mb-8">
-              <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
+              <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
               <div className="mt-4">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins']">
                   {pageTitle}
@@ -614,7 +614,7 @@ export default function StudentNotesPage() {
         <div className="max-w-7xl mx-auto w-full">
           {/* Header */}
           <div className="mb-8">
-            <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
+            <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mt-4">
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins']">
@@ -772,10 +772,13 @@ export default function StudentNotesPage() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
           <div className="mb-8">
-            <Button variant="ghost" className="text-[#3B82F6] hover:text-[#2563EB] hover:bg-white/5 -ml-2" onClick={() => setSelectedSubject(null)}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Volver a Notas
-            </Button>
+            <Breadcrumb
+              items={[
+                { label: 'Dashboard', href: '/dashboard' },
+                { label: 'Notas', href: '/mi-aprendizaje/notas' },
+                { label: subjectCard?.nombre ?? 'Materia' },
+              ]}
+            />
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 font-['Poppins'] break-words">
@@ -820,12 +823,14 @@ export default function StudentNotesPage() {
     return (
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
-          {/* Header con botón volver */}
           <div className="mb-8">
-            <Button variant="ghost" className="text-[#3B82F6] hover:text-[#2563EB] hover:bg-white/5 -ml-2" onClick={() => setSelectedSubject(null)}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Volver a Notas
-            </Button>
+            <Breadcrumb
+              items={[
+                { label: 'Dashboard', href: '/dashboard' },
+                { label: 'Notas', href: '/mi-aprendizaje/notas' },
+                { label: subjectDetail.nombre },
+              ]}
+            />
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 font-['Poppins'] break-words">
@@ -972,7 +977,7 @@ export default function StudentNotesPage() {
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
       <div className="max-w-7xl mx-auto w-full">
-        <NavBackButton to={isPadre ? '/dashboard' : undefined} label={isPadre ? 'Dashboard' : undefined} />
+        <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
         <div className="mt-4">
           <h1 className="text-2xl font-bold text-white mb-2">{isPadre ? `Notas de ${nombreHijo}` : 'Mis Notas'}</h1>
           <p className="text-white/60 mb-4">Revisa tu rendimiento académico por materia.</p>

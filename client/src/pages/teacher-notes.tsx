@@ -4,7 +4,7 @@ import { useLocation, useRoute } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Plus, MessageSquare } from 'lucide-react';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -269,7 +269,15 @@ export default function TeacherNotesPage() {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
         <div className="max-w-7xl mx-auto w-full">
           <div className="mb-8">
-            <NavBackButton to={`/course/${cursoId}/grades`} label="Tabla de notas" />
+            <Breadcrumb
+              items={[
+                { label: 'Dashboard', href: '/dashboard' },
+                { label: 'Cursos', href: '/profesor/academia/cursos' },
+                { label: `Grupo ${groupDisplayName}`, href: `/course-detail/${cursoId}` },
+                { label: 'Notas', href: `/course/${cursoId}/grades` },
+                { label: currentStudent.nombre },
+              ]}
+            />
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
               <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
                 <AvatarFallback className="bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white text-xl">
@@ -372,7 +380,14 @@ export default function TeacherNotesPage() {
       <div className="max-w-7xl mx-auto w-full">
         {/* Header */}
         <div className="mb-8">
-          <NavBackButton to={`/course-detail/${cursoId}`} label={`Grupo ${groupDisplayName}`} />
+          <Breadcrumb
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Cursos', href: '/profesor/academia/cursos' },
+              { label: `Grupo ${groupDisplayName}`, href: `/course-detail/${cursoId}` },
+              { label: 'Notas' },
+            ]}
+          />
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 font-['Poppins'] break-words">

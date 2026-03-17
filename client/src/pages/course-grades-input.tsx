@@ -3,7 +3,7 @@ import { useRoute, useLocation } from 'wouter';
 import { useAuth } from '@/lib/authContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { CategoryOverviewGrid } from '@/components/grading/CategoryOverviewGrid';
 import { PerformanceSidebar } from '@/components/grading/PerformanceSidebar';
 import { useCourseGrading } from '@/hooks/useCourseGrading';
@@ -126,9 +126,14 @@ export default function CourseGradesInputPage() {
     <div className="min-h-screen bg-[#0a0a2a] text-white p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
-          <NavBackButton
-            to={`/course-detail/${cursoId}`}
-            label="Volver al curso"
+          <Breadcrumb
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Cursos', href: '/profesor/academia/cursos' },
+              { label: `Grupo ${groupDisplayName}`, href: `/course-detail/${cursoId}` },
+              { label: 'Notas', href: `/course/${cursoId}/grades` },
+              { label: 'Ingreso' },
+            ]}
           />
         </div>
 

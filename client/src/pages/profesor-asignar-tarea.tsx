@@ -12,7 +12,7 @@ import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 
 interface Course {
   _id: string;
@@ -41,7 +41,14 @@ class AsignarTareaErrorBoundary extends Component<{ children: React.ReactNode },
     if (this.state.hasError) {
       return (
         <div className="p-6">
-          <NavBackButton to="/profesor/academia/tareas" label="Asignaciones" />
+          <Breadcrumb
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Cursos', href: '/profesor/academia/cursos' },
+              { label: 'Tareas', href: '/profesor/academia/tareas' },
+              { label: 'Crear asignación' },
+            ]}
+          />
           <div className="mt-6 p-6 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-200 flex flex-col gap-4">
             <p className="font-medium flex items-center gap-2">
               <AlertCircle className="w-5 h-5" />
@@ -253,7 +260,14 @@ function ProfesorAsignarTareaPageInner() {
   return (
     <div className="flex-1 overflow-auto w-full">
       <div className="mb-6">
-        <NavBackButton to="/profesor/academia/tareas" label="Asignaciones" />
+        <Breadcrumb
+          items={[
+            { label: 'Dashboard', href: '/dashboard' },
+            { label: 'Cursos', href: '/profesor/academia/cursos' },
+            { label: 'Tareas', href: '/profesor/academia/tareas' },
+            { label: 'Crear asignación' },
+          ]}
+        />
         <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">
           Crear Asignación
         </h2>

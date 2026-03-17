@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 
 // Función para obtener el nombre del grupo desde el grupoId
 const getGroupDisplayName = (groupId: string): string => {
@@ -119,7 +119,14 @@ export default function ProfesorRevisionTareasPage() {
     <div className="flex-1 overflow-auto p-6 md:p-10">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <NavBackButton to="/profesor/academia/tareas" label="Asignaciones" />
+          <Breadcrumb
+            items={[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Cursos', href: '/profesor/academia/cursos' },
+              { label: 'Tareas', href: '/profesor/academia/tareas' },
+              { label: 'Revisión' },
+            ]}
+          />
           <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">
             Panel de Cursos - Revisión de Asignaciones
           </h2>

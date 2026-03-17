@@ -16,7 +16,7 @@ import { useLocation, useParams } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { DocumentEditor } from '@/components/document-editor';
 import { courseDisplayLabel } from '@/lib/assignmentUtils';
 
@@ -131,12 +131,24 @@ export default function AssignmentDetailPage() {
     enabled: !!params.id && !isProfesor && !!assignment,
   });
   interface GoogleDriveFileSubmit { id: string; name: string; mimeType?: string; webViewLink?: string }
-  const { data: submitGoogleFilesRes, isLoading: submitGoogleFilesLoading } = useQuery<{ files: GoogleDriveFileSubmit[] }>({
+  const { data: submitGoogleFilesRes, isLoading: submitGoogleFilesLoading, isError: submitGoogleFilesError } = useQuery<{ files: GoogleDriveFileSubmit[] }>({
     queryKey: ['evo-drive', 'google-files-submit', submitGoogleSearch],
     queryFn: () => apiRequest('GET', `/api/evo-drive/google/files?q=${encodeURIComponent(submitGoogleSearch)}`),
     enabled: submitAddFromGoogleOpen && !!submitGoogleStatus.connected,
+    retry: false,
   });
   const submitGoogleFiles = submitGoogleFilesRes?.files ?? [];
+  const submitGoogleDriveDisconnected = !submitGoogleStatus.connected || (!!submitGoogleStatus.connected && submitGoogleFilesError);
+
+  const reconnectGoogleDrive = async () => {
+    try {
+      const data = await apiRequest<{ url: string }>('GET', '/api/evo-drive/google/auth-url');
+      if (data?.url && typeof data.url === 'string') window.location.href = data.url;
+      else toast({ title: 'Error', description: 'No se pudo obtener el enlace de conexión.', variant: 'destructive' });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo conectar con Google Drive.', variant: 'destructive' });
+    }
+  };
 
   const createPersonalDocMutation = useMutation({
     mutationFn: async (payload: { nombre: string; tipo: 'doc' | 'slide' | 'sheet' }) =>
@@ -408,15 +420,25 @@ export default function AssignmentDetailPage() {
   return (
     <div className="flex-1 overflow-auto p-8">
       <div className="max-w-4xl mx-auto">
-        {!isProfesor && !isPadre && (
-          <NavBackButton to="/mi-aprendizaje/tareas" label="Tareas" />
-        )}
-        {isPadre && (
-          <NavBackButton to="/calendar" label="Calendario" />
-        )}
-        {isProfesor && (
-          <NavBackButton to="/profesor/academia/tareas" label="Tareas" />
-        )}
+        <Breadcrumb
+          className="mb-4"
+          items={[
+            { label: 'Dashboard', href: '/dashboard' },
+            ...(isPadre
+              ? [{ label: 'Calendario', href: '/calendar' }]
+              : [{ label: 'Cursos', href: isProfesor ? '/profesor/academia/cursos' : '/mi-aprendizaje/cursos' }]),
+            ...(groupIdOrName
+              ? [
+                  {
+                    label: courseDisplayLabel(assignment),
+                    href: isProfesor ? `/course-detail/${groupIdOrName}` : undefined,
+                  },
+                ]
+              : []),
+            { label: 'Tareas', href: isProfesor && groupIdOrName ? `/profesor/cursos/${groupIdOrName}/tareas` : '/mi-aprendizaje/tareas' },
+            { label: assignment.titulo },
+          ]}
+        />
               {isProfesor ? (
                 <Tabs defaultValue={defaultTab} className="w-full">
                   <TabsList className="bg-white/5 border border-white/10 mb-6">
@@ -1235,8 +1257,17 @@ export default function AssignmentDetailPage() {
               </div>
             </DialogTitle>
           </DialogHeader>
-          {!submitGoogleStatus.connected ? (
-            <p className="text-white/60 text-sm py-4">Conecta Google Drive desde Evo Drive primero para usar tus archivos.</p>
+          {submitGoogleDriveDisconnected ? (
+            <div className="space-y-4 py-2">
+              <p className="text-white/60 text-sm">
+                {submitGoogleFilesError ? 'Google Drive se desconectó. Reconéctalo para usar tus archivos.' : 'Conecta Google Drive para agregar archivos desde tu cuenta.'}
+              </p>
+              <Button type="button" onClick={reconnectGoogleDrive} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium">
+                <Cloud className="w-4 h-4 mr-2" />
+                Reconectar Google Drive
+              </Button>
+              <p className="text-white/40 text-xs">Serás redirigido a Google y volverás aquí sin cerrar sesión.</p>
+            </div>
           ) : (
             <>
               <div className="space-y-2">

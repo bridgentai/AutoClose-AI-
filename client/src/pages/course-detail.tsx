@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3, FolderOpen, Cloud, Link2, Presentation, FileSpreadsheet, ExternalLink } from 'lucide-react';
-import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -271,6 +270,13 @@ export default function CourseDetailPage() {
     const isProfessor = userRole === 'profesor';
     const isPadre = userRole === 'padre';
     const isStudentOrParent = userRole === 'estudiante' || userRole === 'padre';
+    const coursesHomeHref =
+        userRole === 'directivo' ? '/directivo/cursos'
+            : userRole === 'profesor' ? '/profesor/academia/cursos'
+                : userRole === 'estudiante' ? '/mi-aprendizaje/cursos'
+                    : userRole === 'padre' ? '/parent/materias'
+                        : '/courses';
+    const coursesHomeLabel = userRole === 'padre' ? 'Materias' : 'Cursos';
 
     // Nombre legible del grupo (cuando la URL usa UUID, se obtiene del API)
     const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
@@ -608,12 +614,24 @@ export default function CourseDetailPage() {
         enabled: showAssignmentForm,
     });
     interface GoogleDriveFile { id: string; name: string; mimeType?: string; webViewLink?: string; size?: string }
-    const { data: googleFilesRes, isLoading: googleFilesLoading } = useQuery<{ files: GoogleDriveFile[] }>({
+    const { data: googleFilesRes, isLoading: googleFilesLoading, isError: googleFilesError } = useQuery<{ files: GoogleDriveFile[] }>({
         queryKey: ['evo-drive', 'google-files-assign', googleSearch],
         queryFn: () => apiRequest('GET', `/api/evo-drive/google/files?q=${encodeURIComponent(googleSearch)}`),
         enabled: addFromGoogleOpen && !!googleStatus.connected,
+        retry: false,
     });
     const googleFilesForAssign = googleFilesRes?.files ?? [];
+    const googleDriveDisconnected = !googleStatus.connected || (!!googleStatus.connected && googleFilesError);
+
+    const reconnectGoogleDrive = async () => {
+        try {
+            const data = await apiRequest<{ url: string }>('GET', '/api/evo-drive/google/auth-url');
+            if (data?.url && typeof data.url === 'string') window.location.href = data.url;
+            else toast({ title: 'Error', description: 'No se pudo obtener el enlace de conexión.', variant: 'destructive' });
+        } catch {
+            toast({ title: 'Error', description: 'No se pudo conectar con Google Drive.', variant: 'destructive' });
+        }
+    };
 
     // Efecto para resetear el formulario
     useEffect(() => {
@@ -698,11 +716,14 @@ export default function CourseDetailPage() {
     // Crear Doc/Slide/Sheet en Google desde formulario de asignación (Evo Drive) y añadir enlace a materiales
     const createNewDocForAssignMutation = useMutation({
         mutationFn: async (payload: { nombre: string; tipo: 'doc' | 'slide' | 'sheet'; cursoId: string; cursoNombre: string }) => {
+            // Usar la materia actual (firstSubjectId) como group_subject destino en Evo Drive
+            const groupSubjectId = firstSubjectId || '';
             return apiRequest<{ googleWebViewLink?: string; nombre?: string }>('POST', '/api/evo-drive/google/create', {
                 nombre: payload.nombre,
                 tipo: payload.tipo,
                 cursoId: payload.cursoId,
                 cursoNombre: payload.cursoNombre,
+                groupSubjectId: groupSubjectId || undefined,
             });
         },
         onSuccess: (data, variables) => {
@@ -824,7 +845,13 @@ export default function CourseDetailPage() {
                 <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                            <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+                                    <Breadcrumb
+                                        items={[
+                                            { label: 'Dashboard', href: '/dashboard' },
+                                            { label: coursesHomeLabel, href: coursesHomeHref },
+                                            { label: `Grupo ${groupDisplayName}` },
+                                        ]}
+                                    />
                             {showOptionsButton && (
                                 <Button
                                     variant="outline"
@@ -1237,8 +1264,21 @@ export default function CourseDetailPage() {
                                 </div>
                             </DialogTitle>
                         </DialogHeader>
-                        {!googleStatus.connected ? (
-                            <p className="text-white/60 text-sm py-4">Conecta Google Drive desde Evo Drive primero.</p>
+                        {googleDriveDisconnected ? (
+                            <div className="space-y-4 py-2">
+                                <p className="text-white/60 text-sm">
+                                    {googleFilesError ? 'Google Drive se desconectó. Reconéctalo para seguir usando tus archivos.' : 'Conecta Google Drive para agregar archivos desde tu cuenta.'}
+                                </p>
+                                <Button
+                                    type="button"
+                                    onClick={reconnectGoogleDrive}
+                                    className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium"
+                                >
+                                    <Cloud className="w-4 h-4 mr-2" />
+                                    Reconectar Google Drive
+                                </Button>
+                                <p className="text-white/40 text-xs">Serás redirigido a Google y volverás aquí sin cerrar sesión.</p>
+                            </div>
                         ) : (
                             <>
                                 <div className="space-y-2">
@@ -1447,7 +1487,13 @@ export default function CourseDetailPage() {
                             {errorMessage}
                         </AlertDescription>
                     </Alert>
-                    <NavBackButton to="/courses" label="Materias" />
+                    <Breadcrumb
+                        items={[
+                            { label: 'Dashboard', href: '/dashboard' },
+                            { label: 'Materias', href: '/courses' },
+                            { label: 'Error' },
+                        ]}
+                    />
                 </div>
             );
         }
@@ -1462,7 +1508,13 @@ export default function CourseDetailPage() {
                             El ID de materia proporcionado es inválido o no tienes acceso a esta materia.
                         </AlertDescription>
                     </Alert>
-                    <NavBackButton to="/courses" label="Materias" />
+                    <Breadcrumb
+                        items={[
+                            { label: 'Dashboard', href: '/dashboard' },
+                            { label: 'Materias', href: '/courses' },
+                            { label: 'No encontrada' },
+                        ]}
+                    />
                 </div>
             );
         }
@@ -1558,24 +1610,14 @@ export default function CourseDetailPage() {
 
         return (
             <>
-                {/* Breadcrumbs */}
-                <Breadcrumb className="mb-6">
-                    <BreadcrumbList>
-                        <BreadcrumbItem>
-                            <BreadcrumbLink
-                                onClick={() => setLocation('/courses')}
-                                className="text-white/70 hover:text-[#3B82F6] cursor-pointer transition-colors duration-200"
-                            >
-                                <Home className="w-4 h-4 mr-1" />
-                                Materias
-                            </BreadcrumbLink>
-                        </BreadcrumbItem>
-                        <BreadcrumbSeparator className="text-white/40" />
-                        <BreadcrumbItem>
-                            <BreadcrumbPage className="text-[#E2E8F0]">{details.nombre}</BreadcrumbPage>
-                        </BreadcrumbItem>
-                    </BreadcrumbList>
-                </Breadcrumb>
+                <Breadcrumb
+                    className="mb-6"
+                    items={[
+                        { label: 'Dashboard', href: '/dashboard' },
+                        { label: 'Materias', href: '/courses' },
+                        { label: details.nombre },
+                    ]}
+                />
 
                 {/* Encabezado: mismo estilo glass que vista profesor (panel-grades) */}
                 <div className="mb-8 relative overflow-hidden rounded-2xl panel-grades border border-white/10 transition-all duration-300 hover:shadow-[0_0_48px_rgba(37,99,235,0.3)]">
@@ -1636,7 +1678,6 @@ export default function CourseDetailPage() {
                                         Opciones de materia
                                     </Button>
                                 )}
-                                <NavBackButton to="/courses" label="Materias" />
                             </div>
                         </div>
                     </div>

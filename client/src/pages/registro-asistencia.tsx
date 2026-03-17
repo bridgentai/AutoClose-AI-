@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { NavBackButton } from "@/components/nav-back-button";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Clock, User, CheckCircle, XCircle, Timer } from "lucide-react";
 import { motion } from "framer-motion";
@@ -162,7 +162,15 @@ export default function RegistroAsistenciaPage() {
     <div className="min-h-[calc(100vh-8rem)] w-full" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
       <div className="relative z-10 w-full flex flex-col min-h-0">
         <div className="mb-6">
-          <NavBackButton to={`/course/${grupoId}/asistencia`} label="Volver" />
+          <Breadcrumb
+            items={[
+              { label: "Dashboard", href: "/dashboard" },
+              { label: "Cursos", href: "/profesor/academia/cursos" },
+              { label: `Grupo ${grupoDisplay}`, href: `/course-detail/${grupoId}` },
+              { label: "Asistencia", href: `/course/${grupoId}/asistencia` },
+              { label: "Registro" },
+            ]}
+          />
         </div>
         <header className="mb-8">
           <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-2 flex items-center gap-2">

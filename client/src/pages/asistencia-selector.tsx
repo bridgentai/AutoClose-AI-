@@ -4,22 +4,21 @@ import { useState, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { NavBackButton } from "@/components/nav-back-button";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon, CheckCircle, ChevronRight, Clock, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
-/** Mismos períodos que el horario del directivo (Horarios Curso/Profesor) */
+/** 6 horas de clase, 1 break, 1 almuerzo. Alineado con Horarios Curso/Profesor. */
 const PERIODOS = [
   { num: 1, inicio: "7:30", fin: "8:25", especial: null },
-  { num: 2, inicio: "8:25", fin: "9:20", especial: null },
-  { num: 3, inicio: "9:20", fin: "10:15", especial: null },
-  { num: 4, inicio: "10:15", fin: "10:35", especial: "Break" },
-  { num: 5, inicio: "10:35", fin: "11:30", especial: null },
-  { num: 6, inicio: "11:30", fin: "12:25", especial: null },
-  { num: 7, inicio: "12:25", fin: "13:05", especial: "Almuerzo" },
-  { num: 8, inicio: "13:05", fin: "14:00", especial: null },
-  { num: 9, inicio: "14:00", fin: "14:25", especial: null },
+  { num: 2, inicio: "8:30", fin: "9:25", especial: null },
+  { num: 3, inicio: "9:30", fin: "10:30", especial: null },
+  { num: 4, inicio: "10:30", fin: "10:50", especial: "Break" },
+  { num: 5, inicio: "10:50", fin: "11:45", especial: null },
+  { num: 6, inicio: "11:50", fin: "12:50", especial: null },
+  { num: 7, inicio: "12:50", fin: "13:35", especial: "Almuerzo" },
+  { num: 8, inicio: "13:35", fin: "14:25", especial: null },
 ];
 
 const DIAS_OPCIONES = [1, 2, 3, 4, 5, 6];
@@ -258,7 +257,14 @@ export default function AsistenciaSelectorPage() {
     >
       <div className="relative z-10 w-full flex flex-col min-h-0 max-w-2xl mx-auto">
         <div className="mb-6">
-          <NavBackButton to={`/course-detail/${grupoId}`} label={`Grupo ${groupDisplayName}`} />
+          <Breadcrumb
+            items={[
+              { label: "Dashboard", href: "/dashboard" },
+              { label: "Cursos", href: "/profesor/academia/cursos" },
+              { label: `Grupo ${groupDisplayName}`, href: `/course-detail/${grupoId}` },
+              { label: "Asistencia" },
+            ]}
+          />
         </div>
 
         <header className="mb-8">

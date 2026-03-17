@@ -6,7 +6,7 @@ import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { FileText, MessageSquare } from "lucide-react";
-import { NavBackButton } from "@/components/nav-back-button";
+import { Breadcrumb } from "@/components/Breadcrumb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -89,9 +89,15 @@ export default function DirectivoEstudianteNotasPage() {
 
   return (
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
-      <NavBackButton
-        to={`/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes`}
-        label={groupDisplayName}
+      <Breadcrumb
+        className="mb-4"
+        items={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Cursos", href: "/directivo/cursos" },
+          { label: `Grupo ${groupDisplayName}`, href: `/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes` },
+          { label: "Estudiantes", href: `/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes` },
+          { label: "Notas" },
+        ]}
       />
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
