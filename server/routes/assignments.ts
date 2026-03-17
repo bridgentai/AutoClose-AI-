@@ -148,10 +148,11 @@ router.get('/', protect, async (req: AuthRequest, res) => {
         const gs = await findGroupSubjectById(a.group_subject_id);
         const group = gs ? await findGroupById(gs.group_id) : null;
         const subject = gs ? await findSubjectById(gs.subject_id) : null;
+        const displayName = (gs?.display_name?.trim() || subject?.name) ?? undefined;
         const extra: { estado: string; submissions?: { estudianteId: string; calificacion?: number; fechaEntrega?: string }[]; curso?: string; materiaNombre?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string } = {
           estado: state,
           curso: group?.name,
-          materiaNombre: subject?.name ?? undefined,
+          materiaNombre: displayName,
           groupId: gs?.group_id,
           subjectId: gs?.subject_id,
           logroCalificacionId: a.assignment_category_id ?? undefined,
@@ -255,7 +256,8 @@ router.get('/student', protect, async (req: AuthRequest, res) => {
         const gs = await findGroupSubjectById(a.group_subject_id);
         const subject = await findSubjectById(gs?.subject_id ?? '');
         const cursoNombre = groupIdToName.get(gs?.group_id ?? '') ?? 'Sin grupo';
-        return assignmentToApi(a, { estado: state, materiaNombre: subject?.name ?? 'Sin materia', curso: cursoNombre, groupId: gs?.group_id, subjectId: gs?.subject_id });
+        const materiaNombre = (gs?.display_name?.trim() || subject?.name) ?? 'Sin materia';
+        return assignmentToApi(a, { estado: state, materiaNombre, curso: cursoNombre, groupId: gs?.group_id, subjectId: gs?.subject_id });
       })
     );
 
@@ -305,7 +307,8 @@ router.get('/hijo/:estudianteId', protect, async (req: AuthRequest, res) => {
         const state = submissionState(sub);
         const gs = await findGroupSubjectById(a.group_subject_id);
         const subject = await findSubjectById(gs?.subject_id ?? '');
-        return assignmentToApi(a, { estado: state, materiaNombre: subject?.name ?? 'Sin materia', curso: group.name, groupId: gs?.group_id, subjectId: gs?.subject_id });
+        const materiaNombre = (gs?.display_name?.trim() || subject?.name) ?? 'Sin materia';
+        return assignmentToApi(a, { estado: state, materiaNombre, curso: group.name, groupId: gs?.group_id, subjectId: gs?.subject_id });
       })
     );
 
@@ -553,7 +556,7 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
     const group = await findGroupById(gsForInst.group_id);
     const subject = await findSubjectById(gsForInst.subject_id);
     const curso = group?.name ?? undefined;
-    const materiaNombre = subject?.name ?? undefined;
+    const materiaNombre = (gsForInst.display_name?.trim() || subject?.name) ?? undefined;
     const groupId = gsForInst.group_id;
 
     const subs = await findSubmissionsByAssignment(assignment.id);

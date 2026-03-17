@@ -440,7 +440,7 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
 
     const teacher = gs ? await findUserById(gs.teacher_id) : null;
     const cursoAsignado = user.role === 'estudiante' ? (await getFirstGroupNameForStudent(userId)) ?? undefined : undefined;
-    const displayName = gs?.display_name ?? subject.name;
+    const displayName = (gs?.display_name?.trim() || subject.name);
     res.json({
       _id: subject.id,
       groupSubjectId: gs?.id ?? null,
@@ -823,9 +823,10 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
   try {
     const student = await findUserById(studentId);
     const subject = data.gs ? await findSubjectById(data.gs.subject_id) : null;
+    const courseDisplayName = (data.gs?.display_name?.trim() || subject?.name) ?? 'Materia';
     const context: AcademicInsightsContext = {
       studentName: student?.full_name ?? 'Estudiante',
-      courseName: subject?.name ?? 'Materia',
+      courseName: courseDisplayName,
       weightedAverage,
       byCategory,
       role: (req.user?.rol as AcademicInsightRole) ?? 'profesor',
@@ -1045,6 +1046,7 @@ router.put('/assign-professor', protect, checkAdminColegioOnly, async (req: Auth
     const { queryPg } = await import('../config/db-pg.js');
     await queryPg('UPDATE group_subjects SET teacher_id = $1 WHERE id = $2 RETURNING 1', [professorId, gsId]);
     const subject = await findSubjectById(gs.subject_id);
+    const courseDisplayName = (gs.display_name?.trim() || subject?.name) ?? '';
     await logAdminAction({
       userId: req.user!.id!,
       role: req.user?.rol ?? 'admin-general-colegio',
@@ -1052,9 +1054,9 @@ router.put('/assign-professor', protect, checkAdminColegioOnly, async (req: Auth
       entityType: 'course',
       entityId: gsId,
       colegioId: gs.institution_id,
-      requestData: { courseId: gsId, professorId, courseName: subject?.name },
+      requestData: { courseId: gsId, professorId, courseName: courseDisplayName },
     }).catch(() => {});
-    res.status(200).json({ message: `Profesor asignado correctamente al curso ${subject?.name}.`, course: { _id: gs.id }, professor: { _id: professor.id, nombre: professor.full_name } });
+    res.status(200).json({ message: `Profesor asignado correctamente al curso ${courseDisplayName}.`, course: { _id: gs.id }, professor: { _id: professor.id, nombre: professor.full_name } });
   } catch (error: unknown) {
     console.error('Error al asignar profesor:', error);
     res.status(500).json({ message: 'Error interno del servidor.' });

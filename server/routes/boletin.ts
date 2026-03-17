@@ -260,19 +260,16 @@ router.get(
       );
       const grupoNombre = groupRes.rows[0]?.name ?? '';
 
-      // Profesor: filtrar solo su materia
+      // Profesor: filtrar solo su materia (usar display_name para coincidir con data.materias.materia)
       if (rol === 'profesor') {
-        const gsRes = await queryPg<{ subject_id: string }>(
-          `SELECT subject_id FROM group_subjects
-         WHERE group_id = $1 AND teacher_id = $2 AND institution_id = $3`,
+        const teacherDisplayNamesRes = await queryPg<{ subject_name: string }>(
+          `SELECT COALESCE(gs.display_name, s.name) AS subject_name
+           FROM group_subjects gs
+           JOIN subjects s ON s.id = gs.subject_id
+           WHERE gs.group_id = $1 AND gs.teacher_id = $2 AND gs.institution_id = $3`,
           [groupId, userId, institutionId]
         );
-        const teacherSubjectIds = gsRes.rows.map((r) => r.subject_id);
-        const subjectsRes = await queryPg<{ name: string }>(
-          `SELECT name FROM subjects WHERE id = ANY($1::uuid[])`,
-          [teacherSubjectIds]
-        );
-        const teacherSubjectNames = subjectsRes.rows.map((r) => r.name);
+        const teacherSubjectNames = teacherDisplayNamesRes.rows.map((r) => r.subject_name);
         data.materias = data.materias.filter((m) =>
           teacherSubjectNames.includes(m.materia)
         );

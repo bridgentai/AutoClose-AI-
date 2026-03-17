@@ -138,9 +138,10 @@ router.get('/:id/overview', protect, async (req: AuthRequest, res) => {
     const pendingAssignments = assignments.filter((a) => a.due_date > now);
     const pastAssignments = assignments.filter((a) => a.due_date <= now);
 
+    const displayName = (gsRow.display_name?.trim() || subject?.name) ?? '';
     const response = {
       _id: subject?.id ?? id,
-      nombre: subject?.name ?? '',
+      nombre: displayName,
       descripcion: subject?.description ?? '',
       colorAcento: '',
       icono: '',

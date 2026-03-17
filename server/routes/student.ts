@@ -120,10 +120,11 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
         const gs = assignment ? await findGroupSubjectById(assignment.group_subject_id) : null;
         const subject = gs ? await findSubjectById(gs.subject_id) : null;
         const group = gs ? await findGroupById(gs.group_id) : null;
+        const subjectDisplayName = (gs?.display_name?.trim() || subject?.name) ?? 'Sin materia';
         return {
           _id: g.id,
           subjectId: subject?.id ?? g.assignment_id,
-          subjectName: subject?.name ?? 'Sin materia',
+          subjectName: subjectDisplayName,
           groupName: group?.name ?? '',
           gsId: gs?.id ?? null,
           assignmentCategoryId: assignment?.assignment_category_id ?? null,
@@ -369,10 +370,11 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
         const gs = assignment ? await findGroupSubjectById(assignment.group_subject_id) : null;
         const subject = gs ? await findSubjectById(gs.subject_id) : null;
         const group = gs ? await findGroupById(gs.group_id) : null;
+        const subjectDisplayName = (gs?.display_name?.trim() || subject?.name) ?? 'Sin materia';
         return {
           _id: g.id,
           subjectId: subject?.id ?? g.assignment_id,
-          subjectName: subject?.name ?? 'Sin materia',
+          subjectName: subjectDisplayName,
           groupName: group?.name ?? '',
           gsId: gs?.id ?? null,
           assignmentCategoryId: assignment?.assignment_category_id ?? null,
