@@ -11,6 +11,7 @@ import { TopStudentCard } from '@/components/chat/TopStudentCard';
 import { TasksOverviewCard } from '@/components/chat/TasksOverviewCard';
 import { TrendAnalyticsCard } from '@/components/chat/TrendAnalyticsCard';
 import { NotesOverviewCard } from '@/components/chat/NotesOverviewCard';
+import kiwiImg from '@/assets/Kiwi-chat.png';
 
 interface Message {
   emisor: 'user' | 'ai';
@@ -224,6 +225,13 @@ export default function Chat() {
 
   const accentColor = '#00c8ff';
   const accentColorDark = '#1e3cff';
+  const rol = user?.rol ?? '';
+  const emptySubtitle =
+    rol === 'estudiante'
+      ? 'Pregúntame sobre tus tareas, notas o materias'
+      : rol === 'profesor'
+        ? 'Crea tareas, revisa entregas o genera materiales'
+        : 'Consulta reportes, estadísticas o gestiona el colegio';
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4 relative" data-testid="chat-page">
@@ -277,14 +285,30 @@ export default function Chat() {
             ) : messages.length === 0 ? (
               <div className="flex items-center justify-center flex-1">
                 <div className="text-center">
-                  <div className="w-20 h-20 rounded-2xl mx-auto mb-6 flex items-center justify-center bg-gradient-to-br from-[#002366] to-[#1e3cff]">
-                    <MessageSquare className="w-10 h-10 text-white" />
+                  <div className="flex flex-col items-center">
+                    <img
+                      src={kiwiImg}
+                      alt="Kiwi"
+                      className="kiwi-float select-none"
+                      style={{ width: 160, height: 'auto' }}
+                      draggable={false}
+                    />
+                    <div
+                      className="kiwi-shadow mt-2"
+                      style={{
+                        width: 140,
+                        height: 16,
+                        borderRadius: 999,
+                        background: 'rgba(37,99,235,0.30)',
+                        filter: 'blur(12px)',
+                      }}
+                    />
                   </div>
-                  <h2 className="text-3xl font-bold text-white mb-3 font-['Poppins']">
-                    Por donde empezamos?
+                  <h2 className="mt-6 text-[20px] font-bold text-white">
+                    Hola, soy Kiwi <span aria-hidden="true">👋</span>
                   </h2>
-                  <p className="text-white/60 text-lg">
-                    Pregunta sobre tus cursos, tareas o conceptos academicos
+                  <p className="text-white/60 text-sm mt-2">
+                    {emptySubtitle}
                   </p>
                 </div>
               </div>
@@ -339,25 +363,59 @@ export default function Chat() {
                         }}
                       />
                     ) : (
-                      <div
-                        className="max-w-[80%] px-5 py-3 rounded-2xl bg-white/95 text-gray-900 rounded-bl-sm border-2"
-                        style={{ borderColor: accentColor }}
-                      >
-                        <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
-                          {msg.contenido}
-                        </p>
+                      <div className="w-full flex items-start gap-2 max-w-[80%]">
+                        <img
+                          src={kiwiImg}
+                          alt="Kiwi"
+                          className="shrink-0"
+                          style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                          draggable={false}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                          <div
+                            className="px-5 py-3 text-white/90"
+                            style={{
+                              background: 'rgba(37,99,235,0.10)',
+                              border: '1px solid rgba(37,99,235,0.15)',
+                              borderRadius: '16px 16px 16px 4px',
+                            }}
+                          >
+                            <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
+                              {msg.contenido}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
                 ))}
                 {loading && (
-                  <div className="flex justify-start">
-                    <div
-                      className="bg-white/90 px-5 py-3 rounded-2xl rounded-bl-sm border flex items-center gap-2"
-                      style={{ color: accentColor, borderColor: `${accentColor}30` }}
-                    >
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="italic">Escribiendo...</span>
+                  <div className="flex justify-start max-w-[80%]">
+                    <div className="flex items-start gap-2">
+                      <img
+                        src={kiwiImg}
+                        alt="Kiwi"
+                        className="shrink-0"
+                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                        draggable={false}
+                      />
+                      <div>
+                        <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                        <div
+                          className="px-4 py-3"
+                          style={{
+                            background: 'rgba(37,99,235,0.10)',
+                            border: '1px solid rgba(37,99,235,0.15)',
+                            borderRadius: '16px 16px 16px 4px',
+                          }}
+                          aria-label="Kiwi está pensando"
+                        >
+                          <span className="kiwi-dot" />
+                          <span className="kiwi-dot" style={{ animationDelay: '0.12s', marginLeft: 6 }} />
+                          <span className="kiwi-dot" style={{ animationDelay: '0.24s', marginLeft: 6 }} />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -377,16 +435,16 @@ export default function Chat() {
                 handleSend();
               }
             }}
-            placeholder="Escribe tu pregunta..."
-            className="h-12 rounded-2xl px-5 text-white placeholder:text-white/40 bg-white/5 border-white/10"
+            placeholder="Escríbele a Kiwi..."
+            className="h-12 rounded-[12px] px-5 text-white placeholder:text-white/40 bg-white/5 border-white/10"
             disabled={loading}
             data-testid="input-chat"
           />
           <Button
             onClick={handleSend}
             disabled={loading || !input.trim()}
-            className="w-12 h-12 rounded-full hover:opacity-90 flex-shrink-0"
-            style={{ background: `linear-gradient(to right, ${accentColor}, ${accentColorDark})` }}
+            className="w-12 h-12 rounded-[12px] hover:opacity-90 flex-shrink-0"
+            style={{ background: `linear-gradient(to right, ${accentColorDark}, ${accentColor})` }}
             data-testid="button-send"
           >
             {loading ? (

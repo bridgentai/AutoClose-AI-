@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import kiwiImg from '@/assets/Kiwi-chat.png';
 import {
   Dialog,
   DialogContent,
@@ -60,6 +61,13 @@ function AIChatBox({ rol }: AIChatBoxProps) {
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const emptySubtitle =
+    rol === 'estudiante'
+      ? 'Pregúntame sobre tus tareas, notas o materias'
+      : rol === 'profesor'
+        ? 'Crea tareas, revisa entregas o genera materiales'
+        : 'Consulta reportes, estadísticas o gestiona el colegio';
 
   const scrollToBottom = () => {
     // Usar requestAnimationFrame para asegurar que el DOM se haya actualizado
@@ -165,19 +173,30 @@ function AIChatBox({ rol }: AIChatBoxProps) {
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <div
-                  className="w-14 h-14 rounded-xl mx-auto mb-3 flex items-center justify-center badge-glow animate-float"
-                  style={{
-                    background: `linear-gradient(to bottom right, ${colorPrimario}, ${colorSecundario})`
-                  }}
-                >
-                  <MessageSquare className="w-7 h-7 text-white" />
+                <div className="flex flex-col items-center">
+                  <img
+                    src={kiwiImg}
+                    alt="Kiwi"
+                    className="kiwi-float select-none"
+                    style={{ width: 160, height: 'auto' }}
+                    draggable={false}
+                  />
+                  <div
+                    className="kiwi-shadow mt-2"
+                    style={{
+                      width: 140,
+                      height: 16,
+                      borderRadius: 999,
+                      background: 'rgba(37,99,235,0.30)',
+                      filter: 'blur(12px)',
+                    }}
+                  />
                 </div>
-                <h2 className="text-lg font-semibold text-white mb-1.5 text-expressive">
-                  {rol === 'estudiante' ? 'Tu centro de comandos' : 'Asistente de Productividad'}
+                <h2 className="mt-5 text-[20px] font-bold text-white text-expressive">
+                  Hola, soy Kiwi <span aria-hidden="true">👋</span>
                 </h2>
-                <p className="text-white/60 text-sm text-expressive-subtitle">
-                  Escribe un comando o una pregunta para comenzar.
+                <p className="text-white/60 text-sm mt-2 text-expressive-subtitle">
+                  {emptySubtitle}
                 </p>
               </div>
             </div>
@@ -200,18 +219,56 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                       <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
                     </div>
                   ) : (
-                    <div className="w-full">
-                      <div className="text-white/90 text-[14px] leading-relaxed whitespace-pre-wrap">
-                        {msg.contenido}
+                    <div className="w-full flex items-start gap-2">
+                      <img
+                        src={kiwiImg}
+                        alt="Kiwi"
+                        className="shrink-0"
+                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                        draggable={false}
+                      />
+                      <div className="min-w-0 max-w-[85%]">
+                        <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                        <div
+                          className="px-3 py-2 text-white/90 text-[14px] leading-relaxed whitespace-pre-wrap"
+                          style={{
+                            background: 'rgba(37,99,235,0.10)',
+                            border: '1px solid rgba(37,99,235,0.15)',
+                            borderRadius: '16px 16px 16px 4px',
+                          }}
+                        >
+                          {msg.contenido}
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
               ))}
               {loading && (
-                <div className="flex items-center gap-2 text-white/60">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span className="text-sm italic">Escribiendo...</span>
+                <div className="w-full flex items-start gap-2">
+                  <img
+                    src={kiwiImg}
+                    alt="Kiwi"
+                    className="shrink-0"
+                    style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                    draggable={false}
+                  />
+                  <div className="min-w-0 max-w-[85%]">
+                    <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                    <div
+                      className="px-3 py-2"
+                      style={{
+                        background: 'rgba(37,99,235,0.10)',
+                        border: '1px solid rgba(37,99,235,0.15)',
+                        borderRadius: '16px 16px 16px 4px',
+                      }}
+                      aria-label="Kiwi está pensando"
+                    >
+                      <span className="kiwi-dot" />
+                      <span className="kiwi-dot" style={{ animationDelay: '0.12s', marginLeft: 6 }} />
+                      <span className="kiwi-dot" style={{ animationDelay: '0.24s', marginLeft: 6 }} />
+                    </div>
+                  </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -219,7 +276,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
           )}
         </div>
         <div className="border-t border-white/10 pt-3 mt-3 flex-shrink-0">
-          <div className="relative flex items-end gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2 backdrop-blur-sm hover:border-white/20 transition-colors">
+          <div className="relative flex items-end gap-2 bg-white/5 border border-white/10 rounded-[12px] px-3 py-2 backdrop-blur-sm hover:border-white/20 transition-colors">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -229,7 +286,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                   handleSend();
                 }
               }}
-              placeholder="Escribe tu mensaje..."
+              placeholder="Escríbele a Kiwi..."
               className="flex-1 border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm py-1"
               disabled={loading}
               data-testid="input-dashboard-chat"
@@ -724,31 +781,29 @@ function DirectivoDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* 4 KPIs */}
+      {/* 4 KPIs: Cursos | Docentes | Promedio general | Amonestaciones */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/estudiantes')}>
+        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/cursos')}>
           <CardHeader className="pb-1">
-            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Estudiantes activos</CardTitle>
+            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Cursos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingStats ? '—' : (stats?.estudiantes ?? 0)}</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingStats ? '—' : (stats?.cursos ?? 0)}</div>
             <div className="flex items-center gap-2 mt-1">
-              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">+0 hoy</Badge>
-              <span className="text-white/50 text-sm">{stats?.cursos ?? 0} cursos</span>
+              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">Grupos</Badge>
+              <span className="text-white/50 text-sm">{stats?.estudiantes ?? 0} estudiantes</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/cursos')}>
+        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/profesores')}>
           <CardHeader className="pb-1">
-            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Asistencia hoy</CardTitle>
+            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Docentes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">
-              {isLoadingStats ? '—' : (stats?.asistenciaResumen?.porcentajePromedio ?? 0)}%
-            </div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingStats ? '—' : (stats?.profesores ?? 0)}</div>
             <div className="flex items-center gap-2 mt-1 text-emerald-400 text-sm">
-              <ArrowUp className="w-4 h-4" /> <span>{stats?.asistenciaResumen?.presentes ?? 0} presentes</span>
+              <ArrowUp className="w-4 h-4" /> <span>{stats?.materias ?? 0} materias</span>
             </div>
           </CardContent>
         </Card>
@@ -767,16 +822,16 @@ function DirectivoDashboard() {
           </CardContent>
         </Card>
 
-        <Card className={`${CARD_STYLE}`}>
+        <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/estudiantes')}>
           <CardHeader className="pb-1">
-            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Alertas</CardTitle>
+            <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Amonestaciones</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
               <span className="text-3xl font-bold text-white font-['Poppins']">0</span>
-              <Button size="sm" className="bg-red-500/80 hover:bg-red-500 text-white text-xs rounded-full">Revisar</Button>
+              <Button size="sm" className="bg-red-500/80 hover:bg-red-500 text-white text-xs rounded-full" onClick={(e) => { e.stopPropagation(); setLocation('/directivo/estudiantes'); }}>Revisar</Button>
             </div>
-            <p className="text-white/50 text-sm mt-1">0 críticas</p>
+            <p className="text-white/50 text-sm mt-1">Ver en perfiles de estudiantes</p>
           </CardContent>
         </Card>
       </div>
