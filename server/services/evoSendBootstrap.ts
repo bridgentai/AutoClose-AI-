@@ -8,12 +8,14 @@ import { findUsersByInstitutionAndRoles } from '../repositories/userRepository.j
 import {
   findAnnouncementByInstitutionTitleAndType,
   findDirectThreadBetweenUsers,
+  findSupportThreadByInstitution,
   createAnnouncement,
   addAnnouncementRecipients,
 } from '../repositories/announcementRepository.js';
 
 const STAFF_GROUP_TITLES = ['Profesores Highschool', 'Profesores GLC'] as const;
 const STAFF_ROLES = ['profesor', 'directivo'];
+const SUPPORT_TITLE = 'Soporte GLC';
 
 export async function ensureEvoSendStaffAndDirectThreads(): Promise<void> {
   const institutions = await findAllInstitutions();
@@ -21,10 +23,31 @@ export async function ensureEvoSendStaffAndDirectThreads(): Promise<void> {
     try {
       await ensureStaffGroupsForInstitution(inst.id);
       await ensureDirectThreadsForInstitution(inst.id);
+      await ensureSupportThreadForInstitution(inst.id);
     } catch (err) {
       console.error(`[evoSendBootstrap] Error for institution ${inst.id}:`, err);
     }
   }
+}
+
+async function ensureSupportThreadForInstitution(institutionId: string): Promise<void> {
+  const existing = await findSupportThreadByInstitution(institutionId);
+  if (existing) return;
+
+  const admins = await findUsersByInstitutionAndRoles(institutionId, ['admin-general-colegio']);
+  const createdById = admins.length > 0 ? admins[0].id : undefined;
+  if (!createdById) return;
+
+  const a = await createAnnouncement({
+    institution_id: institutionId,
+    title: SUPPORT_TITLE,
+    body: null,
+    type: 'evo_chat_support',
+    group_id: null,
+    group_subject_id: null,
+    created_by_id: createdById,
+  });
+  await addAnnouncementRecipients(a.id, admins.map((u) => u.id));
 }
 
 async function ensureStaffGroupsForInstitution(institutionId: string): Promise<void> {

@@ -168,13 +168,22 @@ export async function findDirectThreadBetweenUsers(
   return r.rows[0] ?? null;
 }
 
-/** Check if user is a recipient of the announcement (for staff/direct access). */
+/** Check if user is a recipient of the announcement (for staff/direct/support access). */
 export async function isUserRecipientOfAnnouncement(announcementId: string, userId: string): Promise<boolean> {
   const r = await queryPg<{ n: number }>(
     'SELECT 1 AS n FROM announcement_recipients WHERE announcement_id = $1 AND user_id = $2 LIMIT 1',
     [announcementId, userId]
   );
   return r.rows.length > 0;
+}
+
+/** Find the single evo_chat_support thread for an institution (Soporte GLC). */
+export async function findSupportThreadByInstitution(institutionId: string): Promise<AnnouncementRow | null> {
+  const r = await queryPg<AnnouncementRow>(
+    "SELECT * FROM announcements WHERE institution_id = $1 AND type = 'evo_chat_support' LIMIT 1",
+    [institutionId]
+  );
+  return r.rows[0] ?? null;
 }
 
 /** Get or create the Evo Send chat thread for a group_subject (curso + materia). */

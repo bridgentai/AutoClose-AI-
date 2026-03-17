@@ -11,6 +11,8 @@ import {
   findOrCreateEvoChatForGroupSubject,
   findAnnouncementsByRecipient,
   isUserRecipientOfAnnouncement,
+  findSupportThreadByInstitution,
+  addAnnouncementRecipients,
 } from '../repositories/announcementRepository.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupById } from '../repositories/groupRepository.js';
@@ -39,6 +41,7 @@ async function buildThreadFromAnnouncement(a: {
 }) {
   const creator = await findUserById(a.created_by_id);
   const lastMsg = await getLastAnnouncementMessage(a.id);
+  const lastSender = lastMsg ? await findUserById(lastMsg.sender_id) : null;
   let cursoId: { _id: string; nombre: string } | undefined;
   if (a.group_id) {
     const g = await findGroupById(a.group_id);
@@ -58,7 +61,12 @@ async function buildThreadFromAnnouncement(a: {
     cursoId,
     assignmentId,
     ultimoMensaje: lastMsg
-      ? { contenido: lastMsg.content, fecha: lastMsg.created_at, prioridad: lastMsg.priority, remitente: (creator?.full_name) ?? '' }
+      ? {
+          contenido: lastMsg.content,
+          fecha: lastMsg.created_at,
+          prioridad: lastMsg.priority,
+          remitente: lastSender?.full_name ?? (creator?.full_name) ?? '',
+        }
       : null,
     unreadCount: 0,
     updatedAt: a.updated_at,
@@ -74,7 +82,7 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
 
     const tipo = req.query.tipo as string | undefined;
 
-    // Evo Send tipo WhatsApp: profesor ve mis_cursos + colegas (staff groups)
+    // Profesor: mis_cursos + colegas + Soporte GLC al tope
     if (rol === 'profesor' && userId) {
       const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
       const misCursos = await Promise.all(
@@ -92,16 +100,26 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
       );
       const staffAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_staff'], colegioId);
       const colegas = await Promise.all(staffAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
-      return res.json({ mis_cursos: misCursos, colegas });
+      const supportAnn = await findSupportThreadByInstitution(colegioId);
+      const support_thread =
+        supportAnn != null
+          ? { ...(await buildThreadFromAnnouncement(supportAnn)), is_support: true as const }
+          : null;
+      return res.json({ mis_cursos: misCursos, colegas, support_thread });
     }
 
-    // Directivo: colegas (staff groups) + directos (1:1 con profesores)
+    // Directivo: colegas + directos + Soporte GLC al tope
     if (rol === 'directivo' && userId) {
       const staffAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_staff'], colegioId);
       const colegas = await Promise.all(staffAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
       const directAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_direct'], colegioId);
       const directos = await Promise.all(directAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
-      return res.json({ colegas, directos });
+      const supportAnn = await findSupportThreadByInstitution(colegioId);
+      const support_thread =
+        supportAnn != null
+          ? { ...(await buildThreadFromAnnouncement(supportAnn)), is_support: true as const }
+          : null;
+      return res.json({ colegas, directos, support_thread });
     }
 
     if (rol === 'estudiante' && userId) {
@@ -136,10 +154,40 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
       return res.json(threads);
     }
 
-    // asistente, admin-general-colegio: listar todos los hilos (incl. evo_chat, evo_chat_staff, evo_chat_direct y otros)
-    const announcements = await findAnnouncementsByInstitution(colegioId, tipo ? { type: tipo } : undefined);
-    const threads = await Promise.all(announcements.map((a) => buildThreadFromAnnouncement(a)));
-    return res.json(threads);
+    // Asistente: todos los hilos de la institución + Soporte GLC al tope
+    if (rol === 'asistente') {
+      const announcements = await findAnnouncementsByInstitution(colegioId, tipo ? { type: tipo } : undefined);
+      const threads = await Promise.all(announcements.map((a) => buildThreadFromAnnouncement(a)));
+      const supportAnn = await findSupportThreadByInstitution(colegioId);
+      const support_thread =
+        supportAnn != null
+          ? { ...(await buildThreadFromAnnouncement(supportAnn)), is_support: true as const }
+          : null;
+      return res.json({ threads, support_thread });
+    }
+
+    // Admin general colegio: Chats GLC (por categoría) + Soporte (hilos evo_chat_support con mensajes)
+    if (rol === 'admin-general-colegio' && userId) {
+      const allAnnouncements = await findAnnouncementsByInstitution(colegioId, tipo ? { type: tipo } : undefined);
+      const evoChat: Awaited<ReturnType<typeof buildThreadFromAnnouncement>>[] = [];
+      const evoChatStaff: Awaited<ReturnType<typeof buildThreadFromAnnouncement>>[] = [];
+      const evoChatDirect: Awaited<ReturnType<typeof buildThreadFromAnnouncement>>[] = [];
+      for (const a of allAnnouncements) {
+        if (a.type === 'evo_chat_support') continue;
+        const t = await buildThreadFromAnnouncement(a);
+        if (a.type === 'evo_chat') evoChat.push(t);
+        else if (a.type === 'evo_chat_staff') evoChatStaff.push(t);
+        else if (a.type === 'evo_chat_direct') evoChatDirect.push(t);
+      }
+      const supportAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_support'], colegioId);
+      const soporte = await Promise.all(supportAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
+      return res.json({
+        chats_glc: { evo_chat: evoChat, evo_chat_staff: evoChatStaff, evo_chat_direct: evoChatDirect },
+        soporte,
+      });
+    }
+
+    return res.status(403).json({ message: 'Rol no autorizado para Evo Send.' });
   } catch (e: unknown) {
     console.error(e);
     return res.status(500).json({ message: 'Error al listar hilos.' });
@@ -196,9 +244,15 @@ router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: 
     if (!a || a.institution_id !== colegioId) {
       return res.json({ thread: null, messages: [] });
     }
-    if ((a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') && userId) {
-      const allowed = await isUserRecipientOfAnnouncement(id, userId);
-      if (!allowed) return res.json({ thread: null, messages: [] });
+    if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') {
+      if (userId) {
+        const allowed = await isUserRecipientOfAnnouncement(id, userId);
+        if (!allowed) return res.json({ thread: null, messages: [] });
+      }
+    } else if (a.type === 'evo_chat_support' && userId) {
+      const isRecipient = await isUserRecipientOfAnnouncement(id, userId);
+      const canOpenSupport = ['profesor', 'directivo', 'asistente', 'admin-general-colegio'].includes(rol ?? '');
+      if (!isRecipient && !canOpenSupport) return res.json({ thread: null, messages: [] });
     }
 
     const creator = await findUserById(a.created_by_id);
@@ -293,6 +347,11 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
     if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') {
       const allowed = await isUserRecipientOfAnnouncement(id, userId);
       if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+    } else if (a.type === 'evo_chat_support') {
+      const canWrite = ['profesor', 'directivo', 'asistente', 'admin-general-colegio'].includes(rol ?? '');
+      if (!canWrite) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+      const isRecipient = await isUserRecipientOfAnnouncement(id, userId);
+      if (!isRecipient) await addAnnouncementRecipients(id, [userId]);
     }
 
     const msg = await createAnnouncementMessage({

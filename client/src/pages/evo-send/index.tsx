@@ -16,6 +16,7 @@ import {
   ChevronRight,
   MessageSquare,
   ArrowLeft,
+  Shield,
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -46,7 +47,7 @@ const EVO_BLUE = '#3B82F6';
 const EVO_BLUE_DARK = '#1D4ED8';
 const EVO_PANEL = 'panel-grades rounded-2xl border border-white/[0.08] overflow-hidden';
 
-type ThreadType = 'comunicado_general' | 'curso' | 'asignacion' | 'asistencia' | 'general' | 'evo_chat' | 'evo_chat_staff' | 'evo_chat_direct';
+type ThreadType = 'comunicado_general' | 'curso' | 'asignacion' | 'asistencia' | 'general' | 'evo_chat' | 'evo_chat_staff' | 'evo_chat_direct' | 'evo_chat_support';
 
 interface EvoThreadItem {
   _id: string;
@@ -65,6 +66,7 @@ interface EvoThreadItem {
   } | null;
   unreadCount?: number;
   updatedAt: string;
+  is_support?: boolean;
 }
 
 interface EvoMessageItem {
@@ -93,6 +95,7 @@ const tipoLabels: Record<string, string> = {
   evo_chat: 'Chat',
   evo_chat_staff: 'Grupos',
   evo_chat_direct: 'Chat directo',
+  evo_chat_support: 'Soporte GLC',
 };
 
 const tipoIcons: Record<string, React.ReactNode> = {
@@ -104,6 +107,7 @@ const tipoIcons: Record<string, React.ReactNode> = {
   evo_chat: <MessageSquare className="w-4 h-4" />,
   evo_chat_staff: <Users className="w-4 h-4" />,
   evo_chat_direct: <MessageSquare className="w-4 h-4" />,
+  evo_chat_support: <Shield className="w-4 h-4" />,
 };
 
 export default function EvoSendPage() {
@@ -144,7 +148,17 @@ export default function EvoSendPage() {
 
   type ThreadsResponse =
     | EvoThreadItem[]
-    | { mis_cursos?: EvoThreadItem[]; colegas: EvoThreadItem[]; directos?: EvoThreadItem[] };
+    | {
+        mis_cursos?: EvoThreadItem[];
+        colegas: EvoThreadItem[];
+        directos?: EvoThreadItem[];
+        support_thread?: (EvoThreadItem & { is_support: true }) | null;
+      }
+    | { threads: EvoThreadItem[]; support_thread?: (EvoThreadItem & { is_support: true }) | null }
+    | {
+        chats_glc: { evo_chat: EvoThreadItem[]; evo_chat_staff: EvoThreadItem[]; evo_chat_direct: EvoThreadItem[] };
+        soporte: EvoThreadItem[];
+      };
 
   const { data: threadsData, isLoading: loadingThreads } = useQuery({
     queryKey: ['/api/evo-send/threads', filterTipo],
@@ -156,14 +170,74 @@ export default function EvoSendPage() {
   });
 
   const { threads: threadsFlat, sections } = useMemo(() => {
-    const raw = threadsData ?? [];
+    const raw = threadsData;
+    if (raw == null) return { threads: [] as EvoThreadItem[], sections: null as null };
+
     if (Array.isArray(raw)) {
       return { threads: raw, sections: null as null };
     }
-    const misCursos = raw.mis_cursos ?? [];
-    const colegas = raw.colegas ?? [];
-    const directos = raw.directos ?? [];
+
+    if ('chats_glc' in raw && 'soporte' in raw) {
+      const g = raw.chats_glc;
+      const evoChat = g.evo_chat ?? [];
+      const evoChatStaff = g.evo_chat_staff ?? [];
+      const evoChatDirect = g.evo_chat_direct ?? [];
+      const soporte = raw.soporte ?? [];
+      const flat = [...evoChat, ...evoChatStaff, ...evoChatDirect, ...soporte];
+      return {
+        threads: flat,
+        sections: [
+          { label: 'Chats GLC', threads: [...evoChat, ...evoChatStaff, ...evoChatDirect] },
+          { label: 'Soporte', threads: soporte },
+        ],
+      };
+    }
+
+    if ('threads' in raw && Array.isArray(raw.threads)) {
+      const list = raw.threads as EvoThreadItem[];
+      const support = raw.support_thread;
+      if (support) {
+        return {
+          threads: [support, ...list],
+          sections: [
+            { label: 'Soporte', threads: [support] },
+            { label: 'Mensajes', threads: list },
+          ],
+        };
+      }
+      return { threads: list, sections: null };
+    }
+
+    const misCursos = (raw as { mis_cursos?: EvoThreadItem[] }).mis_cursos ?? [];
+    const colegas = (raw as { colegas: EvoThreadItem[] }).colegas ?? [];
+    const directos = (raw as { directos?: EvoThreadItem[] }).directos ?? [];
+    const support_thread = (raw as { support_thread?: (EvoThreadItem & { is_support: true }) | null }).support_thread;
     const flat = [...misCursos, ...colegas, ...directos];
+    if (support_thread) {
+      const withSupport = [support_thread, ...flat];
+      if (user?.rol === 'profesor') {
+        return {
+          threads: withSupport,
+          sections: [
+            { label: 'Soporte', threads: [support_thread] },
+            { label: 'Mis cursos', threads: misCursos },
+            { label: 'Colegas', threads: colegas },
+          ],
+        };
+      }
+      if (user?.rol === 'directivo') {
+        return {
+          threads: withSupport,
+          sections: [
+            { label: 'Soporte', threads: [support_thread] },
+            { label: 'Grupos', threads: colegas },
+            { label: 'Colegas', threads: directos },
+          ],
+        };
+      }
+      return { threads: withSupport, sections: [{ label: 'Soporte', threads: [support_thread] }] };
+    }
+
     if (user?.rol === 'profesor') {
       return {
         threads: flat,
@@ -807,7 +881,11 @@ function filteredThreadsList(
           className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
           style={{ background: 'linear-gradient(145deg, rgba(59, 130, 246, 0.4), rgba(30, 64, 175, 0.5))' }}
         >
-          <MessageSquare className="w-6 h-6 text-[#93C5FD]" />
+          {(t.is_support || t.tipo === 'evo_chat_support') ? (
+            <Shield className="w-6 h-6 text-[#93C5FD]" />
+          ) : (
+            <MessageSquare className="w-6 h-6 text-[#93C5FD]" />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className={`font-medium truncate ${hasUnread ? 'text-[#E2E8F0]' : 'text-white/90'}`}>{title(t)}</p>
