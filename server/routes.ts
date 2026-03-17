@@ -33,6 +33,7 @@ import logrosCalificacionRoutes from "./routes/logrosCalificacion";
 import gradeEventsRoutes from "./routes/gradeEvents";
 import gradingSchemaRoutes from "./routes/gradingSchema";
 import auditRoutes from "./routes/audit";
+import accessControlsRoutes from "./routes/accessControls";
 import boletinRoutes from "./routes/boletin";
 import reportsRoutes from "./routes/reports";
 import assignmentMaterialsRoutes from "./routes/assignmentMaterials";
@@ -76,6 +77,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/grade-events', gradeEventsRoutes);
   app.use('/api/grading-schemas', gradingSchemaRoutes);
   app.use('/api/audit', auditRoutes);
+  app.use('/api/access-controls', accessControlsRoutes);
   app.use('/api/boletin', boletinRoutes);
   app.use('/api/reports', reportsRoutes);
   app.use('/api/assignment-materials', assignmentMaterialsRoutes);

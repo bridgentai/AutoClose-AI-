@@ -170,7 +170,7 @@ router.get('/relaciones/:userId', protect, async (req: AuthRequest, res) => {
     const adminId = req.user?.id;
     if (!adminId) return res.status(403).json({ message: 'No autorizado' });
     const admin = await findUserById(adminId);
-    if (!admin || admin.role !== 'admin-general-colegio') {
+    if (!admin || (admin.role !== 'admin-general-colegio' && admin.role !== 'school_admin')) {
       return res.status(403).json({ message: 'Solo administradores generales del colegio pueden acceder' });
     }
     const { userId } = req.params;
@@ -745,6 +745,58 @@ router.post('/activar-cuentas', protect, async (req: AuthRequest, res) => {
   } catch (e: unknown) {
     console.error('Error en POST /activar-cuentas:', (e as Error).message);
     res.status(500).json({ message: 'Error al activar cuentas.' });
+  }
+});
+
+// PATCH /api/users/:id — actualizar datos básicos del usuario
+router.patch('/:id', protect, async (req: AuthRequest, res) => {
+  try {
+    const check = await ensureAdminColegio(req);
+    if (!check.ok) return res.status(check.status).json({ message: check.message });
+    const { id } = req.params;
+    const target = await findUserById(id);
+    if (!target || target.institution_id !== check.user.institution_id) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    const { nombre, email, telefono } = req.body as { nombre?: string; email?: string; telefono?: string };
+    const updates: Record<string, unknown> = {};
+    if (nombre && typeof nombre === 'string') updates.full_name = nombre.trim();
+    if (email && typeof email === 'string') {
+      const emailNorm = email.toLowerCase().trim();
+      const existing = await findUserByEmail(emailNorm);
+      if (existing && existing.id !== id) return res.status(400).json({ message: 'El correo ya está en uso.' });
+      updates.email = emailNorm;
+    }
+    if (telefono !== undefined) updates.phone = telefono || null;
+    if (Object.keys(updates).length === 0) return res.status(400).json({ message: 'No hay campos para actualizar.' });
+    await updateUser(id, updates);
+    const updated = await findUserById(id);
+    return res.json({ message: 'Usuario actualizado.', user: { _id: updated?.id, nombre: updated?.full_name, email: updated?.email, telefono: updated?.phone } });
+  } catch (e: unknown) {
+    console.error('Error PATCH /users/:id:', (e as Error).message);
+    return res.status(500).json({ message: 'Error al actualizar usuario.' });
+  }
+});
+
+// PATCH /api/users/:id/status — activar o suspender usuario
+router.patch('/:id/status', protect, async (req: AuthRequest, res) => {
+  try {
+    const check = await ensureAdminColegio(req);
+    if (!check.ok) return res.status(check.status).json({ message: check.message });
+    const { id } = req.params;
+    const target = await findUserById(id);
+    if (!target || target.institution_id !== check.user.institution_id) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    const { status } = req.body as { status?: 'active' | 'suspended' };
+    if (status !== 'active' && status !== 'suspended') {
+      return res.status(400).json({ message: 'Estado inválido. Usa "active" o "suspended".' });
+    }
+    await updateUser(id, { status });
+    return res.json({ message: `Usuario ${status === 'active' ? 'activado' : 'suspendido'}.`, userId: id, status });
+  } catch (e: unknown) {
+    console.error('Error PATCH /users/:id/status:', (e as Error).message);
+    return res.status(500).json({ message: 'Error al cambiar estado del usuario.' });
   }
 });
 
