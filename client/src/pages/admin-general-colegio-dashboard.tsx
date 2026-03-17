@@ -131,6 +131,7 @@ export function AdminGeneralColegioDashboard() {
     rol: string;
     passwordTemporal: string;
     _id: string;
+    cuentasCreadas?: Array<{ rol: string; nombre: string; email: string; passwordTemporal: string }>;
   } | null>(null);
   // Caja con la nueva contraseña tras restablecer (en el diálogo de información de cuenta)
   const [resetPasswordBox, setResetPasswordBox] = useState<{ passwordTemporal: string } | null>(null);
@@ -270,6 +271,12 @@ export function AdminGeneralColegioDashboard() {
     materiaNombre: '', // Materia que dicta el profesor (string)
     materias: [] as string[],
     cursos: [] as string[],
+    // Campos exclusivos para crear estudiante
+    cursoGrupo: '',       // nombre del grupo (ej. "11A")
+    padre1Nombre: '',
+    padre1Email: '',
+    padre2Nombre: '',
+    padre2Email: '',
   });
   const [userPasswordTemporal, setUserPasswordTemporal] = useState<Record<string, string>>({});
 
@@ -412,16 +419,18 @@ export function AdminGeneralColegioDashboard() {
       const passwordTemporal = data?.user?.passwordTemporal ?? (data as any)?.passwordTemporal;
       if (data?.user?._id && passwordTemporal) {
         setUserPasswordTemporal(prev => ({ ...prev, [data.user!._id]: passwordTemporal }));
+        const cuentasCreadas = (data as any)?.cuentasCreadas ?? [];
         setCreatedUserInfo({
           _id: data.user._id,
           nombre: data.user.nombre ?? '',
           email: data.user.email ?? '',
           rol: data.user.rol ?? variables?.rol ?? '',
           passwordTemporal,
+          cuentasCreadas,
         });
       }
       setCreateUserOpen(false);
-      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [] });
+      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [], cursoGrupo: '', padre1Nombre: '', padre1Email: '', padre2Nombre: '', padre2Email: '' });
     },
   });
 
@@ -607,6 +616,10 @@ export function AdminGeneralColegioDashboard() {
         alert('Indica la materia que dicta el profesor (ej. Matemáticas).');
         return;
       }
+      if (createUserType === 'estudiante' && !newUser.padre1Email.trim()) {
+        alert('El email del padre/tutor principal es obligatorio.');
+        return;
+      }
       const payload: Record<string, unknown> = {
         nombre: newUser.nombre,
         email: newUser.email,
@@ -614,8 +627,14 @@ export function AdminGeneralColegioDashboard() {
         telefono: newUser.telefono || undefined,
         celular: newUser.celular || undefined,
       };
-      if (createUserType === 'directivo') {
-        // Directiva: solo datos básicos, sin materia ni cursos
+      if (createUserType === 'estudiante') {
+        if (newUser.cursoGrupo) payload.curso = newUser.cursoGrupo;
+        payload.padre1Nombre = newUser.padre1Nombre || newUser.padre1Email;
+        payload.padre1Email = newUser.padre1Email;
+        if (newUser.padre2Email.trim()) {
+          payload.padre2Nombre = newUser.padre2Nombre || newUser.padre2Email;
+          payload.padre2Email = newUser.padre2Email;
+        }
       } else if (createUserType === 'profesor') {
         if (newUser.materiaNombre) payload.materia = newUser.materiaNombre;
         if (newUser.materias.length > 0) payload.materias = newUser.materias;
@@ -1990,7 +2009,7 @@ export function AdminGeneralColegioDashboard() {
           setCreateUserOpen(open);
           if (!open) {
             // Limpiar formularios al cerrar
-            setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [] });
+            setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [], cursoGrupo: '', padre1Nombre: '', padre1Email: '', padre2Nombre: '', padre2Email: '' });
             setNewCourse({ curso: '', seccion: '', directorGrupo: '' });
           }
         }}
@@ -2119,6 +2138,70 @@ export function AdminGeneralColegioDashboard() {
                       : 'Se genera una contraseña temporal automáticamente. La cuenta solo funciona para este colegio.'}
                   </p>
                 </div>
+                {createUserType === 'estudiante' && (
+                  <>
+                    <div>
+                      <Label className="text-white/90 mb-2 block">Curso / Grupo</Label>
+                      <Select
+                        value={newUser.cursoGrupo}
+                        onValueChange={(v) => setNewUser({ ...newUser, cursoGrupo: v })}
+                      >
+                        <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                          <SelectValue placeholder="Selecciona el curso (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#0a0a2a] border-white/10">
+                          {gruposList.map((g) => (
+                            <SelectItem key={g._id} value={g.nombre} className="text-white focus:bg-white/10">{g.nombre}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="rounded-lg border border-white/10 p-3 space-y-3">
+                      <p className="text-white/70 text-sm font-medium">Padre / Tutor principal *</p>
+                      <div>
+                        <Label className="text-white/80 text-xs mb-1 block">Nombre completo</Label>
+                        <Input
+                          value={newUser.padre1Nombre}
+                          onChange={(e) => setNewUser({ ...newUser, padre1Nombre: e.target.value })}
+                          className="bg-white/5 border-white/10 text-white"
+                          placeholder="Ana García"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-white/80 text-xs mb-1 block">Email *</Label>
+                        <Input
+                          type="email"
+                          value={newUser.padre1Email}
+                          onChange={(e) => setNewUser({ ...newUser, padre1Email: e.target.value })}
+                          className="bg-white/5 border-white/10 text-white"
+                          placeholder="ana@ejemplo.com"
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 p-3 space-y-3">
+                      <p className="text-white/70 text-sm font-medium">Padre / Tutor 2 (opcional)</p>
+                      <div>
+                        <Label className="text-white/80 text-xs mb-1 block">Nombre completo</Label>
+                        <Input
+                          value={newUser.padre2Nombre}
+                          onChange={(e) => setNewUser({ ...newUser, padre2Nombre: e.target.value })}
+                          className="bg-white/5 border-white/10 text-white"
+                          placeholder="Carlos García"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-white/80 text-xs mb-1 block">Email</Label>
+                        <Input
+                          type="email"
+                          value={newUser.padre2Email}
+                          onChange={(e) => setNewUser({ ...newUser, padre2Email: e.target.value })}
+                          className="bg-white/5 border-white/10 text-white"
+                          placeholder="carlos@ejemplo.com"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
                 {createUserType === 'profesor' && (
                   <>
                     <div>
@@ -2215,7 +2298,8 @@ export function AdminGeneralColegioDashboard() {
                     onClick={handleCreateUser}
                     disabled={
                       createUserMutation.isPending ||
-                      (createUserType === 'profesor' && !newUser.materiaNombre.trim())
+                      (createUserType === 'profesor' && !newUser.materiaNombre.trim()) ||
+                      (createUserType === 'estudiante' && !newUser.padre1Email.trim())
                     }
                     style={{
                       background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
@@ -2227,7 +2311,7 @@ export function AdminGeneralColegioDashboard() {
                     variant="outline"
                     onClick={() => {
                       setCreateUserOpen(false);
-                      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [] });
+                      setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [], cursoGrupo: '', padre1Nombre: '', padre1Email: '', padre2Nombre: '', padre2Email: '' });
                     }}
                     className="border-white/10 text-white"
                   >
@@ -2432,30 +2516,58 @@ export function AdminGeneralColegioDashboard() {
             </DialogDescription>
           </DialogHeader>
           {createdUserInfo && (
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
+              {/* Cuenta principal (estudiante / usuario) */}
               <div className="rounded-lg border border-white/20 bg-white/5 p-4 space-y-3">
+                <p className="text-xs text-white/60 uppercase tracking-wider font-semibold">{createdUserInfo.rol}</p>
                 <div>
                   <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nombre</p>
                   <p className="text-white font-medium">{createdUserInfo.nombre}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Usuario (email para iniciar sesión)</p>
+                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Email (usuario)</p>
                   <p className="text-white font-mono text-sm break-all">{createdUserInfo.email}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Contraseña generada</p>
+                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Contraseña temporal</p>
                   <p className="text-amber-300 font-mono text-sm bg-amber-500/10 px-3 py-2 rounded border border-amber-500/30 break-all select-all">
                     {createdUserInfo.passwordTemporal}
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Rol</p>
-                  <p className="text-white capitalize">{createdUserInfo.rol}</p>
-                </div>
               </div>
-              <p className="text-white/60 text-sm">
-                Esta cuenta ya puede iniciar sesión con el usuario y la contraseña de arriba.
-              </p>
+              {/* Cuentas de padres creados */}
+              {createdUserInfo.cuentasCreadas && createdUserInfo.cuentasCreadas.length > 0 && (
+                <>
+                  <p className="text-white/70 text-sm font-medium">Cuentas de padres creadas:</p>
+                  {createdUserInfo.cuentasCreadas.map((c, i) => (
+                    <div key={i} className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 space-y-2">
+                      <p className="text-xs text-blue-400 uppercase tracking-wider font-semibold">{c.rol}</p>
+                      <div>
+                        <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nombre</p>
+                        <p className="text-white text-sm">{c.nombre}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Email</p>
+                        <p className="text-white font-mono text-sm break-all">{c.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Contraseña temporal</p>
+                        <p className="text-amber-300 font-mono text-sm bg-amber-500/10 px-3 py-2 rounded border border-amber-500/30 break-all select-all">
+                          {c.passwordTemporal}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-blue-400/80 text-xs">Ve a Vínculos para confirmar la vinculación y activar estas cuentas.</p>
+                </>
+              )}
+              {(!createdUserInfo.cuentasCreadas || createdUserInfo.cuentasCreadas.length === 0) && (
+                <p className="text-white/60 text-sm">
+                  {createdUserInfo.rol === 'estudiante'
+                    ? 'El estudiante fue creado. Los padres indicados ya existían — ve a Vínculos para confirmar la vinculación.'
+                    : 'Esta cuenta ya puede iniciar sesión con el usuario y la contraseña de arriba.'}
+                </p>
+              )}
               <Button
                 className="w-full"
                 style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}

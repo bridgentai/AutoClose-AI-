@@ -17,7 +17,8 @@ import { findGroupById } from '../repositories/groupRepository.js';
 import { getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
 import { findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
-import { findGroupsByInstitution, countGradeGroupsByInstitution } from '../repositories/groupRepository.js';
+import { findGroupsByInstitution, countGradeGroupsByInstitution, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
+import { createEnrollment } from '../repositories/enrollmentRepository.js';
 import { findSubjectsByInstitution } from '../repositories/subjectRepository.js';
 import { countAttendanceByInstitutionAndDateRange } from '../repositories/attendanceRepository.js';
 import { protect, AuthRequest } from '../middleware/auth';
@@ -318,7 +319,11 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
     if (!admin || (admin.role !== 'admin-general-colegio' && admin.role !== 'school_admin')) {
       return res.status(403).json({ message: 'Solo administradores del colegio pueden crear usuarios.' });
     }
-    const { nombre, email, rol, curso, telefono, celular, materias: materiasBody, materia, cursos } = req.body;
+    const {
+      nombre, email, rol, curso, telefono, celular,
+      materias: materiasBody, materia, cursos,
+      padre1Nombre, padre1Email, padre2Nombre, padre2Email,
+    } = req.body;
     const materias = rol === 'profesor' && (materia != null || materiasBody != null)
       ? (Array.isArray(materiasBody) ? materiasBody : (materia != null ? [materia] : materiasBody ? [materiasBody] : []))
       : undefined;
@@ -330,6 +335,9 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
     if (!rolesPermitidos.includes(rol)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
     }
+    if (rol === 'estudiante' && !padre1Email) {
+      return res.status(400).json({ message: 'El padre/tutor principal (nombre y email) es obligatorio al crear un estudiante.' });
+    }
 
     const existing = await findUserByEmail((email || '').toLowerCase());
     if (existing) return res.status(400).json({ message: 'El correo ya está registrado.' });
@@ -338,14 +346,15 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
     const codigoUnico = await generarCodigoUnico();
     const passwordPlain = generarPasswordAleatorio();
     const passwordHash = await bcrypt.hash(passwordPlain, 10);
+    const colegioId = admin.institution_id;
 
     const config: Record<string, unknown> = {
-      curso: rol === 'estudiante' ? curso : undefined,
+      curso: esEstudiante ? curso : undefined,
       materias: rol === 'profesor' && materias ? (Array.isArray(materias) ? materias : [materias]) : undefined,
       userId: undefined as string | undefined,
     };
     const newUser = await createUser({
-      institution_id: admin.institution_id,
+      institution_id: colegioId,
       email: (email as string).toLowerCase(),
       password_hash: passwordHash,
       full_name: nombre,
@@ -358,19 +367,67 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
     const userIdInfo = generateUserId(rol, newUser.id);
     await updateUser(newUser.id, { config: { ...config, userId: userIdInfo.fullId } });
 
+    // Para estudiantes: enrollment + creación de padres + vínculos
+    const cuentasCreadas: Array<{ rol: string; nombre: string; email: string; passwordTemporal: string }> = [];
+    if (esEstudiante) {
+      // 1. Enrollment en grupo si se especificó curso
+      if (curso) {
+        const group = await findGroupByNameAndInstitution(colegioId, String(curso).toUpperCase().trim());
+        if (group) {
+          await createEnrollment({ student_id: newUser.id, group_id: group.id, academic_period_id: null });
+        }
+      }
+      // 2. Crear o encontrar padre 1
+      const padresData = [
+        { nombre: padre1Nombre, email: padre1Email },
+        ...(padre2Email ? [{ nombre: padre2Nombre, email: padre2Email }] : []),
+      ];
+      for (const padreData of padresData) {
+        if (!padreData.email) continue;
+        const emailNorm = String(padreData.email).toLowerCase().trim();
+        let padreUser = await findUserByEmail(emailNorm);
+        let padrePwd: string | null = null;
+        if (!padreUser) {
+          padrePwd = generarPasswordAleatorio();
+          const padreHash = await bcrypt.hash(padrePwd, 10);
+          const padreCode = await generarCodigoUnico();
+          padreUser = await createUser({
+            institution_id: colegioId,
+            email: emailNorm,
+            password_hash: padreHash,
+            full_name: padreData.nombre ? String(padreData.nombre).trim() : emailNorm,
+            role: 'padre',
+            status: 'pendiente_vinculacion',
+            internal_code: padreCode,
+            phone: null,
+            config: {},
+          });
+          const padreUserIdInfo = generateUserId('padre', padreUser.id);
+          await updateUser(padreUser.id, { config: { userId: padreUserIdInfo.fullId } });
+          cuentasCreadas.push({ rol: 'padre', nombre: padreUser.full_name, email: emailNorm, passwordTemporal: padrePwd });
+        }
+        // Crear vínculo si no existe
+        const { findGuardianStudent: findGs, createGuardianStudent: createGs } = await import('../repositories/guardianStudentRepository.js');
+        const existeVinculo = await findGs(padreUser.id, newUser.id);
+        if (!existeVinculo) {
+          await createGs(padreUser.id, newUser.id, colegioId);
+        }
+      }
+    }
+
     await logAdminAction({
       userId: adminId,
       role: admin.role,
       action: 'create_user',
       entityType: 'user',
       entityId: newUser.id,
-      colegioId: admin.institution_id,
+      colegioId,
       requestData: { rol, email: (email as string).toLowerCase(), nombre },
     });
 
     res.status(201).json({
       message: esEstudiante
-        ? 'Estudiante creado. Debe vincularse con al menos un padre y luego activar la cuenta.'
+        ? 'Estudiante creado con padre(s) vinculados. Confirma la vinculación y activa las cuentas desde la sección Vínculos.'
         : 'Usuario creado exitosamente',
       user: {
         _id: newUser.id,
@@ -382,6 +439,7 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
         estado: newUser.status,
         passwordTemporal: passwordPlain,
       },
+      cuentasCreadas,
     });
   } catch (error: unknown) {
     console.error('Error al crear usuario:', (error as Error).message);
