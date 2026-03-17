@@ -380,15 +380,49 @@ export default function CourseDetailPage() {
         mutationFn: (body: { display_name?: string; icon?: string }) =>
             apiRequest('PATCH', `/api/courses/group-subject/${groupSubjectIdForOptions}`, body),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['subjectsForGroup', cursoId] });
-            queryClient.invalidateQueries({ queryKey: ['courseDetails', cursoId] });
             setOptionsModalOpen(false);
             toast({ title: 'Materia actualizada', description: 'Nombre e ícono guardados.' });
+            // Invalidar todas las queries que puedan mostrar nombre/ícono de materias o listados de cursos
+            queryClient.invalidateQueries({ queryKey: ['subjectsForGroup'] });
+            queryClient.invalidateQueries({ queryKey: ['courseDetails'] });
+            queryClient.invalidateQueries({ queryKey: ['studentNotes'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/users/me/courses'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/courses/all'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/student/hijo'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/schedule/my-group'] });
+            queryClient.invalidateQueries({ queryKey: ['courses'] });
+            queryClient.invalidateQueries({ queryKey: ['professorGroups'] });
+            queryClient.invalidateQueries({ queryKey: ['professorCourses'] });
+            queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
+            queryClient.invalidateQueries({ queryKey: ['group'] });
+            queryClient.invalidateQueries({ queryKey: ['evo-send-thread-id'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/courses/for-group'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/evo-send/courses'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/professor/courses'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/student/subjects'] });
+            queryClient.invalidateQueries({ queryKey: ['studentCourses'] });
+            queryClient.invalidateQueries({ queryKey: ['coursesAdmin'] });
         },
         onError: (err: Error) => {
             toast({ title: 'Error', description: err?.message ?? 'No se pudo guardar.', variant: 'destructive' });
         },
     });
+
+    // Al abrir el modal, precargar display_name e icon del group_subject actual (solo al abrir, no mientras está abierto)
+    const prevOptionsModalOpen = useRef(false);
+    useEffect(() => {
+        const justOpened = optionsModalOpen && !prevOptionsModalOpen.current;
+        prevOptionsModalOpen.current = optionsModalOpen;
+        if (!justOpened || !groupSubjectIdForOptions) return;
+        if (isProfessor && subjectsForGroup.length > 0) {
+            const subject = subjectsForGroup.find((s) => s._id === groupSubjectIdForOptions) ?? subjectsForGroup[0];
+            setOptionsDisplayName(subject.nombre ?? '');
+            setOptionsIcon(subject.icono ?? '');
+        } else if (courseDetails) {
+            setOptionsDisplayName(courseDetails.nombre ?? '');
+            setOptionsIcon((courseDetails as CourseSubject).icono ?? '');
+        }
+    }, [optionsModalOpen, groupSubjectIdForOptions, isProfessor, subjectsForGroup, courseDetails]);
 
     // Query: threadId de Evo Send para este curso (atajo desde la tarjeta — profesor y estudiante)
     const { data: evoThreadIdData } = useQuery<{ threadId: string }>({
@@ -775,9 +809,13 @@ export default function CourseDetailPage() {
         // Obtener la primera materia para usar su ID en las notas (si hay materias)
         const firstSubjectId = subjects.length > 0 ? subjects[0]._id : null;
 
+        // Precargar display_name e icon del group_subject que se edita (el que coincide con groupSubjectIdForOptions)
+        const subjectForOptions = groupSubjectIdForOptions
+            ? (subjects.find((s) => s._id === groupSubjectIdForOptions) ?? subjects[0])
+            : subjects[0];
         const openOptionsModal = () => {
-            setOptionsDisplayName(subjects[0]?.nombre ?? '');
-            setOptionsIcon(subjects[0]?.icono ?? '');
+            setOptionsDisplayName(subjectForOptions?.nombre ?? '');
+            setOptionsIcon(subjectForOptions?.icono ?? '');
             setOptionsModalOpen(true);
         };
 

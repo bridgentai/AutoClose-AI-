@@ -8,7 +8,7 @@ export default function Setup() {
               <span className="text-5xl">⚙️</span>
             </div>
             <h1 className="text-4xl font-bold bg-gradient-to-r from-[#1e3cff] to-[#00c8ff] bg-clip-text text-transparent font-['Poppins'] mb-3">
-              Configuración de MindOS
+              Configuración de EvoOS
             </h1>
             <p className="text-white/70 text-lg">La aplicación requiere configuración adicional</p>
           </div>

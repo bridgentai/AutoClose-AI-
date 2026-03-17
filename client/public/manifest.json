@@ -1,6 +1,6 @@
 {
-  "name": "MindOS",
-  "short_name": "MindOS",
+  "name": "EvoOS",
+  "short_name": "EvoOS",
   "description": "Plataforma educativa del colegio",
   "start_url": "/",
   "display": "standalone",

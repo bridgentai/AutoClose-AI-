@@ -870,7 +870,7 @@ function SuperAdminDashboard() {
   const [newSchool, setNewSchool] = useState({
     nombre: '',
     colegioId: '',
-    nombreIA: 'MindOS',
+    nombreIA: 'EvoOS',
     colorPrimario: '#002366',
     colorSecundario: '#1e3cff',
   });
@@ -917,7 +917,7 @@ function SuperAdminDashboard() {
       setNewSchool({
         nombre: '',
         colegioId: '',
-        nombreIA: 'MindOS',
+        nombreIA: 'EvoOS',
         colorPrimario: '#002366',
         colorSecundario: '#1e3cff',
       });

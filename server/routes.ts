@@ -5,6 +5,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import cors from "cors";
 import { ENV } from "./config/env";
+import { protect, type AuthRequest } from "./middleware/auth.js";
+import { requireRole } from "./middleware/roleAuth.js";
 
 // Importar rutas
 import authRoutes from "./routes/auth";
@@ -13,7 +15,7 @@ import aiRoutes from "./routes/ai";
 import coursesRoutes from "./routes/courses";
 import materialsRoutes from "./routes/materials";
 import assignmentsRoutes from "./routes/assignments";
-import subjectsRoutes from "./routes/subjects";
+import subjectsRoutes, { listSubjectsHandler } from "./routes/subjects";
 import usersRoutes from "./routes/users";
 import groupsRoutes from "./routes/groups";
 import sectionsRoutes from "./routes/sections";
@@ -54,6 +56,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/courses', coursesRoutes);
   app.use('/api/materials', materialsRoutes);
   app.use('/api/assignments', assignmentsRoutes);
+  // GET /api/subjects registrado explícitamente para evitar "Cannot GET /api/subjects"
+  app.get('/api/subjects', protect, requireRole('admin-general-colegio', 'school_admin'), listSubjectsHandler);
   app.use('/api/subjects', subjectsRoutes);
   app.use('/api/users', usersRoutes);
   app.use('/api/groups', groupsRoutes);
@@ -84,7 +88,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const postgresOnly = ENV.USE_POSTGRES_ONLY || false;
     const payload: Record<string, unknown> = {
       status: pgConfigured ? 'ok' : 'degraded',
-      message: pgConfigured ? 'MindOS Backend (PostgreSQL)' : 'Configure DATABASE_URL',
+      message: pgConfigured ? 'EvoOS Backend (PostgreSQL)' : 'Configure DATABASE_URL',
       postgres: { configured: pgConfigured, postgres_only: postgresOnly },
       timestamp: new Date().toISOString(),
     };

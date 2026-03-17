@@ -122,7 +122,7 @@ export default function ParentPage() {
             className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
             data-testid="button-chat-main"
           >
-            Iniciar Chat con MindOS
+            Iniciar Chat con EvoOS
           </Button>
         </CardContent>
       </Card>

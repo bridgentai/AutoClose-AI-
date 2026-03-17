@@ -81,7 +81,7 @@ export default function Login() {
           <h2 className="text-3xl font-bold mb-2 text-[#3B82F6] font-['Poppins']">
             Iniciar sesión
           </h2>
-          <p className="text-[#E2E8F0]/80 mb-8">Accede a MindOS</p>
+          <p className="text-[#E2E8F0]/80 mb-8">Accede a EvoOS</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>

@@ -8,6 +8,7 @@ import {
   upsertGroupSchedule,
   upsertProfessorSchedule,
 } from '../repositories/scheduleRepository.js';
+import { findGroupSubjectsByGroupAndTeacher } from '../repositories/groupSubjectRepository.js';
 
 const router = express.Router();
 
@@ -124,6 +125,23 @@ router.put('/professor/:profesorId', protect, async (req: AuthRequest, res) => {
 
     const safeSlots = typeof slots === 'object' && slots !== null ? slots : {};
     await upsertProfessorSchedule(institutionId, profesorId, safeSlots);
+
+    // Sincronizar horario del profesor → horario de cada curso: al asignar un grupo a un slot,
+    // ese curso (grupo) queda con esa materia/profesor en ese slot en su horario.
+    for (const [slotKey, groupId] of Object.entries(safeSlots)) {
+      const groupIdStr = typeof groupId === 'string' ? groupId.trim() : '';
+      if (!groupIdStr) continue;
+      const resolved = await resolveGroupId(groupIdStr, institutionId);
+      if (!resolved) continue;
+      const gsList = await findGroupSubjectsByGroupAndTeacher(resolved.id, profesorId, institutionId);
+      if (gsList.length === 0) continue;
+      const groupSubjectId = gsList[0].id;
+      const existing = await findGroupScheduleByGroup(institutionId, resolved.id);
+      const existingSlots = (existing?.slots && typeof existing.slots === 'object') ? existing.slots : {};
+      const merged = { ...existingSlots, [slotKey]: groupSubjectId };
+      await upsertGroupSchedule(institutionId, resolved.id, merged);
+    }
+
     return res.json({ success: true });
   } catch (e: unknown) {
     return res.status(500).json({ message: (e as Error).message || 'Error al actualizar horario.' });

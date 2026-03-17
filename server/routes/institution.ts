@@ -21,7 +21,7 @@ router.get('/config', protect, async (req: AuthRequest, res) => {
       colegioId: row?.id ?? colegioId,
       nombre: row?.name ?? 'Colegio',
       logoUrl: (settings.logoUrl as string) ?? '',
-      nombreIA: (settings.nombreIA as string) ?? 'MindOS',
+      nombreIA: (settings.nombreIA as string) ?? 'EvoOS',
       colorPrimario: (settings.colorPrimario as string) ?? '#9f25b8',
       colorSecundario: (settings.colorSecundario as string) ?? '#6a0dad',
     });

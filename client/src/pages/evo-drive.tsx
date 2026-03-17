@@ -61,6 +61,7 @@ interface SubjectFolder {
   name: string;
   groupId: string;
   groupName: string;
+  icon?: string;
 }
 
 interface EvoFile {
@@ -121,7 +122,11 @@ function SubjectFolder({ folder }: { folder: SubjectFolder }) {
             ) : (
               <ChevronRight className="w-5 h-5 text-[#3B82F6] shrink-0" />
             )}
-            <FolderOpen className="w-6 h-6 text-[#3B82F6] shrink-0" />
+            {folder.icon ? (
+              <span className="text-xl leading-none w-6 flex items-center justify-center shrink-0" aria-hidden>{folder.icon}</span>
+            ) : (
+              <FolderOpen className="w-6 h-6 text-[#3B82F6] shrink-0" />
+            )}
             <span className="font-semibold text-white">{folder.name}</span>
             <span className="text-[#E2E8F0]/70 text-sm ml-auto">
               {files.length} {files.length === 1 ? 'archivo' : 'archivos'}
@@ -214,7 +219,7 @@ export default function EvoDrivePage() {
   }, [cursoId, courseSubjects, selectedGroupSubjectId]);
 
   // Misma API que "Mis Materias Asignadas" para que el estudiante vea sus carpetas por materia (Física, Matemáticas, etc.)
-  const { data: meCourses = [] } = useQuery<Array<{ _id: string; nombre: string; groupId?: string; groupName?: string; subjectName?: string }>>({
+  const { data: meCourses = [] } = useQuery<Array<{ _id: string; nombre: string; groupId?: string; groupName?: string; subjectName?: string; icono?: string }>>({
     queryKey: ['users', 'me', 'courses'],
     queryFn: () => apiRequest('GET', '/api/users/me/courses'),
     enabled: !isTeacher,
@@ -226,6 +231,7 @@ export default function EvoDrivePage() {
       name: c.subjectName || c.nombre,
       groupId: c.groupId,
       groupName: c.groupName,
+      icon: c.icono?.trim() || undefined,
     }));
 
   const { data: myFolderFiles = [], refetch: refetchMyFolder } = useQuery<MyFolderFile[]>({

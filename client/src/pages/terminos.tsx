@@ -27,7 +27,7 @@ export default function TerminosPage() {
         </div>
         <Card className={CARD_STYLE}>
           <CardHeader>
-            <CardTitle className="text-white">Términos de uso de MindOS</CardTitle>
+            <CardTitle className="text-white">Términos de uso de EvoOS</CardTitle>
           </CardHeader>
           <CardContent className="text-white/80 space-y-4 prose prose-invert max-w-none">
             <p className="text-sm">
@@ -36,7 +36,7 @@ export default function TerminosPage() {
             <section>
               <h3 className="text-white font-medium mt-4">1. Aceptación</h3>
               <p>
-                Al utilizar la plataforma MindOS usted acepta estos términos y condiciones.
+                Al utilizar la plataforma EvoOS usted acepta estos términos y condiciones.
                 Si no está de acuerdo, no debe usar el servicio.
               </p>
             </section>

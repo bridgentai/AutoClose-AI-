@@ -27,7 +27,7 @@ export default function PrivacidadPage() {
         </div>
         <Card className={CARD_STYLE}>
           <CardHeader>
-            <CardTitle className="text-white">Política de privacidad de MindOS</CardTitle>
+            <CardTitle className="text-white">Política de privacidad de EvoOS</CardTitle>
           </CardHeader>
           <CardContent className="text-white/80 space-y-4 prose prose-invert max-w-none">
             <p className="text-sm">

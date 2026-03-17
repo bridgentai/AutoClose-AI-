@@ -675,6 +675,16 @@ input[type="search"]::-webkit-search-cancel-button {
   box-shadow: 0 0 40px rgba(37, 99, 235, 0.3);
 }
 
+/* Desplegables, popovers y barras de opciones: mismo color predominante con glassmorphism, buena legibilidad */
+.glass-dropdown {
+  background: linear-gradient(145deg, rgba(30, 58, 138, 0.55), rgba(15, 23, 42, 0.85));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 40px rgba(37, 99, 235, 0.25);
+  color: #E2E8F0;
+}
+
 .gradient-overlay-blue {
   position: relative;
 }

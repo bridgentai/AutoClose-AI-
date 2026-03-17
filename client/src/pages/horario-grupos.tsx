@@ -192,7 +192,7 @@ export default function HorarioGruposPage() {
             className="px-6 py-4 border-t border-white/10"
             style={{ background: "rgba(0,0,0,0.15)" }}
           >
-            <p className="text-xs text-white/40">Academia · Horario · MindOS</p>
+            <p className="text-xs text-white/40">Academia · Horario · EvoOS</p>
           </div>
         </div>
       </div>

@@ -115,6 +115,8 @@ import CafeteriaPage from "@/pages/cafeteria";
 // Módulos de Directivo
 import DirectivoComunidadLayout from "@/pages/directivo-comunidad";
 import DirectivoAcademiaLayout from "@/pages/directivo-academia";
+import DirectivoAcademiaUsuariosPage from "@/pages/directivo-academia-usuarios";
+import DirectivoProfesoresPage from "@/pages/directivo-profesores";
 import DirectivoReportesPage from "@/pages/directivo-reportes";
 
 // Módulos de Administrador General
@@ -498,8 +500,14 @@ function AppRouter() {
             <Route path="/directivo/academia/reportes">
               <AuthGuard><DirectivoReportesPage /></AuthGuard>
             </Route>
+            <Route path="/directivo/academia/usuarios">
+              <AuthGuard><DirectivoAcademiaUsuariosPage /></AuthGuard>
+            </Route>
             <Route path="/directivo/academia">
               <AuthGuard><DirectivoAcademiaLayout /></AuthGuard>
+            </Route>
+            <Route path="/directivo/profesores">
+              <AuthGuard><DirectivoProfesoresPage /></AuthGuard>
             </Route>
             <Route path="/directivo/estudiantes">
               <AuthGuard><DirectivoEstudiantesPage /></AuthGuard>

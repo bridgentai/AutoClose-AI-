@@ -281,7 +281,11 @@ style={{
   boxShadow: `0 0 16px ${groupColor}30`,
 }}
 >
-<Users className="w-7 h-7" style={{ color: groupColor }} />
+{(group.subjects?.[0]?.icono?.trim()) ? (
+  <span className="text-2xl leading-none" aria-hidden>{group.subjects[0].icono.trim()}</span>
+) : (
+  <Users className="w-7 h-7" style={{ color: groupColor }} />
+)}
 </div>
 <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300 flex-shrink-0" />
 </div>
@@ -310,6 +314,7 @@ const description = isDirectivo
 // Estilo de tarjeta igual al del profesor (colored border + glow, icono con borde/glow)
 const renderStudentCard = (course: Course) => {
   const displayColor = course.colorAcento || generateColorFromId(course._id);
+  const showEmoji = course.icono && course.icono.trim().length > 0;
   return (
     <Card
       key={course._id}
@@ -345,14 +350,15 @@ const renderStudentCard = (course: Course) => {
               boxShadow: `0 0 16px ${displayColor}30`,
             }}
           >
-            <BookOpen className="w-7 h-7" style={{ color: displayColor }} />
+            {showEmoji ? (
+              <span className="text-2xl leading-none" aria-hidden>{course.icono!.trim()}</span>
+            ) : (
+              <BookOpen className="w-7 h-7" style={{ color: displayColor }} />
+            )}
           </div>
           <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300 flex-shrink-0" />
         </div>
         <CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{course.nombre}</CardTitle>
-        <p className="text-sm text-white/60 font-['Inter'] line-clamp-2">
-          <span className="text-white/70">Grupo(s):</span> {course.cursos?.join(', ') || 'N/A'}
-        </p>
       </CardHeader>
     </Card>
   );
@@ -362,6 +368,7 @@ const renderStudentCard = (course: Course) => {
 const renderDirectivoCard = (course: Course) => {
   const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
   const displayColor = course.colorAcento || generateColorFromId(course._id);
+  const showEmoji = course.icono && course.icono.trim().length > 0;
   return (
     <Card
       key={course._id}
@@ -371,7 +378,11 @@ const renderDirectivoCard = (course: Course) => {
       <CardHeader className="flex flex-col p-6">
         <div className="flex items-center justify-between mb-4 min-h-[56px]">
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
-            <BookOpen className="w-7 h-7 text-white" />
+            {showEmoji ? (
+              <span className="text-2xl leading-none" aria-hidden>{course.icono!.trim()}</span>
+            ) : (
+              <BookOpen className="w-7 h-7 text-white" />
+            )}
           </div>
           <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
         </div>
@@ -380,7 +391,6 @@ const renderDirectivoCard = (course: Course) => {
           {course.descripcion || 'Sin descripción.'}
         </CardDescription>
         <p className="text-sm text-white/50 mt-2 truncate">Profesor: {primaryProfessor}</p>
-        <p className="text-xs text-white/40 truncate mt-0.5">Grupo(s): {course.cursos?.join(', ') || 'N/A'}</p>
       </CardHeader>
     </Card>
   );
@@ -413,6 +423,7 @@ Revisa las materias y el progreso de los estudiantes a tu cargo.
 {courses.map((course, index) => {
 const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
 const displayColor = course.colorAcento || generateColorFromId(course._id);
+const showEmoji = course.icono && course.icono.trim().length > 0;
 
 return (
 <Card
@@ -423,7 +434,11 @@ onClick={() => handleCourseClick(course._id)}
 <CardHeader className="flex-1 flex flex-col p-6 pb-2">
 <div className="flex items-center justify-between mb-4 min-h-[56px]">
 <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
-<ClipboardList className="w-7 h-7 text-white" />
+{showEmoji ? (
+  <span className="text-2xl leading-none" aria-hidden>{course.icono!.trim()}</span>
+) : (
+  <ClipboardList className="w-7 h-7 text-white" />
+)}
 </div>
 <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
 </div>

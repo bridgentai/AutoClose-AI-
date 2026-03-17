@@ -1,35 +1,29 @@
+"use client";
+
 import { Link } from "wouter";
-import { UserCircle, Users, BarChart3, FileText } from "lucide-react";
+import { BookOpen, GraduationCap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { NavBackButton } from "@/components/nav-back-button";
 
-const navigationItems = [
+const subItems = [
   {
-    title: "Usuarios",
-    path: "/directivo/academia/usuarios",
-    icon: UserCircle,
+    title: "Cursos y estudiantes",
+    path: "/directivo/cursos",
+    icon: BookOpen,
+    description: "Grupos, cursos y listado de estudiantes por grupo.",
   },
   {
-    title: "Asignación de Horarios",
-    path: "/asignacion-horarios",
-    icon: Users,
-  },
-  {
-    title: "Análisis de Rendimiento",
-    path: "/directivo/academia/rendimiento",
-    icon: BarChart3,
-  },
-  {
-    title: "Reportes Académicos",
-    path: "/directivo/academia/reportes",
-    icon: FileText,
+    title: "Profesores",
+    path: "/directivo/profesores",
+    icon: GraduationCap,
+    description: "Listado de profesores del colegio y acceso a horarios.",
   },
 ];
 
-export default function DirectivoAcademiaLayout() {
+export default function DirectivoAcademiaUsuariosPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -44,19 +38,25 @@ export default function DirectivoAcademiaLayout() {
   }
 
   return (
-    <div className="p-6" data-testid="directivo-academia-layout">
-      <NavBackButton to="/dashboard" label="Dashboard" />
-      <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
-        Academia: Gestión Académica Global
+    <div className="p-6" data-testid="directivo-academia-usuarios">
+      <NavBackButton to="/directivo/academia" label="Academia" />
+      <h1 className="text-2xl font-bold mb-2 text-white font-['Poppins']">
+        Usuarios
       </h1>
+      <p className="text-white/60 text-sm mb-6">
+        Gestiona cursos y estudiantes o el listado de profesores del colegio.
+      </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {navigationItems.map((item) => (
+        {subItems.map((item) => (
           <Link key={item.path} href={item.path}>
             <Card className="hover-elevate cursor-pointer bg-white/5 border-white/10 backdrop-blur-md">
               <CardContent className="flex flex-col items-center justify-center p-8">
                 <item.icon className="w-12 h-12 mb-4 text-[#1e3cff]" />
                 <span className="text-lg font-medium text-white">{item.title}</span>
+                <span className="text-sm text-white/60 mt-1 text-center">
+                  {item.description}
+                </span>
               </CardContent>
             </Card>
           </Link>

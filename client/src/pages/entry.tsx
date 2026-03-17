@@ -279,7 +279,7 @@ export default function Entry() {
         {/* Header */}
         <div className="text-center mb-12">
           <div className="inline-flex flex-col items-center gap-4 mb-6">
-            <span className="text-white font-bold text-3xl font-['Poppins']">MindOS</span>
+            <span className="text-white font-bold text-3xl font-['Poppins']">EvoOS</span>
           </div>
           <p className="text-white/70 text-lg">Plataforma Educativa Inteligente</p>
         </div>

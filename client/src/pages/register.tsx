@@ -122,7 +122,7 @@ export default function Register() {
           <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-[#002366] via-[#1e3cff] to-[#003d7a] bg-clip-text text-transparent font-['Poppins']">
             Crear cuenta
           </h2>
-          <p className="text-white/70 mb-8">Únete a MindOS</p>
+          <p className="text-white/70 mb-8">Únete a EvoOS</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
               <div>

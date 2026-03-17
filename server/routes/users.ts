@@ -108,10 +108,10 @@ router.get('/me/courses', protect, async (req: AuthRequest, res) => {
         for (const gs of details) {
           courses.push({
             _id: gs.id,
-            nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || g.name,
+            nombre: (gs.subject_name ?? '').trim() || 'Materia',
             descripcion: gs.subject_description ?? '',
             colorAcento: '',
-            icono: '',
+            icono: gs.icon ?? '',
             profesorIds: [{ _id: gs.teacher_id, nombre: gs.teacher_name, email: gs.teacher_email }],
             cursos: [g.name],
             groupId: g.id,

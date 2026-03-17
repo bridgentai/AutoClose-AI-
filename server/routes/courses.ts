@@ -16,6 +16,7 @@ import {
 import {
   findGroupSubjectsByGroup,
   findGroupSubjectsByGroupWithDetails,
+  findGroupSubjectsBySubjectIdWithDetails,
   findGroupSubjectsByTeacher,
   findGroupSubjectsByTeacherWithDetails,
   findGroupSubjectById,
@@ -388,8 +389,8 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
     }
 
     const gsIdResolved = await resolveGroupSubjectId(id ?? '', colegioId);
-    const gs = gsIdResolved ? await findGroupSubjectById(gsIdResolved) : await findGroupSubjectById(id);
-    const subject = gs ? await findSubjectById(gs.subject_id) : await findSubjectById(id);
+    let gs = gsIdResolved ? await findGroupSubjectById(gsIdResolved) : await findGroupSubjectById(id);
+    let subject = gs ? await findSubjectById(gs.subject_id) : await findSubjectById(id);
     if (!subject) return res.status(404).json({ message: 'Materia no encontrada' });
     if (subject.institution_id !== colegioId) return res.status(403).json({ message: 'No tienes acceso a esta materia.' });
 
@@ -397,19 +398,25 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
     if (user.role === 'estudiante') {
       const courseGroups = await getAllCourseGroupsForStudent(userId, colegioId);
       if (gs) {
-        cursoPermitido = courseGroups.some((g) => g.id === gs.group_id);
+        cursoPermitido = courseGroups.some((g) => g.id === gs!.group_id);
       } else {
         const allGs = (await Promise.all(
           courseGroups.map((g) => findGroupSubjectsByGroup(g.id))
         )).flat();
         cursoPermitido = allGs.some((x) => x.subject_id === id);
+        // Si el id es subject_id y el estudiante tiene acceso, resolver un group_subject para devolver groupSubjectId
+        if (cursoPermitido && !gs && id) {
+          const bySubject = await findGroupSubjectsBySubjectIdWithDetails(id, colegioId);
+          const firstInStudentGroup = bySubject.find((x) => courseGroups.some((g) => g.id === x.group_id));
+          if (firstInStudentGroup) gs = await findGroupSubjectById(firstInStudentGroup.id);
+        }
       }
     } else if (user.role === 'padre') {
       const links = await findGuardianStudentsByGuardian(userId);
       for (const link of links) {
         const hijoGroups = await getAllCourseGroupsForStudent(link.student_id, colegioId);
         if (gs) {
-          if (hijoGroups.some((g) => g.id === gs.group_id)) {
+          if (hijoGroups.some((g) => g.id === gs!.group_id)) {
             cursoPermitido = true;
             break;
           }
@@ -419,6 +426,11 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
           )).flat();
           if (allGs.some((x) => x.subject_id === id)) {
             cursoPermitido = true;
+            if (!gs && id) {
+              const bySubject = await findGroupSubjectsBySubjectIdWithDetails(id, colegioId);
+              const firstInHijoGroup = bySubject.find((x) => hijoGroups.some((g) => g.id === x.group_id));
+              if (firstInHijoGroup) gs = await findGroupSubjectById(firstInHijoGroup.id);
+            }
             break;
           }
         }

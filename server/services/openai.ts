@@ -103,7 +103,7 @@ export async function generateAIResponse(userMessage: string, context: {
 
   try {
 
-    const systemPrompt = `Eres MindOS, un asistente educativo personalizado para instituciones académicas.
+    const systemPrompt = `Eres EvoOS, un asistente educativo personalizado para instituciones académicas.
 
 Contexto:
 - Rol del usuario: ${context.rol}
@@ -323,7 +323,7 @@ export async function generateAIResponseWithFunctions(
  * Construye el system prompt dinámico según el rol
  */
 function buildSystemPrompt(role: string, context: any): string {
-  const basePrompt = `Eres MindOS, el asistente educativo inteligente de MindOS. Tu función es ayudar a los usuarios a realizar tareas académicas mediante lenguaje natural.
+  const basePrompt = `Eres EvoOS, el asistente educativo inteligente de EvoOS. Tu función es ayudar a los usuarios a realizar tareas académicas mediante lenguaje natural.
 
 IMPORTANTE: Responde SIEMPRE en español de Colombia. Sé claro, conciso y útil.
 

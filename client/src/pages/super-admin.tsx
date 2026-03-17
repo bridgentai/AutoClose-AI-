@@ -48,7 +48,7 @@ export default function SuperAdminPage() {
     nombre: '',
     colegioId: '',
     logoUrl: '',
-    nombreIA: 'MindOS',
+    nombreIA: 'EvoOS',
     colorPrimario: '#00c8ff',
     colorSecundario: '#1e3cff',
   });
@@ -96,7 +96,7 @@ export default function SuperAdminPage() {
         nombre: '',
         colegioId: '',
         logoUrl: '',
-        nombreIA: 'MindOS',
+        nombreIA: 'EvoOS',
         colorPrimario: '#00c8ff',
         colorSecundario: '#1e3cff',
       });

@@ -125,11 +125,11 @@ router.get('/my-groups', protect, async (req: AuthRequest, res) => {
       const entry = groupMap.get(gid)!;
       entry.subjects.push({
         _id: gs.id,
-        nombre: [gs.subject_name, gs.group_name].filter(Boolean).join(' ').trim() || gs.subject_name || '',
+        nombre: (gs.subject_name ?? '').trim() || 'Materia',
         groupName: gs.group_name ?? '',
         descripcion: gs.subject_description,
         colorAcento: '',
-        icono: '',
+        icono: gs.icon ?? '',
       });
       const enrollments = await findEnrollmentsByGroup(gs.group_id);
       enrollments.forEach((e) => entry.studentIds.add(e.student_id));

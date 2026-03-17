@@ -21,7 +21,7 @@ const institutionConfigSchema = new Schema<IInstitutionConfig>({
   logoUrl: { type: String, required: false, default: '' },
   parametros: { type: Schema.Types.Mixed, default: {} },
   // Campos adicionales para compatibilidad
-  nombreIA: { type: String, default: 'MindOS' },
+  nombreIA: { type: String, default: 'EvoOS' },
   colorPrimario: { type: String, default: '#9f25b8' },
   colorSecundario: { type: String, default: '#6a0dad' },
   metodologia: { type: String },

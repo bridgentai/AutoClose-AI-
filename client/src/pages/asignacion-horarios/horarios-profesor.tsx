@@ -11,17 +11,16 @@ import { useToast } from "@/hooks/use-toast";
 
 const DIAS = [1, 2, 3, 4, 5, 6] as const;
 
-/** Mismos períodos que Horarios Curso: última clase hasta 14:25 */
+/** 6 horas de clase, 1 break, 1 almuerzo. */
 const PERIODOS = [
   { num: 1, inicio: "7:30", fin: "8:25", especial: null },
-  { num: 2, inicio: "8:25", fin: "9:20", especial: null },
-  { num: 3, inicio: "9:20", fin: "10:15", especial: null },
-  { num: 4, inicio: "10:15", fin: "10:35", especial: "Break" },
-  { num: 5, inicio: "10:35", fin: "11:30", especial: null },
-  { num: 6, inicio: "11:30", fin: "12:25", especial: null },
-  { num: 7, inicio: "12:25", fin: "13:05", especial: "Almuerzo" },
-  { num: 8, inicio: "13:05", fin: "14:00", especial: null },
-  { num: 9, inicio: "14:00", fin: "14:25", especial: null },
+  { num: 2, inicio: "8:30", fin: "9:25", especial: null },
+  { num: 3, inicio: "9:30", fin: "10:30", especial: null },
+  { num: 4, inicio: "10:30", fin: "10:50", especial: "Break" },
+  { num: 5, inicio: "10:50", fin: "11:45", especial: null },
+  { num: 6, inicio: "11:50", fin: "12:50", especial: null },
+  { num: 7, inicio: "12:50", fin: "13:35", especial: "Almuerzo" },
+  { num: 8, inicio: "13:35", fin: "14:25", especial: null },
 ];
 
 interface Group {
@@ -97,7 +96,9 @@ export default function HorariosProfesorPage() {
       queryClient.setQueryData(["/api/schedule/professor", profesorIdStr], { slots: payload });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/professor", profesorIdStr] });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/my-professor"] });
-      toast({ title: "Horario guardado", description: "El horario del profesor se ha actualizado correctamente." });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/group"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/schedule/group-for-attendance"] });
+      toast({ title: "Horario guardado", description: "El horario del profesor y de los cursos asignados se ha actualizado correctamente." });
     },
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message || "No se pudo guardar el horario.", variant: "destructive" });
@@ -196,9 +197,6 @@ export default function HorariosProfesorPage() {
               <table className="w-full min-w-[800px] border-collapse">
                 <thead>
                   <tr className="border-b border-white/10" style={{ background: "rgba(16,185,129,0.12)" }}>
-                    <th className="w-24 py-3 px-3 text-left text-xs font-semibold text-[#E2E8F0] uppercase tracking-wider border-r border-white/10">
-                      Período
-                    </th>
                     <th className="w-28 py-3 px-3 text-left text-xs font-semibold text-white/70 uppercase tracking-wider border-r border-white/10">
                       Horario
                     </th>
@@ -219,9 +217,6 @@ export default function HorariosProfesorPage() {
                       key={per.num}
                       className={`border-b border-white/[0.06] ${idx % 2 === 1 ? "bg-white/[0.02]" : ""}`}
                     >
-                      <td className="py-2.5 px-3 text-sm font-semibold text-emerald-400 border-r border-white/10">
-                        {per.num}
-                      </td>
                       <td className="py-2.5 px-3 text-xs text-white/60 border-r border-white/10">
                         {per.inicio} – {per.fin}
                       </td>
@@ -263,7 +258,7 @@ export default function HorariosProfesorPage() {
             className="px-6 py-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-4"
             style={{ background: "rgba(0,0,0,0.15)" }}
           >
-            <p className="text-xs text-white/40">Horarios Profesor · MindOS</p>
+            <p className="text-xs text-white/40">Horarios Profesor · EvoOS</p>
             <Button
               onClick={handleConfirmar}
               disabled={!profesorIdStr || saveMutation.isPending}
