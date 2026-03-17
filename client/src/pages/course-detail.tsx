@@ -182,10 +182,12 @@ function computeWeightedPromedioAndUltima(
 }
 
 interface CourseSubject {
-    _id: string; // ID de la materia
+    _id: string; // ID de la materia (group_subject id cuando viene de for-group)
     nombre: string;
     descripcion?: string;
     colorAcento?: string;
+    icono?: string;
+    groupSubjectId?: string | null; // desde GET details (estudiante/padre)
     // Campo para el profesor
     profesor?: {
         nombre: string;
@@ -316,6 +318,10 @@ export default function CourseDetailPage() {
     const [googleSearch, setGoogleSearch] = useState('');
     const [evoLinkUrl, setEvoLinkUrl] = useState('');
     const [evoLinkName, setEvoLinkName] = useState('');
+    // Modal opciones de materia (nombre visible + ícono) — solo profesor/admin
+    const [optionsModalOpen, setOptionsModalOpen] = useState(false);
+    const [optionsDisplayName, setOptionsDisplayName] = useState('');
+    const [optionsIcon, setOptionsIcon] = useState('');
 
     // Obtener mes y año actuales
     const now = new Date();
@@ -365,6 +371,24 @@ export default function CourseDetailPage() {
 
     // groupSubjectId para Evo Send: profesor = primera materia del grupo; estudiante = cursoId (materia actual)
     const evoSendGroupSubjectId = isProfessor ? firstSubjectId : (isStudent ? cursoId : null);
+
+    // Botón de opciones de materia: solo profesor asignado o admin (display_name e icon)
+    const groupSubjectIdForOptions = firstSubjectId ?? (courseDetails as CourseSubject | undefined)?.groupSubjectId ?? '';
+    const showOptionsButton = (isProfessor && !!firstSubjectId) || (['admin-general-colegio', 'directivo'].includes(user?.rol ?? '') && !!groupSubjectIdForOptions);
+
+    const patchGroupSubjectMutation = useMutation({
+        mutationFn: (body: { display_name?: string; icon?: string }) =>
+            apiRequest('PATCH', `/api/courses/group-subject/${groupSubjectIdForOptions}`, body),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['subjectsForGroup', cursoId] });
+            queryClient.invalidateQueries({ queryKey: ['courseDetails', cursoId] });
+            setOptionsModalOpen(false);
+            toast({ title: 'Materia actualizada', description: 'Nombre e ícono guardados.' });
+        },
+        onError: (err: Error) => {
+            toast({ title: 'Error', description: err?.message ?? 'No se pudo guardar.', variant: 'destructive' });
+        },
+    });
 
     // Query: threadId de Evo Send para este curso (atajo desde la tarjeta — profesor y estudiante)
     const { data: evoThreadIdData } = useQuery<{ threadId: string }>({
@@ -751,16 +775,37 @@ export default function CourseDetailPage() {
         // Obtener la primera materia para usar su ID en las notas (si hay materias)
         const firstSubjectId = subjects.length > 0 ? subjects[0]._id : null;
 
+        const openOptionsModal = () => {
+            setOptionsDisplayName(subjects[0]?.nombre ?? '');
+            setOptionsIcon(subjects[0]?.icono ?? '');
+            setOptionsModalOpen(true);
+        };
+
         return (
             <>
-                <div className="mb-8">
-                    <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
-                    <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 font-['Poppins'] break-words">
-                        Gestión del Grupo {groupDisplayName}
-                    </h2>
-                    <p className="text-white/60 text-sm sm:text-base">
-                        Gestiona estudiantes, notas, tareas y calendario del grupo
-                    </p>
+                <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <NavBackButton to="/profesor/academia/cursos" label="Cursos" />
+                            {showOptionsButton && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-white/20 text-white/90 hover:bg-white/10"
+                                    onClick={openOptionsModal}
+                                >
+                                    <Settings className="w-4 h-4 mr-1" />
+                                    Opciones de materia
+                                </Button>
+                            )}
+                        </div>
+                        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 font-['Poppins'] break-words mt-2">
+                            Gestión del Grupo {groupDisplayName}
+                        </h2>
+                        <p className="text-white/60 text-sm sm:text-base">
+                            Gestiona estudiantes, notas, tareas y calendario del grupo
+                        </p>
+                    </div>
                 </div>
 
                 {/* 6 Tarjetas: Fila 1 — Estudiantes, Tareas, Notas. Fila 2 — Asistencia, Evo Send, Evo Drive */}
@@ -1538,6 +1583,21 @@ export default function CourseDetailPage() {
                                 </div>
                             </div>
                             <div className="flex flex-col gap-3">
+                                {showOptionsButton && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-white/20 text-white/90 hover:bg-white/10"
+                                        onClick={() => {
+                                            setOptionsDisplayName(details.nombre ?? '');
+                                            setOptionsIcon((details as CourseSubject).icono ?? '');
+                                            setOptionsModalOpen(true);
+                                        }}
+                                    >
+                                        <Settings className="w-4 h-4 mr-1" />
+                                        Opciones de materia
+                                    </Button>
+                                )}
                                 <NavBackButton to="/courses" label="Materias" />
                             </div>
                         </div>
@@ -1845,11 +1905,71 @@ export default function CourseDetailPage() {
         );
     };
 
+    const MATERIA_ICONS = ['📐', '🔬', '🧪', '🌍', '🖥️', '📖', '🎨', '⚽', '🎵', '🧮', '🏛️', '✏️', '🌱', '💡'];
+
     return (
         <div className="flex-1 overflow-auto p-4 sm:p-6 md:p-8">
             <div className="max-w-7xl mx-auto w-full">
                 {renderContent()}
             </div>
+            {/* Modal Opciones de materia (nombre visible + ícono) — profesor/admin */}
+            <Dialog open={optionsModalOpen} onOpenChange={setOptionsModalOpen}>
+                <DialogContent className="bg-white/5 border border-white/10 max-w-md rounded-2xl p-6 shadow-xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-white font-['Poppins']">Opciones de la materia</DialogTitle>
+                        <DialogDescription className="text-white/60 text-sm">
+                            Cambia el nombre visible y el ícono de esta materia (solo afecta cómo se muestra, no el nombre oficial).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-2">
+                        <div>
+                            <Label className="text-white/90 mb-2 block">Nombre visible</Label>
+                            <Input
+                                value={optionsDisplayName}
+                                onChange={(e) => setOptionsDisplayName(e.target.value)}
+                                placeholder="Ej. Matemáticas 11"
+                                className="bg-white/5 border-white/10 text-white placeholder:text-white/50"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-white/90 mb-2 block">Ícono</Label>
+                            <div className="grid grid-cols-7 gap-2">
+                                {MATERIA_ICONS.map((emoji) => (
+                                    <button
+                                        key={emoji}
+                                        type="button"
+                                        onClick={() => setOptionsIcon(emoji)}
+                                        className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${
+                                            optionsIcon === emoji
+                                                ? 'bg-[#1e3cff] text-white ring-2 ring-[#00c8ff]'
+                                                : 'bg-white/10 text-white hover:bg-white/20'
+                                        }`}
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter className="gap-2 mt-6">
+                        <Button variant="outline" className="border-white/10 text-white" onClick={() => setOptionsModalOpen(false)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            className="bg-[#1e3cff] hover:bg-[#002366] text-white"
+                            disabled={patchGroupSubjectMutation.isPending}
+                            onClick={() => {
+                                patchGroupSubjectMutation.mutate({
+                                    display_name: optionsDisplayName.trim() || undefined,
+                                    icon: optionsIcon || undefined,
+                                });
+                            }}
+                        >
+                            {patchGroupSubjectMutation.isPending ? 'Guardando...' : 'Guardar'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

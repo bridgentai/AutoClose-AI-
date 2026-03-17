@@ -179,6 +179,8 @@ CREATE TABLE IF NOT EXISTS group_subjects (
   group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
   subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
   teacher_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  display_name VARCHAR(255),
+  icon VARCHAR(32),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (group_id, subject_id)
 );

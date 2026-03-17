@@ -42,7 +42,7 @@ const checkIsDirectivoOrAdminColegio = (req: AuthRequest, res: Response, next: N
   else res.status(403).json({ message: 'Acceso denegado. Solo Directivos o Administradores del Colegio pueden realizar esta acción.' });
 };
 
-function toCourseResponse(gs: { id: string; subject_id: string; group_id: string; teacher_id: string; institution_id: string; created_at: string }, subject: { id: string; name: string; description: string | null } | null, teacher: { id: string; full_name: string; email: string } | null, groupName?: string) {
+function toCourseResponse(gs: { id: string; subject_id: string; group_id: string; teacher_id: string; institution_id: string; created_at: string; icon?: string | null }, subject: { id: string; name: string; description: string | null } | null, teacher: { id: string; full_name: string; email: string } | null, groupName?: string) {
   const nombre = groupName ? `${subject?.name ?? ''} ${groupName}`.trim() || (subject?.name ?? '') : (subject?.name ?? '');
   return {
     _id: gs.id,
@@ -50,7 +50,7 @@ function toCourseResponse(gs: { id: string; subject_id: string; group_id: string
     nombre,
     descripcion: subject?.description ?? '',
     colorAcento: '',
-    icono: '',
+    icono: gs.icon ?? '',
     cursos: groupName ? [groupName] : [],
     profesorIds: teacher ? [{ _id: teacher.id, nombre: teacher.full_name, email: teacher.email }] : [],
     colegioId: gs.institution_id,
@@ -234,6 +234,37 @@ router.get('/group-subjects-options', protect, requireRole('profesor', 'directiv
   }
 });
 
+// PATCH /api/courses/group-subject/:groupSubjectId — actualizar display_name e icon (solo profesor asignado o admin)
+router.patch('/group-subject/:groupSubjectId', protect, async (req: AuthRequest, res) => {
+  try {
+    const { groupSubjectId } = req.params;
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    const role = req.user?.rol;
+    if (!userId || !colegioId || !groupSubjectId) return res.status(401).json({ message: 'No autorizado.' });
+    const gs = await findGroupSubjectById(groupSubjectId);
+    if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const isTeacher = gs.teacher_id === userId;
+    const isAdmin = ['admin-general-colegio', 'administrador-general', 'directivo', 'school_admin', 'super_admin'].includes(role ?? '');
+    if (!isTeacher && !isAdmin) return res.status(403).json({ message: 'Solo el profesor asignado o un administrador pueden editar esta materia.' });
+    const body = req.body as { display_name?: string; icon?: string };
+    const display_name = body.display_name !== undefined ? (typeof body.display_name === 'string' ? body.display_name.trim() || null : null) : undefined;
+    const icon = body.icon !== undefined ? (typeof body.icon === 'string' ? body.icon.trim().slice(0, 32) || null : null) : undefined;
+    if (display_name === undefined && icon === undefined) return res.status(400).json({ message: 'Indica display_name y/o icon para actualizar.' });
+    const updates: string[] = [];
+    const params: unknown[] = [];
+    let i = 1;
+    if (display_name !== undefined) { updates.push(`display_name = $${i}`); params.push(display_name); i++; }
+    if (icon !== undefined) { updates.push(`icon = $${i}`); params.push(icon); i++; }
+    params.push(groupSubjectId);
+    await queryPg(`UPDATE group_subjects SET ${updates.join(', ')} WHERE id = $${i} RETURNING id, display_name, icon`, params);
+    res.json({ message: 'Materia actualizada.', groupSubjectId });
+  } catch (error: unknown) {
+    console.error('Error al actualizar materia:', (error as Error).message);
+    res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
 // POST /api/courses/academic-message — enviar mensaje académico a un curso (profesor/directivo/asistente)
 router.post('/academic-message', protect, requireRole('profesor', 'directivo', 'asistente', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
   try {
@@ -397,12 +428,14 @@ router.get('/:id/details', protect, async (req: AuthRequest, res) => {
 
     const teacher = gs ? await findUserById(gs.teacher_id) : null;
     const cursoAsignado = user.role === 'estudiante' ? (await getFirstGroupNameForStudent(userId)) ?? undefined : undefined;
+    const displayName = gs?.display_name ?? subject.name;
     res.json({
       _id: subject.id,
-      nombre: subject.name,
+      groupSubjectId: gs?.id ?? null,
+      nombre: displayName,
       descripcion: subject.description,
       colorAcento: '',
-      icono: '',
+      icono: gs?.icon ?? '',
       cursos: gs ? [(await findGroupById(gs.group_id))?.name].filter(Boolean) : [],
       cursoAsignado,
       profesor: teacher ? { _id: teacher.id, nombre: teacher.full_name, email: teacher.email } : null,

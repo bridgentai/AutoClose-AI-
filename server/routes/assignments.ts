@@ -347,7 +347,7 @@ router.get('/profesor/:profesorId/pending-review', protect, async (req: AuthRequ
       group_name: string;
       subject_name: string;
     }>(
-      `SELECT DISTINCT ON (a.id) a.id, a.group_subject_id, a.title, a.description, a.content_document, a.due_date, a.max_score, a.created_by, a.type, a.is_gradable, a.created_at, g.name AS group_name, s.name AS subject_name
+      `SELECT DISTINCT ON (a.id) a.id, a.group_subject_id, a.title, a.description, a.content_document, a.due_date, a.max_score, a.created_by, a.type, a.is_gradable, a.created_at, g.name AS group_name, COALESCE(gs.display_name, s.name) AS subject_name
        FROM assignments a
        JOIN group_subjects gs ON gs.id = a.group_subject_id
        JOIN groups g ON g.id = gs.group_id

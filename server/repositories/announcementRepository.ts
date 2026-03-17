@@ -77,7 +77,7 @@ export async function findAcademicFeedWithDetails(
   opts?: { groupSubjectIds?: string[] }
 ): Promise<AcademicFeedItem[]> {
   let q = `
-    SELECT a.*, s.name AS subject_name, g.name AS group_name
+    SELECT a.*, COALESCE(gs.display_name, s.name) AS subject_name, g.name AS group_name
     FROM announcements a
     LEFT JOIN group_subjects gs ON gs.id = a.group_subject_id
     LEFT JOIN subjects s ON s.id = gs.subject_id

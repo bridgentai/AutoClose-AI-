@@ -29,7 +29,7 @@ async function getBoletinDataForStudent(
     subject_name: string;
     teacher_name: string;
   }>(
-    `SELECT gs.id as group_subject_id, gs.subject_id, s.name as subject_name,
+    `SELECT gs.id as group_subject_id, gs.subject_id, COALESCE(gs.display_name, s.name) as subject_name,
             u.full_name as teacher_name
      FROM group_subjects gs
      JOIN subjects s ON gs.subject_id = s.id
