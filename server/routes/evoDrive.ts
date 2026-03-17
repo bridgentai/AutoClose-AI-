@@ -175,7 +175,7 @@ router.get('/google/files', protect, async (req: AuthRequest, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'No autorizado.' });
   const auth = await getAuthedClient(userId);
-  if (!auth) return res.status(401).json({ error: 'Google Drive no conectado' });
+  if (!auth) return res.status(403).json({ error: 'Google Drive no conectado', code: 'GOOGLE_DRIVE_DISCONNECTED' });
   const drive = google.drive({ version: 'v3', auth });
   const { q = '', pageToken } = req.query as { q?: string; pageToken?: string };
   const params: Parameters<typeof drive.files.list>[0] = {
@@ -204,7 +204,7 @@ router.post('/google/create', protect, restrictTo(...ROLES_WRITE), async (req: A
   const colegioId = req.user?.colegioId;
   if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
   const auth = await getAuthedClient(userId);
-  if (!auth) return res.status(401).json({ message: 'Google Drive no conectado.' });
+  if (!auth) return res.status(403).json({ message: 'Google Drive no conectado.', code: 'GOOGLE_DRIVE_DISCONNECTED' });
   const { nombre, tipo, cursoId, cursoNombre, groupSubjectId } = req.body as { nombre?: string; tipo?: string; cursoId?: string; cursoNombre?: string; groupSubjectId?: string };
   if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
   if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
@@ -275,7 +275,7 @@ router.post('/google/create-personal', protect, async (req: AuthRequest, res) =>
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ message: 'No autorizado.' });
   const auth = await getAuthedClient(userId);
-  if (!auth) return res.status(401).json({ message: 'Google Drive no conectado.' });
+  if (!auth) return res.status(403).json({ message: 'Google Drive no conectado.', code: 'GOOGLE_DRIVE_DISCONNECTED' });
   const { nombre, tipo } = req.body as { nombre?: string; tipo?: string };
   if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
   const mimeType = tipo && GOOGLE_CREATE_MIME[tipo] ? GOOGLE_CREATE_MIME[tipo] : GOOGLE_CREATE_MIME.doc;
@@ -298,7 +298,7 @@ router.post('/google/create-personal', protect, async (req: AuthRequest, res) =>
   }
 });
 
-// GET /api/evo-drive/groups — estudiante: solo sus cursos; profesor: solo las materias que dicta; otros: todos los grupos del colegio
+// GET /api/evo-drive/groups — profesor: carpetas por group_subject (materia — curso); admin/directivo: grupos con group_subjects anidados; estudiante: solo sus cursos (usa student-subject-folders en front)
 router.get('/groups', protect, async (req: AuthRequest, res) => {
   const colegioId = req.user?.colegioId;
   const userId = req.user?.id;
@@ -310,18 +310,36 @@ router.get('/groups', protect, async (req: AuthRequest, res) => {
   }
   if (rol === 'profesor') {
     const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
-    const seen = new Set<string>();
-    const list: { id: string; name: string }[] = [];
-    for (const gs of gsList) {
-      if (!seen.has(gs.group_id)) {
-        seen.add(gs.group_id);
-        list.push({ id: gs.group_id, name: gs.group_name });
-      }
-    }
-    return res.json(list);
+    const folderName = (gs: { display_name?: string | null; subject_name: string; group_name: string }) =>
+      `${gs.display_name?.trim() || gs.subject_name} — ${gs.group_name}`;
+    return res.json(
+      gsList.map((gs) => ({
+        id: gs.id,
+        name: folderName(gs),
+        groupId: gs.group_id,
+        groupSubjectId: gs.id,
+      }))
+    );
   }
+  // admin / directivo: grupos con group_subjects anidados (dos niveles: curso → materia)
   const groups = await findGroupsByInstitution(colegioId);
-  return res.json(groups.map((g) => ({ id: g.id, name: g.name })));
+  const result: { id: string; name: string; groupSubjects?: { id: string; name: string; groupId: string; groupSubjectId: string }[] }[] = [];
+  for (const g of groups) {
+    const details = await findGroupSubjectsByGroupWithDetails(g.id, colegioId);
+    const folderName = (gs: { display_name?: string | null; subject_name: string; group_name: string }) =>
+      `${gs.display_name?.trim() || gs.subject_name} — ${gs.group_name}`;
+    result.push({
+      id: g.id,
+      name: g.name,
+      groupSubjects: details.map((gs) => ({
+        id: gs.id,
+        name: folderName(gs),
+        groupId: g.id,
+        groupSubjectId: gs.id,
+      })),
+    });
+  }
+  return res.json(result);
 });
 
 // GET /api/evo-drive/student-subject-folders — estudiante: carpetas por materia (una por group_subject de sus cursos). Siempre incluye todas las materias, vacías o no.

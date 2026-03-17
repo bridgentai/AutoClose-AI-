@@ -50,6 +50,21 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+/** Carpeta por materia para profesor (cada ítem = group_subject). */
+interface TeacherFolder {
+  id: string;
+  name: string;
+  groupId: string;
+  groupSubjectId: string;
+}
+
+/** Curso con materias anidadas para admin/directivo (dos niveles: curso → materia). */
+interface EvoGroupWithSubjects {
+  id: string;
+  name: string;
+  groupSubjects?: { id: string; name: string; groupId: string; groupSubjectId: string }[];
+}
+
 interface EvoGroup {
   id: string;
   name: string;
@@ -167,11 +182,19 @@ function mimeToTipo(mime: string): string {
   return 'link';
 }
 
+/** Carpeta seleccionada (grupo + materia) para listar archivos. */
+interface SelectedFolder {
+  groupId: string;
+  groupSubjectId: string;
+  folderName: string;
+  groupName: string;
+}
+
 export default function EvoDrivePage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [cursoId, setCursoId] = useState<string>('');
+  const [selectedFolder, setSelectedFolder] = useState<SelectedFolder | null>(null);
   const [addFromGoogleOpen, setAddFromGoogleOpen] = useState(false);
   const [addFromEvoOpen, setAddFromEvoOpen] = useState(false);
   const [evoLinkName, setEvoLinkName] = useState('');
@@ -182,7 +205,10 @@ export default function EvoDrivePage() {
   const [createNewOpen, setCreateNewOpen] = useState(false);
   const [createNewType, setCreateNewType] = useState<'doc' | 'sheet' | 'slide'>('doc');
   const [createNewNombre, setCreateNewNombre] = useState('');
+  const [expandedAdminCourseId, setExpandedAdminCourseId] = useState<string | null>(null);
   const isTeacher = user?.rol && ROLES_WRITE.includes(user.rol);
+  const isProfesor = user?.rol === 'profesor';
+  const isAdminOrDirectivo = ['admin-general-colegio', 'directivo', 'school_admin', 'super_admin'].includes(user?.rol || '');
 
   // Mi carpeta (estudiante): modales y estado
   const [myFolderAddGoogleOpen, setMyFolderAddGoogleOpen] = useState(false);
@@ -199,24 +225,18 @@ export default function EvoDrivePage() {
     queryFn: () => apiRequest('GET', '/api/evo-drive/google/status'),
   });
 
-  const { data: groups = [] } = useQuery<EvoGroup[]>({
+  const { data: groupsData = [] } = useQuery<TeacherFolder[] | EvoGroupWithSubjects[]>({
     queryKey: ['evo-drive', 'groups'],
     queryFn: () => apiRequest('GET', '/api/evo-drive/groups'),
     enabled: isTeacher,
   });
+  const teacherFolders: TeacherFolder[] = isProfesor ? (groupsData as TeacherFolder[]) : [];
+  const adminGroups: EvoGroupWithSubjects[] = isAdminOrDirectivo ? (groupsData as EvoGroupWithSubjects[]) : [];
 
-  // Materias del curso seleccionado (profesor): para asociar cada archivo a una materia
-  const { data: courseSubjects = [] } = useQuery<Array<{ _id: string; id: string; nombre: string }>>({
-    queryKey: ['courses', 'for-group', cursoId],
-    queryFn: () => apiRequest('GET', `/api/courses/for-group/${encodeURIComponent(cursoId)}`),
-    enabled: isTeacher && !!cursoId,
-  });
-  const [selectedGroupSubjectId, setSelectedGroupSubjectId] = useState<string>('');
-  useEffect(() => {
-    if (courseSubjects.length === 1) setSelectedGroupSubjectId(courseSubjects[0]._id || courseSubjects[0].id);
-    else if (courseSubjects.length > 0 && !courseSubjects.some((s) => (s._id || s.id) === selectedGroupSubjectId)) setSelectedGroupSubjectId('');
-    else if (courseSubjects.length === 0) setSelectedGroupSubjectId('');
-  }, [cursoId, courseSubjects, selectedGroupSubjectId]);
+  // Derivados de la carpeta seleccionada (profesor y admin/directivo)
+  const cursoId = selectedFolder?.groupId ?? '';
+  const selectedGroupSubjectId = selectedFolder?.groupSubjectId ?? '';
+  const group = selectedFolder ? { name: selectedFolder.groupName } : null;
 
   // Misma API que "Mis Materias Asignadas" para que el estudiante vea sus carpetas por materia (Física, Matemáticas, etc.)
   const { data: meCourses = [] } = useQuery<Array<{ _id: string; nombre: string; groupId?: string; groupName?: string; subjectName?: string; icono?: string }>>({
@@ -228,7 +248,7 @@ export default function EvoDrivePage() {
     .filter((c): c is typeof c & { groupId: string; groupName: string } => !!c.groupId && !!c.groupName)
     .map((c) => ({
       id: c._id,
-      name: c.subjectName || c.nombre,
+      name: c.groupName ? `${c.subjectName || c.nombre} — ${c.groupName}` : (c.subjectName || c.nombre),
       groupId: c.groupId,
       groupName: c.groupName,
       icon: c.icono?.trim() || undefined,
@@ -241,32 +261,49 @@ export default function EvoDrivePage() {
   });
 
   const { data: files = [], isLoading: filesLoading } = useQuery<EvoFile[]>({
-    queryKey: ['evo-drive', 'files', cursoId],
-    queryFn: () => apiRequest('GET', `/api/evo-drive/files?cursoId=${encodeURIComponent(cursoId)}`),
-    enabled: !!cursoId,
+    queryKey: ['evo-drive', 'files', cursoId, selectedGroupSubjectId],
+    queryFn: () =>
+      apiRequest(
+        'GET',
+        `/api/evo-drive/files?cursoId=${encodeURIComponent(cursoId)}&groupSubjectId=${encodeURIComponent(selectedGroupSubjectId)}`
+      ),
+    enabled: !!cursoId && !!selectedGroupSubjectId,
   });
 
-  const { data: googleFilesRes, isLoading: googleFilesLoading } = useQuery<{ files: GoogleDriveFile[] }>({
+  const { data: googleFilesRes, isLoading: googleFilesLoading, isError: googleFilesError } = useQuery<{ files: GoogleDriveFile[] }>({
     queryKey: ['evo-drive', 'google-files', googleSearch],
     queryFn: () =>
       apiRequest('GET', `/api/evo-drive/google/files?q=${encodeURIComponent(googleSearch)}`),
     enabled: addFromGoogleOpen && !!googleStatus.connected,
+    retry: false,
   });
   const googleFiles = googleFilesRes?.files ?? [];
+  const googleDriveDisconnectedInModal = !googleStatus.connected || (!!googleStatus.connected && googleFilesError);
 
-  const { data: myFolderGoogleFilesRes, isLoading: myFolderGoogleFilesLoading } = useQuery<{
+  const { data: myFolderGoogleFilesRes, isLoading: myFolderGoogleFilesLoading, isError: myFolderGoogleFilesError } = useQuery<{
     files: GoogleDriveFile[];
   }>({
     queryKey: ['evo-drive', 'google-files-my', myFolderGoogleSearch],
     queryFn: () =>
       apiRequest('GET', `/api/evo-drive/google/files?q=${encodeURIComponent(myFolderGoogleSearch)}`),
     enabled: myFolderAddGoogleOpen && !!googleStatus.connected,
+    retry: false,
   });
   const myFolderGoogleFiles = myFolderGoogleFilesRes?.files ?? [];
+  const myFolderGoogleDriveDisconnected = !googleStatus.connected || (!!googleStatus.connected && myFolderGoogleFilesError);
 
   useEffect(() => {
-    if (isTeacher && groups.length > 0 && !cursoId) setCursoId(groups[0].id);
-  }, [isTeacher, groups, cursoId]);
+    if (isProfesor && teacherFolders.length > 0 && !selectedFolder) {
+      const f = teacherFolders[0];
+      const groupName = f.name.includes(' — ') ? f.name.split(' — ')[1]?.trim() ?? f.name : f.name;
+      setSelectedFolder({
+        groupId: f.groupId,
+        groupSubjectId: f.groupSubjectId,
+        folderName: f.name,
+        groupName,
+      });
+    }
+  }, [isProfesor, teacherFolders, selectedFolder]);
 
   const connectGoogle = async () => {
     try {
@@ -291,7 +328,9 @@ export default function EvoDrivePage() {
     mutationFn: (body: Record<string, unknown>) =>
       apiRequest('POST', '/api/evo-drive/files', body),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'files', cursoId] });
+      const gid = (variables.cursoId as string) ?? cursoId;
+      const gsid = (variables.groupSubjectId as string) ?? selectedGroupSubjectId;
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'files', gid, gsid] });
       if (variables.origen === 'google') {
         setAddFromGoogleOpen(false);
         toast({ title: 'Archivo agregado', description: 'Se vinculó el archivo de Google Drive.' });
@@ -311,7 +350,7 @@ export default function EvoDrivePage() {
     mutationFn: (body: { nombre: string; tipo: 'doc' | 'sheet' | 'slide'; cursoId: string; cursoNombre: string; groupSubjectId?: string }) =>
       apiRequest('POST', '/api/evo-drive/google/create', body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'files', cursoId] });
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'files', cursoId, selectedGroupSubjectId] });
       setCreateNewOpen(false);
       setCreateNewNombre('');
       toast({ title: 'Documento creado', description: 'Se creó en Google Drive y se añadió a Evo Drive.' });
@@ -361,11 +400,11 @@ export default function EvoDrivePage() {
   });
 
   const handleCreateNewDoc = () => {
-    if (!group || !cursoId || !createNewNombre.trim()) return;
+    if (!selectedFolder || !createNewNombre.trim()) return;
     if (!selectedGroupSubjectId) {
       toast({
-        title: 'Elige una materia',
-        description: 'Debes seleccionar una materia antes de crear un documento.',
+        title: 'Elige una carpeta',
+        description: 'Debes seleccionar una carpeta (materia — curso) antes de crear un documento.',
         variant: 'destructive',
       });
       return;
@@ -373,9 +412,9 @@ export default function EvoDrivePage() {
     createNewDocMutation.mutate({
       nombre: createNewNombre.trim(),
       tipo: createNewType,
-      cursoId,
-      cursoNombre: group.name,
-      groupSubjectId: selectedGroupSubjectId,
+      cursoId: selectedFolder.groupId,
+      cursoNombre: selectedFolder.groupName,
+      groupSubjectId: selectedFolder.groupSubjectId,
     });
   };
 
@@ -410,7 +449,6 @@ export default function EvoDrivePage() {
         (f.nombre || '').toLowerCase().includes(fileSearch.trim().toLowerCase())
       )
     : allFilesSorted;
-  const group = groups.find((g) => g.id === cursoId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Enlace para abrir en Drive cuando la API no devuelve webViewLink
@@ -423,10 +461,10 @@ export default function EvoDrivePage() {
   };
 
   const handleAddFromGoogle = (gfile: GoogleDriveFile) => {
-    if (!cursoId || !group) {
+    if (!selectedFolder) {
       toast({
-        title: 'Selecciona un curso',
-        description: 'Elige un curso en el selector de la barra superior antes de agregar archivos.',
+        title: 'Selecciona una carpeta',
+        description: 'Elige una carpeta (materia — curso) en el sidebar antes de agregar archivos.',
         variant: 'destructive',
       });
       return;
@@ -445,9 +483,9 @@ export default function EvoDrivePage() {
       nombre: gfile.name,
       tipo,
       origen: 'google',
-      cursoId,
-      cursoNombre: group.name,
-      groupSubjectId: selectedGroupSubjectId,
+      cursoId: selectedFolder.groupId,
+      cursoNombre: selectedFolder.groupName,
+      groupSubjectId: selectedFolder.groupSubjectId,
       googleFileId: gfile.id,
       googleWebViewLink: webViewLink,
       googleMimeType: gfile.mimeType,
@@ -457,11 +495,11 @@ export default function EvoDrivePage() {
   };
 
   const handleAddFromEvo = () => {
-    if (!cursoId || !group || !evoLinkName.trim()) return;
+    if (!selectedFolder || !evoLinkName.trim()) return;
     if (!selectedGroupSubjectId) {
       toast({
         title: 'Elige una materia',
-        description: 'Debes seleccionar una materia antes de agregar un enlace.',
+        description: 'Debes seleccionar una carpeta (materia — curso) antes de agregar un enlace.',
         variant: 'destructive',
       });
       return;
@@ -470,9 +508,9 @@ export default function EvoDrivePage() {
       nombre: evoLinkName.trim(),
       tipo: 'link',
       origen: 'material',
-      cursoId,
-      cursoNombre: group.name,
-      groupSubjectId: selectedGroupSubjectId,
+      cursoId: selectedFolder.groupId,
+      cursoNombre: selectedFolder.groupName,
+      groupSubjectId: selectedFolder.groupSubjectId,
       evoStorageUrl: evoLinkUrl.trim() || undefined,
     });
   };
@@ -549,21 +587,60 @@ export default function EvoDrivePage() {
         </section>
         <section className="mb-4">
           <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Cursos</p>
-          {isTeacher && groups.map((g) => {
-            const isActive = cursoId === g.id;
+          {isProfesor && teacherFolders.map((f) => {
+            const isActive = selectedFolder?.groupSubjectId === f.groupSubjectId;
             return (
               <button
-                key={g.id}
+                key={f.groupSubjectId}
                 type="button"
-                onClick={() => setCursoId(g.id)}
+                onClick={() => {
+                  const groupName = f.name.includes(' — ') ? f.name.split(' — ')[1]?.trim() ?? f.name : f.name;
+                  setSelectedFolder({ groupId: f.groupId, groupSubjectId: f.groupSubjectId, folderName: f.name, groupName });
+                }}
                 className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'}`}
               >
                 <span className="flex items-center gap-2 min-w-0 truncate">
-                  <FolderOpen className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-white'}`} />
-                  <span className="truncate">{g.name}</span>
+                  <FolderOpen className="w-4 h-4 shrink-0 text-white" />
+                  <span className="truncate">{f.name}</span>
                 </span>
-                <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{cursoId === g.id ? allFiles.length : 0}</span>
+                <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{isActive ? allFiles.length : 0}</span>
               </button>
+            );
+          })}
+          {isAdminOrDirectivo && adminGroups.map((g) => {
+            const expanded = expandedAdminCourseId === g.id;
+            return (
+              <div key={g.id} className="mx-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedAdminCourseId(expanded ? null : g.id)}
+                  className="w-[calc(100%-0px)] flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors text-white/80 hover:bg-white/10"
+                >
+                  <span className="flex items-center gap-2 min-w-0 truncate">
+                    <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                    <FolderOpen className="w-4 h-4 shrink-0 text-white" />
+                    <span className="truncate">{g.name}</span>
+                  </span>
+                </button>
+                {expanded && g.groupSubjects?.map((sub) => {
+                  const isActive = selectedFolder?.groupSubjectId === sub.groupSubjectId;
+                  const groupName = sub.name.includes(' — ') ? sub.name.split(' — ')[1]?.trim() ?? sub.name : sub.name;
+                  return (
+                    <button
+                      key={sub.groupSubjectId}
+                      type="button"
+                      onClick={() => setSelectedFolder({ groupId: sub.groupId, groupSubjectId: sub.groupSubjectId, folderName: sub.name, groupName })}
+                      className={`w-[calc(100%-16px)] ml-6 flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors ${isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'}`}
+                    >
+                      <span className="flex items-center gap-2 min-w-0 truncate">
+                        <FolderOpen className="w-4 h-4 shrink-0 text-white" />
+                        <span className="truncate">{sub.name}</span>
+                      </span>
+                      <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{isActive ? allFiles.length : 0}</span>
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
           {!isTeacher && subjectFolders.map((folder) => (
@@ -588,7 +665,7 @@ export default function EvoDrivePage() {
       </aside>
 
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto relative">
-        {isTeacher && cursoId && (
+        {isTeacher && selectedFolder && (
           <div className="shrink-0 flex items-center gap-4 px-6 py-3 border-b border-white/10">
             <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-[#1E3A8A]/40 border border-white/10 py-2 px-3">
               <Search className="w-4 h-4 text-white/50 shrink-0" />
@@ -628,7 +705,7 @@ export default function EvoDrivePage() {
           </div>
         )}
 
-        {isTeacher && cursoId && (
+        {isTeacher && selectedFolder && (
           <div className="shrink-0 flex flex-wrap items-center gap-2.5 px-6 py-2 border-b border-white/10">
             {!googleStatus.connected && (
               <Button onClick={connectGoogle} variant="outline" size="sm" className="h-9 rounded-xl border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] text-xs font-medium hover:bg-[#22c55e]/20">
@@ -642,7 +719,7 @@ export default function EvoDrivePage() {
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" title={!selectedGroupSubjectId ? 'Selecciona una materia primero' : ''} className="h-9 rounded-full bg-white/10 border border-white/20 text-white text-[13px] font-medium hover:bg-white/15 px-4">
+                <Button size="sm" title={!selectedFolder ? 'Selecciona una carpeta primero' : ''} className="h-9 rounded-full bg-white/10 border border-white/20 text-white text-[13px] font-medium hover:bg-white/15 px-4">
                   <Plus className="w-4 h-4 mr-2" />
                   Añadir o crear
                 </Button>
@@ -686,7 +763,13 @@ export default function EvoDrivePage() {
         {isTeacher ? (
           <>
             <div className="flex-1 p-6 overflow-auto">
-              {filesLoading ? (
+              {!selectedFolder ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <FolderOpen className="w-12 h-12 text-white/30 mb-4" />
+                  <p className="text-white/70 font-medium">Selecciona una carpeta</p>
+                  <p className="text-white/50 text-sm mt-1">Elige una materia — curso en el sidebar para ver y gestionar archivos.</p>
+                </div>
+              ) : filesLoading ? (
                 <div className="space-y-3">
                   <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
                   <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
@@ -717,7 +800,7 @@ export default function EvoDrivePage() {
                   </table>
                 </div>
               )}
-              {!filesLoading && (
+              {selectedFolder && !filesLoading && (
                 <div
                   className="mt-6 rounded-xl border-2 border-dashed border-white/10 py-7 px-6 flex flex-col items-center justify-center gap-2 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06] transition-colors cursor-pointer"
                   onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }}
@@ -931,13 +1014,20 @@ export default function EvoDrivePage() {
               </div>
             </DialogTitle>
           </DialogHeader>
-          {!googleStatus.connected ? (
+          {googleDriveDisconnectedInModal ? (
+            <div className="space-y-4 py-2">
+              <p className="text-white/60 text-sm">
+                {googleFilesError ? 'Google Drive se desconectó. Reconéctalo para seguir usando tus archivos.' : 'Conecta Google Drive para agregar archivos desde tu cuenta.'}
+              </p>
+              <Button type="button" onClick={connectGoogle} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium">
+                <Cloud className="w-4 h-4 mr-2" />
+                Reconectar Google Drive
+              </Button>
+              <p className="text-white/40 text-xs">Serás redirigido a Google y volverás aquí sin cerrar sesión.</p>
+            </div>
+          ) : !selectedFolder ? (
             <p className="text-white/60 text-sm py-4">
-              Conecta Google Drive primero con el botón de la barra superior.
-            </p>
-          ) : !cursoId || !group ? (
-            <p className="text-white/60 text-sm py-4">
-              Selecciona un curso en el sidebar (ej. 10C) para poder agregar archivos de Google Drive a ese curso.
+              Selecciona una carpeta (materia — curso) en el sidebar para poder agregar archivos de Google Drive.
             </p>
           ) : (
             <>
@@ -1124,7 +1214,7 @@ export default function EvoDrivePage() {
             </Button>
             <Button
               onClick={handleCreateNewDoc}
-              disabled={!createNewNombre.trim() || !selectedGroupSubjectId || createNewDocMutation.isPending || !group || !cursoId}
+              disabled={!createNewNombre.trim() || !selectedFolder || createNewDocMutation.isPending}
               className="bg-[#1a73e8] hover:bg-[#1558b0] text-white text-[13px] font-medium"
             >
               {createNewDocMutation.isPending ? 'Creando…' : 'Crear'}
@@ -1147,8 +1237,17 @@ export default function EvoDrivePage() {
               </div>
             </DialogTitle>
           </DialogHeader>
-          {!googleStatus.connected ? (
-            <p className="text-white/60 text-sm py-4">Conecta Google Drive primero para usar tus archivos.</p>
+          {myFolderGoogleDriveDisconnected ? (
+            <div className="space-y-4 py-2">
+              <p className="text-white/60 text-sm">
+                {myFolderGoogleFilesError ? 'Google Drive se desconectó. Reconéctalo para usar tus archivos.' : 'Conecta Google Drive para usar tus archivos.'}
+              </p>
+              <Button type="button" onClick={connectGoogle} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium">
+                <Cloud className="w-4 h-4 mr-2" />
+                Reconectar Google Drive
+              </Button>
+              <p className="text-white/40 text-xs">Serás redirigido a Google y volverás aquí sin cerrar sesión.</p>
+            </div>
           ) : (
             <>
               <div className="space-y-2">
