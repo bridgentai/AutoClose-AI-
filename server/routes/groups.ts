@@ -217,7 +217,12 @@ router.post('/assign-student', protect, async (req: AuthRequest, res) => {
 router.get('/all', protect, async (req: AuthRequest, res) => {
   try {
     const colegioId = req.user?.colegioId;
+    const rolUser = req.user?.rol;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const allowedRoles = ['admin-general-colegio', 'school_admin', 'directivo', 'profesor'];
+    if (!rolUser || !allowedRoles.includes(rolUser)) {
+      return res.status(403).json({ message: 'Acceso denegado.' });
+    }
     const groups = await findGroupsByInstitution(colegioId);
     const groupIds = groups.map((g) => g.id);
     const counts = await countEnrollmentsByGroupIds(groupIds);

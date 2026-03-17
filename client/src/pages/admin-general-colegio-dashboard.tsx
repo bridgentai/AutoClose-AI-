@@ -3,10 +3,11 @@ import { useAuth } from '@/lib/authContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useInstitutionColors } from '@/hooks/useInstitutionColors';
-import { 
-  Users, GraduationCap, BookOpen, UserPlus, Plus, Edit, Trash2, 
+import {
+  Users, GraduationCap, BookOpen, UserPlus, Plus, Edit, Trash2,
   X, Check, Settings, Bot, Link as LinkIcon, Eye, EyeOff,
-  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search, Upload, KeyRound, Copy, ScrollText, LayoutGrid
+  LayoutDashboard, UserCog, School, BookMarked, FileText, Brain, Search, Upload, KeyRound, Copy, ScrollText, LayoutGrid,
+  Shield, UserCheck, ChevronDown, ChevronUp, Download, UserX
 } from 'lucide-react';
 import { BulkUsersUpload } from '@/components/admin/BulkUsersUpload';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -98,7 +99,7 @@ export function AdminGeneralColegioDashboard() {
   const queryClient = useQueryClient();
   const { colorPrimario, colorSecundario } = useInstitutionColors();
   
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'usuarios' | 'cursos' | 'materias' | 'asignaciones' | 'carga-masiva' | 'ia' | 'auditoria' | 'config'>('dashboard');
+  const [activeSection, setActiveSection] = useState<'dashboard' | 'usuarios' | 'cursos' | 'materias' | 'vinculos' | 'carga-masiva' | 'accesos' | 'auditoria'>('dashboard');
   const [activeTab, setActiveTab] = useState<'estudiantes' | 'profesores' | 'padres' | 'directivos' | 'asistentes'>('estudiantes');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -143,6 +144,25 @@ export function AdminGeneralColegioDashboard() {
   const [createMateriaOpen, setCreateMateriaOpen] = useState(false);
   const [nuevaMateriaNombre, setNuevaMateriaNombre] = useState('');
   const [nuevaMateriaDescripcion, setNuevaMateriaDescripcion] = useState('');
+  // Editar materia
+  const [editMateriaOpen, setEditMateriaOpen] = useState(false);
+  const [editingMateria, setEditingMateria] = useState<{ id: string; nombre: string; area: string | null } | null>(null);
+  // Control de accesos
+  const [accessControlFeature, setAccessControlFeature] = useState('');
+  const [accessControlReason, setAccessControlReason] = useState('');
+  const [accessControlExpires, setAccessControlExpires] = useState('');
+  // Editar usuario
+  const [editUserFields, setEditUserFields] = useState({ nombre: '', email: '', telefono: '' });
+  const [editUserMode, setEditUserMode] = useState<'view' | 'edit'>('view');
+  // Vinculos: buscar estudiante
+  const [vincBusqueda, setVincBusqueda] = useState('');
+  const [vincEstudianteId, setVincEstudianteId] = useState('');
+  const [vincPadreId, setVincPadreId] = useState('');
+  const [vincAddPadreOpen, setVincAddPadreOpen] = useState(false);
+  // Auditoría: filtro por usuario
+  const [auditUserSearch, setAuditUserSearch] = useState('');
+  // Cursos: expandir estudiantes por grupo
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const isAdminColegio = user?.rol === 'admin-general-colegio' || user?.rol === 'school_admin';
 
@@ -184,7 +204,7 @@ export function AdminGeneralColegioDashboard() {
   const { data: materiasList = [], isLoading: materiasLoading, isError: materiasError, error: materiasErrorDetail } = useQuery<MateriaItem[]>({
     queryKey: ['materiasList', institutionIdForQueries],
     queryFn: () => apiRequest<MateriaItem[]>('GET', '/api/subjects'),
-    enabled: !!institutionIdForQueries && isAdminColegio,
+    enabled: !!institutionIdForQueries && isAdminColegio && (activeSection === 'materias' || (createUserOpen && createUserType === 'profesor')),
   });
 
   const createMateriaMutation = useMutation({
@@ -281,12 +301,12 @@ export function AdminGeneralColegioDashboard() {
   const { data: estudiantesVinculo = [] } = useQuery<User[]>({
     queryKey: ['estudiantesForVinculo', user?.colegioId],
     queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=estudiante'),
-    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'asignaciones',
+    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'vinculos' || activeSection === 'cursos'),
   });
   const { data: padresVinculo = [] } = useQuery<User[]>({
     queryKey: ['padresForVinculo', user?.colegioId],
     queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=padre'),
-    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'asignaciones',
+    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'vinculos' || activeSection === 'cursos'),
   });
 
   interface VinculacionItem {
@@ -490,6 +510,83 @@ export function AdminGeneralColegioDashboard() {
     },
   });
 
+  // Patch usuario (editar datos básicos)
+  const patchUserMutation = useMutation({
+    mutationFn: ({ id, ...body }: { id: string; nombre?: string; email?: string; telefono?: string }) =>
+      apiRequest('PATCH', `/api/users/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usuariosByRole'] });
+      setEditUserMode('view');
+    },
+  });
+
+  // Cambiar status (activar/suspender)
+  const changeStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'active' | 'suspended' }) =>
+      apiRequest('PATCH', `/api/users/${id}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['usuariosByRole'] });
+      setEditUserOpen(false);
+    },
+  });
+
+  // Control de accesos
+  interface AccessControlFeature { id: string; blocked_roles: string[]; reason: string | null; expires_at: string | null }
+  const { data: accessControlsData, refetch: refetchAccessControls } = useQuery<{ features: Record<string, AccessControlFeature | null> }>({
+    queryKey: ['accessControls', user?.colegioId],
+    queryFn: () => apiRequest('GET', '/api/access-controls'),
+    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'accesos',
+  });
+  const toggleAccessMutation = useMutation({
+    mutationFn: (payload: { feature: string; enabled: boolean; blocked_roles?: string[]; reason?: string; expires_at?: string | null }) =>
+      apiRequest('POST', '/api/access-controls/toggle', payload),
+    onSuccess: () => refetchAccessControls(),
+  });
+
+  // Editar materia
+  const editMateriaMutation = useMutation({
+    mutationFn: ({ id, nombre, area }: { id: string; nombre: string; area?: string }) =>
+      apiRequest('PATCH', `/api/subjects/${id}`, { nombre, area }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['materiasList'] });
+      setEditMateriaOpen(false);
+      setEditingMateria(null);
+    },
+  });
+
+  // Vinculos simplificados: buscar vinculaciones por estudiante
+  const { data: vincVinculaciones = [], refetch: refetchVincVinculaciones } = useQuery<VinculacionItem[]>({
+    queryKey: ['vincVinculaciones', vincEstudianteId],
+    queryFn: () => apiRequest('GET', `/api/users/vinculaciones?estudianteId=${vincEstudianteId}`),
+    enabled: !!vincEstudianteId,
+  });
+  const { data: estudiantesVincSearch = [] } = useQuery<User[]>({
+    queryKey: ['estudiantesVincSearch', user?.colegioId],
+    queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=estudiante'),
+    enabled: !!user?.colegioId && isAdminColegio && activeSection === 'vinculos',
+  });
+  const { data: padresVincSearch = [] } = useQuery<User[]>({
+    queryKey: ['padresVincSearch', user?.colegioId],
+    queryFn: () => apiRequest<User[]>('GET', '/api/users/by-role?rol=padre'),
+    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'vinculos' || vincAddPadreOpen),
+  });
+  const crearVincMutation = useMutation({
+    mutationFn: (payload: { padreId: string; estudianteId: string }) =>
+      apiRequest('POST', '/api/users/vinculaciones', payload),
+    onSuccess: () => {
+      refetchVincVinculaciones();
+      setVincPadreId('');
+      setVincAddPadreOpen(false);
+    },
+  });
+
+  // Estudiantes de un grupo (lazy, por groupId)
+  const { data: groupStudents = [], refetch: refetchGroupStudents } = useQuery<{ _id: string; nombre: string; estado: string }[]>({
+    queryKey: ['groupStudents', expandedGroup],
+    queryFn: () => apiRequest('GET', `/api/groups/${expandedGroup}/students`),
+    enabled: !!expandedGroup,
+  });
+
   const handleCreateUser = () => {
     if (createUserType === 'curso') {
       if (!newCourse.curso || !newCourse.seccion) {
@@ -539,16 +636,14 @@ export function AdminGeneralColegioDashboard() {
         return renderCursos();
       case 'materias':
         return renderMaterias();
-      case 'asignaciones':
-        return renderAsignaciones();
+      case 'vinculos':
+        return renderVinculos();
       case 'carga-masiva':
         return <BulkUsersUpload />;
-      case 'ia':
-        return renderIA();
+      case 'accesos':
+        return renderControlAccesos();
       case 'auditoria':
         return renderAuditoria();
-      case 'config':
-        return renderConfig();
       default:
         return renderDashboard();
     }
@@ -938,11 +1033,15 @@ export function AdminGeneralColegioDashboard() {
                                   <Button
                                     size="sm"
                                     variant="ghost"
+                                    title={usuario.estado === 'active' ? 'Suspender' : 'Activar'}
                                     onClick={() => {
-                                      // TODO: Implementar desactivar
+                                      const newStatus = usuario.estado === 'active' ? 'suspended' : 'active';
+                                      if (window.confirm(`¿${newStatus === 'suspended' ? 'Suspender' : 'Activar'} la cuenta de ${usuario.nombre}?`)) {
+                                        changeStatusMutation.mutate({ id: usuario._id, status: newStatus });
+                                      }
                                     }}
                                   >
-                                    {usuario.estado === 'active' ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    {usuario.estado === 'active' ? <UserX className="w-4 h-4 text-red-400" /> : <UserCheck className="w-4 h-4 text-green-400" />}
                                   </Button>
                                 </div>
                               </td>
@@ -1024,6 +1123,44 @@ export function AdminGeneralColegioDashboard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-white/70 text-sm">Desde el botón &quot;Crear Curso&quot; en Acciones Rápidas puedes crear nuevos grupos. Luego asigna profesores y estudiantes.</p>
+        </CardContent>
+      </Card>
+      <Card className={CARD_STYLE}>
+        <CardHeader>
+          <CardTitle className="text-white">Estudiantes por curso</CardTitle>
+          <CardDescription className="text-white/60">Selecciona un curso para ver sus estudiantes inscritos.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {gruposList.map((g) => (
+              <Button
+                key={g._id}
+                size="sm"
+                variant={expandedGroup === g._id ? 'default' : 'outline'}
+                className={expandedGroup === g._id ? '' : 'border-white/10 text-white/70'}
+                onClick={() => setExpandedGroup(expandedGroup === g._id ? null : g._id)}
+              >
+                {expandedGroup === g._id ? <ChevronUp className="w-3 h-3 mr-1" /> : <ChevronDown className="w-3 h-3 mr-1" />}
+                {g.nombre}
+              </Button>
+            ))}
+          </div>
+          {expandedGroup && (
+            <div className="rounded-xl border border-white/10 bg-white/5 divide-y divide-white/5">
+              {groupStudents.length === 0 ? (
+                <p className="p-3 text-white/50 text-sm">Sin estudiantes inscritos en este curso.</p>
+              ) : (
+                groupStudents.map((s) => (
+                  <div key={s._id} className="flex items-center justify-between px-4 py-2">
+                    <span className="text-white text-sm">{s.nombre}</span>
+                    <Badge className={s.estado === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}>
+                      {s.estado === 'active' ? 'Activo' : s.estado}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card className={CARD_STYLE}>
@@ -1249,6 +1386,7 @@ export function AdminGeneralColegioDashboard() {
                     <th className="py-3 px-4 text-xs font-semibold text-white/80 uppercase">Materia</th>
                     <th className="py-3 px-4 text-xs font-semibold text-white/80 uppercase">Cursos vinculados</th>
                     <th className="py-3 px-4 text-xs font-semibold text-white/80 uppercase">Profesor(es)</th>
+                    <th className="py-3 px-4 text-xs font-semibold text-white/80 uppercase"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1257,12 +1395,18 @@ export function AdminGeneralColegioDashboard() {
                       <td className="py-3 px-4">
                         <span className="font-medium text-white">{m.nombre}</span>
                         {m.descripcion && <p className="text-xs text-white/50 mt-0.5">{m.descripcion}</p>}
+                        {m.area && <p className="text-xs text-white/40">{m.area}</p>}
                       </td>
                       <td className="py-3 px-4 text-sm text-white/80">
                         {m.cursos.length === 0 ? <span className="text-white/50">— Sin asignar</span> : m.cursos.map((c) => c.groupName).filter(Boolean).join(', ') || '—'}
                       </td>
                       <td className="py-3 px-4 text-sm text-white/80">
-                        {m.cursos.length === 0 ? <span className="text-white/50">—</span> : [...new Set(m.cursos.map((c) => c.teacherName))].join(', ')}
+                        {m.cursos.length === 0 ? <span className="text-white/50">—</span> : Array.from(new Set(m.cursos.map((c) => c.teacherName))).join(', ')}
+                      </td>
+                      <td className="py-3 px-4">
+                        <Button size="sm" variant="ghost" className="text-white/60 hover:text-white" onClick={() => { setEditingMateria({ id: m.id, nombre: m.nombre, area: m.area }); setEditMateriaOpen(true); }}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -1406,25 +1550,103 @@ export function AdminGeneralColegioDashboard() {
     </div>
   );
 
-  // 6️⃣ IA del Colegio
-  const renderIA = () => (
-    <div className="space-y-6">
-      <Card className={CARD_STYLE}>
-        <CardHeader>
-          <CardTitle className="text-white">IA Académica</CardTitle>
-          <CardDescription className="text-white/60">Configuración básica de IA para materias</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-white/60">Funcionalidad en desarrollo...</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  // 6️⃣ Control de Accesos
+  const FEATURE_LABELS: Record<string, { label: string; desc: string; defaultRoles: string[] }> = {
+    ver_notas: { label: 'Ver calificaciones', desc: 'Bloquea que estudiantes y padres vean sus notas', defaultRoles: ['estudiante', 'padre'] },
+    ver_asistencia: { label: 'Ver asistencia', desc: 'Bloquea que estudiantes y padres vean su registro de asistencia', defaultRoles: ['estudiante', 'padre'] },
+    descargar_boletin: { label: 'Descargar boletín', desc: 'Bloquea la descarga de boletines de calificaciones', defaultRoles: ['estudiante', 'padre'] },
+    chat_estudiantes: { label: 'Chat estudiantil', desc: 'Bloquea el acceso al chat para estudiantes', defaultRoles: ['estudiante'] },
+    subir_archivos: { label: 'Subir archivos', desc: 'Bloquea la subida de archivos para estudiantes', defaultRoles: ['estudiante'] },
+  };
+  const renderControlAccesos = () => {
+    const features = accessControlsData?.features ?? {};
+    return (
+      <div className="space-y-6">
+        <Card className={CARD_STYLE}>
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Shield className="w-5 h-5" style={{ color: colorPrimario }} />
+              Control de Accesos
+            </CardTitle>
+            <CardDescription className="text-white/60">
+              Activa o desactiva funcionalidades para roles específicos. Útil para períodos de exámenes, eventos especiales o mantenimiento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {Object.entries(FEATURE_LABELS).map(([feature, meta]) => {
+              const control = features[feature];
+              const isBlocked = !!control;
+              return (
+                <div key={feature} className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-medium">{meta.label}</p>
+                      <p className="text-white/50 text-sm">{meta.desc}</p>
+                      {isBlocked && control && (
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {control.blocked_roles.map((r) => <Badge key={r} className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">{r}</Badge>)}
+                          {control.reason && <span className="text-xs text-amber-400">"{control.reason}"</span>}
+                          {control.expires_at && <span className="text-xs text-white/40">Expira: {new Date(control.expires_at).toLocaleDateString()}</span>}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={isBlocked ? 'default' : 'outline'}
+                      className={isBlocked ? 'bg-red-500/80 hover:bg-red-500 text-white' : 'border-white/20 text-white/70 hover:bg-white/10'}
+                      disabled={toggleAccessMutation.isPending}
+                      onClick={() => {
+                        if (isBlocked) {
+                          toggleAccessMutation.mutate({ feature, enabled: true });
+                        } else {
+                          setAccessControlFeature(feature);
+                          setAccessControlReason('');
+                          setAccessControlExpires('');
+                        }
+                      }}
+                    >
+                      {isBlocked ? 'Bloqueado — Habilitar' : 'Habilitado — Bloquear'}
+                    </Button>
+                  </div>
+                  {accessControlFeature === feature && !isBlocked && (
+                    <div className="border-t border-white/10 pt-3 space-y-3">
+                      <div>
+                        <Label className="text-white/70 text-sm">Razón (opcional)</Label>
+                        <Input value={accessControlReason} onChange={(e) => setAccessControlReason(e.target.value)} placeholder="Ej: Período de exámenes" className="bg-white/5 border-white/10 text-white mt-1" />
+                      </div>
+                      <div>
+                        <Label className="text-white/70 text-sm">Fecha de expiración (opcional)</Label>
+                        <Input type="date" value={accessControlExpires} onChange={(e) => setAccessControlExpires(e.target.value)} className="bg-white/5 border-white/10 text-white mt-1" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+                          onClick={() => {
+                            toggleAccessMutation.mutate({ feature, enabled: false, blocked_roles: meta.defaultRoles, reason: accessControlReason || undefined, expires_at: accessControlExpires || null });
+                            setAccessControlFeature('');
+                          }}>
+                          Confirmar bloqueo
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-white/60" onClick={() => setAccessControlFeature('')}>Cancelar</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
   // 7️⃣ Auditoría (solo admin)
   const renderAuditoria = () => {
     const logs = auditData?.logs ?? [];
     const total = auditData?.total ?? 0;
+    const filteredLogs = auditUserSearch ? logs.filter((l) =>
+      (l.role ?? '').toLowerCase().includes(auditUserSearch.toLowerCase()) ||
+      JSON.stringify(l.requestData ?? '').toLowerCase().includes(auditUserSearch.toLowerCase())
+    ) : logs;
     return (
       <div className="space-y-6">
         <Card className={CARD_STYLE}>
@@ -1439,6 +1661,16 @@ export function AdminGeneralColegioDashboard() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2 items-end">
+              <div>
+                <Label className="text-white/70 text-xs">Usuario</Label>
+                <Input
+                  type="text"
+                  placeholder="Filtrar por usuario..."
+                  className="bg-white/5 border-white/10 text-white w-[180px]"
+                  value={auditUserSearch}
+                  onChange={(e) => setAuditUserSearch(e.target.value)}
+                />
+              </div>
               <div>
                 <Label className="text-white/70 text-xs">Acción</Label>
                 <Select value={auditAction || 'all'} onValueChange={(v) => setAuditAction(v === 'all' ? '' : v)}>
@@ -1493,7 +1725,35 @@ export function AdminGeneralColegioDashboard() {
                 />
               </div>
             </div>
-            <p className="text-white/50 text-sm">Total: {total} registros</p>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-white/50 text-sm">Total: {total} registros</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-white/10 text-white/70"
+                onClick={() => {
+                  const header = ['Fecha', 'Rol', 'Acción', 'Entidad', 'Resultado', 'Detalle'].join(',');
+                  const rows = filteredLogs.map((l) => [
+                    l.timestamp ? new Date(l.timestamp).toLocaleString() : '',
+                    l.role ?? '',
+                    l.action ?? '',
+                    l.entityType ?? '',
+                    l.result ?? '',
+                    l.requestData ? JSON.stringify(l.requestData).replace(/,/g, ';') : '',
+                  ].map((v) => `"${v}"`).join(','));
+                  const csv = [header, ...rows].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `auditoria-${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download className="w-4 h-4 mr-2" />Exportar CSV
+              </Button>
+            </div>
             {auditLoading ? (
               <p className="text-white/60">Cargando...</p>
             ) : (
@@ -1510,10 +1770,10 @@ export function AdminGeneralColegioDashboard() {
                     </tr>
                   </thead>
                   <tbody className="text-white/80">
-                    {logs.length === 0 ? (
+                    {filteredLogs.length === 0 ? (
                       <tr><td colSpan={6} className="px-3 py-4 text-white/50">Sin registros</td></tr>
                     ) : (
-                      logs.map((log) => (
+                      filteredLogs.map((log) => (
                         <tr key={log._id} className="border-t border-white/10">
                           <td className="px-3 py-2">{log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}</td>
                           <td className="px-3 py-2">{log.role ?? '-'}</td>
@@ -1536,20 +1796,115 @@ export function AdminGeneralColegioDashboard() {
     );
   };
 
-  // 8️⃣ Configuración del Colegio
-  const renderConfig = () => (
-    <div className="space-y-6">
-      <Card className={CARD_STYLE}>
-        <CardHeader>
-          <CardTitle className="text-white">Configuración del Colegio</CardTitle>
-          <CardDescription className="text-white/60">Información básica del colegio</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-white/60">Funcionalidad en desarrollo...</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  // 8️⃣ Vínculos (simplificado)
+  const renderVinculos = () => {
+    const estudiantesFiltrados = estudiantesVincSearch.filter((e) =>
+      !vincBusqueda || e.nombre.toLowerCase().includes(vincBusqueda.toLowerCase()) || e.email.toLowerCase().includes(vincBusqueda.toLowerCase())
+    );
+    const estudianteSeleccionado = estudiantesVincSearch.find((e) => e._id === vincEstudianteId);
+    const canConfirmarVinc = vincVinculaciones.length >= 1 && estudianteSeleccionado?.estado === 'pendiente_vinculacion';
+    const canActivarVinc = vincVinculaciones.length >= 1 && estudianteSeleccionado?.estado === 'vinculado';
+    return (
+      <div className="space-y-6">
+        <Card className={CARD_STYLE}>
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <LinkIcon className="w-5 h-5" style={{ color: colorPrimario }} />
+              Vínculos Padre ⇄ Estudiante
+            </CardTitle>
+            <CardDescription className="text-white/60">Busca un estudiante, gestiona sus padres vinculados y activa las cuentas.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+              <Input placeholder="Buscar estudiante por nombre o email..." value={vincBusqueda} onChange={(e) => setVincBusqueda(e.target.value)} className="bg-white/5 border-white/10 text-white pl-10 placeholder:text-white/40" />
+            </div>
+            {vincBusqueda && (
+              <div className="rounded-xl border border-white/10 bg-white/5 divide-y divide-white/5 max-h-48 overflow-y-auto">
+                {estudiantesFiltrados.length === 0 ? (
+                  <p className="p-3 text-white/50 text-sm">Sin resultados</p>
+                ) : estudiantesFiltrados.map((e) => (
+                  <div key={e._id} className={`flex items-center justify-between p-3 cursor-pointer hover:bg-white/10 ${vincEstudianteId === e._id ? 'bg-white/10' : ''}`}
+                    onClick={() => { setVincEstudianteId(e._id); setVincBusqueda(''); }}>
+                    <div>
+                      <p className="text-white text-sm font-medium">{e.nombre}</p>
+                      <p className="text-white/50 text-xs">{e.email}</p>
+                    </div>
+                    <Badge className={e.estado === 'active' ? 'bg-green-500/20 text-green-400' : e.estado === 'vinculado' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}>
+                      {e.estado === 'active' ? 'Activo' : e.estado === 'vinculado' ? 'Vinculado' : 'Pend. vinc.'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+            {vincEstudianteId && estudianteSeleccionado && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-white font-medium">{estudianteSeleccionado.nombre}</p>
+                      <p className="text-white/50 text-sm">{estudianteSeleccionado.email}</p>
+                    </div>
+                    <Button size="sm" variant="ghost" className="text-white/50" onClick={() => setVincEstudianteId('')}><X className="w-4 h-4" /></Button>
+                  </div>
+                  <p className="text-white/70 text-sm font-medium mb-2">Padres vinculados:</p>
+                  {vincVinculaciones.length === 0 ? (
+                    <p className="text-white/40 text-sm">Sin padres vinculados.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {vincVinculaciones.map((v) => (
+                        <li key={(v as any).guardian_id ?? v._id} className="text-sm text-white/70 flex items-center gap-2">
+                          <UserCheck className="w-4 h-4 text-green-400" />
+                          {(v.padreId as any)?.nombre} — {(v.padreId as any)?.email}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => setVincAddPadreOpen(true)} style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}>
+                    <Plus className="w-4 h-4 mr-2" /> Agregar padre
+                  </Button>
+                  {canConfirmarVinc && (
+                    <Button variant="outline" className="border-blue-500/40 text-blue-400" disabled={confirmarVinculacionMutation.isPending}
+                      onClick={() => confirmarVinculacionMutation.mutate(vincEstudianteId)}>
+                      {confirmarVinculacionMutation.isPending ? 'Confirmando...' : 'Confirmar vinculación'}
+                    </Button>
+                  )}
+                  {canActivarVinc && (
+                    <Button variant="outline" className="border-green-500/40 text-green-400" disabled={activarCuentasMutation.isPending}
+                      onClick={() => activarCuentasMutation.mutate(vincEstudianteId)}>
+                      {activarCuentasMutation.isPending ? 'Activando...' : 'Activar cuentas'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Dialog open={vincAddPadreOpen} onOpenChange={setVincAddPadreOpen}>
+          <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
+            <DialogHeader><DialogTitle>Agregar padre/tutor</DialogTitle><DialogDescription className="text-white/60">Selecciona un padre existente para vincular con {estudianteSeleccionado?.nombre}.</DialogDescription></DialogHeader>
+            <div className="space-y-4">
+              <Select value={vincPadreId} onValueChange={setVincPadreId}>
+                <SelectTrigger className="bg-white/5 border-white/10 text-white"><SelectValue placeholder="Selecciona padre" /></SelectTrigger>
+                <SelectContent className="bg-[#0a0a2a] border-white/10">
+                  {padresVincSearch.map((p) => <SelectItem key={p._id} value={p._id} className="text-white focus:bg-white/10">{p.nombre} ({p.email})</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <div className="flex gap-2">
+                <Button disabled={!vincPadreId || crearVincMutation.isPending} style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+                  onClick={() => crearVincMutation.mutate({ padreId: vincPadreId, estudianteId: vincEstudianteId })}>
+                  {crearVincMutation.isPending ? 'Vinculando...' : 'Vincular'}
+                </Button>
+                <Button variant="outline" className="border-white/10 text-white" onClick={() => setVincAddPadreOpen(false)}>Cancelar</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -1590,12 +1945,12 @@ export function AdminGeneralColegioDashboard() {
               Materias
             </Button>
             <Button
-              variant={activeSection === 'asignaciones' ? 'default' : 'ghost'}
-              onClick={() => setActiveSection('asignaciones')}
-              className={activeSection === 'asignaciones' ? '' : 'text-white/70'}
+              variant={activeSection === 'vinculos' ? 'default' : 'ghost'}
+              onClick={() => setActiveSection('vinculos')}
+              className={activeSection === 'vinculos' ? '' : 'text-white/70'}
             >
               <LinkIcon className="w-4 h-4 mr-2" />
-              Asignaciones
+              Vínculos
             </Button>
             <Button
               variant={activeSection === 'carga-masiva' ? 'default' : 'ghost'}
@@ -1606,12 +1961,12 @@ export function AdminGeneralColegioDashboard() {
               Carga masiva
             </Button>
             <Button
-              variant={activeSection === 'ia' ? 'default' : 'ghost'}
-              onClick={() => setActiveSection('ia')}
-              className={activeSection === 'ia' ? '' : 'text-white/70'}
+              variant={activeSection === 'accesos' ? 'default' : 'ghost'}
+              onClick={() => setActiveSection('accesos')}
+              className={activeSection === 'accesos' ? '' : 'text-white/70'}
             >
-              <Brain className="w-4 h-4 mr-2" />
-              IA Académica
+              <Shield className="w-4 h-4 mr-2" />
+              Control de Accesos
             </Button>
             <Button
               variant={activeSection === 'auditoria' ? 'default' : 'ghost'}
@@ -1620,14 +1975,6 @@ export function AdminGeneralColegioDashboard() {
             >
               <ScrollText className="w-4 h-4 mr-2" />
               Auditoría
-            </Button>
-            <Button
-              variant={activeSection === 'config' ? 'default' : 'ghost'}
-              onClick={() => setActiveSection('config')}
-              className={activeSection === 'config' ? '' : 'text-white/70'}
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Configuración
             </Button>
           </div>
         </CardContent>
@@ -1643,7 +1990,7 @@ export function AdminGeneralColegioDashboard() {
           setCreateUserOpen(open);
           if (!open) {
             // Limpiar formularios al cerrar
-            setNewUser({ nombre: '', email: '', password: '', curso: '', telefono: '', celular: '' });
+            setNewUser({ nombre: '', email: '', telefono: '', celular: '', materiaNombre: '', materias: [], cursos: [] });
             setNewCourse({ curso: '', seccion: '', directorGrupo: '' });
           }
         }}
@@ -1785,7 +2132,7 @@ export function AdminGeneralColegioDashboard() {
                       <p className="text-xs text-white/50 mt-1">La materia es un campo del profesor. Luego podrás asignarlo a cursos/grupos.</p>
                     </div>
                     <div>
-                      <Label className="text-white/90 mb-2 block">Vincular a materias existentes (opcional)</Label>
+                      <Label className="text-white/90 mb-2 block">Vincular a materia(s) existentes (opcional)</Label>
                       <Select
                         value=""
                         onValueChange={(materiaId) => {
@@ -1798,9 +2145,9 @@ export function AdminGeneralColegioDashboard() {
                           <SelectValue placeholder="Selecciona una materia" />
                         </SelectTrigger>
                         <SelectContent className="bg-[#0a0a2a] border-white/10">
-                          {coursesList.map((c) => (
-                            <SelectItem key={c._id} value={c._id} className="text-white focus:bg-white/10">
-                              {c.nombre}
+                          {materiasList.map((m) => (
+                            <SelectItem key={m._id} value={m._id} className="text-white focus:bg-white/10">
+                              {m.nombre}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1808,7 +2155,7 @@ export function AdminGeneralColegioDashboard() {
                       {newUser.materias.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-2">
                           {newUser.materias.map((mId) => {
-                            const materia = coursesList.find((c) => c._id === mId);
+                            const materia = materiasList.find((m) => m._id === mId);
                             return materia ? (
                               <Badge key={mId} className="bg-white/10 text-white border-white/20">
                                 {materia.nombre}
@@ -2121,143 +2468,144 @@ export function AdminGeneralColegioDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Diálogo: Información de la cuenta (al hacer clic en un usuario) */}
+      {/* Diálogo: Información/edición de la cuenta */}
       <Dialog
         open={editUserOpen}
         onOpenChange={(open) => {
-          if (!open) setResetPasswordBox(null);
+          if (!open) { setResetPasswordBox(null); setEditUserMode('view'); }
           setEditUserOpen(open);
         }}
       >
         <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-white">Información de la cuenta</DialogTitle>
+            <DialogTitle className="text-white flex items-center justify-between">
+              <span>{editUserMode === 'edit' ? 'Editar usuario' : 'Información de la cuenta'}</span>
+              {editUserMode === 'view' && (
+                <Button size="sm" variant="ghost" className="text-white/70 hover:text-white" onClick={() => {
+                  setEditUserFields({ nombre: selectedUser?.nombre ?? '', email: selectedUser?.email ?? '', telefono: selectedUser?.telefono ?? selectedUser?.celular ?? '' });
+                  setEditUserMode('edit');
+                }}>
+                  <Edit className="w-4 h-4 mr-1" /> Editar
+                </Button>
+              )}
+            </DialogTitle>
             <DialogDescription className="text-white/60">
-              Datos de la cuenta. Usuario de login = email.
+              {editUserMode === 'edit' ? 'Modifica los datos del usuario.' : 'Datos de la cuenta. Usuario de login = email.'}
             </DialogDescription>
           </DialogHeader>
-          {selectedUser && (
+          {selectedUser && editUserMode === 'edit' ? (
             <div className="space-y-4 pt-2">
-              {/* Caja tras restablecer contraseña: nueva contraseña + info + copiar */}
+              <div>
+                <Label className="text-white/80 text-sm">Nombre completo</Label>
+                <Input value={editUserFields.nombre} onChange={(e) => setEditUserFields({ ...editUserFields, nombre: e.target.value })} className="bg-white/5 border-white/10 text-white mt-1" />
+              </div>
+              <div>
+                <Label className="text-white/80 text-sm">Email</Label>
+                <Input type="email" value={editUserFields.email} onChange={(e) => setEditUserFields({ ...editUserFields, email: e.target.value })} className="bg-white/5 border-white/10 text-white mt-1" />
+              </div>
+              <div>
+                <Label className="text-white/80 text-sm">Teléfono</Label>
+                <Input value={editUserFields.telefono} onChange={(e) => setEditUserFields({ ...editUserFields, telefono: e.target.value })} className="bg-white/5 border-white/10 text-white mt-1" placeholder="Opcional" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  disabled={patchUserMutation.isPending}
+                  style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+                  onClick={() => patchUserMutation.mutate({ id: selectedUser._id, nombre: editUserFields.nombre, email: editUserFields.email, telefono: editUserFields.telefono })}
+                >
+                  {patchUserMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+                </Button>
+                <Button variant="outline" className="border-white/10 text-white" onClick={() => setEditUserMode('view')}>Cancelar</Button>
+              </div>
+            </div>
+          ) : selectedUser ? (
+            <div className="space-y-4 pt-2">
               {resetPasswordBox && (
                 <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 space-y-3">
                   <div className="flex items-center gap-2 text-amber-300 font-medium">
-                    <KeyRound className="w-4 h-4" />
-                    Contraseña restablecida
+                    <KeyRound className="w-4 h-4" /> Contraseña restablecida
                   </div>
-                  <div>
-                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nombre</p>
-                    <p className="text-white font-medium">{selectedUser.nombre}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Usuario (email)</p>
-                    <p className="text-white font-mono text-sm break-all">{selectedUser.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nueva contraseña</p>
-                    <p className="text-amber-300 font-mono text-sm bg-black/20 px-3 py-2 rounded border border-amber-500/30 break-all select-all">
-                      {resetPasswordBox.passwordTemporal}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full border-amber-500/40 text-amber-300 hover:bg-amber-500/20"
-                    onClick={() => {
-                      navigator.clipboard.writeText(resetPasswordBox.passwordTemporal);
-                      setCopyFeedback(true);
-                      setTimeout(() => setCopyFeedback(false), 2000);
-                    }}
-                  >
-                    <Copy className="w-4 h-4 mr-2" />
-                    {copyFeedback ? 'Copiado' : 'Copiar contraseña'}
+                  <p className="text-amber-300 font-mono text-sm bg-black/20 px-3 py-2 rounded border border-amber-500/30 break-all select-all">{resetPasswordBox.passwordTemporal}</p>
+                  <Button type="button" size="sm" variant="outline" className="w-full border-amber-500/40 text-amber-300 hover:bg-amber-500/20" onClick={() => { navigator.clipboard.writeText(resetPasswordBox.passwordTemporal); setCopyFeedback(true); setTimeout(() => setCopyFeedback(false), 2000); }}>
+                    <Copy className="w-4 h-4 mr-2" />{copyFeedback ? 'Copiado' : 'Copiar contraseña'}
                   </Button>
                 </div>
               )}
-              <div className="grid gap-2">
-                <p className="text-sm text-white/60">Nombre</p>
-                <p className="text-white font-medium">{selectedUser.nombre}</p>
-              </div>
-              <div className="grid gap-2">
-                <p className="text-sm text-white/60">Usuario (email para iniciar sesión)</p>
-                <p className="text-white font-mono text-sm break-all">{selectedUser.email}</p>
-              </div>
-              <div className="grid gap-2">
-                <p className="text-sm text-white/60">Contraseña</p>
+              <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Nombre</p><p className="text-white font-medium">{selectedUser.nombre}</p></div>
+              <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Email (usuario)</p><p className="text-white font-mono text-sm break-all">{selectedUser.email}</p></div>
+              <div className="grid gap-1">
+                <p className="text-xs text-white/50 uppercase">Contraseña</p>
                 {userPasswordTemporal[selectedUser._id] ? (
-                  <p className="text-amber-300 font-mono text-sm bg-white/5 px-3 py-2 rounded border border-amber-500/30 break-all select-all">
-                    {userPasswordTemporal[selectedUser._id]}
-                  </p>
+                  <p className="text-amber-300 font-mono text-sm bg-white/5 px-3 py-2 rounded border border-amber-500/30 break-all select-all">{userPasswordTemporal[selectedUser._id]}</p>
                 ) : (
-                  <p className="text-white/50 text-sm">Solo visible al crear o al restablecer. Usa el botón de abajo para generar una nueva.</p>
+                  <p className="text-white/50 text-sm">Solo visible al crear o restablecer.</p>
                 )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="border-white/20 text-white hover:bg-white/10 w-fit"
-                  disabled={resetPasswordMutation.isPending}
-                  onClick={() => resetPasswordMutation.mutate(selectedUser._id)}
-                >
-                  <KeyRound className="w-4 h-4 mr-2" />
-                  {resetPasswordMutation.isPending ? 'Generando...' : 'Restablecer contraseña'}
+                <Button type="button" variant="outline" size="sm" className="border-white/20 text-white hover:bg-white/10 w-fit" disabled={resetPasswordMutation.isPending} onClick={() => resetPasswordMutation.mutate(selectedUser._id)}>
+                  <KeyRound className="w-4 h-4 mr-2" />{resetPasswordMutation.isPending ? 'Generando...' : 'Restablecer contraseña'}
                 </Button>
               </div>
-              <div className="grid gap-2">
-                <p className="text-sm text-white/60">Rol</p>
-                <p className="text-white capitalize">{selectedUser.rol || activeTab}</p>
+              <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Estado</p>
+                <div className="flex items-center gap-3">
+                  <Badge className={selectedUser.estado === 'active' ? 'bg-green-500/20 text-green-400' : selectedUser.estado === 'suspended' ? 'bg-red-500/20 text-red-400' : selectedUser.estado === 'vinculado' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}>
+                    {selectedUser.estado === 'active' ? 'Activo' : selectedUser.estado === 'suspended' ? 'Suspendido' : selectedUser.estado === 'vinculado' ? 'Vinculado' : selectedUser.estado === 'pendiente_vinculacion' ? 'Pend. vinculación' : selectedUser.estado}
+                  </Badge>
+                  <Button size="sm" variant="outline" className={`border-white/20 text-xs ${selectedUser.estado === 'active' ? 'text-red-400 border-red-500/30' : 'text-green-400 border-green-500/30'}`}
+                    disabled={changeStatusMutation.isPending}
+                    onClick={() => {
+                      const ns = selectedUser.estado === 'active' ? 'suspended' : 'active';
+                      if (window.confirm(`¿${ns === 'suspended' ? 'Suspender' : 'Activar'} cuenta de ${selectedUser.nombre}?`)) changeStatusMutation.mutate({ id: selectedUser._id, status: ns });
+                    }}>
+                    {selectedUser.estado === 'active' ? 'Suspender' : 'Activar'}
+                  </Button>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <p className="text-sm text-white/60">Estado</p>
-                <Badge
-                  className={
-                    selectedUser.estado === 'active'
-                      ? 'bg-green-500/20 text-green-400'
-                      : selectedUser.estado === 'vinculado'
-                      ? 'bg-blue-500/20 text-blue-400'
-                      : selectedUser.estado === 'pendiente_vinculacion'
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-white/10 text-white'
-                  }
+              {selectedUser.curso && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Curso</p><p className="text-white">{selectedUser.curso}</p></div>}
+              {(selectedUser.telefono || selectedUser.celular) && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Contacto</p><p className="text-white/80 text-sm">{selectedUser.telefono || selectedUser.celular}</p></div>}
+              {selectedUser.codigoUnico && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Código único</p><p className="text-white font-mono">{selectedUser.codigoUnico}</p></div>}
+              {Array.isArray(selectedUser.materias) && selectedUser.materias.length > 0 && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Materia(s)</p><p className="text-white/80 text-sm">{selectedUser.materias.join(', ')}</p></div>}
+              <Button variant="outline" className="mt-2 border-white/10 text-white" onClick={() => setEditUserOpen(false)}>Cerrar</Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo: Editar Materia */}
+      <Dialog open={editMateriaOpen} onOpenChange={(open) => { setEditMateriaOpen(open); if (!open) setEditingMateria(null); }}>
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">Editar materia</DialogTitle>
+            <DialogDescription className="text-white/60">Modifica el nombre y área de la materia.</DialogDescription>
+          </DialogHeader>
+          {editingMateria && (
+            <div className="space-y-4 pt-2">
+              <div>
+                <Label className="text-white/90 mb-2 block">Nombre *</Label>
+                <Input
+                  value={editingMateria.nombre}
+                  onChange={(e) => setEditingMateria({ ...editingMateria, nombre: e.target.value })}
+                  placeholder="Ej: Matemáticas"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                />
+              </div>
+              <div>
+                <Label className="text-white/90 mb-2 block">Área (opcional)</Label>
+                <Input
+                  value={editingMateria.area ?? ''}
+                  onChange={(e) => setEditingMateria({ ...editingMateria, area: e.target.value })}
+                  placeholder="Ej: Ciencias Exactas"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" className="border-white/10 text-white" onClick={() => setEditMateriaOpen(false)}>Cancelar</Button>
+                <Button
+                  disabled={!editingMateria.nombre.trim() || editMateriaMutation.isPending}
+                  style={{ background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})` }}
+                  onClick={() => editMateriaMutation.mutate({ id: editingMateria.id, nombre: editingMateria.nombre.trim(), area: editingMateria.area ?? undefined })}
                 >
-                  {selectedUser.estado === 'active' ? 'Activo' : selectedUser.estado === 'vinculado' ? 'Vinculado' : selectedUser.estado === 'pendiente_vinculacion' ? 'Pend. vinculación' : selectedUser.estado || '—'}
-                </Badge>
+                  {editMateriaMutation.isPending ? 'Guardando...' : 'Guardar cambios'}
+                </Button>
               </div>
-              {selectedUser.curso && (
-                <div className="grid gap-2">
-                  <p className="text-sm text-white/60">Curso / Grupo</p>
-                  <p className="text-white">{selectedUser.curso}</p>
-                </div>
-              )}
-              {(selectedUser.telefono || selectedUser.celular) && (
-                <div className="grid gap-2">
-                  <p className="text-sm text-white/60">Contacto</p>
-                  <p className="text-white/80 text-sm">
-                    {selectedUser.telefono && `Tel: ${selectedUser.telefono}`}
-                    {selectedUser.telefono && selectedUser.celular && ' · '}
-                    {selectedUser.celular && `Cel: ${selectedUser.celular}`}
-                  </p>
-                </div>
-              )}
-              {selectedUser.codigoUnico && (
-                <div className="grid gap-2">
-                  <p className="text-sm text-white/60">Código único</p>
-                  <p className="text-white font-mono">{selectedUser.codigoUnico}</p>
-                </div>
-              )}
-              {Array.isArray(selectedUser.materias) && selectedUser.materias.length > 0 && (
-                <div className="grid gap-2">
-                  <p className="text-sm text-white/60">Materia(s)</p>
-                  <p className="text-white/80 text-sm">{selectedUser.materias.join(', ')}</p>
-                </div>
-              )}
-              <Button
-                variant="outline"
-                className="mt-2 border-white/10 text-white"
-                onClick={() => setEditUserOpen(false)}
-              >
-                Cerrar
-              </Button>
             </div>
           )}
         </DialogContent>

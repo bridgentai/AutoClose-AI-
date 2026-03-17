@@ -178,4 +178,28 @@ router.get('/:id/overview', protect, async (req: AuthRequest, res) => {
   }
 });
 
+// PATCH /api/subjects/:id — editar nombre/área de una materia (solo admin)
+router.patch('/:id', protect, requireRole('admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
+  try {
+    const institutionId = req.user?.colegioId ?? req.user?.institution_id;
+    if (!institutionId) return res.status(401).json({ message: 'No autorizado.' });
+    const { id } = req.params;
+    const subject = await findSubjectById(id);
+    if (!subject || subject.institution_id !== institutionId) {
+      return res.status(404).json({ message: 'Materia no encontrada.' });
+    }
+    const { nombre, area, descripcion } = req.body as { nombre?: string; area?: string; descripcion?: string };
+    const { updateSubject } = await import('../repositories/subjectRepository.js');
+    const updated = await updateSubject(id, institutionId, {
+      name: nombre?.trim() ?? subject.name,
+      description: descripcion !== undefined ? (descripcion?.trim() || null) : subject.description,
+      area: area !== undefined ? (area?.trim() || null) : subject.area,
+    });
+    return res.json({ id: updated?.id ?? id, nombre: updated?.name, area: updated?.area, descripcion: updated?.description });
+  } catch (e: unknown) {
+    console.error('Error PATCH /subjects/:id:', e);
+    return res.status(500).json({ message: 'Error al actualizar materia.' });
+  }
+});
+
 export default router;
