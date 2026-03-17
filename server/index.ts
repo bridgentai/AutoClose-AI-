@@ -108,6 +108,14 @@ app.use((req, res, next) => {
     console.log(`\n🚀 Servidor iniciado exitosamente!`);
     console.log(`📍 URL de previsualización: ${url}`);
     console.log(`   También disponible en: ${localUrl}\n`);
+
+    // Evo Send: ensure staff groups and direct threads exist (idempotent)
+    if (process.env.DATABASE_URL) {
+      import('./services/evoSendBootstrap.js')
+        .then(({ ensureEvoSendStaffAndDirectThreads }) => ensureEvoSendStaffAndDirectThreads())
+        .then(() => console.log('[evoSendBootstrap] Staff and direct threads OK'))
+        .catch((err) => console.error('[evoSendBootstrap]', err));
+    }
     
     // Abrir el navegador automáticamente en modo desarrollo
     if (app.get("env") === "development") {

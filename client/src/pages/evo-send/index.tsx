@@ -46,7 +46,7 @@ const EVO_BLUE = '#3B82F6';
 const EVO_BLUE_DARK = '#1D4ED8';
 const EVO_PANEL = 'panel-grades rounded-2xl border border-white/[0.08] overflow-hidden';
 
-type ThreadType = 'comunicado_general' | 'curso' | 'asignacion' | 'asistencia' | 'general' | 'evo_chat';
+type ThreadType = 'comunicado_general' | 'curso' | 'asignacion' | 'asistencia' | 'general' | 'evo_chat' | 'evo_chat_staff' | 'evo_chat_direct';
 
 interface EvoThreadItem {
   _id: string;
@@ -84,22 +84,26 @@ interface ThreadDetail {
   messages: EvoMessageItem[];
 }
 
-const tipoLabels: Record<ThreadType, string> = {
+const tipoLabels: Record<string, string> = {
   comunicado_general: 'Comunicado general',
   curso: 'Curso',
   asignacion: 'Tarea',
   asistencia: 'Asistencia',
   general: 'General',
   evo_chat: 'Chat',
+  evo_chat_staff: 'Grupos',
+  evo_chat_direct: 'Chat directo',
 };
 
-const tipoIcons: Record<ThreadType, React.ReactNode> = {
+const tipoIcons: Record<string, React.ReactNode> = {
   comunicado_general: <Users className="w-4 h-4" />,
   curso: <BookOpen className="w-4 h-4" />,
   asignacion: <FileText className="w-4 h-4" />,
   asistencia: <AlertCircle className="w-4 h-4" />,
   general: <Inbox className="w-4 h-4" />,
   evo_chat: <MessageSquare className="w-4 h-4" />,
+  evo_chat_staff: <Users className="w-4 h-4" />,
+  evo_chat_direct: <MessageSquare className="w-4 h-4" />,
 };
 
 export default function EvoSendPage() {
@@ -138,14 +142,48 @@ export default function EvoSendPage() {
   const canCreateThread = !isProfesorOrEstudiante && ['directivo', 'admin-general-colegio'].includes(user?.rol || '');
   const isAsistente = user?.rol === 'asistente';
 
-  const { data: threads = [], isLoading: loadingThreads } = useQuery({
+  type ThreadsResponse =
+    | EvoThreadItem[]
+    | { mis_cursos?: EvoThreadItem[]; colegas: EvoThreadItem[]; directos?: EvoThreadItem[] };
+
+  const { data: threadsData, isLoading: loadingThreads } = useQuery({
     queryKey: ['/api/evo-send/threads', filterTipo],
     queryFn: () => {
       const params = new URLSearchParams();
       if (filterTipo && filterTipo !== 'all') params.set('tipo', filterTipo);
-      return apiRequest<EvoThreadItem[]>('GET', `/api/evo-send/threads?${params.toString()}`);
+      return apiRequest<ThreadsResponse>('GET', `/api/evo-send/threads?${params.toString()}`);
     },
   });
+
+  const { threads: threadsFlat, sections } = useMemo(() => {
+    const raw = threadsData ?? [];
+    if (Array.isArray(raw)) {
+      return { threads: raw, sections: null as null };
+    }
+    const misCursos = raw.mis_cursos ?? [];
+    const colegas = raw.colegas ?? [];
+    const directos = raw.directos ?? [];
+    const flat = [...misCursos, ...colegas, ...directos];
+    if (user?.rol === 'profesor') {
+      return {
+        threads: flat,
+        sections: [
+          { label: 'Mis cursos', threads: misCursos },
+          { label: 'Colegas', threads: colegas },
+        ],
+      };
+    }
+    if (user?.rol === 'directivo') {
+      return {
+        threads: flat,
+        sections: [
+          { label: 'Grupos', threads: colegas },
+          { label: 'Colegas', threads: directos },
+        ],
+      };
+    }
+    return { threads: flat, sections: null };
+  }, [threadsData, user?.rol]);
 
   const { data: threadDetail, isLoading: loadingThread } = useQuery({
     queryKey: ['/api/evo-send/threads', selectedId],
@@ -205,16 +243,16 @@ export default function EvoSendPage() {
 
   // Abrir hilo desde query ?thread= (atajo desde página del curso)
   useEffect(() => {
-    if (loadingThreads || threads.length === 0) return;
+    if (loadingThreads || threadsFlat.length === 0) return;
     const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const threadFromUrl = params.get('thread');
-    if (threadFromUrl && threads.some((t) => t._id === threadFromUrl)) {
+    if (threadFromUrl && threadsFlat.some((t) => t._id === threadFromUrl)) {
       setSelectedId(threadFromUrl);
       if (typeof window !== 'undefined' && window.history.replaceState) {
         window.history.replaceState({}, '', window.location.pathname);
       }
     }
-  }, [loadingThreads, threads]);
+  }, [loadingThreads, threadsFlat]);
 
   useEffect(() => {
     if (!lastMessage) return;
@@ -227,8 +265,8 @@ export default function EvoSendPage() {
   }, [lastMessage, selectedId]);
 
   const filteredThreads = searchQ.trim()
-    ? threads.filter((t) => t.asunto?.toLowerCase().includes(searchQ.trim().toLowerCase()))
-    : threads;
+    ? threadsFlat.filter((t) => (t.asunto ?? t.displayTitle ?? '').toLowerCase().includes(searchQ.trim().toLowerCase()))
+    : threadsFlat;
 
   const sortedThreads = useMemo(
     () =>
@@ -240,7 +278,7 @@ export default function EvoSendPage() {
     [filteredThreads]
   );
 
-  const selectedThread = threads.find((t) => t._id === selectedId);
+  const selectedThread = threadsFlat.find((t) => t._id === selectedId);
   const messages = threadDetail?.messages || [];
 
   const handleSendReply = () => {
@@ -302,31 +340,32 @@ export default function EvoSendPage() {
             <AttendanceInbox />
           </TabsContent>
           <TabsContent value="mensajes" className="mt-4 flex-1 flex flex-col min-h-0">
-            <EvoLayout
-              threads={sortedThreads}
-              selectedId={selectedId}
-              setSelectedId={setSelectedId}
-              selectedThread={selectedThread}
-              messages={messages}
-              threadDetail={threadDetail}
-              user={user}
-              replyText={replyText}
-              setReplyText={setReplyText}
-              onSendReply={handleSendReply}
-              sendReplyMutation={sendReplyMutation}
-              loadingThreads={loadingThreads}
-              loadingThread={loadingThread}
-              canCreateThread={false}
-              onNewMessage={() => setNewMessageOpen(true)}
-              searchQ={searchQ}
-              setSearchQ={setSearchQ}
-              filterTipo={filterTipo}
-              setFilterTipo={setFilterTipo}
-              showFilters={false}
-              typing={typing}
-              emitTyping={emitTyping}
-              selectedIdForTyping={selectedId}
-            />
+        <EvoLayout
+          threads={sortedThreads}
+          selectedId={selectedId}
+          setSelectedId={setSelectedId}
+          selectedThread={selectedThread}
+          messages={messages}
+          threadDetail={threadDetail}
+          user={user}
+          replyText={replyText}
+          setReplyText={setReplyText}
+          onSendReply={handleSendReply}
+          sendReplyMutation={sendReplyMutation}
+          loadingThreads={loadingThreads}
+          loadingThread={loadingThread}
+          canCreateThread={false}
+          onNewMessage={() => setNewMessageOpen(true)}
+          searchQ={searchQ}
+          setSearchQ={setSearchQ}
+          filterTipo={filterTipo}
+          setFilterTipo={setFilterTipo}
+          showFilters={false}
+          typing={typing}
+          emitTyping={emitTyping}
+          selectedIdForTyping={selectedId}
+          sections={sections}
+        />
           </TabsContent>
         </Tabs>
       ) : (
@@ -354,6 +393,7 @@ export default function EvoSendPage() {
           typing={typing}
           emitTyping={emitTyping}
           selectedIdForTyping={selectedId}
+          sections={sections}
         />
       )}
       </div>
@@ -526,6 +566,7 @@ interface EvoLayoutProps {
   typing: { userId?: string; userName?: string; threadId?: string } | null;
   emitTyping: (threadId: string, userName?: string) => void;
   selectedIdForTyping: string | null;
+  sections?: { label: string; threads: EvoThreadItem[] }[] | null;
 }
 
 function EvoLayout({
@@ -552,6 +593,7 @@ function EvoLayout({
   typing,
   emitTyping,
   selectedIdForTyping,
+  sections,
 }: EvoLayoutProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 h-full">
@@ -599,7 +641,7 @@ function EvoLayout({
                 <Loader2 className="w-8 h-8 animate-spin text-white/50" />
               </div>
             ) : (
-              filteredThreadsList(threads, selectedId, setSelectedId)
+              filteredThreadsList(threads, selectedId, setSelectedId, searchQ, sections)
             )}
           </div>
         </div>
@@ -719,56 +761,92 @@ function EvoLayout({
   );
 }
 
+const SECTION_LABEL_STYLE = { fontSize: 11, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase' as const };
+
 function filteredThreadsList(
   threads: EvoThreadItem[],
   selectedId: string | null,
-  setSelectedId: (id: string | null) => void
+  setSelectedId: (id: string | null) => void,
+  searchQ?: string,
+  sections?: { label: string; threads: EvoThreadItem[] }[] | null
 ) {
   const title = (t: EvoThreadItem) => t.displayTitle ?? t.asunto;
+  const filterBySearch = (list: EvoThreadItem[]) =>
+    !searchQ?.trim()
+      ? list
+      : list.filter((t) => (t.asunto ?? t.displayTitle ?? '').toLowerCase().includes(searchQ.trim().toLowerCase()));
+  const sortByDate = (list: EvoThreadItem[]) =>
+    [...list].sort((a, b) => {
+      const dateA = a.ultimoMensaje?.fecha ? new Date(a.ultimoMensaje.fecha).getTime() : new Date(a.updatedAt).getTime();
+      const dateB = b.ultimoMensaje?.fecha ? new Date(b.ultimoMensaje.fecha).getTime() : new Date(b.updatedAt).getTime();
+      return dateB - dateA;
+    });
+
+  const renderThread = (t: EvoThreadItem) => {
+    const isSelected = t._id === selectedId;
+    const hasUnread = (t.unreadCount ?? 0) > 0;
+    return (
+      <motion.div
+        key={t._id}
+        layout
+        onClick={() => setSelectedId(t._id)}
+        className={`p-3 border-b border-white/[0.06] cursor-pointer transition-all min-h-[72px] flex items-center gap-3 ${
+          isSelected ? 'bg-[#3B82F6]/15 border-l-4' : 'hover:bg-white/[0.04]'
+        }`}
+        style={isSelected ? { borderLeftColor: EVO_BLUE } : undefined}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setSelectedId(t._id);
+          }
+        }}
+      >
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'linear-gradient(145deg, rgba(59, 130, 246, 0.4), rgba(30, 64, 175, 0.5))' }}
+        >
+          <MessageSquare className="w-6 h-6 text-[#93C5FD]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`font-medium truncate ${hasUnread ? 'text-[#E2E8F0]' : 'text-white/90'}`}>{title(t)}</p>
+          <p className="text-white/60 text-sm truncate mt-0.5">
+            {t.ultimoMensaje?.contenido || 'Sin mensajes'}
+          </p>
+        </div>
+        <div className="flex flex-col items-end flex-shrink-0 gap-1">
+          <span className="text-white/40 text-xs">{new Date(t.updatedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>
+          {hasUnread && (
+            <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] flex-shrink-0" title="No leídos" aria-label="No leídos" />
+          )}
+        </div>
+      </motion.div>
+    );
+  };
+
+  if (sections && sections.length > 0) {
+    return (
+      <>
+        {sections.map((sec) => {
+          const filtered = sortByDate(filterBySearch(sec.threads));
+          if (filtered.length === 0) return null;
+          return (
+            <div key={sec.label}>
+              <p className="px-3 pt-3 pb-1 font-medium tracking-wider" style={SECTION_LABEL_STYLE}>
+                {sec.label}
+              </p>
+              {filtered.map((t) => renderThread(t))}
+            </div>
+          );
+        })}
+      </>
+    );
+  }
+
   return (
     <>
-      {threads.map((t) => {
-        const isSelected = t._id === selectedId;
-        const hasUnread = (t.unreadCount ?? 0) > 0;
-        return (
-          <motion.div
-            key={t._id}
-            layout
-            onClick={() => setSelectedId(t._id)}
-            className={`p-3 border-b border-white/[0.06] cursor-pointer transition-all min-h-[72px] flex items-center gap-3 ${
-              isSelected ? 'bg-[#3B82F6]/15 border-l-4' : 'hover:bg-white/[0.04]'
-            }`}
-            style={isSelected ? { borderLeftColor: EVO_BLUE } : undefined}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                setSelectedId(t._id);
-              }
-            }}
-          >
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(145deg, rgba(59, 130, 246, 0.4), rgba(30, 64, 175, 0.5))' }}
-            >
-              <MessageSquare className="w-6 h-6 text-[#93C5FD]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={`font-medium truncate ${hasUnread ? 'text-[#E2E8F0]' : 'text-white/90'}`}>{title(t)}</p>
-              <p className="text-white/60 text-sm truncate mt-0.5">
-                {t.ultimoMensaje?.contenido || 'Sin mensajes'}
-              </p>
-            </div>
-            <div className="flex flex-col items-end flex-shrink-0 gap-1">
-              <span className="text-white/40 text-xs">{new Date(t.updatedAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</span>
-              {hasUnread && (
-                <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] flex-shrink-0" title="No leídos" aria-label="No leídos" />
-              )}
-            </div>
-          </motion.div>
-        );
-      })}
+      {threads.map((t) => renderThread(t))}
       {threads.length === 0 && (
         <p className="p-4 text-white/50 text-center text-sm">No hay chats. Tus grupos son tus cursos (profesor) o materias (estudiante).</p>
       )}

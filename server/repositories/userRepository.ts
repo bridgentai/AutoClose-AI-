@@ -54,6 +54,19 @@ export async function findUsersByInstitution(institutionId: string): Promise<Use
   return r.rows;
 }
 
+/** Find users by institution and roles (e.g. profesores + directivos for staff groups). */
+export async function findUsersByInstitutionAndRoles(
+  institutionId: string,
+  roles: string[]
+): Promise<UserRow[]> {
+  if (roles.length === 0) return [];
+  const r = await queryPg<UserRow>(
+    'SELECT * FROM users WHERE institution_id = $1 AND role = ANY($2::text[]) ORDER BY full_name',
+    [institutionId, roles]
+  );
+  return r.rows;
+}
+
 export async function findUsersByIds(ids: string[]): Promise<UserRow[]> {
   if (ids.length === 0) return [];
   const r = await queryPg<UserRow>(

@@ -111,6 +111,72 @@ export async function findAnnouncementByGroupSubjectId(groupSubjectId: string): 
   return r.rows[0] ?? null;
 }
 
+/** Find announcement by institution, title and type (for staff/direct threads, avoid duplicates). */
+export async function findAnnouncementByInstitutionTitleAndType(
+  institutionId: string,
+  title: string,
+  type: string
+): Promise<AnnouncementRow | null> {
+  const r = await queryPg<AnnouncementRow>(
+    'SELECT * FROM announcements WHERE institution_id = $1 AND title = $2 AND type = $3 LIMIT 1',
+    [institutionId, title, type]
+  );
+  return r.rows[0] ?? null;
+}
+
+/** Add recipients to an announcement (idempotent: ignores duplicates). */
+export async function addAnnouncementRecipients(announcementId: string, userIds: string[]): Promise<void> {
+  if (userIds.length === 0) return;
+  await queryPg(
+    `INSERT INTO announcement_recipients (announcement_id, user_id)
+     SELECT $1, unnest($2::uuid[])
+     ON CONFLICT (announcement_id, user_id) DO NOTHING`,
+    [announcementId, userIds]
+  );
+}
+
+/** Find announcements where user is in announcement_recipients and type in given types. */
+export async function findAnnouncementsByRecipient(
+  userId: string,
+  types: string[],
+  institutionId: string
+): Promise<AnnouncementRow[]> {
+  if (types.length === 0) return [];
+  const r = await queryPg<AnnouncementRow>(
+    `SELECT a.* FROM announcements a
+     INNER JOIN announcement_recipients ar ON ar.announcement_id = a.id AND ar.user_id = $1
+     WHERE a.institution_id = $2 AND a.type = ANY($3::text[])
+     ORDER BY a.updated_at DESC`,
+    [userId, institutionId, types]
+  );
+  return r.rows;
+}
+
+/** Find evo_chat_direct thread between two users in the same institution. */
+export async function findDirectThreadBetweenUsers(
+  user1Id: string,
+  user2Id: string,
+  institutionId: string
+): Promise<AnnouncementRow | null> {
+  const r = await queryPg<AnnouncementRow>(
+    `SELECT a.* FROM announcements a
+     INNER JOIN announcement_recipients r1 ON r1.announcement_id = a.id AND r1.user_id = $1
+     INNER JOIN announcement_recipients r2 ON r2.announcement_id = a.id AND r2.user_id = $2
+     WHERE a.institution_id = $3 AND a.type = 'evo_chat_direct' LIMIT 1`,
+    [user1Id, user2Id, institutionId]
+  );
+  return r.rows[0] ?? null;
+}
+
+/** Check if user is a recipient of the announcement (for staff/direct access). */
+export async function isUserRecipientOfAnnouncement(announcementId: string, userId: string): Promise<boolean> {
+  const r = await queryPg<{ n: number }>(
+    'SELECT 1 AS n FROM announcement_recipients WHERE announcement_id = $1 AND user_id = $2 LIMIT 1',
+    [announcementId, userId]
+  );
+  return r.rows.length > 0;
+}
+
 /** Get or create the Evo Send chat thread for a group_subject (curso + materia). */
 export async function findOrCreateEvoChatForGroupSubject(
   groupSubjectId: string,

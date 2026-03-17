@@ -9,6 +9,8 @@ import {
   createAnnouncementMessage,
   getLastAnnouncementMessage,
   findOrCreateEvoChatForGroupSubject,
+  findAnnouncementsByRecipient,
+  isUserRecipientOfAnnouncement,
 } from '../repositories/announcementRepository.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupById } from '../repositories/groupRepository.js';
@@ -72,10 +74,10 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
 
     const tipo = req.query.tipo as string | undefined;
 
-    // Evo Send tipo WhatsApp: profesor ve grupos = cursos; estudiante ve grupos = materia + profesor
+    // Evo Send tipo WhatsApp: profesor ve mis_cursos + colegas (staff groups)
     if (rol === 'profesor' && userId) {
       const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
-      const threads = await Promise.all(
+      const misCursos = await Promise.all(
         gsList.map(async (gs) => {
           const a = await findOrCreateEvoChatForGroupSubject(
             gs.id,
@@ -88,7 +90,18 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
           return { ...t, displayTitle: gs.group_name };
         })
       );
-      return res.json(threads);
+      const staffAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_staff'], colegioId);
+      const colegas = await Promise.all(staffAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
+      return res.json({ mis_cursos: misCursos, colegas });
+    }
+
+    // Directivo: colegas (staff groups) + directos (1:1 con profesores)
+    if (rol === 'directivo' && userId) {
+      const staffAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_staff'], colegioId);
+      const colegas = await Promise.all(staffAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
+      const directAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_direct'], colegioId);
+      const directos = await Promise.all(directAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
+      return res.json({ colegas, directos });
     }
 
     if (rol === 'estudiante' && userId) {
@@ -123,7 +136,7 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
       return res.json(threads);
     }
 
-    // directivo, asistente, admin-general-colegio: listar todos los hilos (incl. evo_chat y otros)
+    // asistente, admin-general-colegio: listar todos los hilos (incl. evo_chat, evo_chat_staff, evo_chat_direct y otros)
     const announcements = await findAnnouncementsByInstitution(colegioId, tipo ? { type: tipo } : undefined);
     const threads = await Promise.all(announcements.map((a) => buildThreadFromAnnouncement(a)));
     return res.json(threads);
@@ -175,12 +188,17 @@ router.get('/thread-id-by-group-subject/:groupSubjectId', protect, requireRole(.
 router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
     const a = await findAnnouncementById(id);
     if (!a || a.institution_id !== colegioId) {
       return res.json({ thread: null, messages: [] });
+    }
+    if ((a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') && userId) {
+      const allowed = await isUserRecipientOfAnnouncement(id, userId);
+      if (!allowed) return res.json({ thread: null, messages: [] });
     }
 
     const creator = await findUserById(a.created_by_id);
@@ -272,6 +290,10 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
 
     const a = await findAnnouncementById(id);
     if (!a || a.institution_id !== colegioId) return res.status(404).json({ message: 'Hilo no encontrado.' });
+    if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') {
+      const allowed = await isUserRecipientOfAnnouncement(id, userId);
+      if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+    }
 
     const msg = await createAnnouncementMessage({
       announcement_id: id,
