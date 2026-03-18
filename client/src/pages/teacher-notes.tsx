@@ -249,16 +249,29 @@ export default function TeacherNotesPage() {
   const promedioPonderado = useMemo(() => {
     if (!estudianteId || !currentStudent) return null;
     let weightedSum = 0;
+    let totalWeight = 0;
     Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
       if (logro._id === 'sin-logro') return;
+      const pct = logro.porcentaje ?? 0;
+      if (pct <= 0) return;
       const notas: number[] = [];
       assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
       if (notas.length) {
         const prom = notas.reduce((s, n) => s + n, 0) / notas.length;
-        weightedSum += (prom * (logro.porcentaje ?? 0)) / 100;
+        totalWeight += pct;
+        weightedSum += (prom * pct) / 100;
       }
     });
-    const result = Math.round(weightedSum * 10) / 10;
+    const allNotas: number[] = [];
+    Object.values(assignmentsByLogro).forEach(({ assignments }) => {
+      assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => {
+        const n = getNotaForStudent(a, estudianteId);
+        if (n != null) allNotas.push(n);
+      });
+    });
+    const simple = allNotas.length ? allNotas.reduce((s, n) => s + n, 0) / allNotas.length : 0;
+    const raw = totalWeight > 0 ? (weightedSum / totalWeight) * 100 : simple;
+    const result = Math.round(raw * 10) / 10;
     return Number.isNaN(result) ? null : result;
   }, [estudianteId, currentStudent, assignmentsByLogro]);
 

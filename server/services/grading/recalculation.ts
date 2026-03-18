@@ -108,6 +108,8 @@ export async function runRecalculation(
 
   const categoryAverages: Record<string, number> = {};
   for (const cat of categoryLikes) {
+    const hasGradesInCat = eventLikes.some((e) => String(e.categoryId) === String(cat._id));
+    if (!hasGradesInCat) continue;
     categoryAverages[cat._id] = calculateCategoryAverage(
       studentId,
       cat._id,

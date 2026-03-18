@@ -49,7 +49,8 @@ export function calculateCategoryAverage(
 }
 
 /**
- * Weighted final average: sum of (categoryAverage * weight / 100) for categories that have grades.
+ * Promedio 0–100: solo categorías presentes en categoryAverages (p. ej. con al menos una nota).
+ * N/A no entra; pesos renormalizados.
  */
 export function calculateWeightedFinalAverage(
   _studentId: string,
@@ -61,10 +62,11 @@ export function calculateWeightedFinalAverage(
   let totalWeight = 0;
   for (const cat of categories) {
     const avg = categoryAverages[String(cat._id)];
-    if (avg != null && !Number.isNaN(avg)) {
-      total += (avg * cat.weight) / 100;
-      totalWeight += cat.weight;
-    }
+    if (avg == null || Number.isNaN(avg)) continue;
+    const w = cat.weight;
+    if (!Number.isFinite(w) || w <= 0) continue;
+    total += (avg * w) / 100;
+    totalWeight += w;
   }
   if (totalWeight <= 0) return 0;
   return (total / totalWeight) * 100;

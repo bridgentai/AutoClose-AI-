@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3, FolderOpen, Cloud, Link2, Presentation, FileSpreadsheet, ExternalLink } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3, FolderOpen, Cloud, Link2, Presentation, FileSpreadsheet, ExternalLink, ArrowRight } from 'lucide-react';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -253,9 +253,10 @@ const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
 // =========================================================
 
 export default function CourseDetailPage() {
-    // La ruta es dinámica. cursoId puede ser: ID de materia o Nombre del Grupo
-    const [, params] = useRoute('/course-detail/:cursoId');
-    const cursoId = params?.cursoId || '';
+    const [materiaRouteMatch, materiaRouteParams] = useRoute('/course-detail/:cursoId/materia/:groupSubjectId');
+    const [, baseRouteParams] = useRoute('/course-detail/:cursoId');
+    const cursoId = (materiaRouteParams?.cursoId || baseRouteParams?.cursoId || '').trim();
+    const routeGroupSubjectId = materiaRouteMatch ? materiaRouteParams?.groupSubjectId : undefined;
     const { user } = useAuth();
     const userRole = user?.rol;
 
@@ -305,7 +306,9 @@ export default function CourseDetailPage() {
 
     // Estados del Formulario
     const [showAssignmentForm, setShowAssignmentForm] = useState(false);
-    const [assignmentType, setAssignmentType] = useState<'recordatorio' | 'assignment' | null>(null);
+    /** null = cerrado; elegir si pide entrega; form = datos de la asignación */
+    const [assignmentCreationPhase, setAssignmentCreationPhase] = useState<null | 'choose-delivery' | 'form'>(null);
+    const [requiresStudentDelivery, setRequiresStudentDelivery] = useState(true);
     const [showStudentsDialog, setShowStudentsDialog] = useState(false);
     const [formData, setFormData] = useState({
         titulo: '',
@@ -356,6 +359,26 @@ export default function CourseDetailPage() {
         gcTime: 10 * 60 * 1000, // 10 minutos de caché
     });
 
+    const professorGroupSubjectId = useMemo(() => {
+        if (!isProfessor) return '';
+        if (!subjectsForGroup.length) return '';
+        if (subjectsForGroup.length === 1) return subjectsForGroup[0]._id;
+        if (routeGroupSubjectId && subjectsForGroup.some((s) => s._id === routeGroupSubjectId)) return routeGroupSubjectId;
+        return '';
+    }, [isProfessor, subjectsForGroup, routeGroupSubjectId]);
+
+    const professorMustPickSubject =
+        isProfessor && !isLoadingSubjects && subjectsForGroup.length > 1 && !professorGroupSubjectId;
+
+    useEffect(() => {
+        if (!isProfessor || isLoadingSubjects || subjectsForGroup.length <= 1) return;
+        if (!routeGroupSubjectId) return;
+        if (!subjectsForGroup.some((s) => s._id === routeGroupSubjectId)) {
+            toast({ title: 'Materia no encontrada', description: 'Vuelve a elegir una materia del grupo.', variant: 'destructive' });
+            setLocation(`/course-detail/${cursoId}`);
+        }
+    }, [isProfessor, isLoadingSubjects, subjectsForGroup, routeGroupSubjectId, cursoId, setLocation, toast]);
+
     // Query 3: Tareas del Curso/Grupo
     const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
         queryKey: ['assignments', cursoId, currentMonth, currentYear],
@@ -363,6 +386,11 @@ export default function CourseDetailPage() {
         staleTime: 2 * 60 * 1000, // 2 minutos - las tareas pueden cambiar más frecuentemente
         gcTime: 5 * 60 * 1000, // 5 minutos de caché
     });
+
+    const assignmentsForActiveSubject = useMemo(() => {
+        if (!isProfessor || !professorGroupSubjectId) return assignments;
+        return assignments.filter((a) => String(a.courseId || '') === String(professorGroupSubjectId));
+    }, [assignments, isProfessor, professorGroupSubjectId]);
 
     // Query 4: Estudiantes del Grupo (Solo para Profesor)
     const { data: students = [], isLoading: isLoadingStudents } = useQuery<Student[]>({
@@ -373,14 +401,14 @@ export default function CourseDetailPage() {
         gcTime: 10 * 60 * 1000, // 10 minutos de caché
     });
 
-    const firstSubjectId = subjectsForGroup[0]?._id;
-
-    // groupSubjectId para Evo Send: profesor = primera materia del grupo; estudiante = cursoId (materia actual)
-    const evoSendGroupSubjectId = isProfessor ? firstSubjectId : (isStudent ? cursoId : null);
+    // groupSubjectId para Evo Send: profesor = materia activa; estudiante = cursoId (materia actual)
+    const evoSendGroupSubjectId = isProfessor ? professorGroupSubjectId : (isStudent ? cursoId : null);
 
     // Botón de opciones de materia: solo profesor asignado o admin (display_name e icon)
-    const groupSubjectIdForOptions = firstSubjectId ?? (courseDetails as CourseSubject | undefined)?.groupSubjectId ?? '';
-    const showOptionsButton = (isProfessor && !!firstSubjectId) || (['admin-general-colegio', 'directivo'].includes(user?.rol ?? '') && !!groupSubjectIdForOptions);
+    const groupSubjectIdForOptions = isProfessor
+        ? professorGroupSubjectId
+        : ((courseDetails as CourseSubject | undefined)?.groupSubjectId ?? '');
+    const showOptionsButton = (isProfessor && !!professorGroupSubjectId) || (['admin-general-colegio', 'directivo'].includes(user?.rol ?? '') && !!groupSubjectIdForOptions);
 
     const patchGroupSubjectMutation = useMutation({
         mutationFn: (body: { display_name?: string; icon?: string }) =>
@@ -469,19 +497,19 @@ export default function CourseDetailPage() {
 
     // Query 6: Tareas para tabla de notas (grupo + materia, sin filtro mes)
     const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
-        queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
-        queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
-        enabled: isProfessor && !!cursoId && !!firstSubjectId,
+        queryKey: ['gradeTableAssignments', cursoId, professorGroupSubjectId],
+        queryFn: () => fetchGradeTableAssignments(displayGroupId, professorGroupSubjectId || ''),
+        enabled: isProfessor && !!cursoId && !!professorGroupSubjectId,
         staleTime: 2 * 60 * 1000,
         gcTime: 5 * 60 * 1000,
     });
 
-    // Query 7: Logros de calificación para la tabla de notas (siempre para la primera materia del grupo)
+    // Query 7: Logros de calificación para la tabla de notas (materia activa)
     const { data: logrosForTableData, isLoading: isLoadingLogrosForTable } = useQuery<LogrosResponse>({
-        queryKey: ['/api/logros-calificacion', firstSubjectId],
+        queryKey: ['/api/logros-calificacion', professorGroupSubjectId],
         queryFn: () =>
-            apiRequest<LogrosResponse>('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(firstSubjectId || '')}`),
-        enabled: isProfessor && !!firstSubjectId,
+            apiRequest<LogrosResponse>('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(professorGroupSubjectId || '')}`),
+        enabled: isProfessor && !!professorGroupSubjectId,
         staleTime: 5 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
     });
@@ -590,15 +618,15 @@ export default function CourseDetailPage() {
         return Number.isNaN(rounded) ? '—' : rounded;
     };
 
-    // Efecto para Profesor (Auto-seleccionar materia)
+    // Efecto para Profesor (Auto-seleccionar materia en el formulario)
     useEffect(() => {
-        if (subjectsForGroup.length === 1 && showAssignmentForm) {
-            setFormData(prev => ({ ...prev, courseId: subjectsForGroup[0]._id }));
+        if (professorGroupSubjectId && showAssignmentForm) {
+            setFormData(prev => ({ ...prev, courseId: professorGroupSubjectId }));
         }
-    }, [subjectsForGroup, showAssignmentForm]);
+    }, [professorGroupSubjectId, showAssignmentForm]);
 
     // Query para obtener logros de calificación
-    const courseIdForLogros = formData.courseId || subjectsForGroup[0]?._id || '';
+    const courseIdForLogros = formData.courseId || professorGroupSubjectId || '';
     const { data: logrosData, isLoading: isLoadingLogros } = useQuery<{ logros: { _id: string; nombre: string; porcentaje: number }[] }>({
         queryKey: ['/api/logros-calificacion', courseIdForLogros],
         queryFn: () =>
@@ -637,7 +665,8 @@ export default function CourseDetailPage() {
     useEffect(() => {
         if (!showAssignmentForm) {
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
-            setAssignmentType(null);
+            setAssignmentCreationPhase(null);
+            setRequiresStudentDelivery(true);
             setLogroCalificacionId('');
             setAssignmentMaterials([]);
             setAddFromGoogleOpen(false);
@@ -655,6 +684,8 @@ export default function CourseDetailPage() {
         const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
         if (params.get('openAssignmentForm') === '1') {
             setShowAssignmentForm(true);
+            setAssignmentCreationPhase('form');
+            setRequiresStudentDelivery(true);
             const logroId = params.get('logroId');
             if (logroId) setLogroCalificacionId(logroId);
             // Limpiar query para no reabrir al recargar
@@ -670,21 +701,20 @@ export default function CourseDetailPage() {
         mutationFn: async (payload: { data: typeof formData; newMaterialTitle?: string; materials?: { type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[] }) => {
             const { data, newMaterialTitle: materialTitle, materials = [] } = payload;
             if (!data.courseId) throw new Error('Debes seleccionar una materia');
-            const needsLogro = (assignmentType === 'assignment' || assignmentType === 'recordatorio') && logros.length > 0;
+            const needsLogro = logros.length > 0;
             if (needsLogro && !logroCalificacionId) {
                 throw new Error('Debes seleccionar el logro de calificación para esta asignación');
             }
-            const type = assignmentType === 'recordatorio' ? 'reminder' : 'assignment';
             const created = await apiRequest<{ _id: string }>('POST', '/api/assignments', {
                 titulo: data.titulo,
                 descripcion: data.descripcion,
                 curso: cursoId,
                 courseId: data.courseId,
                 fechaEntrega: data.fechaEntrega,
-                categoryId: (assignmentType === 'assignment' || assignmentType === 'recordatorio') ? (logroCalificacionId || undefined) : undefined,
-                logroCalificacionId: (assignmentType === 'assignment' || assignmentType === 'recordatorio') ? (logroCalificacionId || undefined) : undefined,
-                type,
-                isGradable: type === 'assignment',
+                categoryId: logroCalificacionId || undefined,
+                logroCalificacionId: logroCalificacionId || undefined,
+                requiresSubmission: requiresStudentDelivery,
+                isGradable: requiresStudentDelivery,
             });
             if (materialTitle?.trim()) {
                 try {
@@ -703,6 +733,7 @@ export default function CourseDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
             queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
             queryClient.invalidateQueries({ queryKey: ['materials'] });
+            queryClient.invalidateQueries({ queryKey: ['teacherMisAsignaciones'] });
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setLogroCalificacionId('');
             setAssignmentMaterials([]);
@@ -716,8 +747,7 @@ export default function CourseDetailPage() {
     // Crear Doc/Slide/Sheet en Google desde formulario de asignación (Evo Drive) y añadir enlace a materiales
     const createNewDocForAssignMutation = useMutation({
         mutationFn: async (payload: { nombre: string; tipo: 'doc' | 'slide' | 'sheet'; cursoId: string; cursoNombre: string }) => {
-            // Usar la materia actual (firstSubjectId) como group_subject destino en Evo Drive
-            const groupSubjectId = firstSubjectId || '';
+            const groupSubjectId = professorGroupSubjectId || '';
             return apiRequest<{ googleWebViewLink?: string; nombre?: string }>('POST', '/api/evo-drive/google/create', {
                 nombre: payload.nombre,
                 tipo: payload.tipo,
@@ -749,7 +779,7 @@ export default function CourseDetailPage() {
             });
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, firstSubjectId] });
+            queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, professorGroupSubjectId] });
             queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
         },
         onError: (err: Error) => {
@@ -818,19 +848,79 @@ export default function CourseDetailPage() {
     };
 
 
-    // 🎯 Vista para Profesor (Gestión de Grupo)
+    const professorDetailBasePath =
+        subjectsForGroup.length > 1 && professorGroupSubjectId
+            ? `/course-detail/${cursoId}/materia/${professorGroupSubjectId}`
+            : `/course-detail/${cursoId}`;
+
+    const renderProfessorSubjectPicker = () => (
+        <div className="max-w-4xl mx-auto">
+            <Breadcrumb
+                className="mb-4"
+                items={[
+                    { label: 'Dashboard', href: '/dashboard' },
+                    { label: coursesHomeLabel, href: coursesHomeHref },
+                    { label: `Grupo ${groupDisplayName}` },
+                ]}
+            />
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 font-['Poppins']">
+                Grupo {groupDisplayName}
+            </h2>
+            <p className="text-white/60 mb-8">
+                Dictas más de una materia en este curso. Elige cuál quieres gestionar (cada una tiene sus tareas, notas y calendario por separado).
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {subjectsForGroup.map((s, idx) => {
+                    const hue = ['#1e3cff', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899'][idx % 5];
+                    return (
+                        <Card
+                            key={s._id}
+                            className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl cursor-pointer group shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
+                            style={{ boxShadow: `0 0 0 1px ${hue}33` }}
+                            onClick={() => setLocation(`/course-detail/${cursoId}/materia/${s._id}`)}
+                        >
+                            <CardHeader className="text-center pb-2">
+                                <div
+                                    className="w-20 h-20 mx-auto mb-4 rounded-3xl flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"
+                                    style={{ backgroundColor: `${hue}22`, borderWidth: 2, borderColor: `${hue}55` }}
+                                >
+                                    {s.icono?.trim() ? (
+                                        <span className="leading-none" aria-hidden>
+                                            {s.icono.trim()}
+                                        </span>
+                                    ) : (
+                                        <BookOpen className="w-10 h-10 text-white" />
+                                    )}
+                                </div>
+                                <CardTitle className="text-white text-2xl font-bold font-['Poppins']">{s.nombre}</CardTitle>
+                                <CardDescription className="text-white/60">Gestionar esta materia en el grupo {groupDisplayName}</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex justify-center pb-6">
+                                <span className="text-sm font-medium flex items-center gap-2" style={{ color: hue }}>
+                                    Entrar <ArrowRight className="w-4 h-4" />
+                                </span>
+                            </CardContent>
+                        </Card>
+                    );
+                })}
+            </div>
+        </div>
+    );
+
+    // 🎯 Vista para Profesor (Gestión de Grupo + materia activa)
     const renderProfessorView = () => {
         const loading = isLoadingSubjects || isLoadingAssignments || isLoadingStudents;
         const subjects = subjectsForGroup;
+        const activeSubject = subjects.find((s) => s._id === professorGroupSubjectId) ?? subjects[0];
+        const activeSubjectNombre = activeSubject?.nombre ?? '';
+        const subjectsForForm = professorGroupSubjectId
+            ? subjects.filter((s) => s._id === professorGroupSubjectId)
+            : subjects;
 
         if (loading) {
             return <div className="space-y-4"><Skeleton className="h-10 w-full bg-white/10" /><Skeleton className="h-96 w-full bg-white/10" /></div>;
         }
 
-        // Obtener la primera materia para usar su ID en las notas (si hay materias)
-        const firstSubjectId = subjects.length > 0 ? subjects[0]._id : null;
-
-        // Precargar display_name e icon del group_subject que se edita (el que coincide con groupSubjectIdForOptions)
         const subjectForOptions = groupSubjectIdForOptions
             ? (subjects.find((s) => s._id === groupSubjectIdForOptions) ?? subjects[0])
             : subjects[0];
@@ -849,7 +939,15 @@ export default function CourseDetailPage() {
                                         items={[
                                             { label: 'Dashboard', href: '/dashboard' },
                                             { label: coursesHomeLabel, href: coursesHomeHref },
-                                            { label: `Grupo ${groupDisplayName}` },
+                                            ...(subjects.length > 1
+                                                ? [
+                                                      {
+                                                          label: `Grupo ${groupDisplayName}`,
+                                                          href: `/course-detail/${cursoId}`,
+                                                      },
+                                                      { label: activeSubjectNombre || 'Materia' },
+                                                  ]
+                                                : [{ label: `Grupo ${groupDisplayName}` }]),
                                         ]}
                                     />
                             {showOptionsButton && (
@@ -865,10 +963,19 @@ export default function CourseDetailPage() {
                             )}
                         </div>
                         <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 font-['Poppins'] break-words mt-2">
-                            Gestión del Grupo {groupDisplayName}
+                            {activeSubjectNombre ? (
+                                <>
+                                    <span className="text-[#00c8ff]">{activeSubjectNombre}</span>
+                                    <span className="text-white/50 font-normal text-lg sm:text-xl"> · Grupo {groupDisplayName}</span>
+                                </>
+                            ) : (
+                                <>Gestión del Grupo {groupDisplayName}</>
+                            )}
                         </h2>
                         <p className="text-white/60 text-sm sm:text-base">
-                            Gestiona estudiantes, notas, tareas y calendario del grupo
+                            {activeSubjectNombre
+                                ? `Estudiantes, notas, tareas y calendario para ${activeSubjectNombre} en este grupo.`
+                                : 'Gestiona estudiantes, notas, tareas y calendario del grupo'}
                         </p>
                     </div>
                 </div>
@@ -895,7 +1002,12 @@ export default function CourseDetailPage() {
                     {/* Carta 2: Tareas */}
                     <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-orange-500/20"
-                        onClick={() => setLocation(`/profesor/cursos/${cursoId}/tareas`)}
+                        onClick={() => {
+                            const q = new URLSearchParams();
+                            if (professorGroupSubjectId) q.set('materiaId', professorGroupSubjectId);
+                            const qs = q.toString();
+                            setLocation(`/profesor/cursos/${cursoId}/tareas${qs ? `?${qs}` : ''}`);
+                        }}
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-violet-500/30">
@@ -903,7 +1015,8 @@ export default function CourseDetailPage() {
                             </div>
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Asignaciones</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
-                                {assignments.length} {assignments.length === 1 ? 'tarea' : 'tareas'} asignadas
+                                {assignmentsForActiveSubject.length}{' '}
+                                {assignmentsForActiveSubject.length === 1 ? 'tarea' : 'tareas'} en esta materia
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="text-center pt-0" />
@@ -912,7 +1025,11 @@ export default function CourseDetailPage() {
                     {/* Carta 3: Notas — tabla de calificaciones del grupo */}
                     <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20"
-                        onClick={() => setLocation(`/course/${cursoId}/grades`)}
+                        onClick={() =>
+                            setLocation(
+                                `/course/${cursoId}/grades${professorGroupSubjectId ? `?gs=${encodeURIComponent(professorGroupSubjectId)}` : ''}`
+                            )
+                        }
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-amber-500 via-[#ffd700] to-yellow-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-amber-500/30">
@@ -948,7 +1065,7 @@ export default function CourseDetailPage() {
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-red-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-red-500/20"
                         onClick={() => {
                             try {
-                                sessionStorage.setItem('evo-send-return-path', `/course-detail/${cursoId}`);
+                                sessionStorage.setItem('evo-send-return-path', professorDetailBasePath);
                             } catch {
                                 /* ignore */
                             }
@@ -989,16 +1106,28 @@ export default function CourseDetailPage() {
 
 
                 {/* Calendario */}
-                {renderCalendarAndAssignmentList(assignments, `Grupo ${groupDisplayName}`)}
+                {renderCalendarAndAssignmentList(
+                    assignmentsForActiveSubject,
+                    activeSubjectNombre ? `${activeSubjectNombre} · Grupo ${groupDisplayName}` : `Grupo ${groupDisplayName}`
+                )}
 
                 {/* Botones de acción y Formulario para asignar asignación (Movido debajo del calendario) */}
                 <div className="flex flex-row items-center justify-between gap-4 mb-6 mt-8 flex-wrap">
                     <div>
                         <h2 className="text-2xl font-bold text-white font-['Poppins'] tracking-tight">Asignaciones</h2>
-                        <p className="text-white/60 text-sm mt-0.5">Grupo {groupDisplayName}</p>
+                        <p className="text-white/60 text-sm mt-0.5">
+                            {activeSubjectNombre ? `${activeSubjectNombre} · ` : ''}Grupo {groupDisplayName}
+                        </p>
                     </div>
                     <Button
-                        onClick={() => setShowAssignmentForm(!showAssignmentForm)}
+                        onClick={() => {
+                            if (showAssignmentForm) {
+                                setShowAssignmentForm(false);
+                            } else {
+                                setShowAssignmentForm(true);
+                                setAssignmentCreationPhase('choose-delivery');
+                            }
+                        }}
                         className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out rounded-xl px-5 py-2.5"
                         data-testid="button-assign-task"
                     >
@@ -1010,56 +1139,73 @@ export default function CourseDetailPage() {
                 {showAssignmentForm && (
                     <Card className="bg-[#0a0a2a]/80 border border-white/10 backdrop-blur-md mb-8 rounded-[14px] shadow-xl transition-colors duration-150 ease-in-out">
                         <CardHeader className="pb-2">
-                            <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva Asignación</CardTitle>
-                            <p className="text-white/50 text-sm mt-0.5">Crear tarea o recordatorio para el curso</p>
+                            <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva asignación</CardTitle>
+                            <p className="text-white/50 text-sm mt-0.5">Actividad para el curso (con o sin entrega de los estudiantes)</p>
                         </CardHeader>
                         <CardContent className="pt-4">
-                            {!assignmentType ? (
+                            {assignmentCreationPhase === 'choose-delivery' ? (
                                 <div className="space-y-4">
-                                    <p className="text-white/70 mb-4">Selecciona el tipo de tarea:</p>
+                                    <p className="text-white/80 mb-2 font-medium">¿Los estudiantes deben entregar esta actividad?</p>
+                                    <p className="text-white/50 text-sm mb-4">
+                                        Si eliges <strong className="text-white/80">No</strong>, la tarea aparece en el calendario como cualquier otra, pero no podrán subir entrega ni se calificará por entrega.
+                                    </p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <Button
                                             type="button"
-                                            onClick={() => setAssignmentType('recordatorio')}
-                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
+                                            onClick={() => {
+                                                setRequiresStudentDelivery(true);
+                                                setAssignmentCreationPhase('form');
+                                            }}
+                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/25 to-[#002366]/25 border border-[#1e3cff]/50 hover:from-[#1e3cff]/35 hover:to-[#002366]/35 rounded-[12px] transition-all duration-150 ease-in-out"
                                         >
-                                            <Bell className="w-8 h-8 text-[#00c8ff]" />
-                                            <span className="text-white font-semibold">Recordatorio</span>
-                                            <span className="text-white/60 text-sm">No entregable, sin nota. Puede tener adjuntos.</span>
+                                            <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
+                                            <span className="text-white font-semibold">Sí, requiere entrega</span>
+                                            <span className="text-white/60 text-sm text-center px-2">Los estudiantes envían archivos o texto y se puede calificar la entrega.</span>
                                         </Button>
                                         <Button
                                             type="button"
-                                            onClick={() => setAssignmentType('assignment')}
-                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/20 to-[#002366]/20 border border-[#1e3cff]/40 hover:from-[#1e3cff]/30 hover:to-[#002366]/30 hover:border-[#4DBBFF]/40 rounded-[12px] transition-all duration-150 ease-in-out"
+                                            onClick={() => {
+                                                setRequiresStudentDelivery(false);
+                                                setAssignmentCreationPhase('form');
+                                            }}
+                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-white/10 to-white/5 border border-white/20 hover:bg-white/10 rounded-[12px] transition-all duration-150 ease-in-out"
                                         >
-                                            <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
-                                            <span className="text-white font-semibold">Asignación</span>
-                                            <span className="text-white/60 text-sm">Entregable, puede generar nota. Requiere logro.</span>
+                                            <FileText className="w-8 h-8 text-white/80" />
+                                            <span className="text-white font-semibold">No requiere entrega</span>
+                                            <span className="text-white/60 text-sm text-center px-2">Solo aviso o actividad informativa; sin entrega en la plataforma.</span>
                                         </Button>
                                     </div>
                                 </div>
-                            ) : (
-                                // Formulario de tarea
+                            ) : assignmentCreationPhase === 'form' ? (
                                 <>
-                                    <div className="flex items-center justify-between mb-6">
-                                        <div className="flex items-center gap-2">
-                                            <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 rounded-[10px] transition-colors duration-150 ease-in-out">
-                                                {assignmentType === 'recordatorio' ? 'Recordatorio' : 'Asignación'}
+                                    <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 rounded-[10px]">
+                                                Asignación
+                                            </Badge>
+                                            <Badge
+                                                className={
+                                                    requiresStudentDelivery
+                                                        ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
+                                                        : 'bg-white/10 text-white/80 border-white/25'
+                                                }
+                                            >
+                                                {requiresStudentDelivery ? 'Con entrega' : 'Sin entrega'}
                                             </Badge>
                                         </div>
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => setAssignmentType(null)}
-                                            className="text-white/70 hover:text-white rounded-[10px] transition-colors duration-150 ease-in-out"
+                                            onClick={() => setAssignmentCreationPhase('choose-delivery')}
+                                            className="text-white/70 hover:text-white rounded-[10px]"
                                         >
                                             <X className="w-4 h-4 mr-1" />
-                                            Cambiar tipo
+                                            Cambiar
                                         </Button>
                                     </div>
 
-                                    {subjects.length === 0 && (
+                                    {subjectsForForm.length === 0 && (
                                         <Alert className="mb-4 bg-red-500/10 border-red-500/50">
                                             <AlertCircle className="h-4 w-4 text-red-400" />
                                             <AlertDescription className="text-red-200">
@@ -1174,7 +1320,7 @@ export default function CourseDetailPage() {
                                                 )}
                                             </div>
 
-                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjects.length === 0 || ((assignmentType === 'assignment' || assignmentType === 'recordatorio') && logros.length > 0 && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
+                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjectsForForm.length === 0 || (logros.length > 0 && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
                                                 {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
                                             </Button>
                                         </div>
@@ -1182,7 +1328,7 @@ export default function CourseDetailPage() {
                                         {/* Columna derecha: configuración */}
                                         <div className="rounded-[12px] border border-white/10 bg-white/[0.03] p-5 space-y-5 lg:sticky lg:top-4 transition-colors duration-150 ease-in-out">
                                             <p className="text-xs font-semibold uppercase tracking-wider text-[#4DBBFF]/70">Configuración</p>
-                                            {subjects.length > 1 && (
+                                            {subjectsForForm.length > 1 && (
                                                 <div>
                                                     <Label htmlFor="materia" className="text-white text-xs font-medium">Materia *</Label>
                                                     <Select
@@ -1192,25 +1338,25 @@ export default function CourseDetailPage() {
                                                     >
                                                         <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
                                                         <SelectContent>
-                                                            {subjects.map((subject) => (
+                                                            {subjectsForForm.map((subject) => (
                                                                 <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
                                                             ))}
                                                         </SelectContent>
                                                     </Select>
                                                 </div>
                                             )}
-                                            {subjects.length === 1 && (
+                                            {subjectsForForm.length === 1 && (
                                                 <div>
                                                     <Label className="text-white text-xs font-medium mb-2 block">Materia</Label>
                                                     <div className="flex items-center gap-2">
                                                         <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2 rounded-[10px]">
-                                                            {subjects[0].nombre}
+                                                            {subjectsForForm[0].nombre}
                                                         </Badge>
-                                                        <span className="text-white/50 text-sm">(auto-seleccionada)</span>
+                                                        <span className="text-white/50 text-sm">(esta vista)</span>
                                                     </div>
                                                 </div>
                                             )}
-                                            {logros.length > 0 && (assignmentType === 'assignment' || assignmentType === 'recordatorio') && (
+                                            {logros.length > 0 && (
                                                 <div>
                                                     <Label htmlFor="logro" className="text-white text-xs font-medium">Logro de Calificación *</Label>
                                                     <Select
@@ -1247,7 +1393,7 @@ export default function CourseDetailPage() {
                                         </div>
                                     </form>
                                 </>
-                            )}
+                            ) : null}
                         </CardContent>
                     </Card>
                 )}
@@ -1965,6 +2111,9 @@ export default function CourseDetailPage() {
 
     const renderContent = () => {
         if (isProfessor) {
+            if (professorMustPickSubject) {
+                return renderProfessorSubjectPicker();
+            }
             return renderProfessorView();
         }
 

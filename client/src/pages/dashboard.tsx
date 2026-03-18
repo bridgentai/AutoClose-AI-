@@ -174,13 +174,52 @@ function AIChatBox({ rol }: AIChatBoxProps) {
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <div className="flex flex-col items-center">
-                  <img
-                    src={kiwiImg}
-                    alt="Kiwi"
-                    className="select-none"
-                    style={{ width: 220, height: 'auto' }}
-                    draggable={false}
-                  />
+                  <div
+                    className="relative"
+                    style={{
+                      width: 220,
+                      height: 220,
+                    }}
+                  >
+                    <div
+                      className="absolute inset-0 -z-10"
+                      style={{
+                        background:
+                          'radial-gradient(60% 60% at 50% 45%, rgba(59,130,246,0.22) 0%, rgba(29,78,216,0.10) 35%, rgba(2,6,23,0) 70%)',
+                        filter: 'blur(10px)',
+                        transform: 'scale(1.08)',
+                      }}
+                    />
+                    {/* Capa blur del koala para suavizar bordes (sin máscaras/recortes) */}
+                    <img
+                      src={kiwiImg}
+                      alt=""
+                      aria-hidden="true"
+                      className="select-none absolute left-1/2 top-1/2"
+                      style={{
+                        width: 220,
+                        height: 'auto',
+                        transform: 'translate(-50%, -50%) scale(1.03)',
+                        filter:
+                          'blur(14px) drop-shadow(0 0 44px rgba(59,130,246,0.28))',
+                        opacity: 0.72,
+                        pointerEvents: 'none',
+                      }}
+                      draggable={false}
+                    />
+                    <img
+                      src={kiwiImg}
+                      alt="Kiwi"
+                      className="select-none"
+                      style={{
+                        width: 220,
+                        height: 'auto',
+                        filter:
+                          'drop-shadow(0 10px 22px rgba(2,6,23,0.55)) drop-shadow(0 0 18px rgba(59,130,246,0.18))',
+                      }}
+                      draggable={false}
+                    />
+                  </div>
                   <div
                     className="mt-2"
                     style={{
@@ -581,6 +620,32 @@ function EstudianteDashboard() {
           <AIChatBox rol="estudiante" />
         </div>
       </div>
+
+      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.7s' }}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setLocation('/evo-send')}
+              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+            >
+              <Mail className="w-8 h-8 text-[#3B82F6] mb-2" />
+              <span className="text-sm text-white">Evo Send</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocation('/evo-drive')}
+              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+            >
+              <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" />
+              <span className="text-sm text-white">Evo Drive</span>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -668,12 +733,17 @@ function ProfesorDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoadingPending ? (
+            {isLoadingAssignments ? (
               <div className="text-3xl font-bold text-white font-['Poppins'] animate-pulse">...</div>
             ) : (
-              <div className="text-3xl font-bold text-white font-['Poppins']">{pendingReview.length}</div>
+              <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
             )}
-            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Pendientes de revisión</p>
+            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Asignaciones actuales</p>
+            {!isLoadingPending && pendingReview.length > 0 && (
+              <p className="text-xs text-[#93C5FD] mt-1">
+                {pendingReview.length} pendiente{pendingReview.length === 1 ? '' : 's'} de revisión
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -709,6 +779,32 @@ function ProfesorDashboard() {
           <AIChatBox rol="profesor" />
         </div>
       </div>
+
+      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.5s' }}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setLocation('/evo-send')}
+              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+            >
+              <Mail className="w-8 h-8 text-[#3B82F6] mb-2" />
+              <span className="text-sm text-white">Evo Send</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocation('/evo-drive')}
+              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+            >
+              <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" />
+              <span className="text-sm text-white">Evo Drive</span>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1096,6 +1192,15 @@ function SuperAdminDashboard() {
 
       {/* Acciones principales */}
       <div className="flex gap-4">
+        <Button
+          type="button"
+          variant="outline"
+          className="border-white/20 text-white hover:bg-white/10"
+          onClick={() => setLocation('/evo-send')}
+        >
+          <Mail className="w-4 h-4 mr-2" />
+          Evo Send
+        </Button>
         <Dialog open={createSchoolOpen} onOpenChange={setCreateSchoolOpen}>
           <DialogTrigger asChild>
             <Button
@@ -1601,6 +1706,32 @@ function PadreDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.6s' }}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setLocation('/evo-send')}
+              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+            >
+              <Mail className="w-8 h-8 text-[#3B82F6] mb-2" />
+              <span className="text-sm text-white">Evo Send</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocation('/evo-drive')}
+              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+            >
+              <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" />
+              <span className="text-sm text-white">Evo Drive</span>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       <AIChatBox rol="padre" />
     </div>

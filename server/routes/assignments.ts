@@ -53,7 +53,10 @@ function assignmentToApi(a: {
   type: string;
   is_gradable: boolean;
   created_at: string;
+  requires_submission?: boolean;
 }, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string } = {}) {
+  const requiresSubmission =
+    a.type === 'reminder' ? false : a.requires_submission === false ? false : true;
   return {
     _id: a.id,
     titulo: a.title,
@@ -65,6 +68,7 @@ function assignmentToApi(a: {
     maxScore: a.max_score,
     type: a.type,
     isGradable: a.is_gradable,
+    requiresSubmission,
     createdAt: a.created_at,
     ...extra,
   };
@@ -178,17 +182,27 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 // POST /api/assignments - Crear tarea (courseId = group_subject_id obligatorio)
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, contenidoDocumento, courseId, fechaEntrega, type, isGradable, categoryId, grading_category_id, logroCalificacionId } = req.body;
+    const { titulo, descripcion, contenidoDocumento, courseId, fechaEntrega, type, isGradable, categoryId, grading_category_id, logroCalificacionId, requiresSubmission: bodyRequiresSubmission } = req.body;
     const userId = getUserId(req);
-    if (!titulo || !descripcion || !courseId || !fechaEntrega) {
+    const tituloStr = String(titulo || '').trim();
+    const descripcionStr = (String(descripcion || '').trim() || tituloStr).trim();
+    const courseIdStr = String(courseId || '').trim();
+    const fechaStr = fechaEntrega != null ? String(fechaEntrega) : '';
+    if (!tituloStr || !descripcionStr || !courseIdStr || !fechaStr) {
       return res.status(400).json({ message: 'Faltan campos obligatorios (titulo, descripcion, courseId, fechaEntrega).' });
     }
+
+    const due = new Date(fechaStr);
+    if (Number.isNaN(due.getTime())) {
+      return res.status(400).json({ message: 'Fecha de entrega no válida.' });
+    }
+    const dueIso = due.toISOString();
 
     const user = await findUserById(userId);
     if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
     if (user.role !== 'profesor') return res.status(403).json({ message: 'Solo los profesores pueden crear tareas.' });
 
-    const gs = await findGroupSubjectById(courseId);
+    const gs = await findGroupSubjectById(courseIdStr);
     if (!gs || gs.teacher_id !== userId) return res.status(403).json({ message: 'No tienes permiso para crear tareas en este curso.' });
 
     let assignmentCategoryId: string | null = categoryId ?? grading_category_id ?? logroCalificacionId ?? null;
@@ -196,32 +210,56 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       assignmentCategoryId = await getDefaultGradingCategoryIdForGroup(gs.group_id, gs.institution_id);
     }
 
-    const created = await createAssignment({
-      group_subject_id: courseId,
-      title: titulo,
-      description: descripcion,
+    const requiresSubmission =
+      typeof bodyRequiresSubmission === 'boolean' ? bodyRequiresSubmission : true;
+
+    const buildRow = (cat: string | null) => ({
+      group_subject_id: courseIdStr,
+      title: tituloStr,
+      description: descripcionStr,
       content_document: contenidoDocumento ?? null,
-      due_date: new Date(fechaEntrega).toISOString(),
+      due_date: dueIso,
       created_by: userId,
-      type: type ?? 'assignment',
-      is_gradable: isGradable !== false,
-      assignment_category_id: assignmentCategoryId,
+      type: 'assignment' as const,
+      is_gradable: requiresSubmission ? isGradable !== false : false,
+      requires_submission: requiresSubmission,
+      assignment_category_id: cat,
+      max_score: requiresSubmission ? undefined : 0,
     });
+
+    let created;
+    try {
+      created = await createAssignment(buildRow(assignmentCategoryId));
+    } catch (first: unknown) {
+      const err = first as { code?: string; detail?: string; message?: string };
+      // FK antigua (assignment_categories) o logro inexistente → reintentar sin categoría
+      if (err.code === '23503' && assignmentCategoryId) {
+        console.warn('[assignments] FK al crear con logro, reintentando sin categoría:', err.detail || err.message);
+        try {
+          created = await createAssignment(buildRow(null));
+        } catch (second) {
+          throw first;
+        }
+      } else {
+        throw first;
+      }
+    }
 
     await createAnnouncement({
       institution_id: gs.institution_id,
-      title: `Nueva tarea: ${titulo}`,
-      body: (descripcion ?? '').slice(0, 500) || null,
+      title: `Nueva tarea: ${tituloStr}`,
+      body: descripcionStr.slice(0, 500) || null,
       type: 'nueva_asignacion',
       group_id: gs.group_id,
-      group_subject_id: courseId,
+      group_subject_id: courseIdStr,
       assignment_id: created.id,
       created_by_id: userId,
     }).catch((err) => console.error('Error al crear notificación académica:', (err as Error).message));
 
     return res.status(201).json(assignmentToApi(created));
   } catch (err: unknown) {
-    console.error('Error al crear tarea:', (err as Error).message);
+    const e = err as { message?: string; code?: string; detail?: string };
+    console.error('Error al crear tarea:', e.message, e.code || '', e.detail || '');
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -346,11 +384,12 @@ router.get('/profesor/:profesorId/pending-review', protect, async (req: AuthRequ
       created_by: string;
       type: string;
       is_gradable: boolean;
+      requires_submission: boolean;
       created_at: string;
       group_name: string;
       subject_name: string;
     }>(
-      `SELECT DISTINCT ON (a.id) a.id, a.group_subject_id, a.title, a.description, a.content_document, a.due_date, a.max_score, a.created_by, a.type, a.is_gradable, a.created_at, g.name AS group_name, COALESCE(gs.display_name, s.name) AS subject_name
+      `SELECT DISTINCT ON (a.id) a.id, a.group_subject_id, a.title, a.description, a.content_document, a.due_date, a.max_score, a.created_by, a.type, a.is_gradable, a.requires_submission, a.created_at, g.name AS group_name, COALESCE(gs.display_name, s.name) AS subject_name
        FROM assignments a
        JOIN group_subjects gs ON gs.id = a.group_subject_id
        JOIN groups g ON g.id = gs.group_id
@@ -372,6 +411,7 @@ router.get('/profesor/:profesorId/pending-review', protect, async (req: AuthRequ
       created_by: string;
       type: string;
       is_gradable: boolean;
+      requires_submission: boolean;
       created_at: string;
       group_name: string;
       subject_name: string;
@@ -388,6 +428,7 @@ router.get('/profesor/:profesorId/pending-review', protect, async (req: AuthRequ
         created_by: row.created_by,
         type: row.type,
         is_gradable: row.is_gradable,
+        requires_submission: row.requires_submission,
         created_at: row.created_at,
       };
       return assignmentToApi(a, { curso: row.group_name, materiaNombre: row.subject_name });
@@ -395,6 +436,94 @@ router.get('/profesor/:profesorId/pending-review', protect, async (req: AuthRequ
     return res.json(list);
   } catch (err: unknown) {
     console.error('Error en pending-review:', (err as Error).message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
+});
+
+// GET /api/assignments/profesor/:profesorId/mis-asignaciones — Todas las creadas por el profesor (recordatorios + asignaciones), recientes primero
+router.get('/profesor/:profesorId/mis-asignaciones', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = getUserId(req);
+    const { profesorId } = req.params;
+    if (userId !== profesorId) return res.status(403).json({ message: 'Solo puedes ver tus propias asignaciones.' });
+
+    const cursoId = (req.query.cursoId as string | undefined) ?? undefined;
+
+    const r = await queryPg<{
+      id: string;
+      group_subject_id: string;
+      title: string;
+      description: string | null;
+      content_document: string | null;
+      due_date: string;
+      max_score: number;
+      created_by: string;
+      type: string;
+      is_gradable: boolean;
+      requires_submission: boolean;
+      created_at: string;
+      group_name: string;
+      subject_name: string;
+      pendientes_calificar: number;
+    }>(
+      `SELECT a.id, a.group_subject_id, a.title, a.description, a.content_document, a.due_date, a.max_score, a.created_by, a.type, a.is_gradable, a.requires_submission, a.created_at,
+              g.name AS group_name, COALESCE(gs.display_name, s.name) AS subject_name,
+              COALESCE((
+                SELECT COUNT(*)::int FROM submissions sub
+                WHERE sub.assignment_id = a.id AND sub.submitted_at IS NOT NULL AND sub.score IS NULL
+              ), 0) AS pendientes_calificar
+       FROM assignments a
+       JOIN group_subjects gs ON gs.id = a.group_subject_id
+       JOIN groups g ON g.id = gs.group_id
+       JOIN subjects s ON s.id = gs.subject_id
+       WHERE a.created_by = $1
+       ${cursoId ? 'AND g.id = $2' : ''}
+       ORDER BY a.created_at DESC
+       LIMIT 400`,
+      cursoId ? [profesorId, cursoId] : [profesorId]
+    );
+
+    type Row = {
+      id: string;
+      group_subject_id: string;
+      title: string;
+      description: string | null;
+      content_document: string | null;
+      due_date: string;
+      max_score: number;
+      created_by: string;
+      type: string;
+      is_gradable: boolean;
+      requires_submission: boolean;
+      created_at: string;
+      group_name: string;
+      subject_name: string;
+      pendientes_calificar: number;
+    };
+    const list = r.rows.map((row: Row) => {
+      const a = {
+        id: row.id,
+        group_subject_id: row.group_subject_id,
+        title: row.title,
+        description: row.description,
+        content_document: row.content_document,
+        due_date: row.due_date,
+        max_score: row.max_score,
+        created_by: row.created_by,
+        type: row.type,
+        is_gradable: row.is_gradable,
+        requires_submission: row.requires_submission,
+        created_at: row.created_at,
+      };
+      return assignmentToApi(a, {
+        curso: row.group_name,
+        materiaNombre: row.subject_name,
+        pendientesCalificar: row.pendientes_calificar,
+      });
+    });
+    return res.json(list);
+  } catch (err: unknown) {
+    console.error('Error en mis-asignaciones:', (err as Error).message);
     return res.status(500).json({ message: 'Error interno del servidor.' });
   }
 });
@@ -438,6 +567,9 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
 
     const assignment = await findAssignmentById(req.params.id);
     if (!assignment) return res.status(404).json({ message: 'Tarea no encontrada.' });
+    if (assignment.type === 'reminder' || !assignment.requires_submission) {
+      return res.status(400).json({ message: 'Esta actividad no requiere entrega.' });
+    }
 
     const gs = await findGroupSubjectById(assignment.group_subject_id);
     if (!gs) return res.status(404).json({ message: 'Curso no encontrado.' });

@@ -7,7 +7,8 @@ import {
   Clock,
   User,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  FilePlus,
 } from 'lucide-react';
 import { Breadcrumb as EvoBreadcrumb } from '@/components/Breadcrumb';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +34,16 @@ export default function TeacherGroupTasksPage() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute('/profesor/cursos/:cursoId/tareas');
   const cursoId = params?.cursoId || '';
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const materiaIdFromUrl = new URLSearchParams(search).get('materiaId') || '';
+
+  const assignarHref = (() => {
+    const q = new URLSearchParams();
+    q.set('groupId', cursoId);
+    if (materiaIdFromUrl) q.set('materiaId', materiaIdFromUrl);
+    q.set('returnTo', `/profesor/cursos/${cursoId}/tareas${search || ''}`);
+    return `/profesor/academia/tareas/asignar?${q.toString()}`;
+  })();
 
   // Nombre legible del grupo (evitar mostrar UUID)
   const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
@@ -93,13 +104,22 @@ export default function TeacherGroupTasksPage() {
               { label: 'Tareas' },
             ]}
           />
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
-              Tareas del Grupo {groupDisplayName}
-            </h1>
-            <p className="text-white/60">
-              Gestiona y corrige las tareas asignadas a este grupo
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+                Tareas del Grupo {groupDisplayName}
+              </h1>
+              <p className="text-white/60">
+                Gestiona y corrige las tareas asignadas a este grupo
+              </p>
+            </div>
+            <Button
+              className="shrink-0 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
+              onClick={() => setLocation(assignarHref)}
+            >
+              <FilePlus className="w-4 h-4 mr-2" />
+              Nueva asignación
+            </Button>
           </div>
         </div>
 
@@ -201,14 +221,23 @@ export default function TeacherGroupTasksPage() {
                 <p className="text-white/60 mb-6">
                   Aún no se han asignado tareas para este grupo.
                 </p>
-                <Button
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                  onClick={() => setLocation(`/course-detail/${cursoId}`)}
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Volver al Grupo
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Button
+                    className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
+                    onClick={() => setLocation(assignarHref)}
+                  >
+                    <FilePlus className="w-4 h-4 mr-2" />
+                    Añadir asignación
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-white/20 text-white hover:bg-white/10"
+                    onClick={() => setLocation(`/course-detail/${cursoId}`)}
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Volver al Grupo
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

@@ -1,53 +1,56 @@
 /**
- * Evo Send bootstrap: create staff groups (evo_chat_staff) and direct threads (evo_chat_direct)
- * per institution on server start. Idempotent: skips if threads already exist.
+ * Evo Send bootstrap: staff groups, direct threads, soporte 1-1 (profesor/directivo/asistente ↔ GLC).
  */
 
+import { ensureEvoSendSupportAndReads } from '../db/pgSchemaPatches.js';
 import { findAllInstitutions } from '../repositories/institutionRepository.js';
 import { findUsersByInstitutionAndRoles } from '../repositories/userRepository.js';
 import {
   findAnnouncementByInstitutionTitleAndType,
   findDirectThreadBetweenUsers,
-  findSupportThreadByInstitution,
+  findOrCreateSupportThreadOneToOne,
   createAnnouncement,
   addAnnouncementRecipients,
 } from '../repositories/announcementRepository.js';
 
 const STAFF_GROUP_TITLES = ['Profesores Highschool', 'Profesores GLC'] as const;
 const STAFF_ROLES = ['profesor', 'directivo'];
-const SUPPORT_TITLE = 'Soporte GLC';
+const SUPPORT_STAFF_ROLES = ['profesor', 'directivo', 'asistente'];
 
 export async function ensureEvoSendStaffAndDirectThreads(): Promise<void> {
+  await ensureEvoSendSupportAndReads();
   const institutions = await findAllInstitutions();
   for (const inst of institutions) {
     try {
       await ensureStaffGroupsForInstitution(inst.id);
       await ensureDirectThreadsForInstitution(inst.id);
-      await ensureSupportThreadForInstitution(inst.id);
+      await ensureSupportOneToOneForInstitution(inst.id);
     } catch (err) {
       console.error(`[evoSendBootstrap] Error for institution ${inst.id}:`, err);
     }
   }
 }
 
-async function ensureSupportThreadForInstitution(institutionId: string): Promise<void> {
-  const existing = await findSupportThreadByInstitution(institutionId);
-  if (existing) return;
-
+async function ensureSupportOneToOneForInstitution(institutionId: string): Promise<void> {
   const admins = await findUsersByInstitutionAndRoles(institutionId, ['admin-general-colegio']);
-  const createdById = admins.length > 0 ? admins[0].id : undefined;
-  if (!createdById) return;
+  if (admins.length === 0) return;
 
-  const a = await createAnnouncement({
-    institution_id: institutionId,
-    title: SUPPORT_TITLE,
-    body: null,
-    type: 'evo_chat_support',
-    group_id: null,
-    group_subject_id: null,
-    created_by_id: createdById,
-  });
-  await addAnnouncementRecipients(a.id, admins.map((u) => u.id));
+  const adminIds = admins.map((a) => a.id);
+  const createdBy = admins[0].id;
+  const staff = await findUsersByInstitutionAndRoles(institutionId, [...SUPPORT_STAFF_ROLES]);
+  for (const u of staff) {
+    try {
+      await findOrCreateSupportThreadOneToOne(
+        institutionId,
+        u.id,
+        u.full_name || 'Usuario',
+        adminIds,
+        createdBy
+      );
+    } catch (e) {
+      console.warn(`[evoSendBootstrap] soporte 1-1 ${u.id}:`, (e as Error).message);
+    }
+  }
 }
 
 async function ensureStaffGroupsForInstitution(institutionId: string): Promise<void> {

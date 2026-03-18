@@ -40,8 +40,36 @@ import assignmentMaterialsRoutes from "./routes/assignmentMaterials";
 import integrationsRoutes from "./routes/integrations";
 import scheduleRoutes from "./routes/schedule";
 import adminSqlRoutes, { adminSqlHandler } from "./routes/adminSql";
+import {
+  ensureAssignmentsRequiresSubmissionColumn,
+  ensureAssignmentCategoryFkReferencesGradingCategories,
+  ensureEvoFilesOrigenCheck,
+} from "./db/pgSchemaPatches.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  if (ENV.DATABASE_URL) {
+    try {
+      await ensureAssignmentsRequiresSubmissionColumn();
+      console.log("[schema] assignments.requires_submission OK");
+    } catch (e) {
+      console.warn(
+        "[schema] No se pudo asegurar assignments.requires_submission (¿tabla assignments existe?):",
+        (e as Error).message
+      );
+    }
+    try {
+      await ensureAssignmentCategoryFkReferencesGradingCategories();
+    } catch (e) {
+      console.warn("[schema] Parche FK logros:", (e as Error).message);
+    }
+    try {
+      await ensureEvoFilesOrigenCheck();
+      console.log("[schema] evo_files.origen CHECK OK");
+    } catch (e) {
+      console.warn("[schema] Parche evo_files.origen:", (e as Error).message);
+    }
+  }
+
   // CORS - Configuración explícita para permitir todas las solicitudes
   app.use(cors({
     origin: true, // Permitir cualquier origen

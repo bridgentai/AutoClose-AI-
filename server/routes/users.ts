@@ -15,7 +15,7 @@ import { findGuardianStudentsByGuardian, findGuardianStudentsByStudent, findGuar
 import { createNotification } from '../repositories/notificationRepository.js';
 import { findGroupById } from '../repositories/groupRepository.js';
 import { getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
-import { findGroupSubjectsByGroupWithDetails, createGroupSubject } from '../repositories/groupSubjectRepository.js';
+import { findGroupSubjectsByGroupWithDetails, createGroupSubject, findGroupSubjectsByTeacherWithDetails, upsertGroupSubjectTeacher } from '../repositories/groupSubjectRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
 import { findGroupsByInstitution, countGradeGroupsByInstitution, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
 import { createEnrollment } from '../repositories/enrollmentRepository.js';
@@ -249,11 +249,91 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
       celular: u.phone,
       materias: (u.config as { materias?: string[] })?.materias,
       createdAt: u.created_at,
+      rol: rolNormalizado,
     }));
     return res.json(usuariosConId);
   } catch (error: unknown) {
     console.error('Error al obtener usuarios por rol:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor al cargar los usuarios.' });
+  }
+});
+
+function assertAdminOrDirectivo(req: AuthRequest): boolean {
+  const r = req.user?.rol;
+  return r === 'admin-general-colegio' || r === 'school_admin' || r === 'directivo';
+}
+
+// GET /api/users/:userId/teaching-assignments — cursos y materias donde imparte (nombres legibles)
+router.get('/:userId/teaching-assignments', protect, async (req: AuthRequest, res) => {
+  try {
+    if (!assertAdminOrDirectivo(req)) return res.status(403).json({ message: 'Sin permiso.' });
+    const colegioId = req.user?.colegioId;
+    const { userId } = req.params;
+    if (!colegioId || !userId) return res.status(400).json({ message: 'Datos incompletos.' });
+    const target = await findUserById(userId);
+    if (!target || target.role !== 'profesor' || target.institution_id !== colegioId) {
+      return res.status(404).json({ message: 'Profesor no encontrado.' });
+    }
+    const list = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    res.json({
+      assignments: list.map((gs) => ({
+        groupSubjectId: gs.id,
+        groupId: gs.group_id,
+        groupName: gs.group_name,
+        subjectId: gs.subject_id,
+        subjectName: gs.subject_name,
+      })),
+    });
+  } catch (e) {
+    console.error('teaching-assignments GET:', (e as Error).message);
+    res.status(500).json({ message: 'Error del servidor.' });
+  }
+});
+
+// POST /api/users/:userId/teaching-assignments — asignar materia en un curso (crea o reasigna group_subject)
+router.post('/:userId/teaching-assignments', protect, async (req: AuthRequest, res) => {
+  try {
+    if (!assertAdminOrDirectivo(req)) return res.status(403).json({ message: 'Sin permiso.' });
+    const colegioId = req.user?.colegioId;
+    const { userId } = req.params;
+    const { groupId, subjectId } = req.body as { groupId?: string; subjectId?: string };
+    if (!colegioId || !userId || !groupId || !subjectId) {
+      return res.status(400).json({ message: 'Se requiere groupId y subjectId.' });
+    }
+    const target = await findUserById(userId);
+    if (!target || target.role !== 'profesor' || target.institution_id !== colegioId) {
+      return res.status(404).json({ message: 'Profesor no encontrado.' });
+    }
+    const group = await findGroupById(groupId);
+    const subject = await findSubjectById(subjectId);
+    if (!group || group.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    if (!subject || subject.institution_id !== colegioId) return res.status(404).json({ message: 'Materia no encontrada.' });
+    const row = await upsertGroupSubjectTeacher({
+      institution_id: colegioId,
+      group_id: groupId,
+      subject_id: subjectId,
+      teacher_id: userId,
+    });
+    await logAdminAction({
+      userId: req.user!.id!,
+      role: req.user?.rol ?? 'admin',
+      action: 'assign_teaching_slot',
+      entityType: 'user',
+      entityId: userId,
+      colegioId,
+      requestData: { groupId, subjectId, groupSubjectId: row.id },
+    }).catch(() => {});
+    res.status(200).json({
+      message: 'Asignación guardada.',
+      assignment: {
+        groupSubjectId: row.id,
+        groupName: group.name,
+        subjectName: subject.name,
+      },
+    });
+  } catch (e) {
+    console.error('teaching-assignments POST:', (e as Error).message);
+    res.status(500).json({ message: 'Error del servidor.' });
   }
 });
 

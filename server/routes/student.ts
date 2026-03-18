@@ -21,7 +21,7 @@ import {
   createAnnouncementMessage,
   findDirectThreadBetweenUsers,
 } from '../repositories/announcementRepository.js';
-import { emitEvoMessage } from '../socket.js';
+import { emitEvoMessageBroadcast } from '../socket.js';
 
 const router = express.Router();
 
@@ -167,15 +167,18 @@ router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequ
         priority: severityRaw === 'grave' || severityRaw === 'muy grave' ? 'alta' : 'normal',
       });
 
-      emitEvoMessage(thread.id, {
-        threadId: thread.id,
-        _id: msg.id,
-        contenido: msg.content,
-        prioridad: msg.priority,
-        fecha: msg.created_at,
-        remitenteId: { _id: requesterId, nombre: requester.full_name, rol: requester.role },
-        rolRemitente: requester.role,
-      });
+      emitEvoMessageBroadcast(
+        thread.id,
+        {
+          _id: msg.id,
+          contenido: msg.content,
+          prioridad: msg.priority,
+          fecha: msg.created_at,
+          remitenteId: { _id: requesterId, nombre: requester.full_name, rol: requester.role },
+          rolRemitente: requester.role,
+        },
+        [d.id, requesterId]
+      );
 
       await createNotification({
         institution_id: institutionId,

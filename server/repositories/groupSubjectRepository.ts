@@ -160,3 +160,21 @@ export async function createGroupSubject(row: {
   if (existing.rows[0]) return existing.rows[0];
   throw new Error('Failed to create group_subject');
 }
+
+/** Crea o actualiza la asignación (grupo + materia) para que la imparta este profesor. */
+export async function upsertGroupSubjectTeacher(row: {
+  institution_id: string;
+  group_id: string;
+  subject_id: string;
+  teacher_id: string;
+}): Promise<GroupSubjectRow> {
+  const r = await queryPg<GroupSubjectRow>(
+    `INSERT INTO group_subjects (institution_id, group_id, subject_id, teacher_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (group_id, subject_id) DO UPDATE SET teacher_id = EXCLUDED.teacher_id
+     RETURNING *`,
+    [row.institution_id, row.group_id, row.subject_id, row.teacher_id]
+  );
+  if (!r.rows[0]) throw new Error('upsert group_subject failed');
+  return r.rows[0];
+}

@@ -1,4 +1,5 @@
 import { queryPg } from '../config/db-pg.js';
+import { ensureAssignmentsRequiresSubmissionColumn } from '../db/pgSchemaPatches.js';
 
 export interface AssignmentRow {
   id: string;
@@ -12,15 +13,20 @@ export interface AssignmentRow {
   created_by: string;
   type: string;
   is_gradable: boolean;
+  requires_submission: boolean;
   created_at: string;
 }
 
 export async function findAssignmentById(id: string): Promise<AssignmentRow | null> {
-  const r = await queryPg<AssignmentRow>(
+  const r = await queryPg<AssignmentRow & { requires_submission?: boolean }>(
     'SELECT * FROM assignments WHERE id = $1',
     [id]
   );
-  return r.rows[0] ?? null;
+  const row = r.rows[0];
+  if (!row) return null;
+  const requires =
+    row.type === 'reminder' ? false : row.requires_submission === false ? false : true;
+  return { ...row, requires_submission: requires };
 }
 
 export async function findAssignmentsByGroupSubject(groupSubjectId: string): Promise<AssignmentRow[]> {
@@ -65,24 +71,36 @@ export async function createAssignment(row: {
   created_by: string;
   type?: string;
   is_gradable?: boolean;
+  requires_submission?: boolean;
 }): Promise<AssignmentRow> {
-  const r = await queryPg<AssignmentRow>(
-    `INSERT INTO assignments (group_subject_id, title, description, content_document, due_date, max_score, assignment_category_id, created_by, "type", is_gradable)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-    [
-      row.group_subject_id,
-      row.title,
-      row.description ?? null,
-      row.content_document ?? null,
-      row.due_date,
-      row.max_score ?? 100,
-      row.assignment_category_id ?? null,
-      row.created_by,
-      row.type ?? 'assignment',
-      row.is_gradable ?? true,
-    ]
-  );
-  return r.rows[0];
+  const requiresSubmission = row.requires_submission !== false;
+  const values = [
+    row.group_subject_id,
+    row.title,
+    row.description ?? null,
+    row.content_document ?? null,
+    row.due_date,
+    row.max_score ?? (requiresSubmission ? 100 : 0),
+    row.assignment_category_id ?? null,
+    row.created_by,
+    row.type ?? 'assignment',
+    row.is_gradable ?? requiresSubmission,
+    requiresSubmission,
+  ];
+  const sql = `INSERT INTO assignments (group_subject_id, title, description, content_document, due_date, max_score, assignment_category_id, created_by, "type", is_gradable, requires_submission)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`;
+  try {
+    const r = await queryPg<AssignmentRow>(sql, values);
+    return r.rows[0];
+  } catch (e: unknown) {
+    const err = e as { code?: string; message?: string };
+    if (err.code === '42703' && (err.message ?? '').toLowerCase().includes('requires_submission')) {
+      await ensureAssignmentsRequiresSubmissionColumn();
+      const r = await queryPg<AssignmentRow>(sql, values);
+      return r.rows[0];
+    }
+    throw e;
+  }
 }
 
 export async function updateAssignment(id: string, updates: {
@@ -93,6 +111,7 @@ export async function updateAssignment(id: string, updates: {
   max_score?: number;
   type?: string;
   is_gradable?: boolean;
+  requires_submission?: boolean;
 }): Promise<AssignmentRow | null> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -104,6 +123,7 @@ export async function updateAssignment(id: string, updates: {
   if (updates.max_score !== undefined) { sets.push(`max_score = $${i++}`); values.push(updates.max_score); }
   if (updates.type !== undefined) { sets.push(`"type" = $${i++}`); values.push(updates.type); }
   if (updates.is_gradable !== undefined) { sets.push(`is_gradable = $${i++}`); values.push(updates.is_gradable); }
+  if (updates.requires_submission !== undefined) { sets.push(`requires_submission = $${i++}`); values.push(updates.requires_submission); }
   if (sets.length === 0) return findAssignmentById(id);
   values.push(id);
   const r = await queryPg<AssignmentRow>(`UPDATE assignments SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, values);

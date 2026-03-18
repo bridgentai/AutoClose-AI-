@@ -29,6 +29,7 @@ export function setupEvoSocket(httpServer: HttpServer): Server {
     }
 
     socket.data.userId = userId;
+    socket.join(`user:${userId}`);
 
     socket.on('evo:join', (threadId: string) => {
       if (threadId) socket.join(`thread:${threadId}`);
@@ -58,7 +59,24 @@ export function getEvoIo(): Server | null {
   return io;
 }
 
-/** Emitir nuevo mensaje a todos los usuarios en el hilo */
+/** Payload con threadId; llega aunque el usuario no tenga el hilo abierto (sala user:id). */
+export function emitEvoMessageBroadcast(
+  threadId: string,
+  message: Record<string, unknown>,
+  userIds: string[]
+): void {
+  const io = getEvoIo();
+  if (!io) return;
+  const payload = { ...message, threadId };
+  const seen = new Set<string>();
+  for (const uid of userIds) {
+    if (!uid || seen.has(uid)) continue;
+    seen.add(uid);
+    io.to(`user:${uid}`).emit('evo:message', payload);
+  }
+}
+
+/** @deprecated usar emitEvoMessageBroadcast con participantes */
 export function emitEvoMessage(threadId: string, message: unknown): void {
   getEvoIo()?.to(`thread:${threadId}`).emit('evo:message', message);
 }

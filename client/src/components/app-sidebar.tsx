@@ -25,7 +25,26 @@ export function AppSidebar() {
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
     { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["estudiante", "profesor"] },
-    { icon: Send, label: "Evo Send", path: "/evo-send", roles: ["estudiante", "profesor", "directivo", "asistente", "admin-general-colegio"] },
+    { 
+      icon: Send, 
+      label: "Evo Send", 
+      path: "/evo-send", 
+      roles: [
+        "estudiante",
+        "profesor",
+        "directivo",
+        "padre",
+        "administrador-general",
+        "admin-general-colegio",
+        "transporte",
+        "tesoreria",
+        "nutricion",
+        "cafeteria",
+        "asistente",
+        "school_admin",
+        "super_admin"
+      ] 
+    },
 
     { icon: Mail, label: "Comunicación padres", path: "/asistente/comunicacion", roles: ["asistente"] },
     { icon: FileCheck, label: "Permisos de salida", path: "/permisos", roles: ["asistente"] },

@@ -80,6 +80,15 @@ interface User {
   celular?: string;
   materias?: string[];
   createdAt: string;
+  rol?: string;
+}
+
+interface TeachingAssignment {
+  groupSubjectId: string;
+  groupId: string;
+  groupName: string;
+  subjectId: string;
+  subjectName: string;
 }
 
 interface Stats {
@@ -159,6 +168,8 @@ export function AdminGeneralColegioDashboard() {
   // Editar usuario
   const [editUserFields, setEditUserFields] = useState({ nombre: '', email: '', telefono: '' });
   const [editUserMode, setEditUserMode] = useState<'view' | 'edit'>('view');
+  const [profAddGroupId, setProfAddGroupId] = useState('');
+  const [profAddSubjectId, setProfAddSubjectId] = useState('');
   // Vinculos: buscar estudiante
   const [vincBusqueda, setVincBusqueda] = useState('');
   const [vincEstudianteId, setVincEstudianteId] = useState('');
@@ -217,7 +228,12 @@ export function AdminGeneralColegioDashboard() {
   const { data: materiasList = [], isLoading: materiasLoading, isError: materiasError, error: materiasErrorDetail } = useQuery<MateriaItem[]>({
     queryKey: ['materiasList', institutionIdForQueries],
     queryFn: () => apiRequest<MateriaItem[]>('GET', '/api/subjects'),
-    enabled: !!institutionIdForQueries && isAdminColegio && (activeSection === 'materias' || (createUserOpen && createUserType === 'profesor')),
+    enabled:
+      !!institutionIdForQueries &&
+      isAdminColegio &&
+      (activeSection === 'materias' ||
+        (createUserOpen && createUserType === 'profesor') ||
+        (editUserOpen && selectedUser?.rol === 'profesor')),
   });
 
   const createMateriaMutation = useMutation({
@@ -386,7 +402,14 @@ export function AdminGeneralColegioDashboard() {
   const { data: gruposList = [] } = useQuery<GroupItem[]>({
     queryKey: ['groupsAll', user?.colegioId],
     queryFn: () => apiRequest<GroupItem[]>('GET', '/api/groups/all'),
-    enabled: !!user?.colegioId && isAdminColegio && (activeSection === 'cursos' || activeSection === 'dashboard' || createUserOpen || createSectionOpen),
+    enabled:
+      !!user?.colegioId &&
+      isAdminColegio &&
+      (activeSection === 'cursos' ||
+        activeSection === 'dashboard' ||
+        createUserOpen ||
+        createSectionOpen ||
+        (editUserOpen && selectedUser?.rol === 'profesor')),
   });
 
   interface SectionItem {
@@ -595,6 +618,30 @@ export function AdminGeneralColegioDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['usuariosByRole'] });
       setEditUserMode('view');
+    },
+  });
+
+  const professorModalUserId = editUserOpen && selectedUser?.rol === 'profesor' ? selectedUser._id : null;
+  const { data: teachingAssignmentsData, isLoading: teachingAssignmentsLoading } = useQuery({
+    queryKey: ['teacherAssignments', professorModalUserId],
+    queryFn: () =>
+      apiRequest<{ assignments: TeachingAssignment[] }>(
+        'GET',
+        `/api/users/${professorModalUserId}/teaching-assignments`
+      ),
+    enabled: !!professorModalUserId,
+  });
+  const teachingAssignments = teachingAssignmentsData?.assignments ?? [];
+
+  const addTeachingAssignmentMutation = useMutation({
+    mutationFn: ({ userId, groupId, subjectId }: { userId: string; groupId: string; subjectId: string }) =>
+      apiRequest('POST', `/api/users/${userId}/teaching-assignments`, { groupId, subjectId }),
+    onSuccess: (_, v) => {
+      queryClient.invalidateQueries({ queryKey: ['teacherAssignments', v.userId] });
+      queryClient.invalidateQueries({ queryKey: ['materiasList'] });
+      queryClient.invalidateQueries({ queryKey: ['groupsAll'] });
+      setProfAddGroupId('');
+      setProfAddSubjectId('');
     },
   });
 
@@ -973,6 +1020,14 @@ export function AdminGeneralColegioDashboard() {
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-white/50 mb-4">Acciones rápidas</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <button
+              type="button"
+              onClick={() => setLocation('/evo-send')}
+              className="flex flex-col items-center justify-center gap-2 h-24 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white transition-colors"
+            >
+              <LinkIcon className="w-6 h-6 text-white/80" />
+              <span className="text-sm">Evo Send</span>
+            </button>
             <button
               type="button"
               onClick={() => { setCreateUserType('estudiante'); setCreateUserOpen(true); }}
@@ -2815,11 +2870,18 @@ export function AdminGeneralColegioDashboard() {
       <Dialog
         open={editUserOpen}
         onOpenChange={(open) => {
-          if (!open) { setResetPasswordBox(null); setEditUserMode('view'); }
+          if (!open) {
+            setResetPasswordBox(null);
+            setEditUserMode('view');
+            setProfAddGroupId('');
+            setProfAddSubjectId('');
+          }
           setEditUserOpen(open);
         }}
       >
-        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-md">
+        <DialogContent
+          className={`bg-[#0a0a2a] border-white/10 text-white max-h-[90vh] overflow-y-auto ${selectedUser?.rol === 'profesor' ? 'max-w-lg' : 'max-w-md'}`}
+        >
           <DialogHeader>
             <DialogTitle className="text-white flex items-center justify-between">
               <span>{editUserMode === 'edit' ? 'Editar usuario' : 'Información de la cuenta'}</span>
@@ -2850,6 +2912,88 @@ export function AdminGeneralColegioDashboard() {
                 <Label className="text-white/80 text-sm">Teléfono</Label>
                 <Input value={editUserFields.telefono} onChange={(e) => setEditUserFields({ ...editUserFields, telefono: e.target.value })} className="bg-white/5 border-white/10 text-white mt-1" placeholder="Opcional" />
               </div>
+              {selectedUser.rol === 'profesor' && (
+                <div className="rounded-lg border border-white/15 bg-white/5 p-4 space-y-3">
+                  <p className="text-sm font-medium text-white">Cursos y materias donde imparte</p>
+                  <p className="text-xs text-white/50">Se muestran nombres reales (grupo + materia). Añade una fila por cada curso en el que dicta una materia.</p>
+                  {teachingAssignmentsLoading ? (
+                    <p className="text-white/50 text-sm">Cargando asignaciones…</p>
+                  ) : teachingAssignments.length === 0 ? (
+                    <p className="text-white/50 text-sm">Aún no hay asignaciones en cursos.</p>
+                  ) : (
+                    <ul className="space-y-2 max-h-40 overflow-y-auto">
+                      {teachingAssignments.map((a) => (
+                        <li
+                          key={a.groupSubjectId}
+                          className="text-sm border border-white/10 rounded-md px-3 py-2 bg-black/20"
+                        >
+                          <span className="font-medium text-emerald-300">{a.subjectName}</span>
+                          <span className="text-white/40"> · </span>
+                          <span className="text-white/90">Curso {a.groupName}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label className="text-white/70 text-xs uppercase tracking-wider">Curso (grupo)</Label>
+                      <select
+                        className="mt-1 w-full rounded-md bg-white/5 border border-white/15 text-white text-sm px-3 py-2"
+                        value={profAddGroupId}
+                        onChange={(e) => setProfAddGroupId(e.target.value)}
+                      >
+                        <option value="">Seleccionar…</option>
+                        {[...gruposList]
+                          .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+                          .map((g) => (
+                            <option key={g._id} value={g._id}>
+                              {g.nombre}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label className="text-white/70 text-xs uppercase tracking-wider">Materia</Label>
+                      <select
+                        className="mt-1 w-full rounded-md bg-white/5 border border-white/15 text-white text-sm px-3 py-2"
+                        value={profAddSubjectId}
+                        onChange={(e) => setProfAddSubjectId(e.target.value)}
+                      >
+                        <option value="">Seleccionar…</option>
+                        {[...materiasList]
+                          .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.nombre}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                  {addTeachingAssignmentMutation.isError && (
+                    <p className="text-red-400 text-sm">
+                      {(addTeachingAssignmentMutation.error as Error)?.message ?? 'No se pudo guardar la asignación.'}
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10"
+                    disabled={
+                      addTeachingAssignmentMutation.isPending || !profAddGroupId || !profAddSubjectId
+                    }
+                    onClick={() =>
+                      addTeachingAssignmentMutation.mutate({
+                        userId: selectedUser._id,
+                        groupId: profAddGroupId,
+                        subjectId: profAddSubjectId,
+                      })
+                    }
+                  >
+                    {addTeachingAssignmentMutation.isPending ? 'Guardando…' : 'Añadir asignación curso + materia'}
+                  </Button>
+                </div>
+              )}
               <div className="flex gap-2 pt-2">
                 <Button
                   disabled={patchUserMutation.isPending}
@@ -2905,7 +3049,35 @@ export function AdminGeneralColegioDashboard() {
               {selectedUser.curso && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Curso</p><p className="text-white">{selectedUser.curso}</p></div>}
               {(selectedUser.telefono || selectedUser.celular) && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Contacto</p><p className="text-white/80 text-sm">{selectedUser.telefono || selectedUser.celular}</p></div>}
               {selectedUser.codigoUnico && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Código único</p><p className="text-white font-mono">{selectedUser.codigoUnico}</p></div>}
-              {Array.isArray(selectedUser.materias) && selectedUser.materias.length > 0 && <div className="grid gap-1"><p className="text-xs text-white/50 uppercase">Materia(s)</p><p className="text-white/80 text-sm">{selectedUser.materias.join(', ')}</p></div>}
+              {selectedUser.rol === 'profesor' && (
+                <div className="rounded-lg border border-white/15 bg-white/5 p-4 space-y-2">
+                  <p className="text-xs text-white/50 uppercase tracking-wider">Cursos y materias asignadas</p>
+                  {teachingAssignmentsLoading ? (
+                    <p className="text-white/50 text-sm">Cargando…</p>
+                  ) : teachingAssignments.length === 0 ? (
+                    <p className="text-white/60 text-sm">Sin asignaciones en cursos. Pulsa <strong className="text-white">Editar</strong> para vincular materia y curso.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {teachingAssignments.map((a) => (
+                        <li key={a.groupSubjectId} className="text-sm text-white/90">
+                          <span className="font-medium text-emerald-300">{a.subjectName}</span>
+                          <span className="text-white/40"> — </span>
+                          Curso <span className="text-white">{a.groupName}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="text-xs text-white/40 pt-1">Para modificar, usa Editar y &quot;Añadir asignación&quot;.</p>
+                </div>
+              )}
+              {selectedUser.rol !== 'profesor' &&
+                Array.isArray(selectedUser.materias) &&
+                selectedUser.materias.length > 0 && (
+                  <div className="grid gap-1">
+                    <p className="text-xs text-white/50 uppercase">Materia(s)</p>
+                    <p className="text-white/80 text-sm">{selectedUser.materias.join(', ')}</p>
+                  </div>
+                )}
               <Button variant="outline" className="mt-2 border-white/10 text-white" onClick={() => setEditUserOpen(false)}>Cerrar</Button>
             </div>
           ) : null}

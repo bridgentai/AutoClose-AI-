@@ -286,13 +286,46 @@ export default function Chat() {
               <div className="flex items-center justify-center flex-1">
                 <div className="text-center">
                   <div className="flex flex-col items-center">
-                    <img
-                      src={kiwiImg}
-                      alt="Kiwi"
-                      className="select-none"
-                      style={{ width: 260, height: 'auto' }}
-                      draggable={false}
-                    />
+                    <div className="relative" style={{ width: 260, height: 260 }}>
+                      <div
+                        className="absolute inset-0 -z-10"
+                        style={{
+                          background:
+                            'radial-gradient(60% 60% at 50% 45%, rgba(59,130,246,0.22) 0%, rgba(29,78,216,0.10) 35%, rgba(2,6,23,0) 70%)',
+                          filter: 'blur(12px)',
+                          transform: 'scale(1.10)',
+                        }}
+                      />
+                      {/* Capa blur del koala para suavizar bordes (sin máscaras/recortes) */}
+                      <img
+                        src={kiwiImg}
+                        alt=""
+                        aria-hidden="true"
+                        className="select-none absolute left-1/2 top-1/2"
+                        style={{
+                          width: 260,
+                          height: 'auto',
+                          transform: 'translate(-50%, -50%) scale(1.03)',
+                          filter:
+                            'blur(15px) drop-shadow(0 0 52px rgba(59,130,246,0.28))',
+                          opacity: 0.72,
+                          pointerEvents: 'none',
+                        }}
+                        draggable={false}
+                      />
+                      <img
+                        src={kiwiImg}
+                        alt="Kiwi"
+                        className="select-none"
+                        style={{
+                          width: 260,
+                          height: 'auto',
+                          filter:
+                            'drop-shadow(0 12px 28px rgba(2,6,23,0.55)) drop-shadow(0 0 20px rgba(59,130,246,0.18))',
+                        }}
+                        draggable={false}
+                      />
+                    </div>
                     <div
                       className="mt-3"
                       style={{

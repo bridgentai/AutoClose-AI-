@@ -249,6 +249,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   "type" VARCHAR(20) NOT NULL DEFAULT 'assignment' CHECK ("type" IN ('assignment', 'reminder')),
   is_gradable BOOLEAN NOT NULL DEFAULT true,
+  requires_submission BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -451,6 +452,10 @@ CREATE TABLE IF NOT EXISTS disciplinary_actions (
 
 CREATE INDEX IF NOT EXISTS idx_disciplinary_actions_student ON disciplinary_actions(student_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_disciplinary_actions_institution ON disciplinary_actions(institution_id, created_at DESC);
+
+-- Evo Send soporte 1-1: staff user (profesor/directivo/asistente) asociado al hilo
+-- ALTER TABLE announcements ADD COLUMN IF NOT EXISTS support_staff_id UUID REFERENCES users(id) ON DELETE SET NULL;
+-- CREATE TABLE IF NOT EXISTS evo_thread_reads (user_id UUID, announcement_id UUID, last_read_at TIMESTAMPTZ, PRIMARY KEY (user_id, announcement_id));
 
 CREATE TABLE IF NOT EXISTS announcements (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

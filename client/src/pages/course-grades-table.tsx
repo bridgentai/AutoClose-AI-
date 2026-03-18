@@ -422,6 +422,14 @@ export default function CourseGradesTablePage() {
     gcTime: 10 * 60 * 1000,
   });
 
+  const gsFromQuery =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('gs') || '' : '';
+  const firstSubjectId = useMemo(() => {
+    if (!subjectsForGroup.length) return '';
+    if (gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)) return gsFromQuery;
+    return subjectsForGroup[0]._id;
+  }, [subjectsForGroup, gsFromQuery]);
+
   const { data: students = [], isLoading: isLoadingStudents } = useQuery<Student[]>({
     queryKey: ['students', cursoId],
     queryFn: () => fetchStudentsByGroup(cursoId),
@@ -429,8 +437,6 @@ export default function CourseGradesTablePage() {
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
-
-  const firstSubjectId = subjectsForGroup[0]?._id;
 
   const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
     queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
@@ -607,7 +613,8 @@ export default function CourseGradesTablePage() {
         const rounded = Math.round(simpleProm * 10) / 10;
         return Number.isNaN(rounded) ? '—' : rounded;
       }
-      const result = weightedSum;
+      // Renormalizar: solo pesos de logros con nota; N/A no cuenta como 0
+      const result = (weightedSum / totalWeight) * 100;
       if (Number.isNaN(result)) return Math.round(simpleProm * 10) / 10;
       return Math.round(result * 10) / 10;
     }
@@ -644,7 +651,13 @@ export default function CourseGradesTablePage() {
     if (user && user.rol !== 'profesor') setLocation('/courses');
   }, [user, setLocation]);
 
-  const pageTitle = `${groupDisplayName} – ${subjectsForGroup[0]?.nombre ?? 'Notas'}`;
+  const subjectLabel =
+    subjectsForGroup.find((s) => s._id === firstSubjectId)?.nombre ?? subjectsForGroup[0]?.nombre ?? 'Notas';
+  const pageTitle = `${groupDisplayName} – ${subjectLabel}`;
+  const backToCourseHref =
+    gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)
+      ? `/course-detail/${cursoId}/materia/${gsFromQuery}`
+      : `/course-detail/${cursoId}`;
 
   return (
     <div
@@ -653,7 +666,7 @@ export default function CourseGradesTablePage() {
     >
       <div className="relative z-10 w-full flex-1 flex flex-col min-h-0">
         <div className="mb-4 flex-shrink-0">
-          <NavBackButton to={`/course-detail/${cursoId}`} label="Volver al curso" />
+          <NavBackButton to={backToCourseHref} label="Volver al curso" />
         </div>
 
         <motion.div

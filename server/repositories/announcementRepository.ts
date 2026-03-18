@@ -13,6 +13,7 @@ export interface AnnouncementRow {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  support_staff_id?: string | null;
 }
 
 export interface AnnouncementMessageRow {
@@ -177,16 +178,97 @@ export async function isUserRecipientOfAnnouncement(announcementId: string, user
   return r.rows.length > 0;
 }
 
-/** Find the single evo_chat_support thread for an institution (Soporte GLC). */
+/** Legacy: primer hilo soporte sin pareja 1-1 (solo admins). */
 export async function findSupportThreadByInstitution(institutionId: string): Promise<AnnouncementRow | null> {
   const r = await queryPg<AnnouncementRow>(
-    "SELECT * FROM announcements WHERE institution_id = $1 AND type = 'evo_chat_support' LIMIT 1",
+    `SELECT * FROM announcements WHERE institution_id = $1 AND type = 'evo_chat_support' AND support_staff_id IS NULL ORDER BY created_at ASC LIMIT 1`,
     [institutionId]
   );
   return r.rows[0] ?? null;
 }
 
-/** Get or create the Evo Send chat thread for a group_subject (curso + materia). */
+export async function findOrCreateSupportThreadOneToOne(
+  institutionId: string,
+  staffUserId: string,
+  staffDisplayName: string,
+  adminUserIds: string[],
+  createdByAdminId: string
+): Promise<AnnouncementRow> {
+  const { ensureEvoSendSupportAndReads } = await import('../db/pgSchemaPatches.js');
+  await ensureEvoSendSupportAndReads();
+  if (adminUserIds.length === 0) throw new Error('Sin administrador GLC en la institución');
+  const existing = await queryPg<AnnouncementRow>(
+    `SELECT * FROM announcements WHERE institution_id = $1 AND type = 'evo_chat_support' AND support_staff_id = $2 LIMIT 1`,
+    [institutionId, staffUserId]
+  );
+  if (existing.rows[0]) {
+    await addAnnouncementRecipients(existing.rows[0].id, [staffUserId, ...adminUserIds]);
+    return existing.rows[0];
+  }
+  const title = `Soporte · ${staffDisplayName.slice(0, 80)}`;
+  const ins = await queryPg<AnnouncementRow>(
+    `INSERT INTO announcements (institution_id, title, body, type, group_id, group_subject_id, created_by_id, published_at, support_staff_id)
+     VALUES ($1, $2, NULL, 'evo_chat_support', NULL, NULL, $3, now(), $4) RETURNING *`,
+    [institutionId, title, createdByAdminId, staffUserId]
+  );
+  const row = ins.rows[0];
+  if (!row) throw new Error('No se creó hilo de soporte');
+  await addAnnouncementRecipients(row.id, [staffUserId, ...adminUserIds]);
+  return row;
+}
+
+export async function countUnreadMessagesForUser(announcementId: string, userId: string): Promise<number> {
+  const { ensureEvoSendSupportAndReads } = await import('../db/pgSchemaPatches.js');
+  await ensureEvoSendSupportAndReads();
+  const r = await queryPg<{ c: string }>(
+    `SELECT COUNT(*)::text AS c FROM announcement_messages m
+     WHERE m.announcement_id = $1 AND m.sender_id::text <> $2::text
+     AND m.created_at > COALESCE(
+       (SELECT last_read_at FROM evo_thread_reads WHERE user_id = $2::uuid AND announcement_id = $1::uuid),
+       '1970-01-01'::timestamptz
+     )`,
+    [announcementId, userId]
+  );
+  return parseInt(r.rows[0]?.c ?? '0', 10) || 0;
+}
+
+export async function markEvoThreadRead(userId: string, announcementId: string): Promise<void> {
+  const { ensureEvoSendSupportAndReads } = await import('../db/pgSchemaPatches.js');
+  await ensureEvoSendSupportAndReads();
+  await queryPg(
+    `INSERT INTO evo_thread_reads (user_id, announcement_id, last_read_at)
+     VALUES ($1::uuid, $2::uuid, now())
+     ON CONFLICT (user_id, announcement_id) DO UPDATE SET last_read_at = now()`,
+    [userId, announcementId]
+  );
+}
+
+/** Mapa announcement_id → cantidad de mensajes no leídos (otros remitentes desde last_read). */
+export async function countUnreadByThreadIds(
+  announcementIds: string[],
+  userId: string
+): Promise<Record<string, number>> {
+  if (announcementIds.length === 0) return {};
+  const { ensureEvoSendSupportAndReads } = await import('../db/pgSchemaPatches.js');
+  await ensureEvoSendSupportAndReads();
+  const r = await queryPg<{ announcement_id: string; c: string }>(
+    `SELECT m.announcement_id, COUNT(*)::text AS c
+     FROM announcement_messages m
+     LEFT JOIN evo_thread_reads r ON r.announcement_id = m.announcement_id AND r.user_id = $2::uuid
+     WHERE m.announcement_id = ANY($1::uuid[])
+       AND m.sender_id::text <> $2::text
+       AND m.created_at > COALESCE(r.last_read_at, '1970-01-01'::timestamptz)
+     GROUP BY m.announcement_id`,
+    [announcementIds, userId]
+  );
+  const out: Record<string, number> = {};
+  for (const row of r.rows) {
+    out[row.announcement_id] = parseInt(row.c, 10) || 0;
+  }
+  return out;
+}
+
+/** Get or create the Evo Send chat thread for a group_subject (curso + materia). @deprecated usar findOrCreateEvoChatForGroupTeacher para un chat por curso */
 export async function findOrCreateEvoChatForGroupSubject(
   groupSubjectId: string,
   institutionId: string,
@@ -205,6 +287,46 @@ export async function findOrCreateEvoChatForGroupSubject(
     group_subject_id: groupSubjectId,
     created_by_id: createdById,
   });
+}
+
+/** Un solo chat Evo Send por curso (grupo) y profesor — todas las materias comparten el mismo hilo. */
+export async function findOrCreateEvoChatForGroupTeacher(
+  groupId: string,
+  institutionId: string,
+  title: string,
+  teacherId: string
+): Promise<AnnouncementRow> {
+  const { ensureEvoChatGroupTeacherUniqueIndex } = await import('../db/pgSchemaPatches.js');
+  await ensureEvoChatGroupTeacherUniqueIndex();
+  const sel = await queryPg<AnnouncementRow>(
+    `SELECT * FROM announcements
+     WHERE institution_id = $1 AND type = 'evo_chat' AND group_id = $2
+       AND created_by_id = $3 AND group_subject_id IS NULL
+     LIMIT 1`,
+    [institutionId, groupId, teacherId]
+  );
+  if (sel.rows[0]) return sel.rows[0];
+  try {
+    return await createAnnouncement({
+      institution_id: institutionId,
+      title,
+      body: null,
+      type: 'evo_chat',
+      group_id: groupId,
+      group_subject_id: null,
+      created_by_id: teacherId,
+    });
+  } catch {
+    const again = await queryPg<AnnouncementRow>(
+      `SELECT * FROM announcements
+       WHERE institution_id = $1 AND type = 'evo_chat' AND group_id = $2
+         AND created_by_id = $3 AND group_subject_id IS NULL
+       LIMIT 1`,
+      [institutionId, groupId, teacherId]
+    );
+    if (again.rows[0]) return again.rows[0];
+    throw new Error('No se pudo crear u obtener el chat del curso');
+  }
 }
 
 export async function findAnnouncementMessages(announcementId: string): Promise<AnnouncementMessageRow[]> {

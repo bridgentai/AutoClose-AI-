@@ -1,6 +1,6 @@
-import React, { useState, useRef, Component } from 'react';
+import React, { useState, useRef, useEffect, Component } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Plus, X, Paperclip, Link2, FileText, Maximize2, Bell, Bold, Italic, Underline, List, Strikethrough, Upload, Youtube, Users, HelpCircle, AlertCircle } from 'lucide-react';
+import { Plus, X, Paperclip, Link2, FileText, Maximize2, Bold, Italic, Underline, List, Strikethrough, Upload, Youtube, Users, HelpCircle, AlertCircle, ClipboardList, Inbox } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,8 +70,8 @@ function ProfesorAsignarTareaPageInner() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [assignmentType, setAssignmentType] = useState<'recordatorio' | 'documento' | null>(null);
-  const [documentContent, setDocumentContent] = useState('');
+  const [creationPhase, setCreationPhase] = useState<'choose-delivery' | 'form'>('choose-delivery');
+  const [requiresStudentDelivery, setRequiresStudentDelivery] = useState(true);
   const [formData, setFormData] = useState({
     titulo: '',
     descripcion: '',
@@ -107,6 +107,28 @@ function ProfesorAsignarTareaPageInner() {
   })();
 
   const availableGroups = professorGroups.map(g => g?.groupId).filter(Boolean) as string[];
+  const appliedUrlParamsRef = useRef(false);
+
+  useEffect(() => {
+    if (appliedUrlParamsRef.current || isLoadingGroups || errorGroups) return;
+    if (!professorGroups.length || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const gid = params.get('groupId');
+    if (!gid || !availableGroups.includes(gid)) return;
+    appliedUrlParamsRef.current = true;
+    const group = professorGroups.find(g => g?.groupId === gid);
+    const subjects = Array.isArray(group?.subjects) ? group.subjects : [];
+    const mid = params.get('materiaId');
+    const materiaId =
+      mid && subjects.some(s => s._id === mid)
+        ? mid
+        : subjects.length === 1
+          ? subjects[0]._id
+          : '';
+    setFormData(prev => ({ ...prev, curso: gid, materiaId }));
+    setLogroCalificacionId('');
+  }, [isLoadingGroups, errorGroups, professorGroups, availableGroups]);
+
   const getSubjectsForGroup = (groupId: string) => {
     const group = professorGroups.find(g => g?.groupId === groupId);
     return Array.isArray(group?.subjects) ? group.subjects : [];
@@ -120,7 +142,10 @@ function ProfesorAsignarTareaPageInner() {
     enabled: !!courseIdForLogros,
   });
   const logros = logrosData?.logros ?? [];
-  const logroBlocksCreation = !!courseIdForLogros && (isLoadingLogros || (logrosFetched && (logros.length === 0 || !logroCalificacionId)));
+  const logroBlocksCreation =
+    requiresStudentDelivery &&
+    !!courseIdForLogros &&
+    (isLoadingLogros || (logrosFetched && (logros.length === 0 || !logroCalificacionId)));
 
 
   const createAssignmentMutation = useMutation({
@@ -137,6 +162,7 @@ function ProfesorAsignarTareaPageInner() {
       // CRÍTICO: Invalidar queries de estudiantes para que vean la tarea automáticamente
       queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
       queryClient.invalidateQueries({ queryKey: ['assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['teacherMisAsignaciones'] });
       queryClient.invalidateQueries({ 
         queryKey: ['/api/assignments/student'],
         exact: false 
@@ -148,9 +174,16 @@ function ProfesorAsignarTareaPageInner() {
         exact: false 
       });
       
-      // Opcional: Redirigir después de crear
       setTimeout(() => {
-        setLocation('/profesor/academia/tareas');
+        const ret =
+          typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('returnTo')
+            : null;
+        if (ret && ret.startsWith('/') && !ret.startsWith('//')) {
+          setLocation(ret);
+        } else {
+          setLocation('/profesor/academia/tareas');
+        }
       }, 1200);
     },
     onError: (error: any) => {
@@ -169,8 +202,8 @@ function ProfesorAsignarTareaPageInner() {
     });
     setLogroCalificacionId('');
     setAdjuntos([]);
-    setAssignmentType(null);
-    setDocumentContent('');
+    setCreationPhase('choose-delivery');
+    setRequiresStudentDelivery(true);
     setInstrucciones('');
     setPuntos('100');
     setTema('');
@@ -231,29 +264,37 @@ function ProfesorAsignarTareaPageInner() {
     }
 
     const courseId = formData.materiaId || subjectsForGroup[0]._id;
-    if (logros.length === 0) {
-      toast({ title: 'Error', description: 'Configura los logros de calificación para esta materia en Calificación antes de crear asignaciones.', variant: 'destructive' });
-      return;
+    if (requiresStudentDelivery) {
+      if (logros.length === 0) {
+        toast({ title: 'Error', description: 'Configura los logros de calificación para esta materia en Calificación antes de crear asignaciones con entrega.', variant: 'destructive' });
+        return;
+      }
+      if (!logroCalificacionId) {
+        toast({ title: 'Error', description: 'Selecciona el tipo de logro al que pertenece esta asignación (ej: Tareas, Exámenes).', variant: 'destructive' });
+        return;
+      }
     }
-    if (!logroCalificacionId) {
-      toast({ title: 'Error', description: 'Selecciona el tipo de logro al que pertenece esta asignación (ej: Tareas, Exámenes).', variant: 'destructive' });
-      return;
-    }
-    const fechaEntregaCompleta = formData.fechaEntrega 
+    const fechaEntregaCompleta = formData.fechaEntrega
       ? new Date(`${formData.fechaEntrega}T${formData.horaEntrega}`)
       : undefined;
+    if (!fechaEntregaCompleta) {
+      toast({ title: 'Error', description: 'Indica una fecha de entrega o límite de la actividad.', variant: 'destructive' });
+      return;
+    }
+    const descripcionTexto = (instrucciones || formData.descripcion).trim() || formData.titulo;
 
     createAssignmentMutation.mutate({
       titulo: formData.titulo,
-      descripcion: instrucciones || formData.descripcion,
-      contenidoDocumento: assignmentType === 'documento' ? documentContent : undefined,
+      descripcion: descripcionTexto,
       curso: formData.curso,
       courseId,
-      fechaEntrega: fechaEntregaCompleta?.toISOString() || undefined,
+      fechaEntrega: fechaEntregaCompleta.toISOString(),
       adjuntos,
-      puntos: puntos !== '0' ? parseInt(puntos) : undefined,
-      categoryId: logroCalificacionId || undefined,
-      logroCalificacionId: logroCalificacionId || undefined,
+      puntos: requiresStudentDelivery && puntos !== '0' ? parseInt(puntos) : undefined,
+      categoryId: requiresStudentDelivery ? logroCalificacionId || undefined : undefined,
+      logroCalificacionId: requiresStudentDelivery ? logroCalificacionId || undefined : undefined,
+      requiresSubmission: requiresStudentDelivery,
+      isGradable: requiresStudentDelivery && puntos !== '0',
     });
   };
 
@@ -292,7 +333,55 @@ function ProfesorAsignarTareaPageInner() {
         </div>
       )}
 
+      {creationPhase === 'choose-delivery' ? (
+        <div
+          className="force-white-bg rounded-lg shadow-xl overflow-hidden relative z-10 max-w-3xl mx-auto p-8 md:p-10"
+          style={{ backgroundColor: '#ffffff' }}
+        >
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Nueva asignación</h3>
+          <p className="text-sm text-gray-600 mb-6">Primero indica si los estudiantes deben entregar trabajo en la plataforma.</p>
+          <p className="text-sm font-medium text-gray-800 mb-4">¿Requiere entrega en Evo?</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setRequiresStudentDelivery(true);
+                setCreationPhase('form');
+              }}
+              className="flex flex-col items-center text-center p-6 rounded-xl border-2 border-[#1e3cff]/40 bg-[#1e3cff]/5 hover:bg-[#1e3cff]/10 hover:border-[#1e3cff] transition-all"
+            >
+              <ClipboardList className="w-10 h-10 text-[#1e3cff] mb-3" />
+              <span className="font-semibold text-gray-900">Sí, con entrega</span>
+              <span className="text-xs text-gray-600 mt-2">Los alumnos suben archivos o enlaces; puedes calificar.</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRequiresStudentDelivery(false);
+                setCreationPhase('form');
+              }}
+              className="flex flex-col items-center text-center p-6 rounded-xl border-2 border-gray-200 bg-gray-50 hover:border-gray-400 hover:bg-gray-100 transition-all"
+            >
+              <Inbox className="w-10 h-10 text-gray-600 mb-3" />
+              <span className="font-semibold text-gray-900">No requiere entrega</span>
+              <span className="text-xs text-gray-600 mt-2">Sigue siendo una asignación del curso (fechas, materiales); sin entrega aquí.</span>
+            </button>
+          </div>
+        </div>
+      ) : (
       <div className="force-white-bg rounded-lg shadow-xl overflow-hidden relative z-10" style={{ backgroundColor: '#ffffff', position: 'relative', zIndex: 10 }}>
+            <div className="px-4 pt-3 pb-2 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm text-gray-700">
+                {requiresStudentDelivery ? (
+                  <span className="font-medium text-[#1e3cff]">Con entrega en plataforma</span>
+                ) : (
+                  <span className="font-medium text-gray-700">Sin entrega en plataforma</span>
+                )}
+              </span>
+              <Button type="button" variant="ghost" size="sm" className="text-gray-600" onClick={() => setCreationPhase('choose-delivery')}>
+                Cambiar
+              </Button>
+            </div>
             <form onSubmit={handleSubmit} className="flex gap-0" style={{ backgroundColor: '#ffffff' }}>
               {/* Columna Izquierda - Contenido Principal */}
               <div className="flex-1 p-8 border-r border-gray-200" style={{ backgroundColor: '#ffffff' }}>
@@ -553,7 +642,7 @@ function ProfesorAsignarTareaPageInner() {
                   </div>
                 )}
 
-                {courseIdForLogros && (
+                {requiresStudentDelivery && courseIdForLogros && (
                   <div className="mb-6">
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">
                       Tipo de logro<span className="text-red-500">*</span>
@@ -614,6 +703,7 @@ function ProfesorAsignarTareaPageInner() {
                 </div>
 
                 {/* Puntos */}
+                {requiresStudentDelivery && (
                 <div className="mb-6">
                   <Label className="text-sm font-medium text-gray-700 mb-2 block">Puntos</Label>
                   <Select value={puntos} onValueChange={setPuntos}>
@@ -629,28 +719,28 @@ function ProfesorAsignarTareaPageInner() {
                     </SelectContent>
                   </Select>
                 </div>
+                )}
 
                 {/* Fecha de entrega */}
                 <div className="mb-6">
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">Fecha de entrega</Label>
+                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                    {requiresStudentDelivery ? 'Fecha de entrega' : 'Fecha límite / vigencia'}
+                  </Label>
                   {!formData.fechaEntrega ? (
-                    <Select 
-                      value="sin-fecha"
-                      onValueChange={(value) => {
-                        if (value === 'fecha') {
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">Obligatoria para publicar la asignación en el calendario.</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full border-gray-300 text-gray-900"
+                        onClick={() => {
                           const today = new Date().toISOString().split('T')[0];
                           setFormData({ ...formData, fechaEntrega: today });
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="bg-white border-gray-300 text-gray-900">
-                        <SelectValue>Sin fecha de entrega</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent className="bg-white">
-                        <SelectItem value="sin-fecha" className="text-gray-900">Sin fecha de entrega</SelectItem>
-                        <SelectItem value="fecha" className="text-gray-900">Seleccionar fecha</SelectItem>
-                      </SelectContent>
-                    </Select>
+                        }}
+                      >
+                        Elegir fecha
+                      </Button>
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       <Input
@@ -722,6 +812,7 @@ function ProfesorAsignarTareaPageInner() {
               </div>
             </form>
           </div>
+      )}
     </div>
   );
 }

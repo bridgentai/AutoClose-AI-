@@ -264,6 +264,9 @@ function AppRouter() {
             <Route path="/course-detail/:cursoId/materiales">
               <AuthGuard><CourseMaterialsPage /></AuthGuard>
             </Route>
+            <Route path="/course-detail/:cursoId/materia/:groupSubjectId">
+              <AuthGuard><CourseDetail /></AuthGuard>
+            </Route>
             <Route path="/course-detail/:cursoId">
               <AuthGuard><CourseDetail /></AuthGuard>
             </Route>

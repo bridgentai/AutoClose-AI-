@@ -564,6 +564,26 @@ async function getAnalyticsData(
   };
 }
 
+/** Promedio 0–100: solo categorías con al menos una nota; pesos renormalizados (N/A no cuenta como 0). */
+function normalizedWeightedGradeAverage(
+  categories: { id: string; weight: unknown }[],
+  studentGrades: { grading_category_id: string; score: unknown }[]
+): number {
+  let weightedSum = 0;
+  let totalWeight = 0;
+  for (const cat of categories) {
+    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
+    if (catGrades.length === 0) continue;
+    const w = Number(cat.weight);
+    if (!Number.isFinite(w) || w <= 0) continue;
+    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
+    weightedSum += avg * (w / 100);
+    totalWeight += w;
+  }
+  if (totalWeight <= 0) return 0;
+  return (weightedSum / totalWeight) * 100;
+}
+
 // GET /api/courses/:id/snapshots
 router.get('/:id/snapshots', protect, async (req: AuthRequest, res) => {
   const courseId = req.params.id;
@@ -585,7 +605,6 @@ router.get('/:id/snapshots', protect, async (req: AuthRequest, res) => {
   const categoryImpacts: Record<string, number> = {};
   const categoryNames: Record<string, string> = {};
   const categoryWeights: Record<string, number> = {};
-  let weightedSum = 0;
 
   for (const cat of categories) {
     categoryNames[cat.id] = cat.name;
@@ -596,8 +615,8 @@ router.get('/:id/snapshots', protect, async (req: AuthRequest, res) => {
     categoryAverages[cat.id] = avg;
     const impact = avg * (Number(cat.weight) / 100);
     categoryImpacts[cat.id] = impact;
-    weightedSum += impact;
   }
+  const weightedFinalNorm = normalizedWeightedGradeAverage(categories, studentGrades);
 
   const evolucionLabels: string[] = [];
   const evolucionPromedios: number[] = [];
@@ -622,7 +641,7 @@ router.get('/:id/snapshots', protect, async (req: AuthRequest, res) => {
     studentId,
     courseId: gsId,
     at: new Date().toISOString(),
-    weightedFinalAverage: Math.round(weightedSum * 10) / 10,
+    weightedFinalAverage: Math.round(weightedFinalNorm * 10) / 10,
     categoryAverages,
     categoryImpacts,
     categoryNames,
@@ -654,15 +673,7 @@ router.get('/:id/forecast', protect, async (req: AuthRequest, res) => {
 
   const { categories, studentGrades } = data;
 
-  let weightedSum = 0;
-  for (const cat of categories) {
-    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
-    if (catGrades.length === 0) continue;
-    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
-    weightedSum += avg * (Number(cat.weight) / 100);
-  }
-
-  const current = Math.round(weightedSum * 10) / 10;
+  const current = Math.round(normalizedWeightedGradeAverage(categories, studentGrades) * 10) / 10;
 
   const scores = studentGrades.map((g) => Number(g.score));
   const last3 = scores.slice(-3);
@@ -702,14 +713,7 @@ router.get('/:id/risk', protect, async (req: AuthRequest, res) => {
 
   const { categories, studentGrades, attendanceData } = data;
 
-  let weightedSum = 0;
-  for (const cat of categories) {
-    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
-    if (catGrades.length === 0) continue;
-    const avg = catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length;
-    weightedSum += avg * (Number(cat.weight) / 100);
-  }
-  const current = weightedSum;
+  const current = normalizedWeightedGradeAverage(categories, studentGrades);
 
   const factors: string[] = [];
   if (current < 60) factors.push('Promedio por debajo del mínimo aprobatorio');
@@ -798,7 +802,6 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
 
   const { categories, studentGrades } = data;
 
-  let weightedSum = 0;
   const byCategory: Array<{ categoryName: string; percentage: number; average: number; count: number }> = [];
 
   for (const cat of categories) {
@@ -806,7 +809,6 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
     const avg = catGrades.length
       ? catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length
       : 0;
-    weightedSum += avg * (Number(cat.weight) / 100);
     byCategory.push({
       categoryName: cat.name,
       percentage: Number(cat.weight),
@@ -815,7 +817,7 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
     });
   }
 
-  const weightedAverage = Math.round(weightedSum * 10) / 10;
+  const weightedAverage = Math.round(normalizedWeightedGradeAverage(categories, studentGrades) * 10) / 10;
   const estado = weightedAverage >= 85 ? 'excelente' : weightedAverage >= 75 ? 'bueno' : weightedAverage >= 60 ? 'en riesgo' : 'crítico';
 
   let aiSummary = `Promedio ponderado: ${weightedAverage}/100. Estado: ${estado}.`;

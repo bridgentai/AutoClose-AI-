@@ -61,7 +61,7 @@ interface ResumenCardProps {
   onClick?: () => void;
 }
 
-const EVO_SEND_ROLES = ['estudiante', 'profesor', 'directivo', 'asistente', 'admin-general-colegio'];
+// Evo Send debe estar disponible para todos los roles autenticados.
 
 const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onClick }) => {
   const isAcademico = type === 'academico';
@@ -145,7 +145,7 @@ const EvoSendCard: React.FC<{ onClick: () => void }> = ({ onClick }) => (
 const ComunicacionHome: React.FC = () => {
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
-  const showEvoSend = user?.rol && EVO_SEND_ROLES.includes(user.rol);
+  const showEvoSend = !!user?.rol;
   const isDirectivoView = location.startsWith('/directivo/comunicacion');
   const backTo = isDirectivoView ? '/directivo/academia' : '/dashboard';
   const backLabel = isDirectivoView ? 'Academia' : 'Dashboard';

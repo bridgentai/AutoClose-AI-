@@ -493,84 +493,89 @@ router.get('/recientes', protect, async (req: AuthRequest, res) => {
 
 // POST /api/evo-drive/files — crear archivo (material subido o desde Picker). groupSubjectId = materia para que el estudiante vea el archivo solo en esa carpeta.
 router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthRequest, res) => {
-  const colegioId = req.user?.colegioId;
-  const userId = req.user?.id;
-  if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
-  const user = await findUserById(userId);
-  const propietarioNombre = user?.full_name ?? 'Usuario';
-  const {
-    nombre,
-    tipo,
-    origen,
-    mimeType,
-    cursoId,
-    cursoNombre,
-    esPublico,
-    googleFileId,
-    googleWebViewLink,
-    googleMimeType,
-    sizeBytes,
-    groupSubjectId,
-  } = req.body as {
-    nombre?: string;
-    tipo?: string;
-    origen?: string;
-    mimeType?: string;
-    cursoId?: string;
-    cursoNombre?: string;
-    esPublico?: boolean;
-    googleFileId?: string;
-    googleWebViewLink?: string;
-    googleMimeType?: string;
-    sizeBytes?: number;
-    groupSubjectId?: string;
-  };
-  if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
-  if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
-  if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
-    return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
-  }
-  const resolved = await resolveGroupId(String(cursoId).trim(), colegioId);
-  if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
-  const groupId = resolved.id;
-  const trimmedGroupSubjectId = String(groupSubjectId).trim();
-  let validGroupSubjectId: string | null = null;
-  {
-    const gs = await findGroupSubjectById(trimmedGroupSubjectId);
-    if (!gs || gs.group_id !== groupId || gs.institution_id !== colegioId) {
-      return res.status(400).json({ message: 'Materia (groupSubjectId) no válida para este curso.' });
+  try {
+    const colegioId = req.user?.colegioId;
+    const userId = req.user?.id;
+    if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+    const user = await findUserById(userId);
+    const propietarioNombre = user?.full_name ?? 'Usuario';
+    const {
+      nombre,
+      tipo,
+      origen,
+      mimeType,
+      cursoId,
+      cursoNombre,
+      esPublico,
+      googleFileId,
+      googleWebViewLink,
+      googleMimeType,
+      sizeBytes,
+      groupSubjectId,
+    } = req.body as {
+      nombre?: string;
+      tipo?: string;
+      origen?: string;
+      mimeType?: string;
+      cursoId?: string;
+      cursoNombre?: string;
+      esPublico?: boolean;
+      googleFileId?: string;
+      googleWebViewLink?: string;
+      googleMimeType?: string;
+      sizeBytes?: number;
+      groupSubjectId?: string;
+    };
+    if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
+    if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
+    if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
+      return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
     }
-    if (req.user?.rol === 'profesor' && gs.teacher_id !== userId) {
-      return res.status(403).json({ message: 'Solo puedes subir archivos a las materias que dictas.' });
+    const resolved = await resolveGroupId(String(cursoId).trim(), colegioId);
+    if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const groupId = resolved.id;
+    const trimmedGroupSubjectId = String(groupSubjectId).trim();
+    let validGroupSubjectId: string | null = null;
+    {
+      const gs = await findGroupSubjectById(trimmedGroupSubjectId);
+      if (!gs || gs.group_id !== groupId || gs.institution_id !== colegioId) {
+        return res.status(400).json({ message: 'Materia (groupSubjectId) no válida para este curso.' });
+      }
+      if (req.user?.rol === 'profesor' && gs.teacher_id !== userId) {
+        return res.status(403).json({ message: 'Solo puedes subir archivos a las materias que dictas.' });
+      }
+      validGroupSubjectId = gs.id;
     }
-    validGroupSubjectId = gs.id;
-  }
-  if (req.user?.rol === 'profesor' && !validGroupSubjectId) {
-    const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
-    const teachesCourse = gsList.some((gs) => gs.group_id === groupId);
-    if (!teachesCourse) {
-      return res.status(403).json({ message: 'Solo puedes subir archivos a las materias que dictas.' });
+    if (req.user?.rol === 'profesor' && !validGroupSubjectId) {
+      const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+      const teachesCourse = gsList.some((gs) => gs.group_id === groupId);
+      if (!teachesCourse) {
+        return res.status(403).json({ message: 'Solo puedes subir archivos a las materias que dictas.' });
+      }
     }
+    const row = await createEvoFile({
+      institution_id: colegioId,
+      nombre: String(nombre).trim(),
+      tipo: tipo ?? 'file',
+      origen: origen ?? 'material',
+      mime_type: mimeType,
+      group_id: groupId,
+      curso_nombre: cursoNombre ?? resolved.name,
+      propietario_id: userId,
+      propietario_nombre: propietarioNombre,
+      propietario_rol: req.user?.rol ?? 'profesor',
+      es_publico: esPublico !== false,
+      group_subject_id: validGroupSubjectId,
+      google_file_id: googleFileId,
+      google_web_view_link: googleWebViewLink,
+      google_mime_type: googleMimeType,
+      size_bytes: sizeBytes,
+    });
+    return res.status(201).json(toEvoFileApi(row as Record<string, unknown>));
+  } catch (e: unknown) {
+    console.error('[evoDrive] POST /files:', e);
+    return res.status(500).json({ message: 'Error al crear archivo en Evo Drive.' });
   }
-  const row = await createEvoFile({
-    institution_id: colegioId,
-    nombre: String(nombre).trim(),
-    tipo: tipo ?? 'file',
-    origen: origen ?? 'material',
-    mime_type: mimeType,
-    group_id: groupId,
-    curso_nombre: cursoNombre ?? resolved.name,
-    propietario_id: userId,
-    propietario_nombre: propietarioNombre,
-    propietario_rol: req.user?.rol ?? 'profesor',
-    es_publico: esPublico !== false,
-    group_subject_id: validGroupSubjectId,
-    google_file_id: googleFileId,
-    google_web_view_link: googleWebViewLink,
-    google_mime_type: googleMimeType,
-    size_bytes: sizeBytes,
-  });
-  return res.status(201).json(toEvoFileApi(row as Record<string, unknown>));
 });
 
 // DELETE /api/evo-drive/files/:id

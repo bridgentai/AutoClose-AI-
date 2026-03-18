@@ -64,6 +64,8 @@ interface Assignment {
   submissions?: Submission[];
   entregas?: Submission[]; // Legacy support
   estado?: 'pendiente' | 'entregada' | 'calificada';
+  type?: string;
+  requiresSubmission?: boolean;
 }
 
 export default function AssignmentDetailPage() {
@@ -216,6 +218,7 @@ export default function AssignmentDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['studentNotes'] });
       queryClient.invalidateQueries({ queryKey: ['studentAssignments'] });
       queryClient.invalidateQueries({ queryKey: ['teacherPendingReview'] });
+      queryClient.invalidateQueries({ queryKey: ['teacherMisAsignaciones'] });
       refetch();
     },
     onError: (error: any) => {
@@ -355,6 +358,10 @@ export default function AssignmentDetailPage() {
   const estado = assignment?.estado || (mySubmission 
     ? (mySubmission.calificacion !== undefined ? 'calificada' : 'entregada')
     : 'pendiente');
+
+  const submissionNotRequired =
+    !!assignment &&
+    (assignment.type === 'reminder' || assignment.requiresSubmission === false);
 
   const tabFromUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null;
   const defaultTab = tabFromUrl === 'entregas' ? 'entregas' : 'info';
@@ -1006,6 +1013,21 @@ export default function AssignmentDetailPage() {
                     </Card>
                   )}
 
+                  {submissionNotRequired ? (
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                      <CardHeader>
+                        <CardTitle className="text-white">Sin entrega en la plataforma</CardTitle>
+                        <CardDescription className="text-white/60">
+                          Esta actividad no requiere que {isPadre ? `${nombreHijo} entregue` : 'entregues'} archivos aquí. Revisa instrucciones y materiales arriba.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-white/70 text-sm">
+                          El profesor la registró como asignación del curso; si hay entrega física u otro canal, te lo indicará en clase o en la descripción.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : (
                   <Card className="bg-white/5 border-white/10 backdrop-blur-md">
                     <CardHeader>
                       <CardTitle className="text-white">
@@ -1242,6 +1264,7 @@ export default function AssignmentDetailPage() {
                       ) : null}
                     </CardContent>
                   </Card>
+                  )}
                 </div>
               )}
 
