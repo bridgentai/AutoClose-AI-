@@ -101,3 +101,14 @@ export async function ensureEvoFilesOrigenCheck(): Promise<void> {
   );
   evoFilesOrigenCheckEnsured = true;
 }
+
+let assignmentsCategoryWeightPctEnsured = false;
+
+/** Peso opcional de la tarea dentro del logro (p. ej. 40, 35, 25). Si todas tienen valor, el promedio del logro los respeta. */
+export async function ensureAssignmentsCategoryWeightPctColumn(): Promise<void> {
+  if (assignmentsCategoryWeightPctEnsured) return;
+  await queryPg(
+    `ALTER TABLE assignments ADD COLUMN IF NOT EXISTS category_weight_pct NUMERIC(5,2) NULL`
+  );
+  assignmentsCategoryWeightPctEnsured = true;
+}

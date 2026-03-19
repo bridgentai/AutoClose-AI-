@@ -22,6 +22,11 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import {
+  weightedGradeWithinLogro,
+  courseWeightedFromLogros,
+  hasRecordedScore,
+} from '@shared/weightedGrades';
 
 // =========================================================
 // INTERFACES Y DATOS MOCK
@@ -41,17 +46,17 @@ interface SubjectGrade {
 
 interface GradeDetail {
   categoria: string;
-  promedio: number;
+  promedio: number | null;
   notas: {
     actividad: string;
-    nota: number;
+    nota: number | null;
     fecha: string;
     comentario?: string;
   }[];
 }
 
 interface SubjectDetail extends SubjectGrade {
-  promedioFinal: number;
+  promedioFinal: number | null;
   categorias: GradeDetail[];
   evolucion: { mes: string; promedio: number }[];
   profesorNombre?: string | null;
@@ -60,14 +65,17 @@ interface SubjectDetail extends SubjectGrade {
 // Interfaces para datos reales
 interface NotaReal {
   _id: string;
+  assignmentId?: string;
   tareaId?: string;
   tareaTitulo?: string;
-  nota: number;
+  /** null = N/A (sin calificar); 0 es válido */
+  nota: number | null;
   logro?: string;
   fecha: string;
   profesorNombre?: string;
   comentario?: string;
   gradingCategoryId?: string;
+  categoryWeightPct?: number | null;
 }
 
 interface MateriaConNotas {
@@ -77,9 +85,9 @@ interface MateriaConNotas {
   colorAcento?: string;
   icono?: string;
   notas: NotaReal[];
-  promedio: number;
+  promedio: number | null;
   ultimaNota: number | null;
-  estado: 'excelente' | 'bueno' | 'regular' | 'bajo' | 'aprobado' | 'reprobado';
+  estado: 'excelente' | 'bueno' | 'regular' | 'bajo' | 'aprobado' | 'reprobado' | 'sin_notas';
   tendencia: 'up' | 'down' | 'stable';
   profesorNombre?: string | null;
 }
@@ -91,79 +99,112 @@ interface LogroItem {
   orden?: number;
 }
 
-const noteScoreFrom = (n: { nota?: number; score?: number; calificacion?: number }) =>
-  Number((n as { nota?: number }).nota ?? (n as { score?: number }).score ?? (n as { calificacion?: number }).calificacion) || 0;
-
 /** Colores distintos por materia (icono y línea en el gráfico). */
 const SUBJECT_COLORS = ['#00c8ff', '#1e3cff', '#ffd700', '#10b981', '#f43f5e', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#ec4899'];
 
-/** Evolución del promedio acumulado por fecha (para gráfico de progreso por materia). */
+function promedioForScoreMap(
+  allNotas: NotaReal[],
+  logros: LogroItem[] | undefined,
+  scoreByAssignmentId: Map<string, number>
+): number | null {
+  const list = logros?.length ? [...logros].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999)) : [];
+  const grouped = new Map<string, NotaReal[]>();
+  for (const n of allNotas) {
+    const c = n.gradingCategoryId;
+    if (!c) continue;
+    if (!grouped.has(c)) grouped.set(c, []);
+    grouped.get(c)!.push(n);
+  }
+  const dedupe = (arr: NotaReal[]) => {
+    const m = new Map<string, NotaReal>();
+    for (const n of arr) {
+      const id = n.assignmentId || n._id;
+      if (!m.has(id)) m.set(id, n);
+    }
+    return [...m.values()];
+  };
+  if (list.length === 0) {
+    const vals: number[] = [];
+    for (const n of allNotas) {
+      const id = n.assignmentId || n._id;
+      const s = scoreByAssignmentId.get(id);
+      if (s !== undefined) vals.push(s);
+    }
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+  const getCat = (lid: string) => {
+    const arr = dedupe(grouped.get(lid) ?? []);
+    if (!arr.length) return null;
+    return weightedGradeWithinLogro(
+      arr.map((n) => ({ categoryWeightPct: n.categoryWeightPct })),
+      arr.map((n) => {
+        const id = n.assignmentId || n._id;
+        return scoreByAssignmentId.has(id) ? scoreByAssignmentId.get(id)! : null;
+      })
+    );
+  };
+  return courseWeightedFromLogros(
+    list.map((l) => ({ _id: l._id, porcentaje: l.porcentaje })),
+    getCat
+  );
+}
+
+/** Evolución del promedio según notas registradas (N/A no cuenta). */
 function computeEvolucion(
   materia: MateriaConNotas,
   logros: LogroItem[] | undefined
 ): { date: Date; dateStr: string; promedio: number }[] {
   const notas = materia.notas ?? [];
-  const logrosList = logros ?? [];
-  const totalPct = logrosList.reduce((s, l) => s + (l.porcentaje ?? 0), 0);
-  const hasWeightedLogros = totalPct > 0 && logrosList.length > 0;
-  const notasOrdenadas = [...notas].sort((a, b) =>
-    new Date((a as NotaReal).fecha ?? 0).getTime() - new Date((b as NotaReal).fecha ?? 0).getTime()
-  );
-  return notasOrdenadas.map((n, i, arr) => {
-    const hastaFecha = arr.slice(0, i + 1);
-    let promedioAcum: number;
-    if (hasWeightedLogros && logrosList.length > 0) {
-      const logrosOrdenados = [...logrosList].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
-      let weightedSum = 0;
-      for (const logro of logrosOrdenados) {
-        const notasEnCat = hastaFecha.filter((x) => String((x as NotaReal).gradingCategoryId ?? '') === String(logro._id));
-        const promCat = notasEnCat.length > 0 ? notasEnCat.reduce((s, x) => s + noteScoreFrom(x), 0) / notasEnCat.length : 0;
-        weightedSum += promCat * ((logro.porcentaje ?? 0) / 100);
-      }
-      promedioAcum = weightedSum;
-    } else {
-      promedioAcum = hastaFecha.reduce((s, x) => s + noteScoreFrom(x), 0) / hastaFecha.length;
+  const graded = notas
+    .filter((n) => hasRecordedScore(n.nota))
+    .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+  const out: { date: Date; dateStr: string; promedio: number }[] = [];
+  for (let i = 0; i < graded.length; i++) {
+    const map = new Map<string, number>();
+    for (let j = 0; j <= i; j++) {
+      const x = graded[j];
+      const id = x.assignmentId || x._id;
+      map.set(id, Number(x.nota));
     }
-    const fecha = new Date((n as NotaReal).fecha ?? '');
-    const valid = !Number.isNaN(fecha.getTime());
-    return valid
-      ? {
-          date: fecha,
-          dateStr: fecha.toLocaleDateString('es-CO', { month: 'short', day: 'numeric', year: '2-digit' }),
-          promedio: Math.round(promedioAcum * 10) / 10,
-        }
-      : null;
-  }).filter((p): p is { date: Date; dateStr: string; promedio: number } => p !== null);
+    const p = promedioForScoreMap(notas, logros, map);
+    if (p == null) continue;
+    const fecha = new Date(graded[i].fecha);
+    if (Number.isNaN(fecha.getTime())) continue;
+    out.push({
+      date: fecha,
+      dateStr: fecha.toLocaleDateString('es-CO', { month: 'short', day: 'numeric', year: '2-digit' }),
+      promedio: Math.round(p * 10) / 10,
+    });
+  }
+  return out;
 }
 
-/** Calcula promedio ponderado por logros y última nota (misma lógica que la vista detalle). */
 function computeWeightedPromedioAndUltima(
   materia: MateriaConNotas,
   logros: LogroItem[] | undefined
-): { promedioFinal: number; ultimaNota: number } {
+): { promedioFinal: number | null; ultimaNota: number | null } {
   const notas = materia.notas ?? [];
-  const ultimaNota = notas.length
-    ? noteScoreFrom(notas.reduce((a, b) => (new Date((b as NotaReal).fecha ?? 0) > new Date((a as NotaReal).fecha ?? 0) ? b : a)))
-    : 0;
-  const totalPct = (logros ?? []).reduce((s, l) => s + (l.porcentaje ?? 0), 0);
-  const hasWeightedLogros = totalPct > 0 && (logros ?? []).length > 0;
-
-  if (hasWeightedLogros && logros!.length > 0) {
-    const logrosOrdenados = [...logros!].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
-    let weightedSum = 0;
-    for (const logro of logrosOrdenados) {
-      const notasEnCategoria = notas.filter((n) => String((n as NotaReal).gradingCategoryId ?? '') === String(logro._id));
-      const promCat = notasEnCategoria.length > 0
-        ? notasEnCategoria.reduce((s, x) => s + noteScoreFrom(x), 0) / notasEnCategoria.length
-        : 0;
-      weightedSum += promCat * ((logro.porcentaje ?? 0) / 100);
-    }
-    const promedioFinal = Math.round(weightedSum * 10) / 10;
-    return { promedioFinal, ultimaNota };
+  const map = new Map<string, number>();
+  for (const n of notas) {
+    if (!hasRecordedScore(n.nota)) continue;
+    const id = n.assignmentId || n._id;
+    map.set(id, Number(n.nota));
   }
-  const promedioFinal = notas.length > 0
-    ? Math.round((notas.reduce((s, x) => s + noteScoreFrom(x), 0) / notas.length) * 10) / 10
-    : Number(materia.promedio) || 0;
+  let promedioFinal = promedioForScoreMap(notas, logros, map);
+  if (promedioFinal == null && materia.promedio != null) promedioFinal = materia.promedio;
+  if (promedioFinal != null) promedioFinal = Math.round(promedioFinal * 10) / 10;
+
+  let ultimaNota: number | null = null;
+  let ultimaMs = 0;
+  for (const n of notas) {
+    if (!hasRecordedScore(n.nota)) continue;
+    const ms = new Date(n.fecha).getTime();
+    if (!Number.isNaN(ms) && ms >= ultimaMs) {
+      ultimaMs = ms;
+      ultimaNota = Number(n.nota);
+    }
+  }
   return { promedioFinal, ultimaNota };
 }
 
@@ -289,7 +330,8 @@ export default function StudentNotesPage() {
       if (m) {
         const logros = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
         const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, logros);
-        const estado: SubjectGrade['estado'] = promedioFinal >= 65 ? 'bueno' : 'bajo';
+        const estado: SubjectGrade['estado'] =
+          promedioFinal == null ? 'sin_notas' : promedioFinal >= 65 ? 'bueno' : 'bajo';
         return {
           _id: m._id,
           groupSubjectId: m.groupSubjectId ?? null,
@@ -329,9 +371,9 @@ export default function StudentNotesPage() {
   const subjectDetail: SubjectDetail | null = selectedSubjectData ? (() => {
     const logros = selectedSubjectData.groupSubjectId ? logrosByGsId[selectedSubjectData.groupSubjectId] : logrosData?.logros;
     const { promedioFinal: computedFinal, ultimaNota: computedUltima } = computeWeightedPromedioAndUltima(selectedSubjectData, logros ?? undefined);
-    const promedio = Number(selectedSubjectData.promedio) || 0;
     const ultimaNota = computedUltima;
-    const estado: SubjectGrade['estado'] = computedFinal >= 65 ? 'bueno' : 'bajo';
+    const estado: SubjectGrade['estado'] =
+      computedFinal == null ? 'sin_notas' : computedFinal >= 65 ? 'bueno' : 'bajo';
     const notas = selectedSubjectData.notas ?? [];
     const logrosList = logros ?? [];
     const totalPct = logrosList.reduce((s, l) => s + (l.porcentaje ?? 0), 0);
@@ -340,88 +382,85 @@ export default function StudentNotesPage() {
     const categorias: GradeDetail[] = [];
     const promedioFinal = computedFinal;
 
+    const dedupeCat = (arr: NotaReal[]) => {
+      const m = new Map<string, NotaReal>();
+      for (const n of arr) {
+        const id = n.assignmentId || n._id;
+        if (!m.has(id)) m.set(id, n);
+      }
+      return [...m.values()];
+    };
+
     if (hasWeightedLogros && logrosList.length > 0) {
       const logrosOrdenados = [...logrosList].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
       for (const logro of logrosOrdenados) {
-        const notasEnCategoria = notas.filter((n) => String((n as NotaReal).gradingCategoryId ?? '') === String(logro._id));
-        const promCat = notasEnCategoria.length > 0
-          ? notasEnCategoria.reduce((s, x) => s + noteScoreFrom(x), 0) / notasEnCategoria.length
-          : 0;
+        const notasEnCategoria = dedupeCat(
+          notas.filter((n) => String(n.gradingCategoryId ?? '') === String(logro._id))
+        );
+        const promCat = weightedGradeWithinLogro(
+          notasEnCategoria.map((n) => ({ categoryWeightPct: n.categoryWeightPct })),
+          notasEnCategoria.map((n) => (hasRecordedScore(n.nota) ? Number(n.nota) : null))
+        );
         const pct = logro.porcentaje ?? 0;
         categorias.push({
           categoria: `${logro.nombre} (${pct}%)`,
-          promedio: Math.round(promCat * 10) / 10,
+          promedio: promCat != null ? Math.round(promCat * 10) / 10 : null,
           notas: notasEnCategoria.map((n) => ({
-            actividad: (n as NotaReal).tareaTitulo ?? 'Sin título',
-            nota: noteScoreFrom(n),
-            fecha: (n as NotaReal).fecha ?? '',
-            comentario: (n as NotaReal).comentario ?? (n as NotaReal).logro,
+            actividad: n.tareaTitulo ?? 'Sin título',
+            nota: hasRecordedScore(n.nota) ? Number(n.nota) : null,
+            fecha: n.fecha ?? '',
+            comentario: n.comentario ?? n.logro,
           })),
         });
       }
-      const sinCategoria = notas.filter((n) => !(n as NotaReal).gradingCategoryId);
+      const sinCategoria = dedupeCat(notas.filter((n) => !n.gradingCategoryId));
       if (sinCategoria.length > 0) {
-        const promSin = sinCategoria.reduce((s, x) => s + noteScoreFrom(x), 0) / sinCategoria.length;
+        const scored = sinCategoria.filter((n) => hasRecordedScore(n.nota)).map((n) => Number(n.nota));
+        const promSin = scored.length ? scored.reduce((s, x) => s + x, 0) / scored.length : null;
         categorias.push({
           categoria: 'Sin categoría',
-          promedio: Math.round(promSin * 10) / 10,
+          promedio: promSin != null ? Math.round(promSin * 10) / 10 : null,
           notas: sinCategoria.map((n) => ({
-            actividad: (n as NotaReal).tareaTitulo ?? 'Sin título',
-            nota: noteScoreFrom(n),
-            fecha: (n as NotaReal).fecha ?? '',
-            comentario: (n as NotaReal).comentario ?? (n as NotaReal).logro,
+            actividad: n.tareaTitulo ?? 'Sin título',
+            nota: hasRecordedScore(n.nota) ? Number(n.nota) : null,
+            fecha: n.fecha ?? '',
+            comentario: n.comentario ?? n.logro,
           })),
         });
       }
     } else {
+      const deduped = dedupeCat(notas);
+      const scored = deduped.filter((n) => hasRecordedScore(n.nota)).map((n) => Number(n.nota));
       categorias.push({
         categoria: 'Notas',
-        promedio: promedioFinal,
-        notas: notas.map((n) => ({
-          actividad: (n as NotaReal).tareaTitulo ?? 'Sin título',
-          nota: noteScoreFrom(n),
-          fecha: (n as NotaReal).fecha ?? '',
-          comentario: (n as NotaReal).comentario ?? (n as NotaReal).logro,
+        promedio:
+          scored.length ? Math.round((scored.reduce((a, b) => a + b, 0) / scored.length) * 10) / 10 : null,
+        notas: deduped.map((n) => ({
+          actividad: n.tareaTitulo ?? 'Sin título',
+          nota: hasRecordedScore(n.nota) ? Number(n.nota) : null,
+          fecha: n.fecha ?? '',
+          comentario: n.comentario ?? n.logro,
         })),
       });
     }
 
-    const notasOrdenadas = [...notas].sort((a, b) =>
-      new Date((a as NotaReal).fecha ?? 0).getTime() - new Date((b as NotaReal).fecha ?? 0).getTime()
-    );
-    // Evolución con promedio ponderado hasta cada fecha (coherente con el número de arriba)
-    const evolucion = notasOrdenadas.map((n, i, arr) => {
-      const hastaFecha = arr.slice(0, i + 1);
-      let promedioAcum: number;
-      if (hasWeightedLogros && logrosList.length > 0) {
-        const logrosOrdenados = [...logrosList].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
-        let weightedSum = 0;
-        for (const logro of logrosOrdenados) {
-          const notasEnCat = hastaFecha.filter((x) => String((x as NotaReal).gradingCategoryId ?? '') === String(logro._id));
-          const promCat = notasEnCat.length > 0 ? notasEnCat.reduce((s, x) => s + noteScoreFrom(x), 0) / notasEnCat.length : 0;
-          weightedSum += promCat * ((logro.porcentaje ?? 0) / 100);
-        }
-        promedioAcum = weightedSum;
-      } else {
-        promedioAcum = hastaFecha.reduce((s, x) => s + noteScoreFrom(x), 0) / hastaFecha.length;
-      }
-      return {
-        mes: new Date((n as NotaReal).fecha ?? '').toLocaleDateString('es-CO', { month: 'short', day: 'numeric', year: '2-digit' }),
-        promedio: Math.round(promedioAcum * 10) / 10,
-        nota: noteScoreFrom(n),
-      };
-    });
+    const evoPts = computeEvolucion(selectedSubjectData, logros ?? undefined);
+    const evolucion = evoPts.map((p) => ({
+      mes: p.dateStr,
+      promedio: p.promedio,
+      nota: p.promedio,
+    }));
 
     return {
       _id: selectedSubjectData._id,
       nombre: selectedSubjectData.nombre,
       promedio: computedFinal,
-      ultimaNota: Number.isNaN(ultimaNota) ? 0 : ultimaNota,
+      ultimaNota,
       estado,
       tendencia: selectedSubjectData.tendencia ?? 'stable',
       colorAcento: selectedSubjectData.colorAcento || '#00c8ff',
       promedioFinal,
-      profesorNombre: selectedSubjectData.profesorNombre ?? (notas[0] as NotaReal)?.profesorNombre ?? null,
+      profesorNombre: selectedSubjectData.profesorNombre ?? notas[0]?.profesorNombre ?? null,
       categorias,
       evolucion,
     };
@@ -642,7 +681,7 @@ export default function StudentNotesPage() {
               </CardTitle>
               <CardDescription className="text-white/60 space-y-2">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span>Promedio general: <span className="text-white font-semibold">{subjectsWithGrades.length > 0 ? Math.round(promedioGeneral * 10) / 10 : 'N/A'}</span></span>
+                  <span>Promedio general: <span className="text-white font-semibold">{subjectsWithGrades.length > 0 ? Math.round(promedioGeneral * 10) / 10 : '—'}</span></span>
                   {subjectsWithGrades.length > 0 && (
                     <div className="flex-1 min-w-[120px] max-w-[200px] h-2 rounded-full bg-white/10 overflow-hidden">
                       <div
@@ -746,17 +785,17 @@ export default function StudentNotesPage() {
                   </CardTitle>
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-3xl font-bold text-white">
-                      {subject.promedio !== null ? Math.round(subject.promedio) : 'N/A'}
+                      {subject.promedio !== null ? Math.round(subject.promedio) : '—'}
                     </span>
                     {subject.promedio !== null && <span className="text-white/50">/ 100</span>}
                   </div>
                   <div className="flex items-center gap-2 mb-2">
                     <Badge className={getEstadoColor(subject.estado)}>
-                      {subject.estado === 'sin_notas' ? 'N/A' : subject.estado.charAt(0).toUpperCase() + subject.estado.slice(1)}
+                      {subject.estado === 'sin_notas' ? '—' : subject.estado.charAt(0).toUpperCase() + subject.estado.slice(1)}
                     </Badge>
                   </div>
                   <p className="text-sm text-white/60">
-                    Última nota: <span className="text-white font-semibold">{subject.ultimaNota !== null ? Math.round(subject.ultimaNota) : 'N/A'}</span>
+                    Última nota: <span className="text-white font-semibold">{subject.ultimaNota !== null ? Math.round(subject.ultimaNota) : '—'}</span>
                   </p>
                 </CardHeader>
                 <CardContent className="p-6 pt-0">
@@ -800,7 +839,7 @@ export default function StudentNotesPage() {
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-1 font-['Poppins'] break-words">
                   {subjectCard?.nombre ?? 'Materia'}
                 </h1>
-                <Badge className={getEstadoColor('sin_notas')}>N/A</Badge>
+                <Badge className={getEstadoColor('sin_notas')}>—</Badge>
               </div>
               <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ backgroundColor: subjectCard?.colorAcento || '#00c8ff' }}>
                 <BookOpen className="w-10 h-10 text-white" />
@@ -858,9 +897,9 @@ export default function StudentNotesPage() {
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl font-bold text-white">
-                      {Math.round(subjectDetail.promedioFinal)}
+                      {subjectDetail.promedioFinal != null ? Math.round(subjectDetail.promedioFinal) : '—'}
                     </span>
-                    <span className="text-white/50">/ 100</span>
+                    {subjectDetail.promedioFinal != null && <span className="text-white/50">/ 100</span>}
                   </div>
                   <Badge className={getEstadoColor(subjectDetail.estado)}>
                     {subjectDetail.estado.charAt(0).toUpperCase() + subjectDetail.estado.slice(1)}
@@ -935,9 +974,9 @@ export default function StudentNotesPage() {
                     <CardTitle className="text-white">{categoria.categoria}</CardTitle>
                     <div className="flex items-center gap-2">
                       <span className="text-xl font-bold text-white">
-                        {Math.round(categoria.promedio)}
+                        {categoria.promedio != null ? Math.round(categoria.promedio) : '—'}
                       </span>
-                      <span className="text-white/50">/ 100</span>
+                      {categoria.promedio != null && <span className="text-white/50">/ 100</span>}
                     </div>
                   </div>
                   <CardDescription className="text-white/60">
@@ -964,9 +1003,9 @@ export default function StudentNotesPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-2xl font-bold text-white">
-                              {Math.round(nota.nota)}
+                              {nota.nota != null ? Math.round(nota.nota) : '—'}
                             </span>
-                            <span className="text-white/50">/ 100</span>
+                            {nota.nota != null && <span className="text-white/50">/ 100</span>}
                           </div>
                         </div>
                         {nota.comentario && (

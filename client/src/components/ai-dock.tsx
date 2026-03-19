@@ -47,7 +47,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   const [isExpanded, setIsExpanded] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const { setOpen: setCommandOpen } = useCommandPalette();
-  
+
   // Notificar cambios en el estado del chat
   useEffect(() => {
     if (onChatStateChange) {
@@ -296,6 +296,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
         <div
           className={cn(
             "h-full",
+            "relative",
             "glass-strong",
             "border-l border-white/10",
             "transition-all duration-500",

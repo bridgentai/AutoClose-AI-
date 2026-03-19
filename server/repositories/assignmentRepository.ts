@@ -1,5 +1,8 @@
 import { queryPg } from '../config/db-pg.js';
-import { ensureAssignmentsRequiresSubmissionColumn } from '../db/pgSchemaPatches.js';
+import {
+  ensureAssignmentsRequiresSubmissionColumn,
+  ensureAssignmentsCategoryWeightPctColumn,
+} from '../db/pgSchemaPatches.js';
 
 export interface AssignmentRow {
   id: string;
@@ -15,9 +18,11 @@ export interface AssignmentRow {
   is_gradable: boolean;
   requires_submission: boolean;
   created_at: string;
+  category_weight_pct?: number | null;
 }
 
 export async function findAssignmentById(id: string): Promise<AssignmentRow | null> {
+  await ensureAssignmentsCategoryWeightPctColumn();
   const r = await queryPg<AssignmentRow & { requires_submission?: boolean }>(
     'SELECT * FROM assignments WHERE id = $1',
     [id]
@@ -30,6 +35,7 @@ export async function findAssignmentById(id: string): Promise<AssignmentRow | nu
 }
 
 export async function findAssignmentsByGroupSubject(groupSubjectId: string): Promise<AssignmentRow[]> {
+  await ensureAssignmentsCategoryWeightPctColumn();
   const r = await queryPg<AssignmentRow>(
     'SELECT * FROM assignments WHERE group_subject_id = $1 ORDER BY due_date',
     [groupSubjectId]
@@ -45,6 +51,7 @@ export async function findAssignmentsByGroupSubjectAndDue(
   if (!fromDate && !toDate) {
     return findAssignmentsByGroupSubject(groupSubjectId);
   }
+  await ensureAssignmentsCategoryWeightPctColumn();
   let q = 'SELECT * FROM assignments WHERE group_subject_id = $1';
   const params: unknown[] = [groupSubjectId];
   if (fromDate) {
@@ -72,7 +79,9 @@ export async function createAssignment(row: {
   type?: string;
   is_gradable?: boolean;
   requires_submission?: boolean;
+  category_weight_pct?: number | null;
 }): Promise<AssignmentRow> {
+  await ensureAssignmentsCategoryWeightPctColumn();
   const requiresSubmission = row.requires_submission !== false;
   const values = [
     row.group_subject_id,
@@ -86,18 +95,27 @@ export async function createAssignment(row: {
     row.type ?? 'assignment',
     row.is_gradable ?? requiresSubmission,
     requiresSubmission,
+    row.category_weight_pct ?? null,
   ];
-  const sql = `INSERT INTO assignments (group_subject_id, title, description, content_document, due_date, max_score, assignment_category_id, created_by, "type", is_gradable, requires_submission)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`;
+  const sql = `INSERT INTO assignments (group_subject_id, title, description, content_document, due_date, max_score, assignment_category_id, created_by, "type", is_gradable, requires_submission, category_weight_pct)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`;
   try {
     const r = await queryPg<AssignmentRow>(sql, values);
     return r.rows[0];
   } catch (e: unknown) {
     const err = e as { code?: string; message?: string };
-    if (err.code === '42703' && (err.message ?? '').toLowerCase().includes('requires_submission')) {
-      await ensureAssignmentsRequiresSubmissionColumn();
-      const r = await queryPg<AssignmentRow>(sql, values);
-      return r.rows[0];
+    if (err.code === '42703') {
+      const msg = (err.message ?? '').toLowerCase();
+      if (msg.includes('requires_submission')) {
+        await ensureAssignmentsRequiresSubmissionColumn();
+        const r = await queryPg<AssignmentRow>(sql, values);
+        return r.rows[0];
+      }
+      if (msg.includes('category_weight_pct')) {
+        await ensureAssignmentsCategoryWeightPctColumn();
+        const r = await queryPg<AssignmentRow>(sql, values);
+        return r.rows[0];
+      }
     }
     throw e;
   }
@@ -112,6 +130,7 @@ export async function updateAssignment(id: string, updates: {
   type?: string;
   is_gradable?: boolean;
   requires_submission?: boolean;
+  category_weight_pct?: number | null;
 }): Promise<AssignmentRow | null> {
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -124,6 +143,10 @@ export async function updateAssignment(id: string, updates: {
   if (updates.type !== undefined) { sets.push(`"type" = $${i++}`); values.push(updates.type); }
   if (updates.is_gradable !== undefined) { sets.push(`is_gradable = $${i++}`); values.push(updates.is_gradable); }
   if (updates.requires_submission !== undefined) { sets.push(`requires_submission = $${i++}`); values.push(updates.requires_submission); }
+  if (updates.category_weight_pct !== undefined) {
+    sets.push(`category_weight_pct = $${i++}`);
+    values.push(updates.category_weight_pct);
+  }
   if (sets.length === 0) return findAssignmentById(id);
   values.push(id);
   const r = await queryPg<AssignmentRow>(`UPDATE assignments SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`, values);

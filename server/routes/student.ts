@@ -7,7 +7,7 @@ import { findGuardianStudent } from '../repositories/guardianStudentRepository.j
 import { getFirstGroupNameForStudent, getAllCourseGroupsForStudent, findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { findGroupById, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
 import { findGradesByUserAndGroup } from '../repositories/gradeRepository.js';
-import { findAssignmentById } from '../repositories/assignmentRepository.js';
+import { buildMateriasNotasForStudent } from '../services/studentNotesBuilder.js';
 import { findUsersByInstitutionAndRoles, findUserById as findUserPgById } from '../repositories/userRepository.js';
 import { createNotification } from '../repositories/notificationRepository.js';
 import {
@@ -269,68 +269,8 @@ router.get('/notes', protect, async (req: AuthRequest, res) => {
     if (!estudianteId) return res.status(401).json({ message: 'No autorizado.' });
     const user = await findUserById(estudianteId);
     if (!user || user.role !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
-    const courseGroups = await getAllCourseGroupsForStudent(estudianteId, user.institution_id);
-    if (!courseGroups.length) return res.json({ materias: [], total: 0 });
-    const allGrades = (
-      await Promise.all(courseGroups.map((g) => findGradesByUserAndGroup(estudianteId, g.id)))
-    ).flat();
-    const notesWithSubject = await Promise.all(
-      allGrades.map(async (g) => {
-        const assignment = await findAssignmentById(g.assignment_id);
-        const gs = assignment ? await findGroupSubjectById(assignment.group_subject_id) : null;
-        const subject = gs ? await findSubjectById(gs.subject_id) : null;
-        const group = gs ? await findGroupById(gs.group_id) : null;
-        const subjectDisplayName = (gs?.display_name?.trim() || subject?.name) ?? 'Sin materia';
-        return {
-          _id: g.id,
-          subjectId: subject?.id ?? g.assignment_id,
-          subjectName: subjectDisplayName,
-          groupName: group?.name ?? '',
-          gsId: gs?.id ?? null,
-          assignmentCategoryId: assignment?.assignment_category_id ?? null,
-          tareaId: { _id: assignment?.id, titulo: assignment?.title, fechaEntrega: assignment?.due_date },
-          nota: g.score,
-          maxScore: g.max_score,
-          fecha: g.recorded_at,
-        };
-      })
-    );
-    const byCourse = new Map<string, { _id: string; nombre: string; groupSubjectId: string; notas: typeof notesWithSubject; sum: number; count: number }>();
-    for (const n of notesWithSubject) {
-      const gsId = n.gsId ?? n.subjectId;
-      if (!gsId) continue;
-      const key = gsId;
-      const displayName = ([n.subjectName, n.groupName].filter(Boolean).join(' ').trim() || n.subjectName) ?? 'Sin materia';
-      if (!byCourse.has(key)) byCourse.set(key, { _id: gsId, nombre: displayName, groupSubjectId: gsId, notas: [], sum: 0, count: 0 });
-      const row = byCourse.get(key)!;
-      row.notas.push(n);
-      row.sum += n.nota;
-      row.count += 1;
-    }
-    const materias = Array.from(byCourse.values()).map((row) => {
-      const promedio = row.count > 0 ? Math.round((row.sum / row.count) * 10) / 10 : 0;
-      const ultimaNota = row.notas.length ? row.notas.reduce((a, b) => (new Date(b.fecha) > new Date(a.fecha) ? b : a)).nota : null;
-      const estado = promedio >= 65 ? 'aprobado' : 'reprobado';
-      return {
-        _id: row._id,
-        nombre: row.nombre,
-        groupSubjectId: row.groupSubjectId,
-        promedio,
-        ultimaNota,
-        estado,
-        tendencia: 'stable' as const,
-        colorAcento: '',
-        notas: row.notas.map((nn) => ({
-          tareaTitulo: nn.tareaId?.titulo,
-          nota: nn.nota,
-          fecha: nn.fecha,
-          comentario: null,
-          logro: null,
-          gradingCategoryId: nn.assignmentCategoryId ?? undefined,
-        })),
-      };
-    });
-    res.json({ materias, total: materias.length });
+    const { materias, total } = await buildMateriasNotasForStudent(estudianteId, user.institution_id);
+    res.json({ materias, total });
   } catch (error: unknown) {
     console.error('Error al obtener notas:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });
@@ -519,68 +459,8 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
     let allowed = rol === 'directivo' || rol === 'admin-general-colegio';
     if (!allowed && rol === 'padre') allowed = !!(await findGuardianStudent(userId!, paramId));
     if (!allowed) return res.status(403).json({ message: 'No autorizado a ver las notas de este estudiante.' });
-    const courseGroups = await getAllCourseGroupsForStudent(paramId, estudiante.institution_id);
-    if (!courseGroups.length) return res.json({ materias: [], total: 0 });
-    const allGrades = (
-      await Promise.all(courseGroups.map((g) => findGradesByUserAndGroup(paramId, g.id)))
-    ).flat();
-    const notesWithSubject = await Promise.all(
-      allGrades.map(async (g) => {
-        const assignment = await findAssignmentById(g.assignment_id);
-        const gs = assignment ? await findGroupSubjectById(assignment.group_subject_id) : null;
-        const subject = gs ? await findSubjectById(gs.subject_id) : null;
-        const group = gs ? await findGroupById(gs.group_id) : null;
-        const subjectDisplayName = (gs?.display_name?.trim() || subject?.name) ?? 'Sin materia';
-        return {
-          _id: g.id,
-          subjectId: subject?.id ?? g.assignment_id,
-          subjectName: subjectDisplayName,
-          groupName: group?.name ?? '',
-          gsId: gs?.id ?? null,
-          assignmentCategoryId: assignment?.assignment_category_id ?? null,
-          tareaId: { _id: assignment?.id, titulo: assignment?.title, fechaEntrega: assignment?.due_date },
-          nota: g.score,
-          maxScore: g.max_score,
-          fecha: g.recorded_at,
-        };
-      })
-    );
-    const byCourse = new Map<string, { _id: string; nombre: string; groupSubjectId: string; notas: typeof notesWithSubject; sum: number; count: number }>();
-    for (const n of notesWithSubject) {
-      const gsId = n.gsId ?? n.subjectId;
-      if (!gsId) continue;
-      const key = gsId;
-      const displayName = ([n.subjectName, n.groupName].filter(Boolean).join(' ').trim() || n.subjectName) ?? 'Sin materia';
-      if (!byCourse.has(key)) byCourse.set(key, { _id: gsId, nombre: displayName, groupSubjectId: gsId, notas: [], sum: 0, count: 0 });
-      const row = byCourse.get(key)!;
-      row.notas.push(n);
-      row.sum += n.nota;
-      row.count += 1;
-    }
-    const materias = Array.from(byCourse.values()).map((row) => {
-      const promedio = row.count > 0 ? Math.round((row.sum / row.count) * 10) / 10 : 0;
-      const ultimaNota = row.notas.length ? row.notas.reduce((a, b) => (new Date(b.fecha) > new Date(a.fecha) ? b : a)).nota : null;
-      const estado = promedio >= 65 ? 'aprobado' : 'reprobado';
-      return {
-        _id: row._id,
-        nombre: row.nombre,
-        groupSubjectId: row.groupSubjectId,
-        promedio,
-        ultimaNota,
-        estado,
-        tendencia: 'stable' as const,
-        colorAcento: '',
-        notas: row.notas.map((nn) => ({
-          tareaTitulo: nn.tareaId?.titulo,
-          nota: nn.nota,
-          fecha: nn.fecha,
-          comentario: null,
-          logro: null,
-          gradingCategoryId: nn.assignmentCategoryId ?? undefined,
-        })),
-      };
-    });
-    res.json({ materias, total: materias.length });
+    const { materias, total } = await buildMateriasNotasForStudent(paramId, estudiante.institution_id);
+    res.json({ materias, total });
   } catch (error: unknown) {
     console.error('Error al obtener notas del hijo:', (error as Error).message);
     res.status(500).json({ message: 'Error interno del servidor.' });

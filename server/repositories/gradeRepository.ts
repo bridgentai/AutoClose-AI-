@@ -78,3 +78,11 @@ export async function upsertGrade(row: {
   );
   return r.rows[0];
 }
+
+export async function deleteGradeByAssignmentAndUser(assignmentId: string, userId: string): Promise<boolean> {
+  const r = await queryPg('DELETE FROM grades WHERE assignment_id = $1 AND user_id = $2', [
+    assignmentId,
+    userId,
+  ]);
+  return (r.rowCount ?? 0) > 0;
+}

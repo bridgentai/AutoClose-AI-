@@ -15,6 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  weightedGradeWithinLogro,
+  courseWeightedFromLogros,
+  hasRecordedScore,
+} from '@shared/weightedGrades';
 
 // =========================================================
 // INTERFACES Y DATOS MOCK
@@ -182,8 +187,20 @@ export default function TeacherNotesPage() {
   const logros = logrosRaw?.logros ?? [];
 
   const updateGradeMutation = useMutation({
-    mutationFn: async ({ assignmentId, estudianteId: sid, calificacion }: { assignmentId: string; estudianteId: string; calificacion: number }) =>
-      apiRequest('PUT', `/api/assignments/${assignmentId}/grade`, { estudianteId: sid, calificacion: Math.min(100, Math.max(0, calificacion)), manualOverride: true }),
+    mutationFn: async ({
+      assignmentId,
+      estudianteId: sid,
+      calificacion,
+    }: {
+      assignmentId: string;
+      estudianteId: string;
+      calificacion: number | null;
+    }) =>
+      apiRequest('PUT', `/api/assignments/${assignmentId}/grade`, {
+        estudianteId: sid,
+        calificacion: calificacion == null ? null : Math.min(100, Math.max(0, calificacion)),
+        manualOverride: true,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, courseIdForData] });
       queryClient.invalidateQueries({ queryKey: ['students', cursoId] });
@@ -244,35 +261,38 @@ export default function TeacherNotesPage() {
     const subs = assignment.submissions || assignment.entregas || [];
     const s = subs.find((x: { estudianteId: string }) => String(x.estudianteId) === String(sid));
     const cal = (s as { calificacion?: number })?.calificacion;
-    return cal != null && !isNaN(cal) ? cal : null;
+    if (cal === null || cal === undefined || Number.isNaN(Number(cal))) return null;
+    return Number(cal);
   };
   const promedioPonderado = useMemo(() => {
     if (!estudianteId || !currentStudent) return null;
-    let weightedSum = 0;
-    let totalWeight = 0;
-    Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
-      if (logro._id === 'sin-logro') return;
-      const pct = logro.porcentaje ?? 0;
-      if (pct <= 0) return;
-      const notas: number[] = [];
-      assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
-      if (notas.length) {
-        const prom = notas.reduce((s, n) => s + n, 0) / notas.length;
-        totalWeight += pct;
-        weightedSum += (prom * pct) / 100;
-      }
-    });
-    const allNotas: number[] = [];
-    Object.values(assignmentsByLogro).forEach(({ assignments }) => {
-      assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => {
-        const n = getNotaForStudent(a, estudianteId);
-        if (n != null) allNotas.push(n);
+    const logrosForCourse: { _id: string; porcentaje: number }[] = [];
+    for (const [, { logro }] of Object.entries(assignmentsByLogro)) {
+      if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
+      logrosForCourse.push({ _id: logro._id, porcentaje: logro.porcentaje });
+    }
+    const getCategoryGrade = (catId: string): number | null => {
+      const block = assignmentsByLogro[catId];
+      if (!block?.assignments?.length) return null;
+      const scores = block.assignments.map((a) => getNotaForStudent(a, estudianteId));
+      const slots = block.assignments.map((a) => ({
+        categoryWeightPct: (a as { categoryWeightPct?: number | null }).categoryWeightPct ?? null,
+      }));
+      return weightedGradeWithinLogro(slots, scores);
+    };
+    let course = courseWeightedFromLogros(logrosForCourse, getCategoryGrade);
+    if (course == null) {
+      const all: number[] = [];
+      Object.values(assignmentsByLogro).forEach(({ assignments }) => {
+        assignments.forEach((a) => {
+          const n = getNotaForStudent(a, estudianteId);
+          if (hasRecordedScore(n)) all.push(Number(n));
+        });
       });
-    });
-    const simple = allNotas.length ? allNotas.reduce((s, n) => s + n, 0) / allNotas.length : 0;
-    const raw = totalWeight > 0 ? (weightedSum / totalWeight) * 100 : simple;
-    const result = Math.round(raw * 10) / 10;
-    return Number.isNaN(result) ? null : result;
+      if (all.length) course = all.reduce((s, n) => s + n, 0) / all.length;
+    }
+    if (course == null || Number.isNaN(course)) return null;
+    return Math.round(course * 10) / 10;
   }, [estudianteId, currentStudent, assignmentsByLogro]);
 
   // Vista de notas individual del estudiante (misma fuente que tabla, editable)
@@ -337,15 +357,20 @@ export default function TeacherNotesPage() {
           <div className="space-y-6">
             {Object.values(assignmentsByLogro).map(({ logro, assignments }) => {
               if (assignments.length === 0) return null;
-              const notas: number[] = [];
-              assignments.forEach((a: { submissions?: { estudianteId: string; calificacion?: number }[]; entregas?: { estudianteId: string; calificacion?: number }[] }) => { const n = getNotaForStudent(a, estudianteId); if (n != null) notas.push(n); });
-              const promLogro = notas.length ? Math.round(notas.reduce((s, n) => s + n, 0) / notas.length) : null;
+              const slots = assignments.map((a) => ({
+                categoryWeightPct: (a as { categoryWeightPct?: number | null }).categoryWeightPct ?? null,
+              }));
+              const scores = assignments.map((a) => getNotaForStudent(a, estudianteId));
+              const promLogroRaw = weightedGradeWithinLogro(slots, scores);
+              const promLogro =
+                promLogroRaw != null && !Number.isNaN(promLogroRaw) ? Math.round(promLogroRaw * 10) / 10 : null;
               return (
                 <Card key={logro._id} className="bg-white/5 border-white/10 backdrop-blur-md">
                   <CardHeader>
                     <CardTitle className="text-white">{logro.nombre}</CardTitle>
                     <CardDescription className="text-white">
-                      Promedio: {promLogro != null && !Number.isNaN(promLogro) ? `${promLogro} / 100` : '—'} {logro.porcentaje > 0 && ` · ${logro.porcentaje}% del total`}
+                      Promedio: {promLogro != null ? `${promLogro} / 100` : '—'}{' '}
+                      {logro.porcentaje > 0 && ` · ${logro.porcentaje}% del total`}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -358,17 +383,26 @@ export default function TeacherNotesPage() {
                               <h4 className="font-semibold text-white">{a.titulo}</h4>
                               {a.fechaEntrega && <p className="text-sm text-white">{new Date(a.fechaEntrega).toLocaleDateString('es-CO')}</p>}
                             </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {val == null && <span className="text-white/50 text-sm">—</span>}
                             <Input
                               type="number"
                               min={0}
                               max={100}
-                              defaultValue={val != null ? val : ''}
+                              placeholder="—"
+                              defaultValue={val != null ? String(val) : ''}
                               className="w-20 text-center font-semibold text-white bg-white/10 border-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               onBlur={(e) => {
-                                const n = parseInt(e.target.value, 10);
+                                const raw = e.target.value.trim();
+                                if (raw === '') {
+                                  updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: null });
+                                  return;
+                                }
+                                const n = parseInt(raw, 10);
                                 if (!isNaN(n) && n >= 0 && n <= 100) updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: n });
                               }}
                             />
+                            </div>
                           </div>
                         );
                       })}

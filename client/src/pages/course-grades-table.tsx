@@ -11,6 +11,11 @@ import { useForecast } from '@/hooks/useCourseGrading';
 import { motion } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  weightedGradeWithinLogro,
+  courseWeightedFromLogros,
+  hasRecordedScore,
+} from '@shared/weightedGrades';
 
 // =========================================================
 // TIPOS
@@ -33,6 +38,7 @@ interface Assignment {
   entregas?: Submission[];
   /** Id de grading_categories (logro); usado para agrupar columnas por categoría */
   logroCalificacionId?: string;
+  categoryWeightPct?: number | null;
 }
 
 interface LogroCalificacion {
@@ -108,21 +114,12 @@ function calcularPrediccion(
   estudianteId: string,
   assignmentsByLogro: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }>
 ): PrediccionResult {
-  const getGradesForLogro = (key: string | undefined): number[] => {
-    if (!key) return [];
-    const grupo = assignmentsByLogro[key];
-    if (!grupo) return [];
-    const grades: number[] = [];
-    grupo.assignments.forEach((a) => {
-      const subs = a.submissions || a.entregas || [];
-      const sub = subs.find(
-        (x: { estudianteId?: string }) =>
-          String(x.estudianteId) === estudianteId
-      );
-      const cal = (sub as { calificacion?: number })?.calificacion;
-      if (cal != null && !Number.isNaN(cal)) grades.push(cal);
-    });
-    return grades;
+  const scoreFor = (a: Assignment): number | null => {
+    const subs = a.submissions || a.entregas || [];
+    const sub = subs.find((x: { estudianteId?: string }) => String(x.estudianteId) === estudianteId);
+    const cal = (sub as { calificacion?: number })?.calificacion;
+    if (cal === null || cal === undefined || Number.isNaN(Number(cal))) return null;
+    return Number(cal);
   };
 
   const allAssignmentsWithDates = (Object.values(assignmentsByLogro) as { logro: LogroCalificacion; assignments: Assignment[] }[])
@@ -131,40 +128,28 @@ function calcularPrediccion(
 
   const orderedGrades: number[] = [];
   allAssignmentsWithDates.forEach((a) => {
-    const subs = a.submissions || a.entregas || [];
-    const sub = subs.find((x: { estudianteId?: string }) => String(x.estudianteId) === estudianteId);
-    const cal = (sub as { calificacion?: number })?.calificacion;
-    if (cal != null && !Number.isNaN(cal)) orderedGrades.push(cal);
+    const s = scoreFor(a as Assignment);
+    if (hasRecordedScore(s)) orderedGrades.push(Number(s));
   });
 
   const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
-  const totalPorcentaje = entries.reduce((s, [, { logro }]) => s + (logro.porcentaje ?? 0), 0);
-  const hasWeightedLogros = totalPorcentaje > 0;
-
-  const simpleNotaActual = orderedGrades.length > 0 ? promedio(orderedGrades) : 0;
-
-  let notaActual: number;
-  if (hasWeightedLogros) {
-    let weightedSum = 0;
-    let totalWeight = 0;
-    for (const [id, { logro }] of entries) {
-      const pct = logro.porcentaje ?? 0;
-      if (pct <= 0) continue;
-      const grades = getGradesForLogro(id);
-      if (grades.length === 0) continue; // solo logros con al menos 1 nota
-      const prom = promedio(grades);
-      totalWeight += pct;
-      weightedSum += prom * (pct / 100);
-    }
-    if (totalWeight === 0) {
-      notaActual = simpleNotaActual;
-    } else {
-      notaActual = (weightedSum / totalWeight) * 100;
-    }
-    if (Number.isNaN(notaActual)) notaActual = simpleNotaActual;
-  } else {
-    notaActual = simpleNotaActual;
+  const logrosForCourse: { _id: string; porcentaje: number }[] = [];
+  for (const [, { logro }] of entries) {
+    if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
+    logrosForCourse.push({ _id: logro._id, porcentaje: logro.porcentaje });
   }
+  const getCategoryGrade = (catId: string): number | null => {
+    const grp = assignmentsByLogro[catId];
+    if (!grp?.assignments?.length) return null;
+    const scores = grp.assignments.map((x) => scoreFor(x));
+    const slots = grp.assignments.map((x) => ({ categoryWeightPct: x.categoryWeightPct ?? null }));
+    return weightedGradeWithinLogro(slots, scores);
+  };
+  let notaActual = courseWeightedFromLogros(logrosForCourse, getCategoryGrade);
+  if (notaActual == null) {
+    notaActual = orderedGrades.length > 0 ? promedio(orderedGrades) : 0;
+  }
+  if (Number.isNaN(notaActual)) notaActual = orderedGrades.length ? promedio(orderedGrades) : 0;
 
   const primeras3 = orderedGrades.slice(0, 3);
   const ultimas3 = orderedGrades.slice(-3);
@@ -578,48 +563,39 @@ export default function CourseGradesTablePage() {
     return cal != null && !Number.isNaN(Number(cal)) ? Number(cal) : '';
   };
 
-  /** Promedio final: ponderado por logros (solo logros con al menos 1 nota). Normalización: (weightedSum / totalWeight) * 100. Si totalWeight === 0 pero hay notas, usar promedio simple. Nunca NaN. */
+  /** Promedio: dentro de cada logro, N/A no cuenta; 0 sí. Curso: solo logros con al menos una nota (renorma %). */
   const getPromedioFor = (estudianteId: string): number | string => {
     const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
-    const totalPorcentaje = entries.reduce((s, [, { logro }]) => s + (logro.porcentaje ?? 0), 0);
-    const hasWeightedLogros = totalPorcentaje > 0;
-
-    const notas: number[] = [];
-    allAssignmentsForPromedio.forEach((a) => {
-      const v = getGradeFor(estudianteId, a._id);
-      if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
-    });
-    if (notas.length === 0) return '—';
-    const simpleProm = notas.reduce((s, n) => s + n, 0) / notas.length;
-
-    if (hasWeightedLogros) {
-      let weightedSum = 0;
-      let totalWeight = 0;
-      for (const [, { logro, assignments }] of entries) {
-        const pct = logro.porcentaje ?? 0;
-        if (pct <= 0) continue;
-        const grades: number[] = [];
-        assignments.forEach((a) => {
-          const v = getGradeFor(estudianteId, a._id);
-          if (typeof v === 'number' && !Number.isNaN(v)) grades.push(v);
-        });
-        if (grades.length === 0) continue; // solo logros con al menos 1 nota
-        const prom = grades.reduce((s, n) => s + n, 0) / grades.length;
-        totalWeight += pct;
-        weightedSum += prom * (pct / 100);
-      }
-      // Si ningún logro tenía notas (totalWeight === 0) pero el estudiante sí tiene notas, usar promedio simple
-      if (totalWeight === 0) {
-        const rounded = Math.round(simpleProm * 10) / 10;
-        return Number.isNaN(rounded) ? '—' : rounded;
-      }
-      // Renormalizar: solo pesos de logros con nota; N/A no cuenta como 0
-      const result = (weightedSum / totalWeight) * 100;
-      if (Number.isNaN(result)) return Math.round(simpleProm * 10) / 10;
-      return Math.round(result * 10) / 10;
+    const logrosForCourse: { _id: string; porcentaje: number }[] = [];
+    for (const [, { logro }] of entries) {
+      if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
+      logrosForCourse.push({ _id: logro._id, porcentaje: logro.porcentaje });
     }
-
-    const rounded = Math.round(simpleProm * 10) / 10;
+    const score = (a: Assignment): number | null => {
+      const v = getGradeFor(estudianteId, a._id);
+      if (v === '' || v === undefined) return null;
+      const n = Number(v);
+      return Number.isNaN(n) ? null : n;
+    };
+    const getCat = (catId: string): number | null => {
+      const grp = assignmentsByLogro[catId];
+      if (!grp?.assignments?.length) return null;
+      return weightedGradeWithinLogro(
+        grp.assignments.map((x) => ({ categoryWeightPct: x.categoryWeightPct ?? null })),
+        grp.assignments.map((x) => score(x))
+      );
+    };
+    let course = courseWeightedFromLogros(logrosForCourse, getCat);
+    if (course == null) {
+      const all: number[] = [];
+      allAssignmentsForPromedio.forEach((a) => {
+        const s = score(a);
+        if (hasRecordedScore(s)) all.push(Number(s));
+      });
+      if (all.length === 0) return '—';
+      course = all.reduce((x, y) => x + y, 0) / all.length;
+    }
+    const rounded = Math.round(course * 10) / 10;
     return Number.isNaN(rounded) ? '—' : rounded;
   };
 
@@ -627,14 +603,18 @@ export default function CourseGradesTablePage() {
   const getPromedioForDisplay = (estudianteId: string): number | string => {
     if (activeTab === TAB_VISTA_COMPLETA) return getPromedioFor(estudianteId);
     if (activeAssignments.length === 0) return '—';
-    const notas: number[] = [];
-    activeAssignments.forEach((a) => {
+    const score = (a: Assignment): number | null => {
       const v = getGradeFor(estudianteId, a._id);
-      if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
-    });
-    if (notas.length === 0) return '—';
-    const sum = notas.reduce((s, n) => s + n, 0);
-    const result = Math.round((sum / notas.length) * 10) / 10;
+      if (v === '' || v === undefined) return null;
+      const n = Number(v);
+      return Number.isNaN(n) ? null : n;
+    };
+    const g = weightedGradeWithinLogro(
+      activeAssignments.map((x) => ({ categoryWeightPct: x.categoryWeightPct ?? null })),
+      activeAssignments.map((x) => score(x))
+    );
+    if (g == null) return '—';
+    const result = Math.round(g * 10) / 10;
     return Number.isNaN(result) ? '—' : result;
   };
 

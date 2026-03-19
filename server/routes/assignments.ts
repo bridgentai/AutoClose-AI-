@@ -19,7 +19,12 @@ import {
   createSubmission,
   updateSubmission,
 } from '../repositories/submissionRepository.js';
-import { findGradeByAssignmentAndUser, findGradesByAssignment, upsertGrade } from '../repositories/gradeRepository.js';
+import {
+  findGradeByAssignmentAndUser,
+  findGradesByAssignment,
+  upsertGrade,
+  deleteGradeByAssignmentAndUser,
+} from '../repositories/gradeRepository.js';
 import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
 import { findEnrollmentsByStudent, getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
@@ -54,7 +59,7 @@ function assignmentToApi(a: {
   is_gradable: boolean;
   created_at: string;
   requires_submission?: boolean;
-}, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string } = {}) {
+}, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string; categoryWeightPct?: number | null } = {}) {
   const requiresSubmission =
     a.type === 'reminder' ? false : a.requires_submission === false ? false : true;
   return {
@@ -71,6 +76,8 @@ function assignmentToApi(a: {
     requiresSubmission,
     createdAt: a.created_at,
     ...extra,
+    categoryWeightPct:
+      (a as { category_weight_pct?: number | null }).category_weight_pct ?? extra.categoryWeightPct,
   };
 }
 
@@ -213,6 +220,13 @@ router.post('/', protect, async (req: AuthRequest, res) => {
     const requiresSubmission =
       typeof bodyRequiresSubmission === 'boolean' ? bodyRequiresSubmission : true;
 
+    const cwRaw = (req.body as { categoryWeightPct?: unknown }).categoryWeightPct;
+    let category_weight_pct: number | null = null;
+    if (cwRaw != null && cwRaw !== '') {
+      const w = Number(cwRaw);
+      if (!Number.isNaN(w) && w > 0 && w <= 100) category_weight_pct = w;
+    }
+
     const buildRow = (cat: string | null) => ({
       group_subject_id: courseIdStr,
       title: tituloStr,
@@ -225,6 +239,7 @@ router.post('/', protect, async (req: AuthRequest, res) => {
       requires_submission: requiresSubmission,
       assignment_category_id: cat,
       max_score: requiresSubmission ? undefined : 0,
+      category_weight_pct,
     });
 
     let created;
@@ -541,14 +556,23 @@ router.put('/:id', protect, async (req: AuthRequest, res) => {
     if (!assignment) return res.status(404).json({ message: 'Tarea no encontrada.' });
     if (assignment.created_by !== userId) return res.status(403).json({ message: 'No tienes permiso para editar esta tarea.' });
 
-    const { titulo, descripcion, contenidoDocumento, fechaEntrega, type, isGradable } = req.body;
+    const { titulo, descripcion, contenidoDocumento, fechaEntrega, type, isGradable, categoryWeightPct } = req.body as Record<string, unknown>;
+    let category_weight_pct: number | null | undefined = undefined;
+    if (categoryWeightPct !== undefined) {
+      if (categoryWeightPct === null || categoryWeightPct === '') category_weight_pct = null;
+      else {
+        const w = Number(categoryWeightPct);
+        if (!Number.isNaN(w) && w > 0 && w <= 100) category_weight_pct = w;
+      }
+    }
     const updated = await updateAssignment(req.params.id, {
-      ...(titulo && { title: titulo }),
-      ...(descripcion !== undefined && { description: descripcion }),
-      ...(contenidoDocumento !== undefined && { content_document: contenidoDocumento }),
-      ...(fechaEntrega && { due_date: new Date(fechaEntrega).toISOString() }),
-      ...(type && { type }),
+      ...(titulo && { title: String(titulo) }),
+      ...(descripcion !== undefined && { description: descripcion as string | null }),
+      ...(contenidoDocumento !== undefined && { content_document: contenidoDocumento as string | null }),
+      ...(fechaEntrega && { due_date: new Date(String(fechaEntrega)).toISOString() }),
+      ...(type && { type: String(type) }),
       ...(typeof isGradable === 'boolean' && { is_gradable: isGradable }),
+      ...(category_weight_pct !== undefined && { category_weight_pct }),
     });
 
     return res.json(assignmentToApi(updated ?? assignment));
@@ -640,23 +664,27 @@ router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'No hay esquema de calificación para este grupo. Configure categorías primero.' });
     }
 
-    const score = clearGrade ? 0 : Number(calificacion);
     const maxScore = assignment.max_score;
+    const numericScore = Number(calificacion);
 
-    await upsertGrade({
-      assignment_id: assignment.id,
-      user_id: estudianteId,
-      group_id: gs.group_id,
-      grading_category_id: gradingCategoryId,
-      score,
-      max_score: maxScore,
-      recorded_by_id: userId,
-    });
+    if (clearGrade) {
+      await deleteGradeByAssignmentAndUser(assignment.id, estudianteId);
+    } else {
+      await upsertGrade({
+        assignment_id: assignment.id,
+        user_id: estudianteId,
+        group_id: gs.group_id,
+        grading_category_id: gradingCategoryId,
+        score: numericScore,
+        max_score: maxScore,
+        recorded_by_id: userId,
+      });
+    }
 
     const sub = await findSubmissionByAssignmentAndStudent(assignment.id, estudianteId);
     if (sub) {
       await updateSubmission(sub.id, {
-        score: clearGrade ? null : score,
+        score: clearGrade ? null : numericScore,
         feedback: retroalimentacion ?? sub.feedback,
       });
     }

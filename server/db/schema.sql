@@ -250,6 +250,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   "type" VARCHAR(20) NOT NULL DEFAULT 'assignment' CHECK ("type" IN ('assignment', 'reminder')),
   is_gradable BOOLEAN NOT NULL DEFAULT true,
   requires_submission BOOLEAN NOT NULL DEFAULT true,
+  category_weight_pct NUMERIC(5,2) NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
