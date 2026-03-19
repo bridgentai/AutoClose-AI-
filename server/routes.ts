@@ -40,6 +40,7 @@ import assignmentMaterialsRoutes from "./routes/assignmentMaterials";
 import integrationsRoutes from "./routes/integrations";
 import scheduleRoutes from "./routes/schedule";
 import adminSqlRoutes, { adminSqlHandler } from "./routes/adminSql";
+import uploadsRoutes from "./routes/uploads";
 import {
   ensureAssignmentsRequiresSubmissionColumn,
   ensureAssignmentCategoryFkReferencesGradingCategories,
@@ -113,6 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/integrations', integrationsRoutes);
   app.use('/api/schedule', scheduleRoutes);
   app.use('/api/admin', adminSqlRoutes);
+  app.use('/api/uploads', uploadsRoutes);
   // Ruta explícita para que la consola SQL (Neon) siempre esté disponible con la misma DB de la plataforma
   app.post('/api/admin/sql', protect, requireRole('admin-general-colegio', 'school_admin', 'super_admin'), adminSqlHandler);
 

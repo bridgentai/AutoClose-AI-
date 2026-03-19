@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX, ExternalLink, Presentation, FileSpreadsheet, Cloud, Plus } from 'lucide-react';
+import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX, ExternalLink, Presentation, FileSpreadsheet, Cloud, Plus, Camera } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { DocumentEditor } from '@/components/document-editor';
 import { courseDisplayLabel } from '@/lib/assignmentUtils';
+import { CameraScanner } from '@/components/scanner/CameraScanner';
 
 type AttachmentType = 'pdf' | 'link' | 'imagen' | 'documento' | 'otro';
 
@@ -95,6 +96,8 @@ export default function AssignmentDetailPage() {
   // Estados para calificación (profesor)
   const [gradingStudent, setGradingStudent] = useState<string | null>(null);
   const [gradeData, setGradeData] = useState({ calificacion: '', retroalimentacion: '', logro: '' });
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [activeScanCtx, setActiveScanCtx] = useState<{ assignmentId: string; studentId: string } | null>(null);
 
   const isProfesor = user?.rol === 'profesor';
   const isPadre = user?.rol === 'padre';
@@ -804,6 +807,20 @@ export default function AssignmentDetailPage() {
                                         />
                                       </div>
                                       <div>
+                                        <Label className="text-[#E2E8F0] mb-1 block">Examen escaneado (opcional)</Label>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveScanCtx({ assignmentId: params.id, studentId: submission.estudianteId });
+                                            setScannerOpen(true);
+                                          }}
+                                          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-white/70 hover:bg-white/5 hover:text-white transition-colors text-sm"
+                                        >
+                                          <Camera size={16} />
+                                          Escanear examen físico
+                                        </button>
+                                      </div>
+                                      <div>
                                         <Label className="text-[#E2E8F0] mb-1 block">Retroalimentación</Label>
                                         <Textarea
                                           value={gradeData.retroalimentacion}
@@ -1382,6 +1399,19 @@ export default function AssignmentDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {scannerOpen && (
+        <CameraScanner
+          assignmentId={activeScanCtx?.assignmentId}
+          studentId={activeScanCtx?.studentId}
+          onComplete={(result) => {
+            console.log('Escaneo adjunto:', activeScanCtx, result.url);
+            setScannerOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['/api/assignments', params.id] });
+          }}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
 
       </div>
     </div>

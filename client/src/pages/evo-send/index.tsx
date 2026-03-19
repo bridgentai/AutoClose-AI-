@@ -1282,6 +1282,24 @@ function filteredThreadsList(
   onToggleChatsGlc?: () => void
 ) {
   const title = (t: EvoThreadItem) => t.displayTitle ?? t.asunto;
+  const preview = (t: EvoThreadItem) => {
+    const raw = t.ultimoMensaje?.contenido;
+    if (!raw) return 'Sin mensajes';
+
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return raw;
+
+    const meta = safeParseJson<Record<string, unknown>>(trimmed);
+    if (!meta) return raw;
+
+    const maybeTitle = typeof meta.title === 'string' ? meta.title.trim() : '';
+    if (maybeTitle) return maybeTitle;
+
+    const maybeName = typeof meta.name === 'string' ? meta.name.trim() : '';
+    if (maybeName) return maybeName;
+
+    return raw;
+  };
   const filterBySearch = (list: EvoThreadItem[]) =>
     !searchQ?.trim()
       ? list
@@ -1333,7 +1351,7 @@ function filteredThreadsList(
         <div className="flex-1 min-w-0">
           <p className={`font-medium truncate ${hasUnread ? 'text-[#E2E8F0]' : 'text-white/90'}`}>{title(t)}</p>
           <p className="text-white/60 text-sm truncate mt-0.5">
-            {t.ultimoMensaje?.contenido || 'Sin mensajes'}
+            {preview(t)}
           </p>
         </div>
         <div className="flex flex-col items-end flex-shrink-0 gap-1">

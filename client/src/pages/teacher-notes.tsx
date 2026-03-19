@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/authContext';
 import { useLocation, useRoute } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Plus, MessageSquare } from 'lucide-react';
+import { Plus, MessageSquare, Camera } from 'lucide-react';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import {
   courseWeightedFromLogros,
   hasRecordedScore,
 } from '@shared/weightedGrades';
+import { CameraScanner } from '@/components/scanner/CameraScanner';
 
 // =========================================================
 // INTERFACES Y DATOS MOCK
@@ -208,6 +209,8 @@ export default function TeacherNotesPage() {
   });
 
   const [showAddNoteForm, setShowAddNoteForm] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanCtx, setScanCtx] = useState<{ assignmentId: string; studentId: string } | null>(null);
 
   const [formData, setFormData] = useState({
     categoria: '',
@@ -385,23 +388,36 @@ export default function TeacherNotesPage() {
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               {val == null && <span className="text-white/50 text-sm">—</span>}
-                            <Input
-                              type="number"
-                              min={0}
-                              max={100}
-                              placeholder="—"
-                              defaultValue={val != null ? String(val) : ''}
-                              className="w-20 text-center font-semibold text-white bg-white/10 border-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              onBlur={(e) => {
-                                const raw = e.target.value.trim();
-                                if (raw === '') {
-                                  updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: null });
-                                  return;
-                                }
-                                const n = parseInt(raw, 10);
-                                if (!isNaN(n) && n >= 0 && n <= 100) updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: n });
-                              }}
-                            />
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  placeholder="—"
+                                  defaultValue={val != null ? String(val) : ''}
+                                  className="w-20 text-center font-semibold text-white bg-white/10 border-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                  onBlur={(e) => {
+                                    const raw = e.target.value.trim();
+                                    if (raw === '') {
+                                      updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: null });
+                                      return;
+                                    }
+                                    const n = parseInt(raw, 10);
+                                    if (!isNaN(n) && n >= 0 && n <= 100) updateGradeMutation.mutate({ assignmentId: a._id, estudianteId, calificacion: n });
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  title="Escanear examen"
+                                  onClick={() => {
+                                    setScanCtx({ assignmentId: a._id, studentId: estudianteId });
+                                    setScannerOpen(true);
+                                  }}
+                                  className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                                >
+                                  <Camera size={15} />
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -413,6 +429,17 @@ export default function TeacherNotesPage() {
             })}
           </div>
         </div>
+        {scannerOpen && (
+          <CameraScanner
+            assignmentId={scanCtx?.assignmentId}
+            studentId={scanCtx?.studentId}
+            onComplete={(result) => {
+              console.log('Escaneo guardado:', result.url);
+              setScannerOpen(false);
+            }}
+            onClose={() => setScannerOpen(false)}
+          />
+        )}
       </div>
     );
   }
@@ -537,6 +564,17 @@ export default function TeacherNotesPage() {
           </div>
         </div>
       </div>
+      {scannerOpen && (
+        <CameraScanner
+          assignmentId={scanCtx?.assignmentId}
+          studentId={scanCtx?.studentId}
+          onComplete={(result) => {
+            console.log('Escaneo guardado:', result.url);
+            setScannerOpen(false);
+          }}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </div>
   );
 }
