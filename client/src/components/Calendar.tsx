@@ -24,6 +24,7 @@ interface Assignment {
 interface CalendarProps {
   assignments: Assignment[];
   onDayClick?: (assignment: Assignment) => void;
+  onEmptyDayClick?: (date: Date) => void;
   /** Estudiante: diferenciar por materia y mostrar nombre de materia. Profesor: por curso. */
   variant?: CalendarVariant;
 }
@@ -48,7 +49,7 @@ const MATERIA_PALETTE = [
 const getColorForMateriaIndex = (index: number): string =>
   MATERIA_PALETTE[index % MATERIA_PALETTE.length];
 
-export function Calendar({ assignments, onDayClick, variant = 'student' }: CalendarProps) {
+export function Calendar({ assignments, onDayClick, onEmptyDayClick, variant = 'student' }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const isStudent = variant === 'student';
   const legendTitle = isStudent ? 'Leyenda de materias' : 'Leyenda de cursos';
@@ -253,14 +254,17 @@ export function Calendar({ assignments, onDayClick, variant = 'student' }: Calen
         </HoverCard>
       );
     } else {
+      const dayDate = new Date(year, month, day);
       calendarDays.push(
-        <div
+        <button
+          type="button"
           key={day}
+          onClick={() => onEmptyDayClick?.(dayDate)}
           className="aspect-square rounded-full bg-white/5 border border-white/10 text-white/60 font-medium hover:bg-white/10 transition-colors flex items-center justify-center"
           data-testid={`calendar-day-${day}`}
         >
           {day}
-        </div>
+        </button>
       );
     }
   }

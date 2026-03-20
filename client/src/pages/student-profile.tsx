@@ -56,7 +56,7 @@ interface StudentNote {
 
 interface Amonestacion {
   _id: string;
-  gravedad: 'leve' | 'moderada' | 'grave' | 'muy grave';
+  gravedad: 'leve' | 'grave' | 'suma gravedad';
   razon: string;
   fecha: string;
   registradoPor?: string;
@@ -98,12 +98,15 @@ export default function StudentProfilePage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const searchParams = new URLSearchParams(search);
   
   // Rutas dinámicas
   const [, params] = useRoute('/profesor/cursos/:cursoId/estudiantes/:estudianteId');
   
   const cursoId = params?.cursoId || '';
   const estudianteId = params?.estudianteId || '';
+  const returnTo = searchParams.get('returnTo') || `/course-detail/${cursoId}`;
   
   // Obtener información personal del estudiante desde el backend
   const { data: studentDetail, isLoading: isLoadingStudent, error: studentError } = useQuery<StudentDetail>({
@@ -253,12 +256,10 @@ export default function StudentProfilePage() {
     switch (gravedad) {
       case 'leve':
         return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40';
-      case 'moderada':
-        return 'bg-orange-500/20 text-orange-400 border-orange-500/40';
       case 'grave':
         return 'bg-red-500/20 text-red-400 border-red-500/40';
-      case 'muy grave':
-        return 'bg-red-600/30 text-red-300 border-red-600/50';
+      case 'suma gravedad':
+        return 'bg-red-700/30 text-red-200 border-red-700/50';
       default:
         return 'bg-gray-500/20 text-gray-400 border-gray-500/40';
     }
@@ -273,7 +274,7 @@ export default function StudentProfilePage() {
             <p className="text-white/60">Estudiante no encontrado</p>
             <Button
               variant="ghost"
-              onClick={() => setLocation(`/course-detail/${cursoId}`)}
+              onClick={() => setLocation(returnTo)}
               className="text-white/70 hover:text-white mt-4"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -305,7 +306,7 @@ export default function StudentProfilePage() {
             <p className="text-white/60">Error al cargar la información del estudiante</p>
             <Button
               variant="ghost"
-              onClick={() => setLocation(`/course-detail/${cursoId}`)}
+              onClick={() => setLocation(returnTo)}
               className="text-white/70 hover:text-white mt-4"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -324,7 +325,7 @@ export default function StudentProfilePage() {
         <div className="mb-8">
           <Button
             variant="ghost"
-            onClick={() => setLocation(`/course-detail/${cursoId}`)}
+            onClick={() => setLocation(returnTo)}
             className="text-white/70 hover:text-white mb-4"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -522,9 +523,8 @@ export default function StudentProfilePage() {
                       </SelectTrigger>
                       <SelectContent className="bg-[#0a0a2a] border-red-500/30">
                         <SelectItem value="leve" className="text-white">Leve</SelectItem>
-                        <SelectItem value="moderada" className="text-white">Moderada</SelectItem>
                         <SelectItem value="grave" className="text-white">Grave</SelectItem>
-                        <SelectItem value="muy grave" className="text-white">Muy grave</SelectItem>
+                        <SelectItem value="suma gravedad" className="text-white">Suma gravedad</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

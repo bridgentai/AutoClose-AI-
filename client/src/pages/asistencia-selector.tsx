@@ -58,6 +58,10 @@ export default function AsistenciaSelectorPage() {
   const [, params] = useRoute("/course/:grupoId/asistencia");
   const [, setLocation] = useLocation();
   const grupoId = params?.grupoId || "";
+  const search = typeof window !== "undefined" ? window.location.search : "";
+  const searchParams = new URLSearchParams(search);
+  const returnTo = searchParams.get("returnTo") || `/course-detail/${grupoId}`;
+  const materiaNombreParam = (searchParams.get("materiaNombre") || "").trim();
   const grupoDisplay = grupoId.toUpperCase().trim();
 
   const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
@@ -67,6 +71,9 @@ export default function AsistenciaSelectorPage() {
     staleTime: 5 * 60 * 1000,
   });
   const groupDisplayName = (groupInfo?.nombre?.trim() || grupoDisplay) as string;
+  const asistenciaDisplayName = materiaNombreParam
+    ? `${materiaNombreParam} ${groupDisplayName}`.trim()
+    : `Grupo ${groupDisplayName}`;
 
   const hoy = new Date();
   const fechaDefault = hoy.toISOString().slice(0, 10);
@@ -234,7 +241,7 @@ export default function AsistenciaSelectorPage() {
     e.preventDefault();
     e.stopPropagation();
     if (!slotSeleccionado || !fecha) return;
-    const url = `/course/${grupoId}/asistencia/registro?courseId=${encodeURIComponent(slotSeleccionado.courseId)}&fecha=${encodeURIComponent(fecha)}&hora=${encodeURIComponent(slotSeleccionado.inicio)}&materia=${encodeURIComponent(slotSeleccionado.materia)}`;
+    const url = `/course/${grupoId}/asistencia/registro?courseId=${encodeURIComponent(slotSeleccionado.courseId)}&fecha=${encodeURIComponent(fecha)}&hora=${encodeURIComponent(slotSeleccionado.inicio)}&materia=${encodeURIComponent(slotSeleccionado.materia)}&returnTo=${encodeURIComponent(returnTo)}`;
     setLocation(url);
   };
 
@@ -260,8 +267,7 @@ export default function AsistenciaSelectorPage() {
           <Breadcrumb
             items={[
               { label: "Dashboard", href: "/dashboard" },
-              { label: "Cursos", href: "/profesor/academia/cursos" },
-              { label: `Grupo ${groupDisplayName}`, href: `/course-detail/${grupoId}` },
+              { label: asistenciaDisplayName, href: returnTo },
               { label: "Asistencia" },
             ]}
           />
@@ -270,7 +276,7 @@ export default function AsistenciaSelectorPage() {
         <header className="mb-8">
           <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-2 flex items-center gap-2">
             <CheckCircle className="w-7 h-7 text-emerald-500" />
-            Registrar Asistencia – {groupDisplayName}
+            Registrar Asistencia – {asistenciaDisplayName}
           </h1>
           <p className="text-white/60 text-sm">
             Elige la fecha y el día. Solo podrás continuar si tienes clase con este grupo ese día según tu horario.
@@ -433,7 +439,7 @@ export default function AsistenciaSelectorPage() {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => setLocation(`/course-detail/${grupoId}`)}
+                onClick={() => setLocation(returnTo)}
                 className="rounded-[12px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
               >
                 Cancelar

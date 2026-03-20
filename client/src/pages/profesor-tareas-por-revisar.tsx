@@ -74,17 +74,13 @@ export default function ProfesorTareasPorRevisarPage() {
 
   return (
     <div
-      className="min-h-screen p-4 md:p-6 text-[#E2E8F0]"
-      style={{
-        background: 'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)',
-      }}
+      className="flex-1 overflow-auto p-4 md:p-6 text-[#E2E8F0]"
     >
       <div className="max-w-4xl mx-auto">
         <Breadcrumb
           className="mb-4"
           items={[
             { label: 'Dashboard', href: '/dashboard' },
-            { label: 'Tareas', href: '/profesor/academia/tareas' },
             { label: 'Por revisar' },
           ]}
         />

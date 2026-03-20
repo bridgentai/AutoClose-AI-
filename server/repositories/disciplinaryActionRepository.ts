@@ -1,6 +1,6 @@
 import { queryPg } from '../config/db-pg.js';
 
-export type DisciplinarySeverity = 'leve' | 'moderada' | 'grave' | 'muy grave';
+export type DisciplinarySeverity = 'leve' | 'grave' | 'suma gravedad';
 
 export interface DisciplinaryActionRow {
   id: string;

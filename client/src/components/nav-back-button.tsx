@@ -221,14 +221,17 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
   const fallbackLabel = getRouteLabel(fallbackDestination);
 
   const currentLabel = getRouteLabel(location);
+  const items = fallbackLabel === currentLabel
+    ? [{ label: currentLabel, href: fallbackDestination }]
+    : [
+      { label: fallbackLabel, href: fallbackDestination },
+      { label: currentLabel },
+    ];
 
   return (
     <Breadcrumb
       className={cn("mb-4", className)}
-      items={[
-        { label: fallbackLabel, href: fallbackDestination },
-        { label: currentLabel },
-      ]}
+      items={items}
     />
   );
 }

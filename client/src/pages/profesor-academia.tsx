@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
-import { NavBackButton } from "@/components/nav-back-button";
+import { Breadcrumb } from "@/components/Breadcrumb";
 
 const navigationItems = [
   { title: "Cursos", path: "/profesor/academia/cursos", icon: BookOpen },
@@ -28,7 +28,10 @@ export default function ProfesorAcademiaLayout() {
 
   return (
     <div className="p-6" data-testid="profesor-academia-layout">
-      <NavBackButton to="/dashboard" label="Dashboard" />
+      <Breadcrumb
+        className="mb-4"
+        items={[{ label: "Dashboard", href: "/dashboard" }]}
+      />
       <h1 className="text-2xl font-bold mb-6 mt-4" data-testid="text-title">
         Academia: Inicio
       </h1>

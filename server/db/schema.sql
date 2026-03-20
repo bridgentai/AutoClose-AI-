@@ -446,7 +446,7 @@ CREATE TABLE IF NOT EXISTS disciplinary_actions (
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
   student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_by_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
-  severity VARCHAR(20) NOT NULL CHECK (severity IN ('leve', 'moderada', 'grave', 'muy grave')),
+  severity VARCHAR(20) NOT NULL CHECK (severity IN ('leve', 'grave', 'suma gravedad')),
   reason TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

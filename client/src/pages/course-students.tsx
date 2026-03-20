@@ -36,6 +36,9 @@ export default function CourseStudentsPage() {
   const [, params] = useRoute('/course-detail/:cursoId/estudiantes');
   const cursoId = params?.cursoId || '';
   const [, setLocation] = useLocation();
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const searchParams = new URLSearchParams(search);
+  const returnTo = searchParams.get('returnTo') || `/course-detail/${cursoId}`;
   const { toast } = useToast();
   const displayGroupId = cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
     ? cursoId
@@ -67,7 +70,7 @@ export default function CourseStudentsPage() {
 
   return (
     <div className="p-6">
-      <NavBackButton to={`/course-detail/${cursoId}`} label={`Grupo ${groupDisplayName}`} />
+      <NavBackButton to={returnTo} label={`Grupo ${groupDisplayName}`} />
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white font-['Poppins'] mt-4 flex items-center gap-2">
           <Users className="w-7 h-7 text-[#00c8ff]" />
@@ -100,7 +103,7 @@ export default function CourseStudentsPage() {
                 <div
                   key={student._id}
                   className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
-                  onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}`)}
+                  onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}?returnTo=${encodeURIComponent(returnTo)}`)}
                 >
                   <h4 className="font-semibold text-white truncate mb-2">{student.nombre}</h4>
                   {student.email && <p className="text-white/60 text-sm truncate mb-2">{student.email}</p>}

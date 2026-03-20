@@ -46,6 +46,7 @@ import { Label } from '@/components/ui/label';
 import { NavBackButton } from '@/components/nav-back-button';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateCourseColor } from '@/lib/courseColor';
+import kiwiChatImg from '@/assets/Kiwi-chat.png';
 
 const EVO_BLUE = '#3B82F6';
 const EVO_PANEL =
@@ -1339,13 +1340,13 @@ function filteredThreadsList(
         <div
           className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-white/10"
           style={{
-            background: `linear-gradient(145deg, color-mix(in srgb, ${ac} 45%, transparent), color-mix(in srgb, ${ac} 25%, #0f172a))`,
+            background: 'linear-gradient(145deg, #1e3cff, #002366)',
           }}
         >
           {(t.is_support || t.tipo === 'evo_chat_support') ? (
             <Shield className="w-6 h-6 text-white/95" style={{ color: ac }} />
           ) : (
-            <MessageSquare className="w-6 h-6 text-white/95" style={{ color: ac }} />
+            <img src={kiwiChatImg} alt="Kiwi" className="w-9 h-9 rounded-full object-cover" draggable={false} />
           )}
         </div>
         <div className="flex-1 min-w-0">

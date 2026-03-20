@@ -40,6 +40,7 @@ export default function RegistroAsistenciaPage() {
   const fechaParam = searchParams.get("fecha") || new Date().toISOString().slice(0, 10);
   const horaParam = searchParams.get("hora") || "7:00";
   const materiaNombre = searchParams.get("materia") || "Clase";
+  const returnTo = searchParams.get("returnTo") || `/course-detail/${grupoId}`;
 
   const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
     queryKey: ["/api/groups", grupoId],
@@ -165,9 +166,8 @@ export default function RegistroAsistenciaPage() {
           <Breadcrumb
             items={[
               { label: "Dashboard", href: "/dashboard" },
-              { label: "Cursos", href: "/profesor/academia/cursos" },
-              { label: `Grupo ${grupoDisplay}`, href: `/course-detail/${grupoId}` },
-              { label: "Asistencia", href: `/course/${grupoId}/asistencia` },
+              { label: `Grupo ${grupoDisplay}`, href: returnTo },
+              { label: "Asistencia", href: `/course/${grupoId}/asistencia?returnTo=${encodeURIComponent(returnTo)}` },
               { label: "Registro" },
             ]}
           />
@@ -300,7 +300,7 @@ export default function RegistroAsistenciaPage() {
             </Button>
             <Button
               variant="outline"
-              onClick={() => setLocation(`/course/${grupoId}/asistencia`)}
+              onClick={() => setLocation(`/course/${grupoId}/asistencia?returnTo=${encodeURIComponent(returnTo)}`)}
               className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
             >
               Volver

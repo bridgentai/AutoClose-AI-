@@ -341,7 +341,9 @@ export default function CourseDetailPage() {
     const [showAssignmentForm, setShowAssignmentForm] = useState(false);
     /** null = cerrado; elegir si pide entrega; form = datos de la asignación */
     const [assignmentCreationPhase, setAssignmentCreationPhase] = useState<null | 'choose-delivery' | 'form'>(null);
-    const [requiresStudentDelivery, setRequiresStudentDelivery] = useState(true);
+    const [assignmentDeliveryMode, setAssignmentDeliveryMode] = useState<'evo' | 'clase' | 'sin-entrega'>('evo');
+    const requiresStudentDelivery = assignmentDeliveryMode === 'evo';
+    const isGradableAssignment = assignmentDeliveryMode !== 'sin-entrega';
     const [showStudentsDialog, setShowStudentsDialog] = useState(false);
     const [formData, setFormData] = useState({
         titulo: '',
@@ -699,7 +701,7 @@ export default function CourseDetailPage() {
         if (!showAssignmentForm) {
             setFormData({ titulo: '', descripcion: '', fechaEntrega: '', courseId: '' });
             setAssignmentCreationPhase(null);
-            setRequiresStudentDelivery(true);
+            setAssignmentDeliveryMode('evo');
             setLogroCalificacionId('');
             setAssignmentMaterials([]);
             setAddFromGoogleOpen(false);
@@ -718,7 +720,7 @@ export default function CourseDetailPage() {
         if (params.get('openAssignmentForm') === '1') {
             setShowAssignmentForm(true);
             setAssignmentCreationPhase('form');
-            setRequiresStudentDelivery(true);
+            setAssignmentDeliveryMode('evo');
             const logroId = params.get('logroId');
             if (logroId) setLogroCalificacionId(logroId);
             // Limpiar query para no reabrir al recargar
@@ -747,7 +749,7 @@ export default function CourseDetailPage() {
                 categoryId: logroCalificacionId || undefined,
                 logroCalificacionId: logroCalificacionId || undefined,
                 requiresSubmission: requiresStudentDelivery,
-                isGradable: requiresStudentDelivery,
+                isGradable: isGradableAssignment,
             });
             if (materialTitle?.trim()) {
                 try {
@@ -859,6 +861,16 @@ export default function CourseDetailPage() {
     const handleDayClick = (assignment: Assignment) => {
         setLocation(`/assignment/${assignment._id}`);
     };
+    const handleEmptyDayClick = (date: Date) => {
+        if (!isProfessor) return;
+        const selectedDate = new Date(date);
+        const yyyy = selectedDate.getFullYear();
+        const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(selectedDate.getDate()).padStart(2, '0');
+        setFormData((prev) => ({ ...prev, fechaEntrega: `${yyyy}-${mm}-${dd}` }));
+        setShowAssignmentForm(true);
+        setAssignmentCreationPhase('form');
+    };
 
     // --------------------------------------------------
     // Vistas por Rol
@@ -892,6 +904,7 @@ export default function CourseDetailPage() {
                 className="mb-4"
                 items={[
                     { label: 'Dashboard', href: '/dashboard' },
+                    { label: 'Academia', href: '/profesor/academia' },
                     { label: coursesHomeLabel, href: coursesHomeHref },
                     { label: `Grupo ${groupDisplayName}` },
                 ]}
@@ -971,6 +984,7 @@ export default function CourseDetailPage() {
                                     <Breadcrumb
                                         items={[
                                             { label: 'Dashboard', href: '/dashboard' },
+                                            ...(isProfessor ? [{ label: 'Academia', href: '/profesor/academia' }] : []),
                                             { label: coursesHomeLabel, href: coursesHomeHref },
                                             ...(subjects.length > 1
                                                 ? [
@@ -983,17 +997,6 @@ export default function CourseDetailPage() {
                                                 : [{ label: `Grupo ${groupDisplayName}` }]),
                                         ]}
                                     />
-                            {showOptionsButton && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-white/20 text-white/90 hover:bg-white/10"
-                                    onClick={openOptionsModal}
-                                >
-                                    <Settings className="w-4 h-4 mr-1" />
-                                    Opciones de materia
-                                </Button>
-                            )}
                         </div>
                         <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 font-['Poppins'] break-words mt-2">
                             {activeSubjectNombre ? (
@@ -1005,12 +1008,18 @@ export default function CourseDetailPage() {
                                 <>Gestión del Grupo {groupDisplayName}</>
                             )}
                         </h2>
-                        <p className="text-white/60 text-sm sm:text-base">
-                            {activeSubjectNombre
-                                ? `Estudiantes, notas, tareas y calendario para ${activeSubjectNombre} en este grupo.`
-                                : 'Gestiona estudiantes, notas, tareas y calendario del grupo'}
-                        </p>
                     </div>
+                    {showOptionsButton && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-white/20 text-white/90 hover:bg-white/10 sm:mt-1 self-start sm:self-start sm:ml-auto"
+                            onClick={openOptionsModal}
+                        >
+                            <Settings className="w-4 h-4 mr-1" />
+                            Opciones de materia
+                        </Button>
+                    )}
                 </div>
 
                 {/* 6 Tarjetas: Fila 1 — Estudiantes, Tareas, Notas. Fila 2 — Asistencia, Evo Send, Evo Drive */}
@@ -1018,7 +1027,7 @@ export default function CourseDetailPage() {
                     {/* Carta 1: Estudiantes */}
                     <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
-                        onClick={() => setLocation(`/course-detail/${cursoId}/estudiantes`)}
+                        onClick={() => setLocation(`/course-detail/${cursoId}/estudiantes?returnTo=${encodeURIComponent(professorDetailBasePath)}`)}
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#1e3cff] via-[#002366] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#1e3cff]/30">
@@ -1038,6 +1047,7 @@ export default function CourseDetailPage() {
                         onClick={() => {
                             const q = new URLSearchParams();
                             if (professorGroupSubjectId) q.set('materiaId', professorGroupSubjectId);
+                            q.set('returnTo', professorDetailBasePath);
                             const qs = q.toString();
                             setLocation(`/profesor/cursos/${cursoId}/tareas${qs ? `?${qs}` : ''}`);
                         }}
@@ -1060,7 +1070,10 @@ export default function CourseDetailPage() {
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#3B82F6]/20"
                         onClick={() =>
                             setLocation(
-                                `/course/${cursoId}/grades${professorGroupSubjectId ? `?gs=${encodeURIComponent(professorGroupSubjectId)}` : ''}`
+                                `/course/${cursoId}/grades?${new URLSearchParams({
+                                    ...(professorGroupSubjectId ? { gs: professorGroupSubjectId } : {}),
+                                    returnTo: professorDetailBasePath,
+                                }).toString()}`
                             )
                         }
                     >
@@ -1079,7 +1092,11 @@ export default function CourseDetailPage() {
                     {/* Carta 4: Asistencia */}
                     <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-emerald-500/20"
-                        onClick={() => setLocation(`/course/${cursoId}/asistencia`)}
+                        onClick={() =>
+                            setLocation(
+                                `/course/${cursoId}/asistencia?returnTo=${encodeURIComponent(professorDetailBasePath)}&materiaNombre=${encodeURIComponent(activeSubjectNombre || '')}`
+                            )
+                        }
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#059669] via-[#10B981] to-emerald-400 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30">
@@ -1182,30 +1199,42 @@ export default function CourseDetailPage() {
                                     <p className="text-white/50 text-sm mb-4">
                                         Si eliges <strong className="text-white/80">No</strong>, la tarea aparece en el calendario como cualquier otra, pero no podrán subir entrega ni se calificará por entrega.
                                     </p>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <Button
                                             type="button"
                                             onClick={() => {
-                                                setRequiresStudentDelivery(true);
+                                                setAssignmentDeliveryMode('evo');
                                                 setAssignmentCreationPhase('form');
                                             }}
                                             className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/25 to-[#002366]/25 border border-[#1e3cff]/50 hover:from-[#1e3cff]/35 hover:to-[#002366]/35 rounded-[12px] transition-all duration-150 ease-in-out"
                                         >
                                             <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
-                                            <span className="text-white font-semibold">Sí, requiere entrega</span>
-                                            <span className="text-white/60 text-sm text-center px-2">Los estudiantes envían archivos o texto y se puede calificar la entrega.</span>
+                                            <span className="text-white font-semibold">Sí requiere entrega en Evo</span>
+                                            <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">Los estudiantes envían archivos o texto y se puede calificar la entrega.</span>
                                         </Button>
                                         <Button
                                             type="button"
                                             onClick={() => {
-                                                setRequiresStudentDelivery(false);
+                                                setAssignmentDeliveryMode('clase');
+                                                setAssignmentCreationPhase('form');
+                                            }}
+                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-white/10 to-white/5 border border-white/20 hover:bg-white/10 rounded-[12px] transition-all duration-150 ease-in-out"
+                                        >
+                                            <FileText className="w-8 h-8 text-white/80" />
+                                            <span className="text-white font-semibold">Entrega en Clase</span>
+                                            <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">No se sube en la plataforma; el docente puede calificar en clase.</span>
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            onClick={() => {
+                                                setAssignmentDeliveryMode('sin-entrega');
                                                 setAssignmentCreationPhase('form');
                                             }}
                                             className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-white/10 to-white/5 border border-white/20 hover:bg-white/10 rounded-[12px] transition-all duration-150 ease-in-out"
                                         >
                                             <FileText className="w-8 h-8 text-white/80" />
                                             <span className="text-white font-semibold">No requiere entrega</span>
-                                            <span className="text-white/60 text-sm text-center px-2">Solo aviso o actividad informativa; sin entrega en la plataforma.</span>
+                                            <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">Solo aviso o actividad informativa; sin entrega ni calificación.</span>
                                         </Button>
                                     </div>
                                 </div>
@@ -1217,13 +1246,15 @@ export default function CourseDetailPage() {
                                                 Asignación
                                             </Badge>
                                             <Badge
-                                                className={
-                                                    requiresStudentDelivery
-                                                        ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
-                                                        : 'bg-white/10 text-white/80 border-white/25'
-                                                }
+                                                className={requiresStudentDelivery
+                                                    ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
+                                                    : 'bg-white/10 text-white/80 border-white/25'}
                                             >
-                                                {requiresStudentDelivery ? 'Con entrega' : 'Sin entrega'}
+                                                {assignmentDeliveryMode === 'evo'
+                                                    ? 'Con entrega en Evo'
+                                                    : assignmentDeliveryMode === 'clase'
+                                                        ? 'Entrega en clase'
+                                                        : 'Sin entrega'}
                                             </Badge>
                                         </div>
                                         <Button
@@ -1606,7 +1637,7 @@ export default function CourseDetailPage() {
                                                 key={student._id}
                                                 className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
                                                 onClick={() => {
-                                                    setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}`);
+                                                    setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}?returnTo=${encodeURIComponent(professorDetailBasePath)}`);
                                                     setShowStudentsDialog(false);
                                                 }}
                                             >
@@ -2024,7 +2055,7 @@ export default function CourseDetailPage() {
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <Calendar assignments={assignments} onDayClick={handleDayClick} />
+                                    <Calendar assignments={assignments} onDayClick={handleDayClick} onEmptyDayClick={handleEmptyDayClick} />
                                 </CardContent>
                             </Card>
                         ) : (
@@ -2168,7 +2199,7 @@ export default function CourseDetailPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Calendar assignments={assignments} onDayClick={handleDayClick} />
+                    <Calendar assignments={assignments} onDayClick={handleDayClick} onEmptyDayClick={handleEmptyDayClick} />
                 </CardContent>
             </Card>
         </>

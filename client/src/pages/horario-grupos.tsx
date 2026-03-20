@@ -81,7 +81,7 @@ export default function HorarioGruposPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0f1a] text-[#E2E8F0] p-6">
+    <div className="w-full bg-[#0a0f1a] text-[#E2E8F0] p-6 rounded-2xl border border-white/10">
       <NavBackButton to="/profesor/academia" label="Academia" />
       <div className="max-w-6xl mx-auto mt-4">
         <div className="flex items-center gap-3 mb-6">

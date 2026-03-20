@@ -35,7 +35,9 @@ export default function TeacherGroupTasksPage() {
   const [, params] = useRoute('/profesor/cursos/:cursoId/tareas');
   const cursoId = params?.cursoId || '';
   const search = typeof window !== 'undefined' ? window.location.search : '';
-  const materiaIdFromUrl = new URLSearchParams(search).get('materiaId') || '';
+  const pageParams = new URLSearchParams(search);
+  const materiaIdFromUrl = pageParams.get('materiaId') || '';
+  const returnTo = pageParams.get('returnTo') || `/course-detail/${cursoId}${materiaIdFromUrl ? `/materia/${materiaIdFromUrl}` : ''}`;
 
   const assignarHref = (() => {
     const q = new URLSearchParams();
@@ -53,6 +55,17 @@ export default function TeacherGroupTasksPage() {
     staleTime: 5 * 60 * 1000,
   });
   const groupDisplayName = (groupInfo?.nombre?.trim() || cursoId).toUpperCase();
+  const { data: professorGroups = [] } = useQuery<Array<{ groupId: string; subjects: Array<{ _id: string; nombre: string }> }>>({
+    queryKey: ['professorGroups', 'tasks-breadcrumb'],
+    queryFn: () => apiRequest('GET', '/api/professor/my-groups'),
+    enabled: !!materiaIdFromUrl,
+    staleTime: 5 * 60 * 1000,
+  });
+  const materiaNombre = materiaIdFromUrl
+    ? professorGroups
+        .find((g) => g.groupId === cursoId)
+        ?.subjects?.find((s) => s._id === materiaIdFromUrl)?.nombre
+    : '';
 
   // Obtener mes y año actuales
   const now = new Date();
@@ -99,8 +112,10 @@ export default function TeacherGroupTasksPage() {
           <Breadcrumb
             className="mb-4"
             items={[
-              { label: 'Calendario General', href: '/teacher-calendar' },
-              { label: `Grupo ${groupDisplayName}`, href: `/course-detail/${cursoId}` },
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Academia', href: '/profesor/academia' },
+              { label: 'Cursos', href: '/profesor/academia/cursos' },
+              { label: materiaNombre ? `${materiaNombre} · ${groupDisplayName}` : `Grupo ${groupDisplayName}`, href: returnTo },
               { label: 'Tareas' },
             ]}
           />
@@ -232,7 +247,7 @@ export default function TeacherGroupTasksPage() {
                   <Button
                     variant="outline"
                     className="border-white/20 text-white hover:bg-white/10"
-                    onClick={() => setLocation(`/course-detail/${cursoId}`)}
+                    onClick={() => setLocation(returnTo)}
                   >
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Volver al Grupo

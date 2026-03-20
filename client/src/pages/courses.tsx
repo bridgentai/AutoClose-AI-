@@ -9,6 +9,7 @@ import { useLocation } from 'wouter';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
+import { Breadcrumb } from '@/components/Breadcrumb';
 
 // =========================================================
 // 1. INTERFACES Y CONSTANTES
@@ -231,7 +232,7 @@ const groups = professorGroups || [];
 
 return (
 <>
-<NavBackButton to="/profesor/academia" label="Academia" />
+<Breadcrumb className="mb-4" items={[{ label: 'Academia', href: '/profesor/academia' }]} />
 <div className="mb-6 mt-4">
 <h2 className="text-3xl font-bold text-white font-['Poppins']">Mis Grupos Asignados</h2>
 </div>

@@ -409,6 +409,8 @@ export default function CourseGradesTablePage() {
 
   const gsFromQuery =
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('gs') || '' : '';
+  const returnToFromQuery =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('returnTo') || '' : '';
   const firstSubjectId = useMemo(() => {
     if (!subjectsForGroup.length) return '';
     if (gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)) return gsFromQuery;
@@ -635,7 +637,9 @@ export default function CourseGradesTablePage() {
     subjectsForGroup.find((s) => s._id === firstSubjectId)?.nombre ?? subjectsForGroup[0]?.nombre ?? 'Notas';
   const pageTitle = `${groupDisplayName} – ${subjectLabel}`;
   const backToCourseHref =
-    gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)
+    returnToFromQuery
+      ? returnToFromQuery
+      : gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)
       ? `/course-detail/${cursoId}/materia/${gsFromQuery}`
       : `/course-detail/${cursoId}`;
 

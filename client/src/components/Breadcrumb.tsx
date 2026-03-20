@@ -8,6 +8,7 @@ export type BreadcrumbItem = {
 export function Breadcrumb({ items, className = '' }: { items: BreadcrumbItem[]; className?: string }) {
   const lastIdx = items.length - 1;
   const prev = items.length >= 2 ? items[items.length - 2] : null;
+  const isSingleItem = items.length === 1;
 
   return (
     <nav aria-label="Breadcrumb" className={`text-[13px] ${className}`.trim()}>
@@ -37,12 +38,21 @@ export function Breadcrumb({ items, className = '' }: { items: BreadcrumbItem[];
       <ol className="hidden sm:flex flex-wrap items-center gap-0">
         {items.map((it, idx) => {
           const isLast = idx === lastIdx;
-          const content = it.href && !isLast ? (
-            <Link href={it.href} className="text-white/50 hover:text-white/70 transition-colors">
+          const content = it.href ? (
+            <Link
+              href={it.href}
+              className={
+                isLast
+                  ? isSingleItem
+                    ? 'text-white/90 font-medium hover:text-white transition-colors'
+                    : 'text-[#3B82F6] font-medium hover:text-[#60A5FA] transition-colors'
+                  : 'text-white/50 hover:text-white/70 transition-colors'
+              }
+            >
               {it.label}
             </Link>
           ) : (
-            <span className={isLast ? 'text-white/90' : 'text-white/50'}>{it.label}</span>
+            <span className={isLast ? (isSingleItem ? 'text-white/90 font-medium' : 'text-[#3B82F6] font-medium') : 'text-white/50'}>{it.label}</span>
           );
 
           return (

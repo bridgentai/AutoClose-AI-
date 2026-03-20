@@ -49,6 +49,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useLocation } from 'wouter';
 
 /** Carpeta por materia para profesor (cada ítem = group_subject). */
 interface TeacherFolder {
@@ -192,6 +193,7 @@ interface SelectedFolder {
 
 export default function EvoDrivePage() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [selectedFolder, setSelectedFolder] = useState<SelectedFolder | null>(null);
@@ -206,6 +208,10 @@ export default function EvoDrivePage() {
   const [createNewType, setCreateNewType] = useState<'doc' | 'sheet' | 'slide'>('doc');
   const [createNewNombre, setCreateNewNombre] = useState('');
   const [expandedAdminCourseId, setExpandedAdminCourseId] = useState<string | null>(null);
+  const [librarySection, setLibrarySection] = useState<'all' | 'recent' | 'starred' | 'trash'>('all');
+  const [sortMode, setSortMode] = useState<'recent' | 'oldest' | 'name-asc' | 'name-desc'>('recent');
+  const [starredIds, setStarredIds] = useState<string[]>([]);
+  const [trashIds, setTrashIds] = useState<string[]>([]);
   const isTeacher = user?.rol && ROLES_WRITE.includes(user.rol);
   const isProfesor = user?.rol === 'profesor';
   const isAdminOrDirectivo = ['admin-general-colegio', 'directivo', 'school_admin', 'super_admin'].includes(user?.rol || '');
@@ -441,15 +447,57 @@ export default function EvoDrivePage() {
     }
   }, [queryClient, toast]);
 
-  const allFilesSorted = [...files].sort((a, b) =>
-    (a.nombre || '').localeCompare(b.nombre || '', undefined, { sensitivity: 'base' })
-  );
-  const allFiles = fileSearch.trim()
+  useEffect(() => {
+    try {
+      const rawStarred = localStorage.getItem('evo-drive-starred');
+      const rawTrash = localStorage.getItem('evo-drive-trash');
+      if (rawStarred) setStarredIds(JSON.parse(rawStarred));
+      if (rawTrash) setTrashIds(JSON.parse(rawTrash));
+    } catch {
+      setStarredIds([]);
+      setTrashIds([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('evo-drive-starred', JSON.stringify(starredIds));
+  }, [starredIds]);
+
+  useEffect(() => {
+    localStorage.setItem('evo-drive-trash', JSON.stringify(trashIds));
+  }, [trashIds]);
+
+  const allFilesSorted = [...files];
+  const withSearch = fileSearch.trim()
     ? allFilesSorted.filter((f) =>
         (f.nombre || '').toLowerCase().includes(fileSearch.trim().toLowerCase())
       )
     : allFilesSorted;
+  const nonTrash = withSearch.filter((f) => !trashIds.includes(f.id));
+  const activeSectionFiles = librarySection === 'trash'
+    ? withSearch.filter((f) => trashIds.includes(f.id))
+    : librarySection === 'starred'
+      ? nonTrash.filter((f) => starredIds.includes(f.id))
+      : librarySection === 'recent'
+        ? [...nonTrash]
+        : nonTrash;
+  const indexedFiles = activeSectionFiles.map((f, idx) => ({ f, idx }));
+  const allFiles = [...indexedFiles].sort((a, b) => {
+    if (sortMode === 'recent') return b.idx - a.idx;
+    if (sortMode === 'oldest') return a.idx - b.idx;
+    const nameA = (a.f.nombre || '').toLowerCase();
+    const nameB = (b.f.nombre || '').toLowerCase();
+    if (sortMode === 'name-asc') return nameA.localeCompare(nameB);
+    if (sortMode === 'name-desc') return nameB.localeCompare(nameA);
+    return 0;
+  }).map((x) => x.f);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toggleStar = (id: string) => {
+    setStarredIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+  const toggleTrash = (id: string) => {
+    setTrashIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
 
   // Enlace para abrir en Drive cuando la API no devuelve webViewLink
   const driveViewLink = (id: string, mimeType?: string) => {
@@ -565,22 +613,22 @@ export default function EvoDrivePage() {
         </div>
         <section className="mb-4">
           <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Navegación</p>
-          <button type="button" className="w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
+          <button type="button" onClick={() => setLibrarySection('all')} className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'all' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
             <span className="flex items-center gap-2">
               <FolderOpen className="w-4 h-4 text-white" />
               Todos los archivos
             </span>
             <span className="bg-[#3B82F6]/30 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full">{allFiles.length}</span>
           </button>
-          <button type="button" className="w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
+          <button type="button" onClick={() => setLibrarySection('recent')} className={`w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'recent' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
             <FileText className="w-4 h-4 text-white" />
             Recientes
           </button>
-          <button type="button" className="w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
+          <button type="button" onClick={() => setLibrarySection('starred')} className={`w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'starred' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
             <Star className="w-4 h-4 text-white" />
             Destacados
           </button>
-          <button type="button" className="w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
+          <button type="button" onClick={() => setLibrarySection('trash')} className={`w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'trash' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
             <Trash2 className="w-4 h-4 text-white" />
             Papelera
           </button>
@@ -666,6 +714,19 @@ export default function EvoDrivePage() {
 
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto relative">
         {isTeacher && selectedFolder && (
+          <div className="shrink-0 px-6 pt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-[#3B82F6] hover:text-[#2563EB] hover:bg-white/5 px-0"
+              onClick={() => setLocation(`/course-detail/${selectedFolder.groupId}/materia/${selectedFolder.groupSubjectId}`)}
+            >
+              <ChevronRight className="w-4 h-4 mr-1 rotate-180" />
+              Volver al curso
+            </Button>
+          </div>
+        )}
+        {isTeacher && selectedFolder && (
           <div className="shrink-0 flex items-center gap-4 px-6 py-3 border-b border-white/10">
             <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-[#1E3A8A]/40 border border-white/10 py-2 px-3">
               <Search className="w-4 h-4 text-white/50 shrink-0" />
@@ -688,18 +749,30 @@ export default function EvoDrivePage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[#E2E8F0] hover:bg-[#1E3A8A]/40 border border-white/10 text-sm">
-                  Más reciente primero
+                  {sortMode === 'recent' && 'Más reciente primero'}
+                  {sortMode === 'oldest' && 'Más antiguo primero'}
+                  {sortMode === 'name-asc' && 'Nombre A-Z'}
+                  {sortMode === 'name-desc' && 'Nombre Z-A'}
                   <ChevronDown className="w-4 h-4 text-white/50" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-[#0F172A] border border-white/10 rounded-xl p-1 min-w-[180px]">
-                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/90 focus:bg-white/[0.06] focus:text-white">
-                  <Check className="w-4 h-4 text-[#00c8ff]" />
+                <DropdownMenuItem onClick={() => setSortMode('recent')} className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/90 focus:bg-white/[0.06] focus:text-white">
+                  <Check className={`w-4 h-4 text-[#00c8ff] ${sortMode === 'recent' ? 'opacity-100' : 'opacity-0'}`} />
                   Más reciente primero
                 </DropdownMenuItem>
-                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">Más antiguo primero</DropdownMenuItem>
-                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">Nombre A–Z</DropdownMenuItem>
-                <DropdownMenuItem className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">Nombre Z–A</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortMode('oldest')} className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">
+                  <Check className={`w-4 h-4 text-[#00c8ff] ${sortMode === 'oldest' ? 'opacity-100' : 'opacity-0'}`} />
+                  Más antiguo primero
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortMode('name-asc')} className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">
+                  <Check className={`w-4 h-4 text-[#00c8ff] ${sortMode === 'name-asc' ? 'opacity-100' : 'opacity-0'}`} />
+                  Nombre A-Z
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortMode('name-desc')} className="flex items-center gap-2 rounded-lg py-2 px-3 text-white/50 focus:bg-white/[0.06] focus:text-white">
+                  <Check className={`w-4 h-4 text-[#00c8ff] ${sortMode === 'name-desc' ? 'opacity-100' : 'opacity-0'}`} />
+                  Nombre Z-A
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -777,7 +850,16 @@ export default function EvoDrivePage() {
               ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-4">
                   {allFiles.map((f) => (
-                    <FileRow key={f.id} file={f} variant="grid" />
+                    <FileRow
+                      key={f.id}
+                      file={f}
+                      variant="grid"
+                      isStarred={starredIds.includes(f.id)}
+                      isInTrash={trashIds.includes(f.id)}
+                      onToggleStar={toggleStar}
+                      onToggleTrash={toggleTrash}
+                      onOpenTrash={() => setLibrarySection('trash')}
+                    />
                   ))}
                 </div>
               ) : (
@@ -794,7 +876,15 @@ export default function EvoDrivePage() {
                     </thead>
                     <tbody>
                       {allFiles.map((f) => (
-                        <FileRow key={f.id} file={f} variant="list" />
+                        <FileRow
+                          key={f.id}
+                          file={f}
+                          variant="list"
+                          isStarred={starredIds.includes(f.id)}
+                          isInTrash={trashIds.includes(f.id)}
+                          onToggleStar={toggleStar}
+                          onToggleTrash={toggleTrash}
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -1412,7 +1502,26 @@ const FILE_TYPE_STYLES: Record<string, { icon: React.ReactNode; color: string; h
 };
 const defaultStyle = { icon: <FileText className="w-5 h-5 text-[#f59e0b]" />, color: '#f59e0b', hex: '#f59e0b' };
 
-function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; variant?: 'grid' | 'list' }) {
+function FileRow({
+  file,
+  isNew,
+  variant,
+  isStarred = false,
+  isInTrash = false,
+  onToggleStar,
+  onToggleTrash,
+  onOpenTrash,
+}: {
+  file: EvoFile;
+  isNew?: boolean;
+  variant?: 'grid' | 'list';
+  isStarred?: boolean;
+  isInTrash?: boolean;
+  onToggleStar?: (id: string) => void;
+  onToggleTrash?: (id: string) => void;
+  /** Tras enviar a la papelera, activa la sección Papelera (sidebar). */
+  onOpenTrash?: () => void;
+}) {
   const link = file.googleWebViewLink || file.evoStorageUrl || '#';
   const isGoogle = file.origen === 'google';
   const style = FILE_TYPE_STYLES[file.tipo] || defaultStyle;
@@ -1437,9 +1546,28 @@ function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; var
             <button type="button" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Renombrar">
               <Pencil className="w-4 h-4" />
             </button>
-            <button type="button" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Eliminar">
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {onToggleTrash ? (
+              <button
+                type="button"
+                className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10"
+                aria-label={isInTrash ? 'Restaurar desde la papelera' : 'Mover a la papelera'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isInTrash) {
+                    onToggleTrash(file.id);
+                    onOpenTrash?.();
+                  } else {
+                    onToggleTrash(file.id);
+                  }
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            ) : (
+              <button type="button" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Eliminar">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
         <p className="text-[12px] text-white/70 font-medium text-center leading-tight truncate max-w-[90px]">{file.nombre}</p>
@@ -1504,6 +1632,37 @@ function FileRow({ file, isNew, variant }: { file: EvoFile; isNew?: boolean; var
             <ExternalLink className="w-3.5 h-3.5" />
             Abrir en Drive
           </a>
+        )}
+        {onToggleStar && (
+          <button
+            type="button"
+            className={`w-[30px] h-[30px] rounded-lg flex items-center justify-center transition-colors ${
+              isStarred ? 'text-amber-400 bg-amber-500/10' : 'text-[#E2E8F0]/70 hover:bg-[#1E3A8A]/50 hover:text-white'
+            }`}
+            aria-label="Destacar archivo"
+            onClick={() => onToggleStar(file.id)}
+          >
+            <Star className="w-4 h-4" />
+          </button>
+        )}
+        {onToggleTrash && (
+          <button
+            type="button"
+            className={`w-[30px] h-[30px] rounded-lg flex items-center justify-center transition-colors ${
+              isInTrash ? 'text-rose-400 bg-rose-500/10' : 'text-[#E2E8F0]/70 hover:bg-[#1E3A8A]/50 hover:text-white'
+            }`}
+            aria-label={isInTrash ? 'Restaurar desde la papelera' : 'Mover a la papelera'}
+            onClick={() => {
+              if (!isInTrash) {
+                onToggleTrash(file.id);
+                onOpenTrash?.();
+              } else {
+                onToggleTrash(file.id);
+              }
+            }}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         )}
         <button
           type="button"

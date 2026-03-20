@@ -27,7 +27,7 @@ const router = express.Router();
 
 const DISCIPLINE_ALLOWED_ROLES = ['profesor', 'directivo'] as const;
 const isValidSeverity = (s: unknown): s is DisciplinarySeverity =>
-  s === 'leve' || s === 'moderada' || s === 'grave' || s === 'muy grave';
+  s === 'leve' || s === 'grave' || s === 'suma gravedad';
 
 // GET /api/student/subjects
 router.get('/subjects', protect, async (req: AuthRequest, res) => {
@@ -164,7 +164,7 @@ router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequ
         sender_id: requesterId,
         sender_role: requester.role,
         content: `${title}\n\n${content}`,
-        priority: severityRaw === 'grave' || severityRaw === 'muy grave' ? 'alta' : 'normal',
+        priority: severityRaw === 'grave' || severityRaw === 'suma gravedad' ? 'alta' : 'normal',
       });
 
       emitEvoMessageBroadcast(
