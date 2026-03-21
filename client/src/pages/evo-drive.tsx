@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/authContext';
@@ -110,8 +110,33 @@ interface GoogleDriveFile {
 
 const ROLES_WRITE = ['profesor', 'directivo', 'school_admin', 'super_admin', 'admin-general-colegio'];
 
-// Carpeta por materia (vista estudiante): archivos del profesor para esa materia. groupId + groupSubjectId.
-function SubjectFolder({ folder }: { folder: SubjectFolder }) {
+/** Nombre API "Materia — Curso" → partes (mismo criterio que el backend). */
+function parseTeacherFolderName(name: string): { materia: string; curso: string } {
+  const sep = ' — ';
+  if (name.includes(sep)) {
+    const i = name.indexOf(sep);
+    return {
+      materia: name.slice(0, i).trim(),
+      curso: name.slice(i + sep.length).trim() || name,
+    };
+  }
+  return { materia: name, curso: '' };
+}
+
+// Carpeta por materia (vista estudiante / profesor): archivos del curso para esa materia. groupId + groupSubjectId.
+function SubjectFolder({
+  folder,
+  onTeacherSelect,
+  teacherSelected,
+  nameSuffix,
+}: {
+  folder: SubjectFolder;
+  /** Profesor: al elegir carpeta para subir archivos (toolbar global). */
+  onTeacherSelect?: () => void;
+  teacherSelected?: boolean;
+  /** Ej. nombre del curso debajo del título de la materia */
+  nameSuffix?: string;
+}) {
   const [open, setOpen] = useState(true);
   const { data: files = [], isLoading } = useQuery<EvoFile[]>({
     queryKey: ['evo-drive', 'files', folder.groupId, folder.id],
@@ -127,10 +152,15 @@ function SubjectFolder({ folder }: { folder: SubjectFolder }) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <Card className="bg-[#1E3A8A]/25 border-white/10 overflow-hidden">
+      <Card
+        className={`bg-[#1E3A8A]/25 border-white/10 overflow-hidden ${
+          teacherSelected ? 'ring-2 ring-[#3B82F6]/80 ring-offset-2 ring-offset-[#020617]' : ''
+        }`}
+      >
         <CollapsibleTrigger asChild>
           <button
             type="button"
+            onClick={() => onTeacherSelect?.()}
             className="w-full flex items-center gap-3 p-4 text-left hover:bg-[#1E3A8A]/40 transition-colors"
           >
             {open ? (
@@ -143,8 +173,13 @@ function SubjectFolder({ folder }: { folder: SubjectFolder }) {
             ) : (
               <FolderOpen className="w-6 h-6 text-[#3B82F6] shrink-0" />
             )}
-            <span className="font-semibold text-white">{folder.name}</span>
-            <span className="text-[#E2E8F0]/70 text-sm ml-auto">
+            <span className="flex flex-col items-start min-w-0 flex-1 text-left">
+              <span className="font-semibold text-white truncate w-full">{folder.name}</span>
+              {nameSuffix ? (
+                <span className="text-xs text-[#E2E8F0]/55 font-normal truncate w-full">{nameSuffix}</span>
+              ) : null}
+            </span>
+            <span className="text-[#E2E8F0]/70 text-sm shrink-0">
               {files.length} {files.length === 1 ? 'archivo' : 'archivos'}
             </span>
           </button>
@@ -169,6 +204,71 @@ function SubjectFolder({ folder }: { folder: SubjectFolder }) {
         </CollapsibleContent>
       </Card>
     </Collapsible>
+  );
+}
+
+/** Profesor: un bloque por curso (grupo) con carpetas de materia dentro, mismo estilo que el estudiante. */
+function ProfessorCourseBlock({
+  groupId,
+  groupName,
+  folders,
+  selectedGroupSubjectId,
+  onSelectFolder,
+}: {
+  groupId: string;
+  groupName: string;
+  folders: TeacherFolder[];
+  selectedGroupSubjectId: string | undefined;
+  onSelectFolder: (f: TeacherFolder) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div id={`evo-drive-course-${groupId}`}>
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <Card className="bg-[#0c1929]/80 border-white/[0.08] overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/[0.04] transition-colors border-b border-white/[0.06]"
+          >
+            {open ? (
+              <ChevronDown className="w-5 h-5 text-[#60A5FA] shrink-0" />
+            ) : (
+              <ChevronRight className="w-5 h-5 text-[#60A5FA] shrink-0" />
+            )}
+            <FolderOpen className="w-7 h-7 text-[#60A5FA] shrink-0" />
+            <div className="flex flex-col items-start min-w-0 flex-1">
+              <span className="text-xs uppercase tracking-wider text-white/45 font-semibold">Curso</span>
+              <span className="font-bold text-lg text-white tracking-tight truncate w-full">{groupName}</span>
+            </div>
+            <span className="text-white/50 text-sm shrink-0">
+              {folders.length} {folders.length === 1 ? 'materia' : 'materias'}
+            </span>
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="pt-4 pb-4 px-3 space-y-3">
+            {folders.map((tf) => {
+              const { materia } = parseTeacherFolderName(tf.name);
+              return (
+                <SubjectFolder
+                  key={tf.groupSubjectId}
+                  folder={{
+                    id: tf.groupSubjectId,
+                    name: materia,
+                    groupId: tf.groupId,
+                    groupName: groupName,
+                  }}
+                  onTeacherSelect={() => onSelectFolder(tf)}
+                  teacherSelected={selectedGroupSubjectId === tf.groupSubjectId}
+                />
+              );
+            })}
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
+    </div>
   );
 }
 
@@ -239,6 +339,23 @@ export default function EvoDrivePage() {
   const teacherFolders: TeacherFolder[] = isProfesor ? (groupsData as TeacherFolder[]) : [];
   const adminGroups: EvoGroupWithSubjects[] = isAdminOrDirectivo ? (groupsData as EvoGroupWithSubjects[]) : [];
 
+  /** Profesor: un bloque por curso (grupo), con materias dentro — mismo criterio que la vista estudiante. */
+  const professorCourses = useMemo(() => {
+    if (!isProfesor || teacherFolders.length === 0) return [];
+    const map = new Map<string, TeacherFolder[]>();
+    for (const f of teacherFolders) {
+      if (!map.has(f.groupId)) map.set(f.groupId, []);
+      map.get(f.groupId)!.push(f);
+    }
+    return [...map.entries()]
+      .map(([groupId, folders]) => {
+        const groupName = parseTeacherFolderName(folders[0].name).curso || folders[0].name;
+        const sorted = [...folders].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        return { groupId, groupName, folders: sorted };
+      })
+      .sort((a, b) => a.groupName.localeCompare(b.groupName, 'es'));
+  }, [isProfesor, teacherFolders]);
+
   // Derivados de la carpeta seleccionada (profesor y admin/directivo)
   const cursoId = selectedFolder?.groupId ?? '';
   const selectedGroupSubjectId = selectedFolder?.groupSubjectId ?? '';
@@ -301,12 +418,12 @@ export default function EvoDrivePage() {
   useEffect(() => {
     if (isProfesor && teacherFolders.length > 0 && !selectedFolder) {
       const f = teacherFolders[0];
-      const groupName = f.name.includes(' — ') ? f.name.split(' — ')[1]?.trim() ?? f.name : f.name;
+      const { curso } = parseTeacherFolderName(f.name);
       setSelectedFolder({
         groupId: f.groupId,
         groupSubjectId: f.groupSubjectId,
         folderName: f.name,
-        groupName,
+        groupName: curso || f.name,
       });
     }
   }, [isProfesor, teacherFolders, selectedFolder]);
@@ -635,26 +752,48 @@ export default function EvoDrivePage() {
         </section>
         <section className="mb-4">
           <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Cursos</p>
-          {isProfesor && teacherFolders.map((f) => {
-            const isActive = selectedFolder?.groupSubjectId === f.groupSubjectId;
-            return (
-              <button
-                key={f.groupSubjectId}
-                type="button"
-                onClick={() => {
-                  const groupName = f.name.includes(' — ') ? f.name.split(' — ')[1]?.trim() ?? f.name : f.name;
-                  setSelectedFolder({ groupId: f.groupId, groupSubjectId: f.groupSubjectId, folderName: f.name, groupName });
-                }}
-                className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'}`}
-              >
-                <span className="flex items-center gap-2 min-w-0 truncate">
-                  <FolderOpen className="w-4 h-4 shrink-0 text-white" />
-                  <span className="truncate">{f.name}</span>
-                </span>
-                <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{isActive ? allFiles.length : 0}</span>
-              </button>
-            );
-          })}
+          {isProfesor &&
+            professorCourses.map((course) => (
+              <div key={course.groupId} className="mb-3">
+                <p
+                  className="text-[10px] uppercase font-bold text-white/40 tracking-widest mx-2 mb-1.5 truncate"
+                  style={{ letterSpacing: '0.12em' }}
+                  title={course.groupName}
+                >
+                  {course.groupName}
+                </p>
+                {course.folders.map((f) => {
+                  const isActive = selectedFolder?.groupSubjectId === f.groupSubjectId;
+                  const { materia } = parseTeacherFolderName(f.name);
+                  return (
+                    <button
+                      key={f.groupSubjectId}
+                      type="button"
+                      onClick={() => {
+                        const { curso } = parseTeacherFolderName(f.name);
+                        setSelectedFolder({
+                          groupId: f.groupId,
+                          groupSubjectId: f.groupSubjectId,
+                          folderName: f.name,
+                          groupName: curso || f.name,
+                        });
+                        const el = document.getElementById(`evo-drive-course-${f.groupId}`);
+                        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                      }}
+                      className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'}`}
+                    >
+                      <span className="flex items-center gap-2 min-w-0 truncate">
+                        <FolderOpen className="w-4 h-4 shrink-0 text-white" />
+                        <span className="truncate">{materia}</span>
+                      </span>
+                      <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">
+                        {isActive ? allFiles.length : 0}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           {isAdminOrDirectivo && adminGroups.map((g) => {
             const expanded = expandedAdminCourseId === g.id;
             return (
@@ -726,7 +865,7 @@ export default function EvoDrivePage() {
             </Button>
           </div>
         )}
-        {isTeacher && selectedFolder && (
+        {isTeacher && selectedFolder && !isProfesor && (
           <div className="shrink-0 flex items-center gap-4 px-6 py-3 border-b border-white/10">
             <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-[#1E3A8A]/40 border border-white/10 py-2 px-3">
               <Search className="w-4 h-4 text-white/50 shrink-0" />
@@ -833,7 +972,40 @@ export default function EvoDrivePage() {
           </div>
         )}
 
-        {isTeacher ? (
+        {isProfesor ? (
+          <>
+            <div className="flex-1 p-6 overflow-auto space-y-4 min-h-0">
+              {teacherFolders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border border-white/10 bg-white/[0.03]">
+                  <FolderOpen className="w-12 h-12 text-white/30 mb-4" />
+                  <p className="text-white/70 font-medium">Sin cursos asignados</p>
+                  <p className="text-white/50 text-sm mt-1 max-w-md px-4">
+                    Cuando te asignen materias y grupos, verás aquí una carpeta por cada curso con las materias que impartes.
+                  </p>
+                </div>
+              ) : (
+                professorCourses.map((course) => (
+                  <ProfessorCourseBlock
+                    key={course.groupId}
+                    groupId={course.groupId}
+                    groupName={course.groupName}
+                    folders={course.folders}
+                    selectedGroupSubjectId={selectedFolder?.groupSubjectId}
+                    onSelectFolder={(tf) => {
+                      const { curso } = parseTeacherFolderName(tf.name);
+                      setSelectedFolder({
+                        groupId: tf.groupId,
+                        groupSubjectId: tf.groupSubjectId,
+                        folderName: tf.name,
+                        groupName: curso || tf.name,
+                      });
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </>
+        ) : isTeacher ? (
           <>
             <div className="flex-1 p-6 overflow-auto">
               {!selectedFolder ? (

@@ -1,6 +1,12 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import { findUserById } from './repositories/userRepository.js';
+import { findAnnouncementById } from './repositories/announcementRepository.js';
+import {
+  isStudentGroupEvoThreadType,
+  isWithinStudentEvoSendWriteWindow,
+} from './services/evoSendStudentHours.js';
 
 let io: Server | null = null;
 
@@ -10,7 +16,7 @@ export function setupEvoSocket(httpServer: HttpServer): Server {
     cors: { origin: true, credentials: true },
   });
 
-  io.on('connection', (socket: Socket) => {
+  io.on('connection', async (socket: Socket) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     let userId: string | null = null;
 
@@ -29,6 +35,12 @@ export function setupEvoSocket(httpServer: HttpServer): Server {
     }
 
     socket.data.userId = userId;
+    try {
+      const u = await findUserById(userId);
+      socket.data.role = u?.role ?? null;
+    } catch {
+      socket.data.role = null;
+    }
     socket.join(`user:${userId}`);
 
     socket.on('evo:join', (threadId: string) => {
@@ -40,13 +52,25 @@ export function setupEvoSocket(httpServer: HttpServer): Server {
     });
 
     socket.on('evo:typing', (payload: { threadId: string; userName?: string }) => {
-      if (payload?.threadId) {
+      if (!payload?.threadId) return;
+      void (async () => {
+        const role = socket.data.role as string | undefined;
+        if (role === 'estudiante') {
+          const ann = await findAnnouncementById(payload.threadId);
+          if (
+            ann &&
+            isStudentGroupEvoThreadType(ann.type) &&
+            !isWithinStudentEvoSendWriteWindow()
+          ) {
+            return;
+          }
+        }
         socket.to(`thread:${payload.threadId}`).emit('evo:typing', {
           userId,
           userName: payload.userName,
           threadId: payload.threadId,
         });
-      }
+      })();
     });
 
     socket.on('disconnect', () => {});

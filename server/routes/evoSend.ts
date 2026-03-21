@@ -29,6 +29,11 @@ import {
 import { findGroupsByInstitution } from '../repositories/groupRepository.js';
 import { findEnrollmentsByStudent } from '../repositories/enrollmentRepository.js';
 import { emitEvoMessageBroadcast } from '../socket.js';
+import {
+  getEvoSendStudentChatTimezone,
+  isWithinStudentEvoSendWriteWindow,
+  studentCanWriteEvoSendNow,
+} from '../services/evoSendStudentHours.js';
 
 const router = express.Router();
 // Evo Send accesible para todos los roles autenticados (filtrado por permisos por hilo).
@@ -179,6 +184,22 @@ async function buildSupportThreadForStaff(
   };
 }
 
+/** Estado de horario para que estudiantes vean si pueden escribir en chats de grupo (Evo Send). */
+router.get('/write-window', protect, requireRole(...EVO_SEND_ROLES), async (req: AuthRequest, res) => {
+  const rol = req.user?.rol;
+  const timezone = getEvoSendStudentChatTimezone();
+  if (rol !== 'estudiante') {
+    return res.json({ restricted: false, allowed: true, timezone });
+  }
+  return res.json({
+    restricted: true,
+    allowed: isWithinStudentEvoSendWriteWindow(),
+    timezone,
+    windowStart: '07:00',
+    windowEnd: '18:59',
+  });
+});
+
 router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: AuthRequest, res) => {
   try {
     const userId = req.user?.id;
@@ -246,16 +267,16 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
         const list = await findGroupSubjectsByGroupWithDetails(e.group_id, colegioId);
         allGsWithDetails.push(...list);
       }
-      const seenPair = new Set<string>();
-      const uniqueByGroupTeacher: typeof allGsWithDetails = [];
+      /** Un hilo Evo Send por (grupo + profesor); varias materias del mismo par comparten hilo — el título muestra las materias, no el nombre del profesor. */
+      const byGroupTeacher = new Map<string, typeof allGsWithDetails>();
       for (const gs of allGsWithDetails) {
         const k = `${gs.group_id}:${gs.teacher_id}`;
-        if (seenPair.has(k)) continue;
-        seenPair.add(k);
-        uniqueByGroupTeacher.push(gs);
+        if (!byGroupTeacher.has(k)) byGroupTeacher.set(k, []);
+        byGroupTeacher.get(k)!.push(gs);
       }
       const threadsRaw = await Promise.all(
-        uniqueByGroupTeacher.map(async (gs) => {
+        [...byGroupTeacher.values()].map(async (rows) => {
+          const gs = rows[0];
           const a = await findOrCreateEvoChatForGroupTeacher(
             gs.group_id,
             colegioId,
@@ -263,7 +284,11 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
             gs.teacher_id
           );
           const t = await buildThreadFromAnnouncement(a);
-          const displayTitle = `${gs.group_name} · ${gs.teacher_name}`;
+          const subjectLabels = [
+            ...new Set(rows.map((r) => (r.subject_name ?? '').trim()).filter((s) => s.length > 0)),
+          ];
+          /** Título del chat = materia (display_name o nombre de asignatura), no el nombre del profesor. */
+          const displayTitle = subjectLabels.length ? subjectLabels.join(', ') : gs.group_name;
           return { ...t, displayTitle };
         })
       );
@@ -501,6 +526,14 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
     } else if (a.type === 'evo_chat_support') {
       const allowed = await isUserRecipientOfAnnouncement(id, userId);
       if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+    }
+
+    if (!studentCanWriteEvoSendNow(req.user?.rol, a.type)) {
+      return res.status(403).json({
+        message:
+          'En los chats de grupo solo puedes enviar mensajes entre las 7:00 y las 18:59 (hora local del colegio). Fuera de esa ventana no está permitido.',
+        code: 'EVO_SEND_STUDENT_HOURS',
+      });
     }
 
     const ct = typeof contentType === 'string' && contentType.trim() ? contentType.trim() : 'texto';

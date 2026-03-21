@@ -23,6 +23,9 @@ const PERIODOS = [
 
 const DIAS_OPCIONES = [1, 2, 3, 4, 5, 6];
 
+/** Periodos de clase (sin break ni almuerzo), para modo reemplazo. */
+const PERIODOS_CLASE = PERIODOS.filter((p) => !p.especial);
+
 function toId(v: string | { _id?: string; $oid?: string } | null | undefined): string {
   if (v == null) return "";
   if (typeof v === "string") return v;
@@ -80,6 +83,8 @@ export default function AsistenciaSelectorPage() {
   const [fecha, setFecha] = useState(fechaDefault);
   const [diaSeleccionado, setDiaSeleccionado] = useState<number | null>(null);
   const [slotSeleccionado, setSlotSeleccionado] = useState<{ courseId: string; materia: string; inicio: string; fin: string } | null>(null);
+  /** Profesor suplente / clase fuera de horario: habilita los 6 días y todos los bloques de clase. */
+  const [modoReemplazo, setModoReemplazo] = useState(false);
 
   const { data: profScheduleData } = useQuery<{ slots: Record<string, string> }>({
     queryKey: ["/api/schedule/my-professor"],
@@ -232,10 +237,33 @@ export default function AsistenciaSelectorPage() {
     return list;
   }, [groupIdStr, grupoNombre, grupoId, profSlots, groupSlots, courseById, courses, groupNameByUuid, courseIdParaEsteGrupo]);
 
+  const materiaLabelReemplazo = useMemo(() => {
+    const m = (materiaNombreParam || "").trim();
+    if (m) return m;
+    const cid = courseIdParaEsteGrupo;
+    if (cid && courseById[cid]) return courseById[cid];
+    return "Materia";
+  }, [materiaNombreParam, courseIdParaEsteGrupo, courseById]);
+
+  /** En modo reemplazo: todos los bloques de clase del día con el curso del grupo. */
+  const slotsReemplazoDelDia = useMemo(() => {
+    if (!modoReemplazo || diaSeleccionado == null) return [];
+    const cid = courseIdParaEsteGrupo || grupoId;
+    return PERIODOS_CLASE.map((per) => ({
+      dia: diaSeleccionado,
+      periodo: per.num,
+      courseId: cid,
+      materia: materiaLabelReemplazo,
+      inicio: per.inicio,
+      fin: per.fin,
+    }));
+  }, [modoReemplazo, diaSeleccionado, courseIdParaEsteGrupo, grupoId, materiaLabelReemplazo]);
+
   const slotsDelDia = useMemo(() => {
     if (diaSeleccionado == null) return [];
+    if (modoReemplazo) return slotsReemplazoDelDia;
     return slotsConEsteGrupo.filter((s) => s.dia === diaSeleccionado);
-  }, [diaSeleccionado, slotsConEsteGrupo]);
+  }, [diaSeleccionado, modoReemplazo, slotsReemplazoDelDia, slotsConEsteGrupo]);
 
   const handleContinuar = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -250,6 +278,7 @@ export default function AsistenciaSelectorPage() {
   const grupoNoEncontrado = Boolean(groupScheduleData && !groupIdStr && !groupScheduleError);
   const horarioGrupoSinDefinir = Boolean(groupIdStr && slotsConEsteGrupo.length === 0 && groupScheduleData && !groupScheduleError);
   const puedeContinuar = Boolean(fecha && slotSeleccionado && slotsDelDia.length > 0);
+  const puedeUsarReemplazo = Boolean(courseIdParaEsteGrupo || grupoId);
   const isLoading = !groupScheduleData && !groupScheduleError;
 
   if (!grupoId) {
@@ -279,7 +308,9 @@ export default function AsistenciaSelectorPage() {
             Registrar Asistencia – {asistenciaDisplayName}
           </h1>
           <p className="text-white/60 text-sm">
-            Elige la fecha y el día. Solo podrás continuar si tienes clase con este grupo ese día según tu horario.
+            Elige la fecha y el día. Por horario solo se habilitan los días en los que tienes clase con este grupo. Usa{" "}
+            <span className="text-white/80 font-medium">Reemplazo</span> si cubres una clase fuera de tu horario: se habilitan
+            los 6 días y todos los bloques para registrar con normalidad.
           </p>
         </header>
 
@@ -318,16 +349,19 @@ export default function AsistenciaSelectorPage() {
             <p className="text-white/80 font-medium">No se encontró el grupo {groupDisplayName}.</p>
             <p className="text-white/50 text-sm mt-1">Verifica que el curso exista en el colegio.</p>
           </div>
-        ) : horarioGrupoSinDefinir ? (
-          <div
-            className="rounded-2xl p-8 text-center border border-white/10 bg-white/[0.03]"
-          >
-            <Clock className="w-12 h-12 text-white/30 mx-auto mb-3" />
-            <p className="text-white/80 font-medium">Tu horario no tiene clase con este grupo en ningún día.</p>
-            <p className="text-white/50 text-sm mt-1">Solo puedes tomar asistencia en los días y horas donde tu horario indica que tienes clase con {groupDisplayName}.</p>
-          </div>
         ) : (
           <>
+            {horarioGrupoSinDefinir && (
+              <div className="mb-4 rounded-2xl p-4 border border-amber-500/30 bg-amber-500/10 flex gap-3 items-start">
+                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-white/90 text-sm font-medium">Tu horario no muestra clase con {groupDisplayName}.</p>
+                  <p className="text-white/60 text-xs mt-1">
+                    Pulsa <strong className="text-white/80">Reemplazo</strong> para habilitar los 6 días y elegir el bloque horario.
+                  </p>
+                </div>
+              </div>
+            )}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -356,9 +390,9 @@ export default function AsistenciaSelectorPage() {
                 <label className="block text-sm font-semibold text-white/70 uppercase tracking-wider mb-4">
                   Día (1 a 6)
                 </label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                <div className="flex flex-wrap gap-3">
                   {DIAS_OPCIONES.map((d) => {
-                    const tieneClase = slotsConEsteGrupo.some((s) => s.dia === d);
+                    const tieneClase = modoReemplazo || slotsConEsteGrupo.some((s) => s.dia === d);
                     const isSelected = diaSeleccionado === d;
                     return (
                       <motion.button
@@ -367,13 +401,23 @@ export default function AsistenciaSelectorPage() {
                         whileHover={tieneClase ? { scale: 1.03 } : {}}
                         whileTap={tieneClase ? { scale: 0.98 } : {}}
                         onClick={() => {
+                          if (!tieneClase) return;
                           setDiaSeleccionado(d);
                           setSlotSeleccionado(null);
-                          const slots = slotsConEsteGrupo.filter((s) => s.dia === d);
+                          const slots = modoReemplazo
+                            ? PERIODOS_CLASE.map((per) => ({
+                                dia: d,
+                                periodo: per.num,
+                                courseId: courseIdParaEsteGrupo || grupoId,
+                                materia: materiaLabelReemplazo,
+                                inicio: per.inicio,
+                                fin: per.fin,
+                              }))
+                            : slotsConEsteGrupo.filter((s) => s.dia === d);
                           if (slots.length === 1) setSlotSeleccionado(slots[0]);
                         }}
                         className={`
-                          rounded-xl py-4 px-3 text-center font-semibold text-sm transition-all duration-200
+                          min-w-[calc(33.333%-0.5rem)] sm:min-w-0 sm:flex-1 basis-[30%] sm:basis-0 rounded-xl py-4 px-3 text-center font-semibold text-sm transition-all duration-200
                           ${!tieneClase ? "opacity-50 cursor-not-allowed bg-white/[0.02] border border-white/5 text-white/40" : ""}
                           ${tieneClase && isSelected
                             ? "bg-[#10B981]/25 border-2 border-[#10B981] text-[#6EE7B7] shadow-lg shadow-emerald-500/20"
@@ -387,18 +431,64 @@ export default function AsistenciaSelectorPage() {
                       </motion.button>
                     );
                   })}
+                  <motion.button
+                    type="button"
+                    disabled={!puedeUsarReemplazo}
+                    whileHover={puedeUsarReemplazo ? { scale: 1.03 } : {}}
+                    whileTap={puedeUsarReemplazo ? { scale: 0.98 } : {}}
+                    onClick={() => {
+                      if (!puedeUsarReemplazo) return;
+                      setModoReemplazo((prev) => {
+                        const next = !prev;
+                        setDiaSeleccionado(null);
+                        setSlotSeleccionado(null);
+                        return next;
+                      });
+                    }}
+                    title={
+                      modoReemplazo
+                        ? "Desactivar reemplazo y volver al filtro por horario"
+                        : "Habilitar los 6 días y todos los bloques (clase de reemplazo / suplencia)"
+                    }
+                    className={`
+                      w-full min-w-0 max-w-full sm:w-auto sm:min-w-[7.25rem] sm:flex-none sm:shrink-0
+                      rounded-xl py-3.5 px-2 sm:px-2.5 text-center font-semibold text-sm transition-all duration-200
+                      ${!puedeUsarReemplazo ? "opacity-50 cursor-not-allowed bg-white/[0.02] border border-white/5 text-white/40" : ""}
+                      ${puedeUsarReemplazo && modoReemplazo
+                        ? "bg-[#3B82F6]/25 border-2 border-[#3B82F6] text-[#93C5FD] shadow-lg shadow-blue-500/20"
+                        : puedeUsarReemplazo
+                          ? "bg-white/[0.04] border border-white/10 text-white/80 hover:bg-white/[0.08] hover:border-white/20"
+                          : ""}
+                    `}
+                  >
+                    <span className="block text-[11px] sm:text-xs font-bold leading-snug tracking-tight text-balance px-0.5">
+                      Reemplazo
+                    </span>
+                    <span className="block text-[10px] opacity-80 mt-1 leading-tight">
+                      {modoReemplazo ? "Activo" : "6 días"}
+                    </span>
+                  </motion.button>
                 </div>
+
+                {modoReemplazo && (
+                  <p className="mt-3 text-sm text-[#93C5FD]/90 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 flex-shrink-0 text-emerald-400" />
+                    Modo reemplazo activo: elige día y bloque; el registro es el mismo que en horario normal.
+                  </p>
+                )}
 
                 {diaSeleccionado != null && slotsDelDia.length === 0 && (
                   <p className="mt-4 text-sm text-amber-400/90 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    No tienes clase con {groupDisplayName} el día {diaSeleccionado}. Elige otro día.
+                    No tienes clase con {groupDisplayName} el día {diaSeleccionado}. Elige otro día o activa Reemplazo.
                   </p>
                 )}
 
                 {diaSeleccionado != null && slotsDelDia.length > 0 && (
                   <div className="mt-4">
-                    <label className="block text-sm font-semibold text-white/70 mb-2">Clase ese día (según tu horario)</label>
+                    <label className="block text-sm font-semibold text-white/70 mb-2">
+                      {modoReemplazo ? "Bloque horario (modo reemplazo)" : "Clase ese día (según tu horario)"}
+                    </label>
                     <div className="space-y-2">
                       {slotsDelDia.map((slot) => {
                         const isSelected = slotSeleccionado?.courseId === slot.courseId && slotSeleccionado?.inicio === slot.inicio;

@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { NavBackButton } from '@/components/nav-back-button';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateCourseColor } from '@/lib/courseColor';
@@ -119,6 +120,9 @@ const tipoLabels: Record<string, string> = {
   evo_chat_support: 'Soporte GLC',
 };
 
+/** Chats de grupo Evo Send con horario restringido para estudiantes (alineado con el servidor). */
+const STUDENT_TIMED_EVO_THREAD_TYPES = new Set(['evo_chat', 'evo_chat_staff', 'evo_chat_direct']);
+
 const tipoIcons: Record<string, React.ReactNode> = {
   comunicado_general: <Users className="w-4 h-4" />,
   curso: <BookOpen className="w-4 h-4" />,
@@ -191,6 +195,21 @@ export default function EvoSendPage() {
       if (filterTipo && filterTipo !== 'all') params.set('tipo', filterTipo);
       return apiRequest<ThreadsResponse>('GET', `/api/evo-send/threads?${params.toString()}`);
     },
+  });
+
+  const { data: writeWindow } = useQuery({
+    queryKey: ['/api/evo-send/write-window'],
+    queryFn: () =>
+      apiRequest<{
+        restricted: boolean;
+        allowed: boolean;
+        timezone: string;
+        windowStart?: string;
+        windowEnd?: string;
+      }>('GET', '/api/evo-send/write-window'),
+    enabled: user?.rol === 'estudiante',
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 
   const { threads: threadsFlat, sections } = useMemo(() => {
@@ -430,8 +449,15 @@ export default function EvoSendPage() {
   const selectedThread = threadsFlat.find((t) => t._id === selectedId);
   const messages = threadDetail?.messages || [];
 
+  const studentComposerBlocked =
+    user?.rol === 'estudiante' &&
+    writeWindow?.restricted &&
+    writeWindow.allowed === false &&
+    !!selectedThread &&
+    STUDENT_TIMED_EVO_THREAD_TYPES.has(selectedThread.tipo);
+
   const handleSendReply = () => {
-    if (!replyText.trim() || !selectedId) return;
+    if (!replyText.trim() || !selectedId || studentComposerBlocked) return;
     sendReplyMutation.mutate({ contentType: 'texto', contenido: replyText.trim() });
   };
 
@@ -514,6 +540,8 @@ export default function EvoSendPage() {
           emitTyping={emitTyping}
           selectedIdForTyping={selectedId}
           sections={sections}
+          studentComposerBlocked={studentComposerBlocked}
+          writeWindowTimezone={writeWindow?.timezone}
         />
           </TabsContent>
         </Tabs>
@@ -545,6 +573,8 @@ export default function EvoSendPage() {
           sections={sections}
           chatsGlcCollapsed={isAdminColegio ? adminChatsGlcCollapsed : undefined}
           onToggleChatsGlc={isAdminColegio ? () => setAdminChatsGlcCollapsed((c) => !c) : undefined}
+          studentComposerBlocked={studentComposerBlocked}
+          writeWindowTimezone={writeWindow?.timezone}
         />
       )}
       </div>
@@ -720,6 +750,9 @@ interface EvoLayoutProps {
   sections?: { label: string; threads: EvoThreadItem[] }[] | null;
   chatsGlcCollapsed?: boolean;
   onToggleChatsGlc?: () => void;
+  /** Solo estudiantes: fuera de 7:00–19:00 en chats de grupo */
+  studentComposerBlocked?: boolean;
+  writeWindowTimezone?: string;
 }
 
 interface EvoDriveFile {
@@ -900,6 +933,8 @@ function EvoLayout({
   sections,
   chatsGlcCollapsed,
   onToggleChatsGlc,
+  studentComposerBlocked = false,
+  writeWindowTimezone,
 }: EvoLayoutProps) {
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const [showReminderPicker, setShowReminderPicker] = useState(false);
@@ -1183,7 +1218,20 @@ function EvoLayout({
                   </div>
                 )}
               </div>
-              <div className="flex-shrink-0 p-4 border-t border-white/10 flex gap-2">
+              <div className="flex-shrink-0 p-4 border-t border-white/10 flex flex-col gap-3">
+                {studentComposerBlocked && (
+                  <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-100 [&>svg]:text-amber-200">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle className="text-sm font-semibold text-amber-50">
+                      Horario de chat para estudiantes
+                    </AlertTitle>
+                    <AlertDescription className="text-xs text-amber-100/90">
+                      Solo puedes enviar mensajes en los chats de grupo entre las 7:00 y las 18:59
+                      {writeWindowTimezone ? ` (${writeWindowTimezone})` : ''}. Fuera de ese horario el envío no está disponible.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="flex gap-2">
                 <div className="flex items-end gap-2 flex-1">
                   <div className="flex flex-col gap-1">
                     <Button
@@ -1192,7 +1240,7 @@ function EvoLayout({
                       size="icon"
                       className="h-9 w-9 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-[#E2E8F0]"
                       onClick={() => setShowDrivePicker(true)}
-                      disabled={!cursoIdForThread}
+                      disabled={!cursoIdForThread || studentComposerBlocked}
                       title="Adjuntar desde Evo Drive"
                     >
                       <Cloud className="w-4 h-4" />
@@ -1203,7 +1251,7 @@ function EvoLayout({
                       size="icon"
                       className="h-9 w-9 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-[#E2E8F0]"
                       onClick={() => setShowReminderPicker(true)}
-                      disabled={!cursoIdForThread}
+                      disabled={!cursoIdForThread || studentComposerBlocked}
                       title="Enviar recordatorio de tarea"
                     >
                       <Bell className="w-4 h-4" />
@@ -1212,14 +1260,19 @@ function EvoLayout({
                   <Textarea
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    onFocus={() => selectedIdForTyping && emitTyping(selectedIdForTyping, user?.nombre)}
+                    onFocus={() =>
+                      selectedIdForTyping &&
+                      !studentComposerBlocked &&
+                      emitTyping(selectedIdForTyping, user?.nombre)
+                    }
                     placeholder="Escribe tu respuesta..."
-                    className="flex-1 bg-white/[0.06] border-white/[0.08] text-[#E2E8F0] placeholder:text-white/50 min-h-[56px] rounded-xl resize-none"
+                    disabled={studentComposerBlocked}
+                    className="flex-1 bg-white/[0.06] border-white/[0.08] text-[#E2E8F0] placeholder:text-white/50 min-h-[56px] rounded-xl resize-none disabled:opacity-50"
                   />
                 </div>
                 <Button
                   onClick={onSendReply}
-                  disabled={!replyText.trim() || sendReplyMutation.isPending}
+                  disabled={!replyText.trim() || sendReplyMutation.isPending || studentComposerBlocked}
                   style={{
                     background: `linear-gradient(180deg, ${accent}, color-mix(in srgb, ${accent} 80%, #000))`,
                   }}
@@ -1227,6 +1280,7 @@ function EvoLayout({
                 >
                   {sendReplyMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </Button>
+                </div>
               </div>
             </>
           ) : (
