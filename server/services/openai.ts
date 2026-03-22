@@ -1,14 +1,18 @@
 import OpenAI from 'openai';
 import { getOpenAITools } from './aiFunctions';
 import { executeAction } from './actionExecutor';
-import { buildRoleContext, formatContextForPrompt } from './roleContextBuilder';
+import {
+  buildRoleContext,
+  formatContextForPrompt,
+  buildSanitizerContextFromRoleContext,
+} from './roleContextBuilder';
+import { sanitizeMessages, sanitizeText } from './llmSanitizer';
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 // La API key ahora se lee dinámicamente en cada llamada para asegurar que siempre use la más reciente del .env
 
 // Función para obtener la API key dinámicamente (para asegurar que se lea del .env correctamente)
 function getOpenAIKey(): string | null {
-  console.log(process.env.OPENAI_API_KEY);
   let rawKey = process.env.OPENAI_API_KEY || '';
   
   // Log detallado para debugging
@@ -71,7 +75,7 @@ function getOpenAIClient(): OpenAI | null {
   // Si la key cambió o no hay cliente cacheado, crear uno nuevo
   if (!openaiClientCache || lastApiKey !== apiKey) {
     // Log solo la primera vez que se crea el cliente
-    if (!openaiClientCache) {
+    if (!openaiClientCache && process.env.LLM_DEBUG === 'true') {
       console.log('[OpenAI] ✅ Cliente OpenAI inicializado');
       console.log(`   Tipo: ${apiKey.startsWith('sk-proj-') ? 'Proyecto (sk-proj-)' : apiKey.startsWith('skproj') ? 'Proyecto (skproj)' : 'Estándar'}`);
       console.log(`   Longitud: ${apiKey.length} caracteres`);
@@ -126,11 +130,13 @@ Importante:
 - Si no tienes información específica del currículo, indica que es una respuesta general
 `;
 
+    const { sanitized: safeUserMessage } = sanitizeText(userMessage);
+
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
+        { role: 'user', content: safeUserMessage }
       ],
       max_completion_tokens: 1500,
     });
@@ -181,13 +187,14 @@ export async function generateAIResponseWithFunctions(
       { role: 'user', content: userMessage ?? '' },
     ];
 
-    console.log('==== MENSAJES ENVIADOS AL MODELO ====');
-    console.log(JSON.stringify(messagesToSend, null, 2));
-    console.log('=====================================');
+    const llmSanitizeCtx = buildSanitizerContextFromRoleContext(roleContext);
+    const { messages: sanitizedMessages } = sanitizeMessages(messagesToSend as any[], llmSanitizeCtx);
+
+    console.log(`[OpenAI] Enviando ${messagesToSend.length} mensajes al modelo gpt-4o`);
 
     let response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
-      messages: messagesToSend as any,
+      messages: sanitizedMessages as any,
       tools: tools.length > 0 ? tools : undefined,
       tool_choice: tools.length > 0 ? 'auto' : undefined,
       max_completion_tokens: 2000,
@@ -266,10 +273,12 @@ export async function generateAIResponseWithFunctions(
       // Agregar resultados de funciones
       messagesToSend.push(...functionResults as any);
 
+      const { messages: sanitizedLoopMessages } = sanitizeMessages(messagesToSend as any[], llmSanitizeCtx);
+
       // Llamar nuevamente a OpenAI con los resultados
       response = await openaiClient.chat.completions.create({
         model: 'gpt-4o',
-        messages: messagesToSend as any,
+        messages: sanitizedLoopMessages as any,
         tools: tools.length > 0 ? tools : undefined,
         tool_choice: tools.length > 0 ? 'auto' : undefined,
         max_completion_tokens: 2000,
@@ -302,10 +311,10 @@ export async function generateAIResponseWithFunctions(
       console.error('   3. La API key empiece con "sk-" o "skproj"');
       console.error('   4. La API key tenga créditos disponibles en tu cuenta de OpenAI');
       console.error('   5. La API key no esté enmascarada o truncada (no debe tener asteriscos en el medio)');
-      if (currentKey) {
+      if (process.env.LLM_DEBUG === 'true' && currentKey) {
         console.error(`   API key detectada (primeros 20 chars): ${currentKey.substring(0, 20)}...`);
         console.error(`   API key detectada (últimos 10 chars): ...${currentKey.substring(currentKey.length - 10)}`);
-      } else {
+      } else if (!currentKey) {
         console.error('   No se pudo leer la API key del .env');
       }
       throw new Error('La clave de API de OpenAI no es válida. Verifica que la API key en el archivo .env sea completa (sin asteriscos), correcta y tenga créditos disponibles.');
@@ -589,7 +598,7 @@ export async function generateAcademicInsightsSummary(
   }
 
   const parts: string[] = [];
-  parts.push(`Estudiante: ${context.studentName}. Materia: ${context.courseName}.`);
+  parts.push(`Estudiante: [EST_1]. Materia: ${context.courseName}.`);
   if (context.weightedAverage != null) {
     parts.push(`Promedio ponderado actual: ${context.weightedAverage.toFixed(1)}/100.`);
   }
@@ -650,6 +659,10 @@ export async function generateAcademicInsightsSummary(
   }
 
   const dataBlock = parts.join('\n');
+  const { sanitized: sanitizedDataBlock } = sanitizeText(dataBlock, {
+    studentNames: [context.studentName],
+    teacherNames: [],
+  });
   const role: AcademicInsightRole = context.role ?? 'profesor';
 
   const promptsByRole: Record<AcademicInsightRole, string> = {
@@ -674,7 +687,7 @@ export async function generateAcademicInsightsSummary(
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `Contexto del estudiante y sus notas:\n${dataBlock}\n\nGenera el resumen e insights en prosa (solo texto, sin viñetas).`,
+          content: `Contexto del estudiante y sus notas:\n${sanitizedDataBlock}\n\nGenera el resumen e insights en prosa (solo texto, sin viñetas).`,
         },
       ],
       max_tokens: 400,
@@ -694,6 +707,7 @@ export async function generateAcademicInsightsSummary(
 export async function generateBoletinResumen(prompt: string): Promise<string | null> {
   const openaiClient = getOpenAIClient();
   if (!openaiClient) return null;
+  const { sanitized: safePrompt } = sanitizeText(prompt);
   try {
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
@@ -703,7 +717,7 @@ export async function generateBoletinResumen(prompt: string): Promise<string | n
           content:
             'Eres un orientador académico. Genera un boletín personalizado en español en 3-4 oraciones. Menciona fortalezas, áreas de mejora y una recomendación concreta. Sé empático y constructivo.',
         },
-        { role: 'user', content: prompt },
+        { role: 'user', content: safePrompt },
       ],
       max_completion_tokens: 300,
     });
@@ -728,6 +742,7 @@ export async function generateAttendanceAnalysis(
   if (!openaiClient) {
     return 'Configura OPENAI_API_KEY en .env para ver el análisis con IA.';
   }
+  const { sanitized: safeSummary } = sanitizeText(summaryText);
   try {
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
@@ -739,7 +754,7 @@ export async function generateAttendanceAnalysis(
         },
         {
           role: 'user',
-          content: `Analiza estos datos de asistencia del curso ${courseName} del mes ${monthLabel}:\n\n${summaryText}\n\nIdentifica patrones, días problemáticos, estudiantes en riesgo y da recomendaciones concretas al directivo.`,
+          content: `Analiza estos datos de asistencia del curso ${courseName} del mes ${monthLabel}:\n\n${safeSummary}\n\nIdentifica patrones, días problemáticos, estudiantes en riesgo y da recomendaciones concretas al directivo.`,
         },
       ],
       max_tokens: 800,

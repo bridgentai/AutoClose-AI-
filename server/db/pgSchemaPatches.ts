@@ -112,3 +112,22 @@ export async function ensureAssignmentsCategoryWeightPctColumn(): Promise<void> 
   );
   assignmentsCategoryWeightPctEnsured = true;
 }
+
+let auditLogIpColumnsEnsured = false;
+
+/** Columnas ip_address en tablas de auditoría (analytics). */
+export async function ensureAuditLogIpColumns(): Promise<void> {
+  if (auditLogIpColumnsEnsured) return;
+  await queryPg(
+    `ALTER TABLE analytics.activity_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45) DEFAULT NULL`
+  );
+  await queryPg(
+    `ALTER TABLE analytics.ai_action_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45) DEFAULT NULL`
+  );
+  await queryPg(`
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_ip
+    ON analytics.activity_logs(ip_address)
+    WHERE ip_address IS NOT NULL
+  `);
+  auditLogIpColumnsEnsured = true;
+}

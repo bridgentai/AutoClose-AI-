@@ -4,6 +4,8 @@ import './config/env';
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import { registerRoutes } from "./routes";
+import { autoAudit } from "./middleware/auditMiddleware.js";
+import type { AuthRequest } from "./middleware/auth.js";
 import { setupVite, serveStatic, log } from "./vite";
 import { exec } from "child_process";
 import http from "http";
@@ -37,6 +39,10 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+app.use((req, res, next) => {
+  autoAudit(req as AuthRequest, res, next);
+});
 
 // Servir archivos subidos (escaneos) desde /uploads/*
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));

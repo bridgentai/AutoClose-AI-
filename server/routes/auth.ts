@@ -11,6 +11,8 @@ import { findActiveAcademicPeriodForInstitution } from '../repositories/academic
 import { createEnrollment } from '../repositories/enrollmentRepository.js';
 import { findInstitutionById, findInstitutionBySlug, findAllInstitutions } from '../repositories/institutionRepository.js';
 import { generateUserId } from '../utils/idGenerator.js';
+import { getClientIP } from '../middleware/auditMiddleware.js';
+import { createActivityLog } from '../repositories/activityLogRepository.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function resolveInstitutionId(colegioId: string): Promise<string> {
@@ -346,6 +348,19 @@ router.post('/login', async (req, res) => {
       curso = await getFirstGroupNameForStudent(pgUser.id) ?? undefined;
     }
     // El cliente espera AuthResponse plano con curso/materias en raíz para habilitar queries del dashboard
+    try {
+      await createActivityLog({
+        institution_id: pgUser.institution_id,
+        user_id: pgUser.id,
+        entity_type: 'session',
+        entity_id: null,
+        action: 'login',
+        ip_address: getClientIP(req),
+        metadata: { role: pgUser.role, result: 'success' },
+      });
+    } catch {
+      /* auditoría best-effort */
+    }
     return res.json({
       token,
       ...userResponse,

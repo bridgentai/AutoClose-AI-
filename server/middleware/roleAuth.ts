@@ -107,3 +107,11 @@ export function normalizeUserId(id: string | undefined): string | undefined {
   return normalizeIdForQuery(id);
 }
 
+export {
+  can,
+  isAdmin,
+  canViewInstitution,
+  canViewAllGrades,
+  canCreateChatGroup,
+} from '../config/rolePermissions.js';
+

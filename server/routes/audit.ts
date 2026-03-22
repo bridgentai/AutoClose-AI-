@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
-import { checkAdminColegioOnly } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissionMiddleware.js';
 import {
   findActivityLogsByInstitution,
   countActivityLogsByInstitution,
@@ -21,6 +21,7 @@ interface AiActionLogRow {
   parameters: Record<string, unknown>;
   result: Record<string, unknown>;
   status: string;
+  ip_address: string | null;
   created_at: string;
 }
 
@@ -58,7 +59,7 @@ async function findAiActionLogs(
   return r.rows;
 }
 
-router.get('/logs', protect, checkAdminColegioOnly, async (req: AuthRequest, res) => {
+router.get('/logs', protect, requirePermission('audit_logs', 'read'), async (req: AuthRequest, res) => {
   try {
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(400).json({ message: 'Colegio no definido.' });
@@ -90,6 +91,7 @@ router.get('/logs', protect, checkAdminColegioOnly, async (req: AuthRequest, res
           colegioId: row.institution_id,
           timestamp: row.created_at,
           result: 'success',
+          ipAddress: row.ip_address ?? null,
           requestData: (row.metadata as Record<string, unknown>) ?? undefined,
         };
       })
@@ -105,6 +107,7 @@ router.get('/logs', protect, checkAdminColegioOnly, async (req: AuthRequest, res
       colegioId: row.institution_id,
       timestamp: row.created_at,
       result: row.status,
+      ipAddress: row.ip_address ?? null,
       requestData: row.parameters ?? undefined,
     }));
 

@@ -1,5 +1,7 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
+import { auditAction } from '../middleware/auditMiddleware.js';
+import { requirePermission } from '../middleware/permissionMiddleware.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupByNameAndInstitution, findGroupById } from '../repositories/groupRepository.js';
 import { findGroupSubjectById, findGroupSubjectsByTeacher, findGroupSubjectsByGroup, findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
@@ -187,7 +189,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 });
 
 // POST /api/assignments - Crear tarea (courseId = group_subject_id obligatorio)
-router.post('/', protect, async (req: AuthRequest, res) => {
+router.post('/', protect, requirePermission('assignments', 'create'), async (req: AuthRequest, res) => {
   try {
     const { titulo, descripcion, contenidoDocumento, courseId, fechaEntrega, type, isGradable, categoryId, grading_category_id, logroCalificacionId, requiresSubmission: bodyRequiresSubmission } = req.body;
     const userId = getUserId(req);
@@ -636,7 +638,12 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
 });
 
 // PUT /api/assignments/:id/grade - Calificar
-router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
+router.put(
+  '/:id/grade',
+  protect,
+  requirePermission('grades', 'update'),
+  auditAction('grade_assignment', 'assignment'),
+  async (req: AuthRequest, res) => {
   try {
     const { estudianteId, calificacion, retroalimentacion } = req.body;
     const userId = getUserId(req);

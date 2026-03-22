@@ -7,6 +7,7 @@ import {
   findGroupSubjectsByTeacherWithDetails,
   type GroupSubjectWithDetails,
 } from '../repositories/groupSubjectRepository.js';
+import { sanitizeContextObject, type SanitizerContext } from './llmSanitizer.js';
 
 /**
  * Servicio que construye contexto específico por rol
@@ -81,7 +82,7 @@ export async function buildStudentContext(
     _id: r.subject_id,
     nombre: r.subject_name,
     descripcion: r.subject_description,
-    profesor: { _id: r.teacher_id, nombre: r.teacher_name, email: r.teacher_email },
+    profesor: { _id: r.teacher_id, nombre: r.teacher_name },
     curso: r.group_name,
     groupSubjectId: r.id,
   }));
@@ -330,53 +331,90 @@ export async function buildRoleContext(
 }
 
 /**
+ * Nombres conocidos del contexto para sustituir por tokens al enviar al LLM.
+ */
+export function buildSanitizerContextFromRoleContext(ctx: RoleContext): SanitizerContext {
+  const studentNames: string[] = [];
+  const teacherNames: string[] = [];
+
+  if (ctx.materias) {
+    for (const m of ctx.materias) {
+      const prof = m?.profesor as { nombre?: string } | undefined;
+      const n = prof?.nombre;
+      if (typeof n === 'string' && n.trim()) teacherNames.push(n);
+    }
+  }
+
+  if (ctx.resumenNotasProfesor) {
+    for (const block of ctx.resumenNotasProfesor) {
+      for (const n of block.notas) {
+        if (n.estudianteNombre?.trim()) studentNames.push(n.estudianteNombre);
+      }
+    }
+  }
+
+  if (ctx.hijos) {
+    for (const h of ctx.hijos) {
+      if (h.nombre?.trim()) studentNames.push(h.nombre);
+    }
+  }
+
+  return {
+    studentNames: Array.from(new Set(studentNames)),
+    teacherNames: Array.from(new Set(teacherNames)),
+  };
+}
+
+/**
  * Formatea el contexto para incluir en el system prompt
  */
 export function formatContextForPrompt(context: RoleContext): string {
+  const safeContext = sanitizeContextObject(context as unknown as Record<string, unknown>) as unknown as RoleContext;
+
   let prompt = `\n\nCONTEXTO DEL USUARIO:\n`;
-  prompt += `- Rol: ${context.role}\n`;
-  
-  if (context.curso) {
-    prompt += `- Curso: ${context.curso}\n`;
+  prompt += `- Rol: ${safeContext.role}\n`;
+
+  if (safeContext.curso) {
+    prompt += `- Curso: ${safeContext.curso}\n`;
   }
-  
-  if (context.materias && context.materias.length > 0) {
-    prompt += `- Materias asignadas: ${context.materias.map(m => m.nombre).join(', ')}\n`;
+
+  if (safeContext.materias && safeContext.materias.length > 0) {
+    prompt += `- Materias asignadas: ${safeContext.materias.map((m) => m.nombre).join(', ')}\n`;
   }
-  
-  if (context.cursosAsignados && context.cursosAsignados.length > 0) {
+
+  if (safeContext.cursosAsignados && safeContext.cursosAsignados.length > 0) {
     prompt += `- Materias asignadas (con sus grupos/cursos):\n`;
-    context.cursosAsignados.forEach((c: any) => {
-      const grupos = c.grupos && Array.isArray(c.grupos) ? c.grupos.join(', ') : 'Sin grupos';
+    safeContext.cursosAsignados.forEach((c: Record<string, unknown>) => {
+      const grupos = c.grupos && Array.isArray(c.grupos) ? (c.grupos as string[]).join(', ') : 'Sin grupos';
       prompt += `  * ${c.nombre} (materia): Grupos/Cursos [${grupos}]\n`;
       prompt += `    - Cuando el usuario menciona cualquiera de estos grupos (${grupos}), se refiere a esta materia\n`;
     });
     prompt += `\nIMPORTANTE: Los "cursos" son los grupos (12C, 12D, etc.), NO las materias. Cuando el usuario dice "12C" o "curso 12C", se refiere al GRUPO 12C.\n`;
   }
 
-  if (context.resumenNotasProfesor && context.resumenNotasProfesor.length > 0) {
+  if (safeContext.resumenNotasProfesor && safeContext.resumenNotasProfesor.length > 0) {
     prompt += `\n- NOTAS DE TUS ESTUDIANTES (solo de tus cursos):\n`;
-    context.resumenNotasProfesor.forEach((materia: any) => {
+    safeContext.resumenNotasProfesor.forEach((materia: Record<string, unknown>) => {
       prompt += `  * ${materia.materiaNombre} (grupo ${materia.grupo}):\n`;
-      materia.notas.forEach((n: any) => {
+      (materia.notas as Array<Record<string, unknown>>).forEach((n) => {
         prompt += `    - ${n.estudianteNombre}: "${n.tareaTitulo}" = ${n.nota}${n.fecha ? ` (${n.fecha})` : ''}\n`;
       });
     });
     prompt += `\nUsa esta información cuando te pregunten por notas, promedios o rendimiento de sus estudiantes.\n`;
   }
-  
-  if (context.tareasPendientes !== undefined) {
-    prompt += `- Tareas pendientes: ${context.tareasPendientes}\n`;
+
+  if (safeContext.tareasPendientes !== undefined) {
+    prompt += `- Tareas pendientes: ${safeContext.tareasPendientes}\n`;
   }
-  
-  if (context.hijos && context.hijos.length > 0) {
-    prompt += `- Hijos: ${context.hijos.map(h => h.nombre).join(', ')}\n`;
+
+  if (safeContext.hijos && safeContext.hijos.length > 0) {
+    prompt += `- Hijos: ${safeContext.hijos.map((h) => h.nombre).join(', ')}\n`;
   }
-  
-  if (context.permisos && context.permisos.length > 0) {
-    prompt += `- Funciones disponibles: ${context.permisos.join(', ')}\n`;
+
+  if (safeContext.permisos && safeContext.permisos.length > 0) {
+    prompt += `- Funciones disponibles: ${safeContext.permisos.join(', ')}\n`;
   }
-  
+
   return prompt;
 }
 

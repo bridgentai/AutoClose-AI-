@@ -81,3 +81,14 @@ export const checkAdminColegioOnly = (req: AuthRequest, res: Response, next: Nex
     message: 'Acceso denegado. Solo el administrador general del colegio puede realizar esta acción.',
   });
 };
+
+/**
+ * Verifica que el recurso solicitado pertenece a la misma institución del usuario.
+ * Usar en handlers cuando se necesita validar cross-institution.
+ */
+export function isSameInstitution(req: AuthRequest, resourceInstitutionId: string): boolean {
+  if (req.user?.rol === 'super_admin') return true;
+  return (
+    req.user?.colegioId === resourceInstitutionId || req.user?.institution_id === resourceInstitutionId
+  );
+}

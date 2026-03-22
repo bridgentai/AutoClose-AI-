@@ -45,6 +45,7 @@ import {
   ensureAssignmentsRequiresSubmissionColumn,
   ensureAssignmentCategoryFkReferencesGradingCategories,
   ensureEvoFilesOrigenCheck,
+  ensureAuditLogIpColumns,
 } from "./db/pgSchemaPatches.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -68,6 +69,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[schema] evo_files.origen CHECK OK");
     } catch (e) {
       console.warn("[schema] Parche evo_files.origen:", (e as Error).message);
+    }
+    try {
+      await ensureAuditLogIpColumns();
+      console.log("[schema] analytics.activity_logs / ai_action_logs ip_address OK");
+    } catch (e) {
+      console.warn("[schema] Parche audit ip_address:", (e as Error).message);
     }
   }
 
