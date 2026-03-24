@@ -185,3 +185,34 @@ export async function ensureEvoSendRetention(): Promise<void> {
   }
   evoSendRetentionEnsured = true;
 }
+
+let studentActivityTableEnsured = false;
+
+/** Tabla de tracking de actividad estudiantil (vistas de tareas, Evo Send, etc.). */
+export async function ensureStudentActivityTable(): Promise<void> {
+  if (studentActivityTableEnsured) return;
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS student_activity (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      entity_type VARCHAR(50) NOT NULL,
+      entity_id UUID NOT NULL,
+      action VARCHAR(50) NOT NULL,
+      metadata JSONB,
+      duration_seconds INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_student_activity_student ON student_activity(student_id, created_at DESC)`
+  );
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_student_activity_entity ON student_activity(entity_type, entity_id, created_at DESC)`
+  );
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_student_activity_institution ON student_activity(institution_id, created_at DESC)`
+  );
+  studentActivityTableEnsured = true;
+  console.log('[pgSchemaPatches] student_activity OK');
+}

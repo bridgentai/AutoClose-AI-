@@ -632,3 +632,19 @@ CREATE TABLE IF NOT EXISTS evo_categories (
 CREATE INDEX IF NOT EXISTS idx_evo_categories_group ON evo_categories(group_id);
 
 ALTER TABLE evo_files ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES evo_categories(id) ON DELETE SET NULL;
+
+-- Actividad estudiantil (tracking contextual: tareas, Evo Send, etc.)
+CREATE TABLE IF NOT EXISTS student_activity (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entity_type VARCHAR(50) NOT NULL,
+  entity_id UUID NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  metadata JSONB,
+  duration_seconds INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_student_activity_student ON student_activity(student_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_student_activity_entity ON student_activity(entity_type, entity_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_student_activity_institution ON student_activity(institution_id, created_at DESC);

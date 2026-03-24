@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX, ExternalLink, Presentation, FileSpreadsheet, Cloud, Plus, Camera } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -101,6 +101,55 @@ export default function AssignmentDetailPage() {
 
   const isProfesor = user?.rol === 'profesor';
   const isPadre = user?.rol === 'padre';
+  const isEstudiante = user?.rol === 'estudiante';
+  const assignmentStaffViewer =
+    isProfesor ||
+    user?.rol === 'directivo' ||
+    user?.rol === 'admin-general-colegio' ||
+    user?.rol === 'school_admin';
+
+  const viewOpenTimeRef = useRef<number | null>(null);
+  const didFireStartWritingRef = useRef(false);
+
+  const fireActivityTrack = useCallback((body: Record<string, unknown>) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('autoclose_token') : null;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    fetch('/api/activity/track', { method: 'POST', headers, body: JSON.stringify(body) }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!isEstudiante || !params.id) return;
+    viewOpenTimeRef.current = Date.now();
+    fireActivityTrack({
+      entity_type: 'assignment',
+      entity_id: params.id,
+      action: 'view_open',
+    });
+    return () => {
+      const start = viewOpenTimeRef.current;
+      const secs = start != null ? Math.max(0, Math.floor((Date.now() - start) / 1000)) : 0;
+      fireActivityTrack({
+        entity_type: 'assignment',
+        entity_id: params.id,
+        action: 'view_close',
+        duration_seconds: secs,
+      });
+    };
+  }, [isEstudiante, params.id, fireActivityTrack]);
+
+  const trackDownload = useCallback(
+    (fileName: string) => {
+      if (!isEstudiante || !params.id || !fileName) return;
+      fireActivityTrack({
+        entity_type: 'assignment',
+        entity_id: params.id,
+        action: 'download',
+        metadata: { file_name: fileName },
+      });
+    },
+    [isEstudiante, params.id, fireActivityTrack]
+  );
 
   const { data: assignment, isLoading, error, refetch } = useQuery<Assignment>({
     queryKey: ['/api/assignments', params.id],
@@ -342,8 +391,27 @@ export default function AssignmentDetailPage() {
       }
       return [];
     },
-    enabled: isProfesor && !!(groupId || cursoName),
+    enabled: assignmentStaffViewer && !!(groupId || cursoName),
     retry: false,
+  });
+
+  interface AssignmentActivityStudent {
+    student_id: string;
+    full_name: string;
+    first_opened: string | null;
+    last_opened: string | null;
+    total_time_seconds: number;
+    times_opened: number;
+    started_writing: boolean;
+    downloaded_files: string[];
+    never_opened: boolean;
+  }
+
+  const { data: assignmentActivity } = useQuery<{ students: AssignmentActivityStudent[] }>({
+    queryKey: ['/api/activity/assignment', params.id],
+    queryFn: () => apiRequest('GET', `/api/activity/assignment/${params.id}`),
+    enabled: !!params.id && assignmentStaffViewer,
+    staleTime: 30_000,
   });
 
   // Usar submissions si existe, sino usar entregas (legacy)
@@ -449,12 +517,21 @@ export default function AssignmentDetailPage() {
             { label: assignment.titulo },
           ]}
         />
-              {isProfesor ? (
+              {assignmentStaffViewer ? (
                 <Tabs defaultValue={defaultTab} className="w-full">
-                  <TabsList className="bg-white/5 border border-white/10 mb-6">
+                  <TabsList className="bg-white/5 border border-white/10 mb-6 flex-wrap h-auto gap-1">
                     <TabsTrigger value="info" className="data-[state=active]:bg-[#1e3cff]">Información</TabsTrigger>
                     <TabsTrigger value="entregas" className="data-[state=active]:bg-[#1e3cff]">
                       Entregas ({submissions.length}/{groupStudents.length || 0})
+                    </TabsTrigger>
+                    <TabsTrigger value="actividad" className="data-[state=active]:bg-[#1e3cff]">
+                      Actividad
+                      {assignmentActivity?.students?.length ? (
+                        <Badge className="ml-2 bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
+                          {assignmentActivity.students.filter((s) => !s.never_opened).length}/{assignmentActivity.students.length}{' '}
+                          abrieron
+                        </Badge>
+                      ) : null}
                     </TabsTrigger>
                   </TabsList>
 
@@ -728,21 +805,24 @@ export default function AssignmentDetailPage() {
                             <div className="space-y-4">
                               {submissions.map((submission, index) => {
                                 const nombre = submission.estudianteNombre || groupStudents.find((e) => String(e._id) === String(submission.estudianteId))?.nombre || 'Estudiante';
-                                const hasGrade = submission.calificacion != null && submission.calificacion !== '';
+                                const hasGrade =
+                                  submission.calificacion != null &&
+                                  String(submission.calificacion).trim() !== '';
                                 return (
                               <div
                                 key={submission.estudianteId || index}
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => handleGrade(submission.estudianteId)}
+                                role={isProfesor ? 'button' : undefined}
+                                tabIndex={isProfesor ? 0 : undefined}
+                                onClick={() => isProfesor && handleGrade(submission.estudianteId)}
                                 onKeyDown={(e) => {
+                                  if (!isProfesor) return;
                                   if (e.key !== 'Enter' && e.key !== ' ') return;
                                   const target = e.target as HTMLElement;
                                   if (target.closest('form') || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
                                   e.preventDefault();
                                   handleGrade(submission.estudianteId);
                                 }}
-                                className="p-4 rounded-lg border cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/50 panel-grades border-white/10 hover:border-white/20"
+                                className={`p-4 rounded-lg border transition-all panel-grades border-white/10 ${isProfesor ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/50 hover:border-white/20' : ''}`}
                               >
                                 <div className="flex items-start justify-between mb-3">
                                   <div className="flex-1">
@@ -756,7 +836,7 @@ export default function AssignmentDetailPage() {
                                       <Badge className="bg-green-600">{Number(submission.calificacion)}/100</Badge>
                                     ) : (
                                       <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-[#3B82F6]/20 text-[#93C5FD] border border-[#3B82F6]/40">
-                                        —/100 · Clic para calificar
+                                        {isProfesor ? '—/100 · Clic para calificar' : '—/100'}
                                       </span>
                                     )}
                                   </div>
@@ -786,7 +866,7 @@ export default function AssignmentDetailPage() {
                                     <p className="text-sm text-white/80">{submission.retroalimentacion}</p>
                                   </div>
                                 )}
-                                {gradingStudent === submission.estudianteId && (
+                                {isProfesor && gradingStudent === submission.estudianteId && (
                                   <form
                                     onSubmit={handleSubmitGrade}
                                     onClick={(e) => e.stopPropagation()}
@@ -906,6 +986,74 @@ export default function AssignmentDetailPage() {
                       </CardContent>
                     </Card>
                   </TabsContent>
+
+                  <TabsContent value="actividad">
+                    <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                      <CardHeader>
+                        <CardTitle className="text-white">Actividad de estudiantes</CardTitle>
+                        <CardDescription className="text-white/60">
+                          Aperturas, tiempo en la tarea y descargas (tracking solo para estudiantes).
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="overflow-x-auto">
+                        {!assignmentActivity?.students?.length ? (
+                          <p className="text-white/50 text-sm py-4">
+                            {loadingGroupStudents ? 'Cargando…' : 'Sin datos de actividad o sin estudiantes en el grupo.'}
+                          </p>
+                        ) : (
+                          <table className="w-full text-sm text-left border-collapse">
+                            <thead>
+                              <tr className="text-white/50 border-b border-white/10">
+                                <th className="py-2 pr-3 font-medium">Estudiante</th>
+                                <th className="py-2 pr-3 font-medium">Primera apertura</th>
+                                <th className="py-2 pr-3 font-medium">Tiempo total</th>
+                                <th className="py-2 pr-3 font-medium">Veces abierto</th>
+                                <th className="py-2 pr-3 font-medium">Escribió</th>
+                                <th className="py-2 font-medium">Descargas</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {assignmentActivity.students.map((row) => {
+                                const mins = Math.floor(row.total_time_seconds / 60);
+                                const secs = row.total_time_seconds % 60;
+                                const timeLabel = `${mins} min ${secs} seg`;
+                                return (
+                                  <tr
+                                    key={row.student_id}
+                                    className={`border-b border-white/[0.06] ${row.never_opened ? 'bg-[rgba(239,68,68,0.05)]' : ''}`}
+                                  >
+                                    <td className="py-3 pr-3 text-white">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-medium">{row.full_name}</span>
+                                        {row.never_opened && (
+                                          <Badge className="bg-red-500/15 text-red-400 border-red-500/30 text-[10px]">Sin abrir</Badge>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="py-3 pr-3 text-white/80">
+                                      {row.never_opened ? (
+                                        <span className="text-red-400/90">Nunca abrió</span>
+                                      ) : row.first_opened ? (
+                                        new Date(row.first_opened).toLocaleString('es-CO')
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </td>
+                                    <td className="py-3 pr-3 text-white/80">{row.never_opened ? '—' : timeLabel}</td>
+                                    <td className="py-3 pr-3 text-white/80">{row.times_opened}</td>
+                                    <td className="py-3 pr-3 text-white/80">{row.started_writing ? '✓' : '—'}</td>
+                                    <td className="py-3 text-white/70 text-xs max-w-[200px]">
+                                      {row.downloaded_files?.length ? row.downloaded_files.join(', ') : '—'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
                 </Tabs>
               ) : (
                 <div className="space-y-6">
@@ -976,6 +1124,9 @@ export default function AssignmentDetailPage() {
                                 href={adjunto.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                onClick={() => {
+                                  if (isEstudiante) trackDownload(adjunto.nombre || 'archivo');
+                                }}
                                 className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
                                 data-testid={`adjunto-${index}`}
                               >
@@ -1005,6 +1156,9 @@ export default function AssignmentDetailPage() {
                                 href={m.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                onClick={() => {
+                                  if (isEstudiante) trackDownload(displayName || 'archivo');
+                                }}
                                 className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
                                 data-testid={`material-${m._id}`}
                               >
@@ -1163,6 +1317,15 @@ export default function AssignmentDetailPage() {
                             <Textarea
                               value={submitData.comentario}
                               onChange={(e) => setSubmitData({ comentario: e.target.value })}
+                              onFocus={() => {
+                                if (!isEstudiante || !params.id || didFireStartWritingRef.current) return;
+                                didFireStartWritingRef.current = true;
+                                fireActivityTrack({
+                                  entity_type: 'assignment',
+                                  entity_id: params.id,
+                                  action: 'start_writing',
+                                });
+                              }}
                               placeholder="Agrega un comentario para tu profesor..."
                               className="bg-white/5 border-white/10 text-white"
                               data-testid="input-comentario"
