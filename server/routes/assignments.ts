@@ -100,6 +100,8 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 
     let assignments: AssignmentRow[] = [];
     const groupSubjectIds: string[] = [];
+    /** Profesor con ?groupId= (sin courseId): vista calendario del curso completo — todas las materías y tareas del grupo. */
+    let professorGroupWideCalendar = false;
 
     if (courseId && typeof courseId === 'string') {
       if (user.role === 'estudiante') {
@@ -119,8 +121,12 @@ router.get('/', protect, async (req: AuthRequest, res) => {
         const resolved = await resolveGroupId(groupId.trim(), user.institution_id ?? '');
         if (resolved) {
           const gsList = await findGroupSubjectsByGroupWithDetails(resolved.id, user.institution_id ?? undefined);
-          const byTeacher = gsList.filter((gs) => gs.teacher_id === userId);
-          groupSubjectIds.push(...byTeacher.map((gs) => gs.id));
+          const teachesInGroup = gsList.some((gs) => gs.teacher_id === userId);
+          if (!teachesInGroup) {
+            return res.status(403).json({ message: 'No dictas ninguna materia en este grupo.' });
+          }
+          professorGroupWideCalendar = true;
+          groupSubjectIds.push(...gsList.map((gs) => gs.id));
         }
       } else {
         const gsList = await findGroupSubjectsByTeacher(userId);
@@ -147,7 +153,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
       const list = fromDate || toDate
         ? await findAssignmentsByGroupSubjectAndDue(gsId, fromDate, toDate)
         : await findAssignmentsByGroupSubject(gsId);
-      if (user.role === 'profesor') {
+      if (user.role === 'profesor' && !professorGroupWideCalendar) {
         assignments = assignments.concat(list.filter((a) => a.created_by === userId));
       } else {
         assignments = assignments.concat(list);
