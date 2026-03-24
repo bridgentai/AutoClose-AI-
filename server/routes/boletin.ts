@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
+import { requireStudentAccess } from '../middleware/studentAccessGuard.js';
 import { queryPg } from '../config/db-pg.js';
 import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 import { findGradingSchemaByGroupSubject } from '../repositories/gradingSchemaRepository.js';
@@ -213,6 +214,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 router.get(
   '/inteligente/:estudianteId',
   protect,
+  requireStudentAccess('estudianteId', 'own_teacher_only'),
   async (req: AuthRequest, res) => {
     try {
       const { estudianteId } = req.params;

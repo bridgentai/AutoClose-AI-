@@ -46,6 +46,8 @@ import {
   ensureAssignmentCategoryFkReferencesGradingCategories,
   ensureEvoFilesOrigenCheck,
   ensureAuditLogIpColumns,
+  ensureAuditLogRetentionPolicy,
+  ensureEvoSendRetention,
 } from "./db/pgSchemaPatches.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -75,6 +77,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[schema] analytics.activity_logs / ai_action_logs ip_address OK");
     } catch (e) {
       console.warn("[schema] Parche audit ip_address:", (e as Error).message);
+    }
+    try {
+      await ensureAuditLogRetentionPolicy();
+    } catch (e) {
+      console.warn("[schema] Parche retención audit logs:", (e as Error).message);
+    }
+    try {
+      await ensureEvoSendRetention();
+      console.log("[schema] announcement_messages.retention_until OK");
+    } catch (e) {
+      console.warn("[schema] Parche EvoSend retention_until:", (e as Error).message);
     }
   }
 

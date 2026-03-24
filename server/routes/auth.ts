@@ -29,7 +29,7 @@ async function resolveInstitutionId(colegioId: string): Promise<string> {
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
-const TOKEN_EXPIRES = '30d';
+const TOKEN_EXPIRES = process.env.JWT_EXPIRY ?? '8h';
 
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET no está configurado');

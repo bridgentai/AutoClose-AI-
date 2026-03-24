@@ -130,12 +130,13 @@ Importante:
 - Si no tienes información específica del currículo, indica que es una respuesta general
 `;
 
+    const { sanitized: sanitizedSystem } = sanitizeText(systemPrompt);
     const { sanitized: safeUserMessage } = sanitizeText(userMessage);
 
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: sanitizedSystem },
         { role: 'user', content: safeUserMessage }
       ],
       max_completion_tokens: 1500,

@@ -1,6 +1,7 @@
 import express from 'express';
 import { startOfDay, endOfDay } from 'date-fns';
 import { protect, AuthRequest } from '../middleware/auth.js';
+import { requireStudentAccess } from '../middleware/studentAccessGuard.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupSubjectById, findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
 import { findGroupsByInstitution } from '../repositories/groupRepository.js';
@@ -426,7 +427,11 @@ router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general
 });
 
 // GET /api/attendance/estudiante/:estudianteId
-router.get('/estudiante/:estudianteId', protect, async (req: AuthRequest, res) => {
+router.get(
+  '/estudiante/:estudianteId',
+  protect,
+  requireStudentAccess('estudianteId', 'all_teachers'),
+  async (req: AuthRequest, res) => {
   try {
     const { estudianteId } = req.params;
     const userId = req.user?.id;
@@ -436,6 +441,10 @@ router.get('/estudiante/:estudianteId', protect, async (req: AuthRequest, res) =
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
+      rol === 'school_admin' ||
+      rol === 'administrador-general' ||
+      rol === 'super_admin' ||
+      rol === 'profesor' ||
       rol === 'asistente' ||
       userId === estudianteId ||
       (rol === 'padre' && (await canParentViewStudent(userId!, estudianteId)));
@@ -464,7 +473,11 @@ router.get('/estudiante/:estudianteId', protect, async (req: AuthRequest, res) =
 });
 
 // GET /api/attendance/resumen/estudiante/:estudianteId
-router.get('/resumen/estudiante/:estudianteId', protect, async (req: AuthRequest, res) => {
+router.get(
+  '/resumen/estudiante/:estudianteId',
+  protect,
+  requireStudentAccess('estudianteId', 'all_teachers'),
+  async (req: AuthRequest, res) => {
   try {
     const { estudianteId } = req.params;
     const userId = req.user?.id;
@@ -474,6 +487,10 @@ router.get('/resumen/estudiante/:estudianteId', protect, async (req: AuthRequest
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
+      rol === 'school_admin' ||
+      rol === 'administrador-general' ||
+      rol === 'super_admin' ||
+      rol === 'profesor' ||
       rol === 'asistente' ||
       userId === estudianteId ||
       (rol === 'padre' && (await canParentViewStudent(userId!, estudianteId)));

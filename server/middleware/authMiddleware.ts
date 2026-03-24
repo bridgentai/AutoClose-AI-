@@ -1,3 +1,7 @@
+/**
+ * @deprecated Usar server/middleware/auth.ts en su lugar.
+ * Este archivo se mantiene por compatibilidad con rutas legacy.
+ */
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { ENV } from '../config/env.js';

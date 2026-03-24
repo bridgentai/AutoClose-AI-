@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
+import { requireStudentAccess } from '../middleware/studentAccessGuard.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
 import { queryPg } from '../config/db-pg.js';
@@ -13,7 +14,11 @@ export interface CursoResumenItem {
   cantidadNotas: number;
 }
 
-router.get('/estudiante/:id/resumen', protect, async (req: AuthRequest, res) => {
+router.get(
+  '/estudiante/:id/resumen',
+  protect,
+  requireStudentAccess('id', 'own_teacher_only'),
+  async (req: AuthRequest, res) => {
   try {
     const estudianteId = req.params.id;
     const userId = req.user?.id ?? req.userId;
@@ -29,6 +34,9 @@ router.get('/estudiante/:id/resumen', protect, async (req: AuthRequest, res) => 
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
       rol === 'school_admin' ||
+      rol === 'administrador-general' ||
+      rol === 'super_admin' ||
+      rol === 'profesor' ||
       userId === estudianteId ||
       (rol === 'padre' && (await findGuardianStudent(userId ?? '', estudianteId)));
 

@@ -10,6 +10,7 @@
 
 import { createActivityLog } from '../repositories/activityLogRepository.js';
 import { queryPg } from '../config/db-pg.js';
+import { sanitizeContextObject } from './llmSanitizer.js';
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -53,6 +54,9 @@ export interface AuditLogData {
 
 export async function logAuditEvent(data: AuditLogData): Promise<void> {
   try {
+    const safeRequestData = data.requestData
+      ? sanitizeContextObject(data.requestData as Record<string, unknown>)
+      : undefined;
     await createActivityLog({
       institution_id: data.institutionId,
       user_id: data.userId,
@@ -64,7 +68,7 @@ export async function logAuditEvent(data: AuditLogData): Promise<void> {
         role: data.role,
         result: data.result,
         ...(data.error ? { error: data.error } : {}),
-        ...(data.requestData ? { requestData: data.requestData } : {}),
+        ...(safeRequestData ? { requestData: safeRequestData } : {}),
       },
     });
   } catch (err: unknown) {
@@ -135,6 +139,8 @@ export async function logAIAction(data: {
   if (data.cursoId) parameters.cursoId = data.cursoId;
   if (data.entityId && !entityUuid) parameters.entityRef = data.entityId;
 
+  const safeParameters = sanitizeContextObject(parameters as Record<string, unknown>) as Record<string, unknown>;
+
   const resultJson =
     data.result === 'success' ? {} : { error: data.error ?? 'unknown' };
 
@@ -151,7 +157,7 @@ export async function logAIAction(data: {
         data.action,
         data.entityType ?? null,
         entityUuid,
-        parameters,
+        safeParameters,
         resultJson,
         data.result,
         data.ipAddress ?? null,

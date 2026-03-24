@@ -5,6 +5,14 @@ import { findUserById } from '../repositories/userRepository.js';
 import { getFirstGroupNameForStudent } from '../repositories/enrollmentRepository.js';
 import { ENV } from '../config/env.js';
 
+/**
+ * NOTA DE MANTENIMIENTO:
+ * Existe también server/middleware/authMiddleware.ts (legacy).
+ * Ambos implementan `protect` pero con diferencias menores en manejo de errores.
+ * TODO: unificar en un solo archivo en la próxima iteración.
+ * Usar auth.ts como la versión canónica — authMiddleware.ts está deprecado.
+ */
+
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {

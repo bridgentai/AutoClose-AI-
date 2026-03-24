@@ -396,3 +396,41 @@ export async function createAnnouncementMessage(row: {
   );
   return r.rows[0];
 }
+
+/**
+ * Elimina un mensaje de EvoSend solo si tiene más de 365 días (política de retención mínima).
+ */
+export async function deleteAnnouncementMessageIfExpired(
+  messageId: string,
+  institutionId: string
+): Promise<{ deleted: boolean; reason?: string }> {
+  const r = await queryPg<{ id: string; created_at: string }>(
+    `SELECT m.id, m.created_at FROM announcement_messages m
+     WHERE m.id = $1
+       AND m.announcement_id IN (
+         SELECT id FROM announcements WHERE institution_id = $2
+       )
+     LIMIT 1`,
+    [messageId, institutionId]
+  );
+
+  if (!r.rows.length) {
+    return { deleted: false, reason: 'Mensaje no encontrado.' };
+  }
+
+  const createdAt = new Date(r.rows[0].created_at);
+  const now = new Date();
+  const diffDays = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+
+  if (diffDays < 365) {
+    const until = new Date(createdAt.getTime() + 365 * 24 * 60 * 60 * 1000);
+    return {
+      deleted: false,
+      reason: `El mensaje debe retenerse hasta ${until.toLocaleDateString()}.`,
+    };
+  }
+
+  await queryPg(`DELETE FROM announcement_messages WHERE id = $1`, [messageId]);
+
+  return { deleted: true };
+}

@@ -3,6 +3,7 @@ import { protect, AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/roleAuth.js';
 import { queryPg } from '../config/db-pg.js';
 import {
+  type AnnouncementRow,
   findAnnouncementsByInstitution,
   findAnnouncementById,
   findAnnouncementMessages,
@@ -13,6 +14,8 @@ import {
   findAnnouncementsByRecipient,
   isUserRecipientOfAnnouncement,
   findOrCreateSupportThreadOneToOne,
+  findDirectThreadBetweenUsers,
+  addAnnouncementRecipients,
   countUnreadByThreadIds,
   markEvoThreadRead,
 } from '../repositories/announcementRepository.js';
@@ -47,6 +50,44 @@ const EVO_SEND_ROLES = [
   'school_admin',
   'super_admin',
 ];
+
+const DIRECTIVO_FULL_INBOX_ROLES = ['directivo', 'school_admin'] as const;
+
+/**
+ * Verifica si un adulto puede tener hilo directo con un estudiante.
+ * Permitido solo si es su profesor directo o su padre/acudiente vinculado.
+ */
+async function canAdultMessageStudent(
+  adultId: string,
+  studentId: string,
+  institutionId: string
+): Promise<boolean> {
+  const isTeacher = await queryPg<{ n: number }>(
+    `SELECT 1 AS n
+     FROM enrollments e
+     JOIN group_subjects gs ON gs.group_id = e.group_id AND gs.institution_id = $3
+     WHERE e.student_id = $1 AND gs.teacher_id = $2
+     LIMIT 1`,
+    [studentId, adultId, institutionId]
+  );
+  if (isTeacher.rows.length > 0) return true;
+
+  const isParent = await queryPg<{ n: number }>(
+    `SELECT 1 AS n FROM guardian_students
+     WHERE guardian_id = $1 AND student_id = $2 AND institution_id = $3
+     LIMIT 1`,
+    [adultId, studentId, institutionId]
+  );
+  if (isParent.rows.length > 0) return true;
+
+  return false;
+}
+
+/** Indica si el usuario tiene rol estudiante (menor en el modelo de permisos EvoSend). */
+async function isMinor(userId: string): Promise<boolean> {
+  const r = await queryPg<{ role: string }>(`SELECT role FROM users WHERE id = $1 LIMIT 1`, [userId]);
+  return r.rows[0]?.role === 'estudiante';
+}
 
 async function resolveRecipientsForThread(args: {
   announcement: { id: string; type: string; group_id: string | null; group_subject_id: string | null; created_by_id: string };
@@ -217,18 +258,40 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
       return res.json({ mis_cursos: misCursos, colegas, support_thread });
     }
 
-    // Directivo: colegas + directos + Soporte 1-1 con GLC
-    if (rol === 'directivo' && userId) {
-      const staffAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_staff'], colegioId);
-      const colegasRaw = await Promise.all(staffAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
-      const directAnnouncements = await findAnnouncementsByRecipient(userId, ['evo_chat_direct'], colegioId);
-      const directosRaw = await Promise.all(directAnnouncements.map((a) => buildThreadFromAnnouncement(a)));
-      const [colegas, directos] = await Promise.all([
+    // Directivo / school_admin: todos los cursos + staff + directos de la institución; soporte 1-1 solo el propio
+    if (rol && DIRECTIVO_FULL_INBOX_ROLES.includes(rol as (typeof DIRECTIVO_FULL_INBOX_ROLES)[number]) && userId) {
+      const [cursoRes, staffRes, directRes] = await Promise.all([
+        queryPg<AnnouncementRow>(
+          `SELECT * FROM announcements a
+           WHERE a.institution_id = $1 AND a.type = 'evo_chat'
+           ORDER BY a.updated_at DESC`,
+          [colegioId]
+        ),
+        queryPg<AnnouncementRow>(
+          `SELECT * FROM announcements a
+           WHERE a.institution_id = $1 AND a.type = 'evo_chat_staff'
+           ORDER BY a.updated_at DESC`,
+          [colegioId]
+        ),
+        queryPg<AnnouncementRow>(
+          `SELECT * FROM announcements a
+           WHERE a.institution_id = $1 AND a.type = 'evo_chat_direct'
+           ORDER BY a.updated_at DESC`,
+          [colegioId]
+        ),
+      ]);
+      const [misCursosRaw, colegasRaw, directosRaw] = await Promise.all([
+        Promise.all(cursoRes.rows.map((a: AnnouncementRow) => buildThreadFromAnnouncement(a))),
+        Promise.all(staffRes.rows.map((a: AnnouncementRow) => buildThreadFromAnnouncement(a))),
+        Promise.all(directRes.rows.map((a: AnnouncementRow) => buildThreadFromAnnouncement(a))),
+      ]);
+      const [mis_cursos, colegas, directos] = await Promise.all([
+        mergeUnreadIntoThreads(misCursosRaw, userId),
         mergeUnreadIntoThreads(colegasRaw, userId),
         mergeUnreadIntoThreads(directosRaw, userId),
       ]);
       const support_thread = await buildSupportThreadForStaff(colegioId, userId);
-      return res.json({ colegas, directos, support_thread });
+      return res.json({ mis_cursos, colegas, directos, support_thread });
     }
 
     if (rol === 'estudiante' && userId) {
@@ -372,18 +435,24 @@ router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: 
     // No se debe "saltar" validaciones por un userId faltante.
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
+    const rol = req.user?.rol;
     const a = await findAnnouncementById(id);
     if (!a || a.institution_id !== colegioId) {
       return res.json({ thread: null, messages: [] });
     }
-    if (a.type === 'evo_chat') {
+    const directorReadAll =
+      !!rol &&
+      DIRECTIVO_FULL_INBOX_ROLES.includes(rol as (typeof DIRECTIVO_FULL_INBOX_ROLES)[number]) &&
+      (a.type === 'evo_chat' || a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct');
+
+    if (a.type === 'evo_chat' && !directorReadAll) {
       const allowedIds = await resolveRecipientsForThread({
         announcement: { id: a.id, type: a.type, group_id: a.group_id, group_subject_id: a.group_subject_id, created_by_id: a.created_by_id },
         institutionId: colegioId,
       });
       if (!allowedIds.includes(userId)) return res.json({ thread: null, messages: [] });
     }
-    if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') {
+    if ((a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') && !directorReadAll) {
       const allowed = await isUserRecipientOfAnnouncement(id, userId);
       if (!allowed) return res.json({ thread: null, messages: [] });
     } else if (a.type === 'evo_chat_support') {
@@ -439,9 +508,17 @@ router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: 
   }
 });
 
-router.post('/threads', protect, requireRole('directivo', 'profesor', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+router.post('/threads', protect, requireRole('directivo', 'profesor', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
   try {
-    const { asunto, contenido, tipo, cursoId, prioridad } = req.body;
+    const { asunto, contenido, tipo, cursoId, prioridad, targetUserId: bodyTargetId, recipientId } = req.body as {
+      asunto?: string;
+      contenido?: string;
+      tipo?: string;
+      cursoId?: string | null;
+      prioridad?: string;
+      targetUserId?: string;
+      recipientId?: string;
+    };
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
@@ -449,14 +526,64 @@ router.post('/threads', protect, requireRole('directivo', 'profesor', 'admin-gen
       return res.status(400).json({ message: 'Faltan asunto o contenido.' });
     }
 
+    const effectiveTipo = (tipo ?? 'general').trim();
+    const targetUserId = (bodyTargetId ?? recipientId ?? '').trim() || undefined;
+
+    if (effectiveTipo === 'evo_chat_direct' && !targetUserId) {
+      return res.status(400).json({ message: 'Para un chat directo se requiere destinatario (targetUserId o recipientId).' });
+    }
+
+    if (targetUserId) {
+      if (targetUserId === userId) {
+        return res.status(400).json({ message: 'No puedes crear un hilo contigo mismo como único participante.' });
+      }
+      const targetUser = await findUserById(targetUserId);
+      if (!targetUser || targetUser.institution_id !== colegioId) {
+        return res.status(404).json({ message: 'Usuario destinatario no encontrado en esta institución.' });
+      }
+
+      const targetIsMinor = await isMinor(targetUserId);
+      const senderIsMinor = await isMinor(userId);
+
+      if (targetIsMinor && !senderIsMinor) {
+        const allowed = await canAdultMessageStudent(userId, targetUserId, colegioId);
+        if (!allowed) {
+          return res.status(403).json({
+            message:
+              'No puedes iniciar un chat directo con este estudiante. Solo su profesor directo o acudiente puede hacerlo.',
+          });
+        }
+      }
+
+      if (senderIsMinor && !targetIsMinor) {
+        const allowed = await canAdultMessageStudent(targetUserId, userId, colegioId);
+        if (!allowed) {
+          return res.status(403).json({
+            message: 'No puedes iniciar un chat directo con este usuario.',
+          });
+        }
+      }
+    }
+
+    if (effectiveTipo === 'evo_chat_direct' && targetUserId) {
+      const existing = await findDirectThreadBetweenUsers(userId, targetUserId, colegioId);
+      if (existing) {
+        return res.status(200).json({ _id: existing.id, message: 'Hilo directo ya existía.', existing: true });
+      }
+    }
+
     const a = await createAnnouncement({
       institution_id: colegioId,
       title: asunto.trim(),
       body: contenido.trim(),
-      type: tipo ?? 'general',
+      type: effectiveTipo,
       group_id: cursoId ?? null,
       created_by_id: userId,
     });
+
+    if (effectiveTipo === 'evo_chat_direct' && targetUserId) {
+      await addAnnouncementRecipients(a.id, [userId, targetUserId]);
+    }
 
     await createAnnouncementMessage({
       announcement_id: a.id,

@@ -24,13 +24,35 @@ const AUDITED_PATTERNS: Array<{
 
 export function getClientIP(req: Request): string {
   const forwarded = req.headers['x-forwarded-for'];
+  let raw: string;
   if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
+    raw = forwarded.split(',')[0].trim();
+  } else if (Array.isArray(forwarded) && forwarded[0]) {
+    raw = forwarded[0].split(',')[0].trim();
+  } else {
+    raw = req.socket?.remoteAddress ?? 'unknown';
   }
-  if (Array.isArray(forwarded) && forwarded[0]) {
-    return forwarded[0].split(',')[0].trim();
+  return anonymizeIP(raw);
+}
+
+function anonymizeIP(ip: string): string {
+  const trimmed = ip.trim();
+  const ipv4 = trimmed.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+  if (ipv4) return `${ipv4[1]}.x`;
+
+  const ipv4mapped = trimmed.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/i);
+  if (ipv4mapped) {
+    return `::ffff:${ipv4mapped[1]}.x`;
   }
-  return req.socket?.remoteAddress ?? 'unknown';
+
+  if (trimmed.includes(':')) {
+    const parts = trimmed.split(':').filter((p) => p.length > 0);
+    if (parts.length >= 4) return `${parts.slice(0, 4).join(':')}::x`;
+    if (parts.length > 0) return `${parts[0]}::x`;
+  }
+
+  if (!trimmed || trimmed === 'unknown') return 'unknown';
+  return 'unknown';
 }
 
 function matchPath(req: AuthRequest): (typeof AUDITED_PATTERNS)[number] | undefined {

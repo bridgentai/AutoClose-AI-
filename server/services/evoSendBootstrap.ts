@@ -84,6 +84,10 @@ async function ensureStaffGroupsForInstitution(institutionId: string): Promise<v
 }
 
 async function ensureDirectThreadsForInstitution(institutionId: string): Promise<void> {
+  // POLÍTICA DE SEGURIDAD: solo se crean hilos directos entre adultos (directivo ↔ profesor).
+  // Los hilos directo adulto-estudiante no se generan aquí.
+  // Solo el profesor directo o el padre/acudiente vinculado puede iniciar chat con un estudiante,
+  // validado en POST /api/evo-send/threads con tipo evo_chat_direct (targetUserId / recipientId).
   const directivos = await findUsersByInstitutionAndRoles(institutionId, ['directivo']);
   const profesores = await findUsersByInstitutionAndRoles(institutionId, ['profesor']);
   if (directivos.length === 0 || profesores.length === 0) return;

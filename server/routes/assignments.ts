@@ -102,6 +102,17 @@ router.get('/', protect, async (req: AuthRequest, res) => {
     const groupSubjectIds: string[] = [];
 
     if (courseId && typeof courseId === 'string') {
+      if (user.role === 'estudiante') {
+        const gsCheck = await findGroupSubjectById(courseId);
+        if (!gsCheck || gsCheck.institution_id !== user.institution_id) {
+          return res.status(403).json({ message: 'No tienes acceso a las tareas de este curso.' });
+        }
+        const studentGroups = await getAllCourseGroupsForStudent(userId, user.institution_id);
+        const enrolledGroupIds = new Set(studentGroups.map((g) => g.id));
+        if (!enrolledGroupIds.has(gsCheck.group_id)) {
+          return res.status(403).json({ message: 'No tienes acceso a las tareas de este curso.' });
+        }
+      }
       groupSubjectIds.push(courseId);
     } else if (user.role === 'profesor') {
       if (groupId && typeof groupId === 'string') {
@@ -726,7 +737,10 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
     const materiaNombre = (gsForInst.display_name?.trim() || subject?.name) ?? undefined;
     const groupId = gsForInst.group_id;
 
-    const subs = await findSubmissionsByAssignment(assignment.id);
+    let subs = await findSubmissionsByAssignment(assignment.id);
+    if (user.role === 'estudiante') {
+      subs = subs.filter((s) => s.student_id === userId);
+    }
     const submissions = subs.map((s) => {
       const attachments = s.attachments != null && Array.isArray(s.attachments) ? s.attachments : [];
       return {

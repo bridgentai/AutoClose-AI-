@@ -4,6 +4,7 @@ import {
   findGroupByNameAndInstitution,
   findGroupByNameAndInstitutionCaseInsensitive,
   findGroupsByInstitution,
+  findGroupsByTeacher,
   createGroup,
 } from '../repositories/groupRepository.js';
 import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
@@ -221,7 +222,12 @@ router.get('/all', protect, async (req: AuthRequest, res) => {
     if (!rolUser || !allowedRoles.includes(rolUser)) {
       return res.status(403).json({ message: 'Acceso denegado.' });
     }
-    const groups = await findGroupsByInstitution(colegioId);
+    let groups = await findGroupsByInstitution(colegioId);
+    if (rolUser === 'profesor' && req.user?.id) {
+      const profesorGroups = await findGroupsByTeacher(req.user.id);
+      const profesorGroupIds = new Set(profesorGroups.map((g) => g.id));
+      groups = groups.filter((g) => profesorGroupIds.has(g.id));
+    }
     const groupIds = groups.map((g) => g.id);
     const counts = await countEnrollmentsByGroupIds(groupIds);
     const result = await Promise.all(
@@ -369,6 +375,9 @@ router.get('/lookup/:objectId', protect, async (req: AuthRequest, res) => {
         objectId,
         suggestion: 'Este ID no corresponde a ningún grupo en la base de datos.',
       });
+    }
+    if (group.institution_id !== req.user?.colegioId && req.user?.rol !== 'super_admin') {
+      return res.status(403).json({ message: 'No tienes acceso a este grupo.' });
     }
     res.json({
       objectId: group.id,

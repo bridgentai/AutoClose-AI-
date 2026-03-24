@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
+import { requireStudentAccess } from '../middleware/studentAccessGuard.js';
 import { findUserById, updateUser } from '../repositories/userRepository.js';
 import { findGroupSubjectsByGroup, findGroupSubjectsByGroupWithDetails, findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
@@ -26,6 +27,18 @@ import { emitEvoMessageBroadcast } from '../socket.js';
 const router = express.Router();
 
 const DISCIPLINE_ALLOWED_ROLES = ['profesor', 'directivo'] as const;
+/** Quién puede listar amonestaciones (alineado con requireStudentAccess + negocio). */
+const DISCIPLINE_VIEW_ROLES = [
+  'profesor',
+  'directivo',
+  'estudiante',
+  'padre',
+  'admin-general-colegio',
+  'school_admin',
+  'administrador-general',
+  'super_admin',
+  'asistente',
+] as const;
 const isValidSeverity = (s: unknown): s is DisciplinarySeverity =>
   s === 'leve' || s === 'grave' || s === 'suma gravedad';
 
@@ -60,7 +73,11 @@ router.get('/subjects', protect, async (req: AuthRequest, res) => {
 });
 
 // GET /api/student/:estudianteId/disciplinary-actions (profesor/directivo)
-router.get('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequest, res) => {
+router.get(
+  '/:estudianteId/disciplinary-actions',
+  protect,
+  requireStudentAccess('estudianteId', 'all_teachers'),
+  async (req: AuthRequest, res) => {
   try {
     const { estudianteId } = req.params;
     const requesterId = req.user?.id;
@@ -68,7 +85,10 @@ router.get('/:estudianteId/disciplinary-actions', protect, async (req: AuthReque
     if (!requesterId || !institutionId) return res.status(401).json({ message: 'No autorizado.' });
 
     const requester = await findUserPgById(requesterId);
-    if (!requester || !DISCIPLINE_ALLOWED_ROLES.includes(requester.role as (typeof DISCIPLINE_ALLOWED_ROLES)[number])) {
+    if (
+      !requester ||
+      !DISCIPLINE_VIEW_ROLES.includes(requester.role as (typeof DISCIPLINE_VIEW_ROLES)[number])
+    ) {
       return res.status(403).json({ message: 'No autorizado.' });
     }
 

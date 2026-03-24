@@ -370,6 +370,9 @@ export function buildSanitizerContextFromRoleContext(ctx: RoleContext): Sanitize
  */
 export function formatContextForPrompt(context: RoleContext): string {
   const safeContext = sanitizeContextObject(context as unknown as Record<string, unknown>) as unknown as RoleContext;
+  let estCounter = 1;
+  let hijoCounter = 1;
+  let profCounter = 1;
 
   let prompt = `\n\nCONTEXTO DEL USUARIO:\n`;
   prompt += `- Rol: ${safeContext.role}\n`;
@@ -380,6 +383,7 @@ export function formatContextForPrompt(context: RoleContext): string {
 
   if (safeContext.materias && safeContext.materias.length > 0) {
     prompt += `- Materias asignadas: ${safeContext.materias.map((m) => m.nombre).join(', ')}\n`;
+    prompt += `- Profesores de materias: ${safeContext.materias.map((m) => m?.profesor?.nombre ? `[PROF_${profCounter++}]` : 'Sin profesor').join(', ')}\n`;
   }
 
   if (safeContext.cursosAsignados && safeContext.cursosAsignados.length > 0) {
@@ -397,7 +401,8 @@ export function formatContextForPrompt(context: RoleContext): string {
     safeContext.resumenNotasProfesor.forEach((materia: Record<string, unknown>) => {
       prompt += `  * ${materia.materiaNombre} (grupo ${materia.grupo}):\n`;
       (materia.notas as Array<Record<string, unknown>>).forEach((n) => {
-        prompt += `    - ${n.estudianteNombre}: "${n.tareaTitulo}" = ${n.nota}${n.fecha ? ` (${n.fecha})` : ''}\n`;
+        const studentToken = `[EST_${estCounter++}]`;
+        prompt += `    - ${studentToken}: "${n.tareaTitulo}" = ${n.nota}${n.fecha ? ` (${n.fecha})` : ''}\n`;
       });
     });
     prompt += `\nUsa esta información cuando te pregunten por notas, promedios o rendimiento de sus estudiantes.\n`;
@@ -408,7 +413,7 @@ export function formatContextForPrompt(context: RoleContext): string {
   }
 
   if (safeContext.hijos && safeContext.hijos.length > 0) {
-    prompt += `- Hijos: ${safeContext.hijos.map((h) => h.nombre).join(', ')}\n`;
+    prompt += `- Hijos: ${safeContext.hijos.map(() => `[HIJO_${hijoCounter++}]`).join(', ')}\n`;
   }
 
   if (safeContext.permisos && safeContext.permisos.length > 0) {

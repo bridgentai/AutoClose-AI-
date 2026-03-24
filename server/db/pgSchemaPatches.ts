@@ -131,3 +131,57 @@ export async function ensureAuditLogIpColumns(): Promise<void> {
   `);
   auditLogIpColumnsEnsured = true;
 }
+
+/** Elimina registros de auditoría muy antiguos al arrancar (minimización de datos). */
+export async function ensureAuditLogRetentionPolicy(): Promise<void> {
+  try {
+    await queryPg(`
+      DELETE FROM analytics.activity_logs
+      WHERE created_at < NOW() - INTERVAL '365 days'
+    `);
+
+    await queryPg(`
+      DELETE FROM analytics.ai_action_logs
+      WHERE created_at < NOW() - INTERVAL '365 days'
+    `);
+
+    console.log('[pgSchemaPatches] Retención de logs: registros > 365 días eliminados.');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[pgSchemaPatches] Error en retención de logs:', msg);
+  }
+}
+
+let evoSendRetentionEnsured = false;
+
+/** Columna derivada de retención mínima (365 días desde created_at) en mensajes EvoSend. */
+export async function ensureEvoSendRetention(): Promise<void> {
+  if (evoSendRetentionEnsured) return;
+  try {
+    await queryPg(`
+      ALTER TABLE announcement_messages
+      ADD COLUMN retention_until TIMESTAMPTZ
+      GENERATED ALWAYS AS (created_at + INTERVAL '365 days') STORED
+    `);
+    console.log('[pgSchemaPatches] EvoSend retention_until (generated) OK');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('already exists') || msg.includes('duplicate column')) {
+      evoSendRetentionEnsured = true;
+      return;
+    }
+    try {
+      await queryPg(`ALTER TABLE announcement_messages ADD COLUMN IF NOT EXISTS retention_until TIMESTAMPTZ`);
+      await queryPg(`
+        UPDATE announcement_messages
+        SET retention_until = created_at + INTERVAL '365 days'
+        WHERE retention_until IS NULL
+      `);
+      console.log('[pgSchemaPatches] EvoSend retention_until (backfill) OK');
+    } catch (e2: unknown) {
+      const m2 = e2 instanceof Error ? e2.message : String(e2);
+      console.warn('[pgSchemaPatches] EvoSend retention:', m2);
+    }
+  }
+  evoSendRetentionEnsured = true;
+}
