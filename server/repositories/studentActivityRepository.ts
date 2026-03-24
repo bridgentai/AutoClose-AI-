@@ -87,11 +87,11 @@ export async function getAssignmentActivityAggregates(
        BOOL_OR(sa.action = 'start_writing') AS started_writing
      FROM (
        SELECT DISTINCT u.id, u.full_name
-       FROM users u
-       INNER JOIN enrollments e ON e.student_id = u.id
+       FROM enrollments e
+       INNER JOIN users u ON u.id = e.student_id
        INNER JOIN assignments a ON a.id = $2::uuid
        INNER JOIN group_subjects gs ON gs.id = a.group_subject_id AND e.group_id = gs.group_id
-       WHERE u.institution_id = $1::uuid AND u.role = 'estudiante'
+       WHERE u.institution_id = $1::uuid
      ) s
      LEFT JOIN student_activity sa
        ON sa.student_id = s.id

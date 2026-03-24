@@ -407,11 +407,18 @@ export default function AssignmentDetailPage() {
     never_opened: boolean;
   }
 
-  const { data: assignmentActivity } = useQuery<{ students: AssignmentActivityStudent[] }>({
+  const {
+    data: assignmentActivity,
+    isError: assignmentActivityError,
+    error: assignmentActivityErr,
+    isFetching: assignmentActivityFetching,
+    refetch: refetchAssignmentActivity,
+  } = useQuery<{ students: AssignmentActivityStudent[] }>({
     queryKey: ['/api/activity/assignment', params.id],
     queryFn: () => apiRequest('GET', `/api/activity/assignment/${params.id}`),
     enabled: !!params.id && assignmentStaffViewer,
     staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   // Usar submissions si existe, sino usar entregas (legacy)
@@ -435,7 +442,8 @@ export default function AssignmentDetailPage() {
     (assignment.type === 'reminder' || assignment.requiresSubmission === false);
 
   const tabFromUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null;
-  const defaultTab = tabFromUrl === 'entregas' ? 'entregas' : 'info';
+  const defaultTab =
+    tabFromUrl === 'entregas' ? 'entregas' : tabFromUrl === 'actividad' ? 'actividad' : 'info';
   
   const handleGrade = (estudianteId: string) => {
     const submission = submissions.find((s: Submission) => s.estudianteId === estudianteId);
@@ -518,7 +526,13 @@ export default function AssignmentDetailPage() {
           ]}
         />
               {assignmentStaffViewer ? (
-                <Tabs defaultValue={defaultTab} className="w-full">
+                <Tabs
+                  defaultValue={defaultTab}
+                  className="w-full"
+                  onValueChange={(v) => {
+                    if (v === 'actividad') void refetchAssignmentActivity();
+                  }}
+                >
                   <TabsList className="bg-white/5 border border-white/10 mb-6 flex-wrap h-auto gap-1">
                     <TabsTrigger value="info" className="data-[state=active]:bg-[#1e3cff]">Información</TabsTrigger>
                     <TabsTrigger value="entregas" className="data-[state=active]:bg-[#1e3cff]">
@@ -996,9 +1010,29 @@ export default function AssignmentDetailPage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="overflow-x-auto">
-                        {!assignmentActivity?.students?.length ? (
+                        {assignmentActivityError ? (
+                          <div className="py-4 space-y-2">
+                            <p className="text-amber-400/90 text-sm">
+                              {(assignmentActivityErr as Error)?.message ??
+                                'No se pudo cargar la actividad (permisos o error del servidor).'}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-white/20 text-white hover:bg-white/10"
+                              onClick={() => refetchAssignmentActivity()}
+                            >
+                              Reintentar
+                            </Button>
+                          </div>
+                        ) : assignmentActivityFetching && !assignmentActivity?.students ? (
+                          <p className="text-white/50 text-sm py-4">Cargando actividad…</p>
+                        ) : !assignmentActivity?.students?.length ? (
                           <p className="text-white/50 text-sm py-4">
-                            {loadingGroupStudents ? 'Cargando…' : 'Sin datos de actividad o sin estudiantes en el grupo.'}
+                            {groupStudents.length === 0
+                              ? 'No hay estudiantes inscritos en el grupo de esta tarea en la base de datos, o no se cargó la lista. Sincroniza desde el detalle del curso.'
+                              : 'No hay filas de actividad para mostrar. Si los estudiantes ya abrieron la tarea, revisa la pestaña Red del navegador: POST /api/activity/track debe responder 204.'}
                           </p>
                         ) : (
                           <table className="w-full text-sm text-left border-collapse">

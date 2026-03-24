@@ -118,7 +118,11 @@ async function assertAssignmentActivityAccess(
   if (r === 'directivo' || r === 'admin-general-colegio' || r === 'school_admin') {
     return { ok: true, institutionId: instId };
   }
-  if (r === 'profesor' && gs.teacher_id === userId) {
+  /** Alinear con GET /api/assignments/:id (creador) y con la titularidad de la materia. */
+  if (
+    r === 'profesor' &&
+    (gs.teacher_id === userId || assignment.created_by === userId)
+  ) {
     return { ok: true, institutionId: instId };
   }
   return { ok: false, status: 403, message: 'Sin permiso para ver actividad de esta tarea.' };
