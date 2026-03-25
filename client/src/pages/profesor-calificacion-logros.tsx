@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/authContext";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Percent, Plus, Trash2, Edit2, Loader2, CheckSquare, ChevronDown, ChevronUp, ListPlus } from "lucide-react";
@@ -57,8 +57,22 @@ const CARD_STYLE = "bg-white/5 border-white/10 backdrop-blur-md";
 export default function ProfesorCalificacionLogrosPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const [, courseLogrosRoute] = useRoute("/course/:cursoId/calificacion-logros");
+  const contextualGrupoId = courseLogrosRoute?.cursoId?.trim() ?? "";
+  const contextualMode = Boolean(contextualGrupoId);
+
+  const gsQuery =
+    contextualMode && typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("gs")?.trim() ?? ""
+      : "";
+  const returnToQuery =
+    contextualMode && typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("returnTo")?.trim() ?? ""
+      : "";
+
   const queryClient = useQueryClient();
   const [cursoSeleccionado, setCursoSeleccionado] = useState<string>("");
+  const embedInitKeyRef = useRef<string>("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const [dialogLogroOpen, setDialogLogroOpen] = useState(false);
@@ -73,8 +87,37 @@ export default function ProfesorCalificacionLogrosPage() {
   const { data: cursos = [], isLoading: loadingCursos } = useQuery<CourseItem[]>({
     queryKey: ["/api/courses"],
     queryFn: () => apiRequest<CourseItem[]>("GET", "/api/courses"),
-    enabled: !!user?.colegioId && user?.rol === "profesor",
+    enabled: !!user?.colegioId && user?.rol === "profesor" && !contextualMode,
   });
+
+  const { data: subjectsForContext = [], isLoading: loadingSubjectsContext } = useQuery<CourseItem[]>({
+    queryKey: ["subjectsForGroup", contextualGrupoId],
+    queryFn: () => apiRequest<CourseItem[]>("GET", `/api/courses/for-group/${encodeURIComponent(contextualGrupoId)}`),
+    enabled: contextualMode && !!user?.colegioId && user?.rol === "profesor",
+  });
+
+  const { data: groupInfoCtx } = useQuery<{ nombre?: string }>({
+    queryKey: ["group", contextualGrupoId],
+    queryFn: () => apiRequest("GET", `/api/groups/${encodeURIComponent(contextualGrupoId)}`),
+    enabled: contextualMode && !!contextualGrupoId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!contextualMode) {
+      embedInitKeyRef.current = "";
+      return;
+    }
+    if (!subjectsForContext.length) return;
+    const key = `${contextualGrupoId}|${gsQuery}`;
+    if (embedInitKeyRef.current === key) return;
+    const pick =
+      gsQuery && subjectsForContext.some((s) => s._id === gsQuery)
+        ? gsQuery
+        : subjectsForContext[0]._id;
+    setCursoSeleccionado(pick);
+    embedInitKeyRef.current = key;
+  }, [contextualMode, contextualGrupoId, gsQuery, subjectsForContext]);
 
   const { data: logrosData, isLoading: loadingLogros } = useQuery<LogrosResponse>({
     queryKey: ["/api/logros-calificacion", cursoSeleccionado],
@@ -251,10 +294,43 @@ export default function ProfesorCalificacionLogrosPage() {
     return null;
   }
 
+  const backHref = contextualMode
+    ? returnToQuery ||
+      `/course/${encodeURIComponent(contextualGrupoId)}/grades${
+        cursoSeleccionado ? `?${new URLSearchParams({ gs: cursoSeleccionado }).toString()}` : ""
+      }`
+    : "/profesor/academia";
+
+  const backLabel = contextualMode
+    ? groupInfoCtx?.nombre
+      ? `Volver · ${groupInfoCtx.nombre}`
+      : "Volver a notas del grupo"
+    : "Academia";
+
+  if (contextualMode && loadingSubjectsContext && subjectsForContext.length === 0) {
+    return (
+      <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto">
+        <Skeleton className="h-10 w-48 bg-white/10 rounded-md mb-6" />
+        <Skeleton className="h-40 w-full bg-white/10 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (contextualMode && !loadingSubjectsContext && subjectsForContext.length === 0) {
+    return (
+      <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto">
+        <NavBackButton to={returnToQuery || `/course-detail/${encodeURIComponent(contextualGrupoId)}`} label="Volver" />
+        <p className="text-white/60 mt-6">No tienes materias asignadas en este grupo.</p>
+      </div>
+    );
+  }
+
   const logros = logrosData?.logros ?? [];
   const totalPesoLogros = logrosData?.totalPesoLogros ?? 0;
   const logrosPesoCompleto = logrosData?.logrosPesoCompleto ?? false;
-  const cursoActual = cursos.find((c) => c._id === cursoSeleccionado);
+  const cursoActual = contextualMode
+    ? subjectsForContext.find((c) => c._id === cursoSeleccionado)
+    : cursos.find((c) => c._id === cursoSeleccionado);
   const cursoActualLabel = cursoActual?.nombre ?? "";
 
   const toggleExpand = (id: string) => {
@@ -262,46 +338,73 @@ export default function ProfesorCalificacionLogrosPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-10 max-w-4xl mx-auto">
-      <NavBackButton to="/profesor/academia" label="Academia" />
-      <div className="mt-4 mb-8">
+    <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto w-full">
+      <NavBackButton to={backHref} label={backLabel} />
+      <div className="mt-4 mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
-          <Percent className="w-8 h-8 text-[#00c8ff]" />
+          <Percent className="w-8 h-8 text-[#00c8ff] shrink-0" />
           Calificación: Logros
         </h1>
-        <p className="text-white/60 mt-1">
+        <p className="text-white/60 mt-2 max-w-4xl">
           Puedes crear un logro (párrafo del criterio) sin indicadores y ajustar después el peso entre logros. Cuando definas indicadores para un logro, deben sumar 100% en ese logro para poder guardarlos. Idealmente los pesos entre logros suman 100% para la nota final.
         </p>
       </div>
 
-      <Card className={`${CARD_STYLE} mb-6`}>
-        <CardHeader>
-          <CardTitle className="text-white">Materia y grupo</CardTitle>
-          <CardDescription className="text-white/60">
-            Selecciona la materia y el grupo para configurar logros e indicadores. Cada combinación materia+grupo tiene su propia configuración.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loadingCursos ? (
-            <Skeleton className="h-10 w-full bg-white/10 rounded-md" />
-          ) : cursos.length === 0 ? (
-            <p className="text-white/60 py-2">No tienes cursos asignados.</p>
-          ) : (
-            <select
-              value={cursoSeleccionado}
-              onChange={(e) => setCursoSeleccionado(e.target.value)}
-              className="w-full h-10 px-3 rounded-md bg-white/10 border border-white/20 text-white focus:ring-2 focus:ring-[#00c8ff]/50 focus:border-[#00c8ff]"
-            >
-              <option value="">✔ Selecciona materia y grupo</option>
-              {cursos.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.nombre}
-                </option>
-              ))}
-            </select>
-          )}
-        </CardContent>
-      </Card>
+      {contextualMode ? (
+        <div
+          className={`${CARD_STYLE} mb-6 rounded-xl border px-4 py-3 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4`}
+        >
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wider text-white/45 mb-1">Materia en este grupo</p>
+            <p className="text-white font-medium truncate">{cursoActualLabel || "…"}</p>
+          </div>
+          {subjectsForContext.length > 1 ? (
+            <div className="flex flex-col gap-1 sm:items-end">
+              <Label className="text-white/50 text-xs">Cambiar materia</Label>
+              <select
+                value={cursoSeleccionado}
+                onChange={(e) => setCursoSeleccionado(e.target.value)}
+                className="h-10 min-w-[min(100%,280px)] sm:min-w-[260px] px-3 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:ring-2 focus:ring-[#00c8ff]/50 focus:border-[#00c8ff]"
+              >
+                {subjectsForContext.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <Card className={`${CARD_STYLE} mb-6`}>
+          <CardHeader>
+            <CardTitle className="text-white">Materia y grupo</CardTitle>
+            <CardDescription className="text-white/60">
+              Selecciona la materia y el grupo para configurar logros e indicadores. Cada combinación materia+grupo tiene su propia configuración.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingCursos ? (
+              <Skeleton className="h-10 w-full bg-white/10 rounded-md" />
+            ) : cursos.length === 0 ? (
+              <p className="text-white/60 py-2">No tienes cursos asignados.</p>
+            ) : (
+              <select
+                value={cursoSeleccionado}
+                onChange={(e) => setCursoSeleccionado(e.target.value)}
+                className="w-full h-10 px-3 rounded-md bg-white/10 border border-white/20 text-white focus:ring-2 focus:ring-[#00c8ff]/50 focus:border-[#00c8ff]"
+              >
+                <option value="">Selecciona materia y grupo</option>
+                {cursos.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.nombre}
+                  </option>
+                ))}
+              </select>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {cursoSeleccionado && (
         <Card className={CARD_STYLE}>
@@ -347,7 +450,7 @@ export default function ProfesorCalificacionLogrosPage() {
                 No hay logros. Crea uno con la descripción del criterio; los indicadores son opcionales hasta que los configures.
               </p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="grid gap-3 sm:gap-4 lg:grid-cols-2 xl:gap-5">
                 {logros.map((L) => {
                   const open = expanded[L._id] !== false;
                   const indicadoresList = Array.isArray(L.indicadores) ? L.indicadores : [];

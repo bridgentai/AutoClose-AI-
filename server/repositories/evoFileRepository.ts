@@ -8,13 +8,32 @@ function evoFilesSubjectCondition(groupSubjectId: string | undefined | null, par
   return ` AND group_subject_id = ${paramPlaceholder}`;
 }
 
+/** Archivos visibles para estudiantes/padres (excluye borradores solo docente). */
+const STAFF_ONLY_FALSE = ' AND COALESCE(staff_only, false) = false';
+
+export type EvoFilesListMode = 'default' | 'teacher_course_private';
+
 export async function getEvoFiles(
   institutionId: string,
   groupId: string,
   userId: string,
   rol: string,
-  groupSubjectId?: string | null
+  groupSubjectId?: string | null,
+  mode: EvoFilesListMode = 'default'
 ) {
+  if (mode === 'teacher_course_private') {
+    if (!ROLES_PROFESOR.includes(rol)) return [];
+    const r = await queryPg<Record<string, unknown>>(
+      `SELECT * FROM evo_files
+       WHERE institution_id = $1 AND group_id = $2
+         AND COALESCE(staff_only, false) = true
+         AND group_subject_id IS NULL
+       ORDER BY updated_at DESC`,
+      [institutionId, groupId]
+    );
+    return r.rows;
+  }
+
   const params: (string | undefined)[] = [institutionId, groupId];
   if (rol === 'estudiante') params.push(userId);
   if (groupSubjectId != null) params.push(groupSubjectId);
@@ -23,7 +42,7 @@ export async function getEvoFiles(
 
   if (ROLES_PROFESOR.includes(rol)) {
     const r = await queryPg<Record<string, unknown>>(
-      `SELECT * FROM evo_files WHERE institution_id = $1 AND group_id = $2${subSql} ORDER BY updated_at DESC`,
+      `SELECT * FROM evo_files WHERE institution_id = $1 AND group_id = $2${subSql}${STAFF_ONLY_FALSE} ORDER BY updated_at DESC`,
       params
     );
     return r.rows;
@@ -32,7 +51,7 @@ export async function getEvoFiles(
     const r = await queryPg<Record<string, unknown>>(
       `SELECT * FROM evo_files
        WHERE institution_id = $1 AND group_id = $2
-         AND (es_publico = true OR (es_publico = false AND propietario_id = $3))${subSql}
+         AND (es_publico = true OR (es_publico = false AND propietario_id = $3))${subSql}${STAFF_ONLY_FALSE}
        ORDER BY updated_at DESC`,
       params
     );
@@ -41,7 +60,7 @@ export async function getEvoFiles(
   if (rol === 'padre') {
     const r = await queryPg<Record<string, unknown>>(
       `SELECT * FROM evo_files
-       WHERE institution_id = $1 AND group_id = $2 AND es_publico = true${subSql}
+       WHERE institution_id = $1 AND group_id = $2 AND es_publico = true${subSql}${STAFF_ONLY_FALSE}
        ORDER BY updated_at DESC`,
       params
     );
@@ -53,7 +72,7 @@ export async function getEvoFiles(
 export async function getRecentFiles(institutionId: string) {
   const r = await queryPg<Record<string, unknown>>(
     `SELECT * FROM evo_files
-     WHERE institution_id = $1 AND es_publico = true
+     WHERE institution_id = $1 AND es_publico = true${STAFF_ONLY_FALSE}
      ORDER BY updated_at DESC LIMIT 8`,
     [institutionId]
   );
@@ -81,7 +100,9 @@ export async function createEvoFile(data: {
   size_bytes?: number;
   etiquetas?: string[];
   category_id?: string | null;
+  staff_only?: boolean;
 }) {
+  const staffOnly = data.staff_only === true;
   const paramsWithCategory = [
     data.institution_id, data.nombre, data.tipo, data.origen, data.mime_type ?? null,
     data.group_id, data.curso_nombre, data.propietario_id, data.propietario_nombre,
@@ -90,6 +111,7 @@ export async function createEvoFile(data: {
     data.google_web_view_link ?? null, data.google_mime_type ?? null,
     data.evo_storage_key ?? null, data.evo_storage_url ?? null,
     data.size_bytes ?? null, data.etiquetas ?? [], data.category_id ?? null,
+    staffOnly,
   ];
   try {
     const r = await queryPg<Record<string, unknown>>(
@@ -97,8 +119,8 @@ export async function createEvoFile(data: {
        (institution_id, nombre, tipo, origen, mime_type, group_id, curso_nombre,
         propietario_id, propietario_nombre, propietario_rol, es_publico, group_subject_id,
         google_file_id, google_web_view_link, google_mime_type,
-        evo_storage_key, evo_storage_url, size_bytes, etiquetas, category_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        evo_storage_key, evo_storage_url, size_bytes, etiquetas, category_id, staff_only)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
        RETURNING *`,
       paramsWithCategory
     );
@@ -106,14 +128,14 @@ export async function createEvoFile(data: {
   } catch (err: unknown) {
     const msg = String((err as Error).message ?? '');
     if (msg.includes('category_id')) {
-      const paramsNoCategory = paramsWithCategory.slice(0, 19);
+      const paramsNoCategory = [...paramsWithCategory.slice(0, 19), staffOnly];
       const r = await queryPg<Record<string, unknown>>(
         `INSERT INTO evo_files
          (institution_id, nombre, tipo, origen, mime_type, group_id, curso_nombre,
           propietario_id, propietario_nombre, propietario_rol, es_publico, group_subject_id,
           google_file_id, google_web_view_link, google_mime_type,
-          evo_storage_key, evo_storage_url, size_bytes, etiquetas)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          evo_storage_key, evo_storage_url, size_bytes, etiquetas, staff_only)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          RETURNING *`,
         paramsNoCategory
       );
@@ -128,14 +150,15 @@ export async function createEvoFile(data: {
         data.google_web_view_link ?? null, data.google_mime_type ?? null,
         data.evo_storage_key ?? null, data.evo_storage_url ?? null,
         data.size_bytes ?? null, data.etiquetas ?? [], data.category_id ?? null,
+        staffOnly,
       ];
       const r = await queryPg<Record<string, unknown>>(
         `INSERT INTO evo_files
          (institution_id, nombre, tipo, origen, mime_type, group_id, curso_nombre,
           propietario_id, propietario_nombre, propietario_rol, es_publico,
           google_file_id, google_web_view_link, google_mime_type,
-          evo_storage_key, evo_storage_url, size_bytes, etiquetas, category_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          evo_storage_key, evo_storage_url, size_bytes, etiquetas, category_id, staff_only)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
          RETURNING *`,
         paramsNoGs
       );

@@ -64,6 +64,8 @@ function assignmentToApi(a: {
 }, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string; categoryWeightPct?: number | null } = {}) {
   const requiresSubmission =
     a.type === 'reminder' ? false : a.requires_submission === false ? false : true;
+  const term = (a as { academic_term?: number }).academic_term;
+  const trimestre = term === 1 || term === 2 || term === 3 ? term : 1;
   return {
     _id: a.id,
     titulo: a.title,
@@ -80,7 +82,16 @@ function assignmentToApi(a: {
     ...extra,
     categoryWeightPct:
       (a as { category_weight_pct?: number | null }).category_weight_pct ?? extra.categoryWeightPct,
+    trimestre,
   };
+}
+
+function parseTrimestreQuery(query: Record<string, unknown>): number | undefined {
+  const raw = query.trimestre ?? query.t;
+  if (raw == null || raw === '') return undefined;
+  const n = Number(raw);
+  if (n === 1 || n === 2 || n === 3) return n;
+  return undefined;
 }
 
 function submissionState(submission: { score: number | null; submitted_at: string | null } | null): 'pendiente' | 'entregada' | 'calificada' {
@@ -95,6 +106,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
   try {
     const userId = getUserId(req);
     const { courseId, groupId, month, year, estado } = req.query;
+    const trimestreFilter = parseTrimestreQuery(req.query as Record<string, unknown>);
     const user = await findUserById(userId);
     if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
 
@@ -151,8 +163,8 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 
     for (const gsId of groupSubjectIds) {
       const list = fromDate || toDate
-        ? await findAssignmentsByGroupSubjectAndDue(gsId, fromDate, toDate)
-        : await findAssignmentsByGroupSubject(gsId);
+        ? await findAssignmentsByGroupSubjectAndDue(gsId, fromDate, toDate, trimestreFilter)
+        : await findAssignmentsByGroupSubject(gsId, trimestreFilter);
       if (user.role === 'profesor' && !professorGroupWideCalendar) {
         assignments = assignments.concat(list.filter((a) => a.created_by === userId));
       } else {
@@ -208,7 +220,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 // POST /api/assignments - Crear tarea (courseId = group_subject_id obligatorio)
 router.post('/', protect, requirePermission('assignments', 'create'), async (req: AuthRequest, res) => {
   try {
-    const { titulo, descripcion, contenidoDocumento, courseId, fechaEntrega, type, isGradable, categoryId, grading_category_id, logroCalificacionId, requiresSubmission: bodyRequiresSubmission } = req.body;
+    const { titulo, descripcion, contenidoDocumento, courseId, fechaEntrega, type, isGradable, categoryId, grading_category_id, logroCalificacionId, requiresSubmission: bodyRequiresSubmission, trimestre: bodyTrimestre } = req.body as Record<string, unknown>;
     const userId = getUserId(req);
     const tituloStr = String(titulo || '').trim();
     const descripcionStr = (String(descripcion || '').trim() || tituloStr).trim();
@@ -246,11 +258,22 @@ router.post('/', protect, requirePermission('assignments', 'create'), async (req
       if (!Number.isNaN(w) && w > 0 && w <= 100) category_weight_pct = w;
     }
 
+    let academic_term = 1;
+    if (bodyTrimestre != null && bodyTrimestre !== '') {
+      const tn = Number(bodyTrimestre);
+      if (tn === 1 || tn === 2 || tn === 3) academic_term = tn;
+    }
+
+    const contentDoc =
+      contenidoDocumento != null && typeof contenidoDocumento === 'string'
+        ? contenidoDocumento
+        : null;
+
     const buildRow = (cat: string | null) => ({
       group_subject_id: courseIdStr,
       title: tituloStr,
       description: descripcionStr,
-      content_document: contenidoDocumento ?? null,
+      content_document: contentDoc,
       due_date: dueIso,
       created_by: userId,
       type: 'assignment' as const,
@@ -259,6 +282,7 @@ router.post('/', protect, requirePermission('assignments', 'create'), async (req
       assignment_category_id: cat,
       max_score: requiresSubmission ? undefined : 0,
       category_weight_pct,
+      academic_term,
     });
 
     let created;
@@ -575,7 +599,7 @@ router.put('/:id', protect, async (req: AuthRequest, res) => {
     if (!assignment) return res.status(404).json({ message: 'Tarea no encontrada.' });
     if (assignment.created_by !== userId) return res.status(403).json({ message: 'No tienes permiso para editar esta tarea.' });
 
-    const { titulo, descripcion, contenidoDocumento, fechaEntrega, type, isGradable, categoryWeightPct } = req.body as Record<string, unknown>;
+    const { titulo, descripcion, contenidoDocumento, fechaEntrega, type, isGradable, categoryWeightPct, trimestre: putTrimestre } = req.body as Record<string, unknown>;
     let category_weight_pct: number | null | undefined = undefined;
     if (categoryWeightPct !== undefined) {
       if (categoryWeightPct === null || categoryWeightPct === '') category_weight_pct = null;
@@ -584,15 +608,28 @@ router.put('/:id', protect, async (req: AuthRequest, res) => {
         if (!Number.isNaN(w) && w > 0 && w <= 100) category_weight_pct = w;
       }
     }
-    const updated = await updateAssignment(req.params.id, {
-      ...(titulo && { title: String(titulo) }),
-      ...(descripcion !== undefined && { description: descripcion as string | null }),
-      ...(contenidoDocumento !== undefined && { content_document: contenidoDocumento as string | null }),
-      ...(fechaEntrega && { due_date: new Date(String(fechaEntrega)).toISOString() }),
-      ...(type && { type: String(type) }),
-      ...(typeof isGradable === 'boolean' && { is_gradable: isGradable }),
-      ...(category_weight_pct !== undefined && { category_weight_pct }),
-    });
+    let academic_term: number | undefined;
+    if (putTrimestre !== undefined) {
+      const tn = Number(putTrimestre);
+      if (tn === 1 || tn === 2 || tn === 3) academic_term = tn;
+    }
+
+    const patch: Parameters<typeof updateAssignment>[1] = {};
+    if (titulo != null && String(titulo).trim()) patch.title = String(titulo).trim();
+    if (descripcion !== undefined) patch.description = descripcion as string | null;
+    if (contenidoDocumento !== undefined) {
+      patch.content_document =
+        contenidoDocumento != null && typeof contenidoDocumento === 'string' ? contenidoDocumento : null;
+    }
+    if (fechaEntrega != null && String(fechaEntrega).trim()) {
+      patch.due_date = new Date(String(fechaEntrega)).toISOString();
+    }
+    if (type != null && String(type).trim()) patch.type = String(type);
+    if (typeof isGradable === 'boolean') patch.is_gradable = isGradable;
+    if (category_weight_pct !== undefined) patch.category_weight_pct = category_weight_pct;
+    if (academic_term !== undefined) patch.academic_term = academic_term;
+
+    const updated = await updateAssignment(req.params.id, patch);
 
     return res.json(assignmentToApi(updated ?? assignment));
   } catch (err: unknown) {

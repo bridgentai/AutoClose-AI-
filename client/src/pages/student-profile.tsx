@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueries } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
@@ -46,12 +46,57 @@ interface StudentDetail {
   curso?: string;
 }
 
-interface StudentNote {
-  actividad: string;
+/** Fila de una actividad calificada */
+interface GradeRow {
+  id: string;
+  titulo: string;
   nota: number;
   fecha: string;
   comentario?: string;
-  categoria: string;
+}
+
+/** Indicador dentro de un logro (API logros-calificacion) */
+interface IndicadorBloque {
+  _id: string;
+  nombre: string;
+  porcentaje: number;
+  orden?: number;
+}
+
+/** Logro / criterio con indicadores anidados */
+interface LogroBloqueApi {
+  _id: string;
+  descripcion: string;
+  pesoEnCurso: number;
+  orden?: number;
+  indicadores: IndicadorBloque[];
+}
+
+interface LogrosCalificacionPayload {
+  logros?: LogroBloqueApi[];
+  indicadoresPlano?: LogroItem[];
+}
+
+interface IndicadorGrupoVista {
+  indicadorId: string;
+  nombre: string;
+  pesoPct: number;
+  filas: GradeRow[];
+}
+
+interface LogroGrupoVista {
+  logroId: string;
+  descripcion: string;
+  pesoEnCurso: number;
+  indicadores: IndicadorGrupoVista[];
+}
+
+/** Vista agrupada por materia → logros → indicadores */
+interface MateriaNotasVista {
+  subjectId: string;
+  nombreMateria: string;
+  logros: LogroGrupoVista[];
+  sinIndicador: GradeRow[];
 }
 
 interface Amonestacion {
@@ -90,6 +135,163 @@ interface AssignmentForNotes {
   entregas?: { estudianteId: string; calificacion?: number }[];
 }
 
+function getNotaForStudent(a: AssignmentForNotes, sid: string): number | null {
+  const subs = a.submissions || a.entregas || [];
+  const s = subs.find((x) => String(x.estudianteId) === String(sid));
+  const cal = s?.calificacion;
+  return cal != null && !Number.isNaN(Number(cal)) ? Number(cal) : null;
+}
+
+function buildAssignmentsByLogro(
+  assignmentsRaw: AssignmentForNotes[],
+  logros: LogroItem[]
+): Record<string, { logro: LogroItem; assignments: AssignmentForNotes[] }> {
+  const grouped: Record<string, { logro: LogroItem; assignments: AssignmentForNotes[] }> = {};
+  const list = [...logros].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+  list.forEach((l) => {
+    grouped[l._id] = { logro: l, assignments: [] };
+  });
+  const sinLogro: AssignmentForNotes[] = [];
+  assignmentsRaw.forEach((a) => {
+    const lid = a.logroCalificacionId as string | undefined;
+    if (lid && grouped[lid]) grouped[lid].assignments.push(a);
+    else sinLogro.push(a);
+  });
+  if (sinLogro.length) {
+    grouped['sin-logro'] = {
+      logro: { _id: 'sin-logro', nombre: 'Sin categoría', porcentaje: 0 },
+      assignments: sinLogro,
+    };
+  }
+  return grouped;
+}
+
+function filasPorAssignments(
+  assignmentsRaw: AssignmentForNotes[],
+  indicadorId: string,
+  estudianteId: string
+): GradeRow[] {
+  const filas: GradeRow[] = [];
+  for (const a of assignmentsRaw) {
+    if (String(a.logroCalificacionId ?? '') !== String(indicadorId)) continue;
+    const n = getNotaForStudent(a, estudianteId);
+    if (n == null) continue;
+    filas.push({
+      id: a._id,
+      titulo: a.titulo,
+      nota: n,
+      fecha: a.fechaEntrega || new Date().toISOString(),
+    });
+  }
+  filas.sort((x, y) => new Date(y.fecha).getTime() - new Date(x.fecha).getTime());
+  return filas;
+}
+
+/** Árbol materia → logros (criterios) → indicadores → actividades, alineado con la API de logros. */
+function buildMateriaNotasVista(
+  subjectId: string,
+  nombreMateria: string,
+  assignmentsRaw: AssignmentForNotes[],
+  payload: LogrosCalificacionPayload | undefined,
+  estudianteId: string
+): MateriaNotasVista {
+  const assigned = new Set<string>();
+  const logrosApi = [...(payload?.logros ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+  const logrosVista: LogroGrupoVista[] = [];
+
+  const pushLogroFromBloque = (L: LogroBloqueApi) => {
+    const inds = [...(L.indicadores ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+    const indicadoresVista: IndicadorGrupoVista[] = [];
+    for (const ind of inds) {
+      const filas = filasPorAssignments(assignmentsRaw, ind._id, estudianteId);
+      filas.forEach((f) => assigned.add(f.id));
+      if (filas.length === 0) continue;
+      indicadoresVista.push({
+        indicadorId: ind._id,
+        nombre: ind.nombre,
+        pesoPct: ind.porcentaje,
+        filas,
+      });
+    }
+    if (indicadoresVista.length === 0) return;
+    logrosVista.push({
+      logroId: L._id,
+      descripcion: (L.descripcion ?? '').trim() || 'Criterio de evaluación',
+      pesoEnCurso: Number(L.pesoEnCurso ?? 0),
+      indicadores: indicadoresVista,
+    });
+  };
+
+  if (logrosApi.length > 0) {
+    for (const L of logrosApi) pushLogroFromBloque(L);
+  } else {
+    const plano = [...(payload?.indicadoresPlano ?? [])].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+    if (plano.length > 0) {
+      const fakeLogro: LogroBloqueApi = {
+        _id: 'flat-indicators',
+        descripcion: 'Indicadores de calificación',
+        pesoEnCurso: 100,
+        orden: 0,
+        indicadores: plano.map((p) => ({
+          _id: p._id,
+          nombre: p.nombre,
+          porcentaje: p.porcentaje,
+          orden: p.orden,
+        })),
+      };
+      pushLogroFromBloque(fakeLogro);
+    }
+  }
+
+  const sinIndicador: GradeRow[] = [];
+  for (const a of assignmentsRaw) {
+    if (assigned.has(a._id)) continue;
+    const n = getNotaForStudent(a, estudianteId);
+    if (n == null) continue;
+    sinIndicador.push({
+      id: a._id,
+      titulo: a.titulo,
+      nota: n,
+      fecha: a.fechaEntrega || new Date().toISOString(),
+    });
+  }
+  sinIndicador.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+  return { subjectId, nombreMateria, logros: logrosVista, sinIndicador };
+}
+
+/** Misma lógica ponderada que la tabla de notas, por una materia. */
+function promedioForSubject(
+  assignmentsByLogro: Record<string, { logro: LogroItem; assignments: AssignmentForNotes[] }>,
+  estudianteId: string,
+  flatNotes: { nota: number }[]
+): number {
+  let weightedSum = 0;
+  let totalPct = 0;
+  Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
+    if (logro._id === 'sin-logro') return;
+    const pct = Number(logro.porcentaje ?? 0);
+    if (!pct) return;
+    const notas: number[] = [];
+    assignments.forEach((a) => {
+      const n = getNotaForStudent(a, estudianteId);
+      if (n != null) notas.push(n);
+    });
+    if (!notas.length) {
+      totalPct += pct;
+      return;
+    }
+    const prom = notas.reduce((s, x) => s + x, 0) / notas.length;
+    weightedSum += (prom * pct) / 100;
+    totalPct += pct;
+  });
+  if (totalPct <= 0) {
+    if (!flatNotes.length) return 0;
+    return Math.round(flatNotes.reduce((acc, n) => acc + n.nota, 0) / flatNotes.length);
+  }
+  return Math.round(weightedSum);
+}
+
 // =========================================================
 // COMPONENTE PRINCIPAL
 // =========================================================
@@ -118,110 +320,102 @@ export default function StudentProfilePage() {
   const displayGroupId =
     cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId) ? cursoId : (cursoId || '').toUpperCase().trim();
 
-  // Notas reales: mismas fuentes que la tabla de notas del profesor (teacher-notes.tsx)
+  // Notas reales: todas las materias del profesor en el grupo (antes solo la primera → notas vacías si calificaba otra materia)
+  const gsFromQuery = searchParams.get('gs')?.trim() || '';
   const { data: subjectsForGroup = [] } = useQuery<{ _id: string; nombre?: string }[]>({
     queryKey: ['subjectsForGroup', cursoId],
     queryFn: () => fetchSubjectsForGroup(cursoId),
     enabled: !!cursoId,
     staleTime: 0,
   });
-  const firstSubjectId = subjectsForGroup[0]?._id;
-  const courseIdForData = firstSubjectId ? firstSubjectId : '';
 
-  const { data: assignmentsRaw = [] } = useQuery<AssignmentForNotes[]>({
-    queryKey: ['gradeTableAssignments', cursoId, courseIdForData],
-    queryFn: () => fetchGradeTableAssignments(displayGroupId, courseIdForData),
-    enabled: !!cursoId && !!courseIdForData,
-    staleTime: 0,
-  });
-
-  const { data: logrosRaw } = useQuery<{ indicadoresPlano: LogroItem[] }>({
-    queryKey: ['logros', courseIdForData],
-    queryFn: () =>
-      fetch(`/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForData)}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('autoclose_token')}` },
-      }).then((r) => r.json()),
-    enabled: !!courseIdForData,
-    staleTime: 0,
-  });
-  const logros = logrosRaw?.indicadoresPlano ?? [];
-
-  const getNotaForStudent = (a: AssignmentForNotes, sid: string) => {
-    const subs = a.submissions || a.entregas || [];
-    const s = subs.find((x) => String(x.estudianteId) === String(sid));
-    const cal = s?.calificacion;
-    return cal != null && !Number.isNaN(Number(cal)) ? Number(cal) : null;
-  };
-
-  const assignmentsByLogro = useMemo(() => {
-    const grouped: Record<string, { logro: LogroItem; assignments: AssignmentForNotes[] }> = {};
-    const list = [...logros].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
-    list.forEach((l) => {
-      grouped[l._id] = { logro: l, assignments: [] };
-    });
-    const sinLogro: AssignmentForNotes[] = [];
-    (assignmentsRaw as AssignmentForNotes[]).forEach((a) => {
-      const lid = a.logroCalificacionId as string | undefined;
-      if (lid && grouped[lid]) grouped[lid].assignments.push(a);
-      else sinLogro.push(a);
-    });
-    if (sinLogro.length) {
-      grouped['sin-logro'] = { logro: { _id: 'sin-logro', nombre: 'Sin categoría', porcentaje: 0 }, assignments: sinLogro };
+  const subjectIds = useMemo(() => {
+    if (!subjectsForGroup.length) return [];
+    const ids = subjectsForGroup.map((s) => s._id);
+    if (gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)) {
+      return [gsFromQuery, ...ids.filter((id) => id !== gsFromQuery)];
     }
-    return grouped;
-  }, [assignmentsRaw, logros]);
+    return ids;
+  }, [subjectsForGroup, gsFromQuery]);
 
-  const notes: StudentNote[] = useMemo(() => {
-    if (!estudianteId) return [];
-    const byLogro = assignmentsByLogro;
-    const result: StudentNote[] = [];
-    Object.values(byLogro).forEach(({ logro, assignments }) => {
-      assignments.forEach((a) => {
-        const n = getNotaForStudent(a, estudianteId);
-        if (n == null) return;
-        result.push({
-          actividad: a.titulo,
-          nota: n,
-          fecha: a.fechaEntrega || new Date().toISOString(),
-          categoria: logro.nombre,
-        });
-      });
+  const gradeQueries = useQueries({
+    queries: subjectIds.map((courseId) => ({
+      queryKey: ['gradeTableAssignments', cursoId, courseId] as const,
+      queryFn: () => fetchGradeTableAssignments(displayGroupId, courseId),
+      enabled: !!cursoId && !!courseId,
+      staleTime: 0,
+    })),
+  });
+
+  const logrosQueries = useQueries({
+    queries: subjectIds.map((courseId) => ({
+      queryKey: ['logros', courseId] as const,
+      queryFn: () =>
+        fetch(`/api/logros-calificacion?courseId=${encodeURIComponent(courseId)}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('autoclose_token')}` },
+        }).then((r) => r.json()),
+      enabled: !!courseId,
+      staleTime: 0,
+    })),
+  });
+
+  const notesLoading =
+    !!cursoId &&
+    subjectIds.length > 0 &&
+    (gradeQueries.some((q) => q.isLoading) || logrosQueries.some((q) => q.isLoading));
+
+  const materiasNotasVista = useMemo((): MateriaNotasVista[] => {
+    if (!estudianteId || !subjectIds.length) return [];
+    return subjectIds.map((subjectCourseId, i) => {
+      const nombreMateria =
+        subjectsForGroup.find((s) => s._id === subjectCourseId)?.nombre?.trim() || 'Materia';
+      const assignmentsRaw = (gradeQueries[i]?.data ?? []) as AssignmentForNotes[];
+      const payload = logrosQueries[i]?.data as LogrosCalificacionPayload | undefined;
+      return buildMateriaNotasVista(subjectCourseId, nombreMateria, assignmentsRaw, payload, estudianteId);
     });
-    // Ordenar por fecha desc
-    result.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-    return result;
-  }, [assignmentsByLogro, estudianteId]);
+  }, [estudianteId, subjectIds, subjectsForGroup, gradeQueries, logrosQueries]);
+
+  const tieneAlgunaNota = useMemo(
+    () =>
+      materiasNotasVista.some(
+        (m) => m.logros.some((lg) => lg.indicadores.length > 0) || m.sinIndicador.length > 0
+      ),
+    [materiasNotasVista]
+  );
 
   const promedioFinal = useMemo(() => {
-    if (!estudianteId) return 0;
-    let weightedSum = 0;
-    let totalPct = 0;
+    if (!estudianteId || !subjectIds.length) return 0;
 
-    Object.values(assignmentsByLogro).forEach(({ logro, assignments }) => {
-      if (logro._id === 'sin-logro') return;
-      const pct = Number(logro.porcentaje ?? 0);
-      if (!pct) return;
-      const notas: number[] = [];
-      assignments.forEach((a) => {
-        const n = getNotaForStudent(a, estudianteId);
-        if (n != null) notas.push(n);
+    const collectFlatAndByLogro = (i: number) => {
+      const assignmentsRaw = (gradeQueries[i]?.data ?? []) as AssignmentForNotes[];
+      const logrosList =
+        (logrosQueries[i]?.data as { indicadoresPlano?: LogroItem[] } | undefined)?.indicadoresPlano ??
+        [];
+      const byLogro = buildAssignmentsByLogro(assignmentsRaw, logrosList);
+      const flat: { nota: number }[] = [];
+      Object.values(byLogro).forEach(({ assignments }) => {
+        assignments.forEach((a) => {
+          const n = getNotaForStudent(a, estudianteId);
+          if (n != null) flat.push({ nota: n });
+        });
       });
-      if (!notas.length) {
-        totalPct += pct;
-        return;
-      }
-      const prom = notas.reduce((s, x) => s + x, 0) / notas.length;
-      weightedSum += (prom * pct) / 100;
-      totalPct += pct;
-    });
+      return { byLogro, flat };
+    };
 
-    // Fallback: promedio simple si no hay pesos configurados
-    if (totalPct <= 0) {
-      if (!notes.length) return 0;
-      return Math.round(notes.reduce((acc, n) => acc + n.nota, 0) / notes.length);
+    if (subjectIds.length === 1) {
+      const { byLogro, flat } = collectFlatAndByLogro(0);
+      return promedioForSubject(byLogro, estudianteId, flat);
     }
-    return Math.round(weightedSum);
-  }, [assignmentsByLogro, estudianteId, notes]);
+
+    const perSubject: number[] = [];
+    for (let i = 0; i < subjectIds.length; i++) {
+      const { byLogro, flat } = collectFlatAndByLogro(i);
+      if (flat.length === 0) continue;
+      perSubject.push(promedioForSubject(byLogro, estudianteId, flat));
+    }
+    if (!perSubject.length) return 0;
+    return Math.round(perSubject.reduce((s, x) => s + x, 0) / perSubject.length);
+  }, [estudianteId, subjectIds, gradeQueries, logrosQueries]);
 
   // Amonestaciones reales (sin datos inventados)
   const { data: amonestaciones = [] } = useQuery<Amonestacion[]>({
@@ -424,7 +618,7 @@ export default function StudentProfilePage() {
                   Notas Específicas
                 </CardTitle>
                 <CardDescription className="text-white/60 mt-2">
-                  Historial completo de calificaciones (Escala: 10-100)
+                  Agrupadas por logros e indicadores definidos para cada materia (escala 0–100).
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -436,46 +630,123 @@ export default function StudentProfilePage() {
             </div>
           </CardHeader>
           <CardContent>
-            {notes.length > 0 ? (
-              <div className="space-y-4">
-                {notes.map((nota, idx) => (
-                  <div
-                    key={idx}
-                    className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all"
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h4 className="font-semibold text-white">{nota.actividad}</h4>
-                          <Badge className="bg-[#1e3cff]/20 text-white border-[#1e3cff]/40 text-xs">
-                            {nota.categoria}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-white/60">
-                          {new Date(nota.fecha).toLocaleDateString('es-CO', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
-                        </p>
+            {notesLoading && !tieneAlgunaNota ? (
+              <div className="space-y-3 py-2">
+                <Skeleton className="h-16 w-full bg-white/10" />
+                <Skeleton className="h-16 w-full bg-white/10" />
+              </div>
+            ) : tieneAlgunaNota ? (
+              <div className="space-y-10">
+                {materiasNotasVista.map((mat) => {
+                  const tiene =
+                    mat.logros.length > 0 || mat.sinIndicador.length > 0;
+                  if (!tiene) return null;
+                  const mostrarTituloMateria = subjectIds.length > 1;
+                  return (
+                    <section key={mat.subjectId} className="space-y-6">
+                      {mostrarTituloMateria ? (
+                        <h3 className="text-base sm:text-lg font-semibold text-white font-['Poppins'] tracking-tight border-b border-white/10 pb-2">
+                          {mat.nombreMateria}
+                        </h3>
+                      ) : null}
+                      <div className="space-y-6">
+                        {mat.logros.map((lg) => (
+                          <div
+                            key={lg.logroId}
+                            className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden backdrop-blur-sm"
+                          >
+                            <div className="px-4 py-3 bg-[#002366]/35 border-b border-white/10">
+                              <p className="text-sm sm:text-[15px] text-white/95 leading-relaxed">
+                                {lg.descripcion}
+                              </p>
+                              {lg.pesoEnCurso > 0 ? (
+                                <p className="text-xs text-[#00c8ff] mt-2 font-medium">
+                                  Peso respecto a la nota del curso: {lg.pesoEnCurso}%
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="p-4 sm:p-5 space-y-6">
+                              {lg.indicadores.map((ind) => (
+                                <div key={ind.indicadorId} className="space-y-2">
+                                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                    <h4 className="text-sm font-semibold text-white">{ind.nombre}</h4>
+                                    <span className="text-xs text-white/50 tabular-nums">
+                                      {ind.pesoPct}% dentro de este logro
+                                    </span>
+                                  </div>
+                                  <ul className="rounded-lg border border-white/[0.07] bg-white/[0.02] divide-y divide-white/[0.06]">
+                                    {ind.filas.map((f) => (
+                                      <li
+                                        key={f.id}
+                                        className="flex items-center justify-between gap-4 px-3 py-3 sm:px-4"
+                                      >
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-medium text-white leading-snug">
+                                            {f.titulo}
+                                          </p>
+                                          <p className="text-xs text-white/45 mt-1">
+                                            {new Date(f.fecha).toLocaleDateString('es-CO', {
+                                              year: 'numeric',
+                                              month: 'long',
+                                              day: 'numeric',
+                                            })}
+                                          </p>
+                                          {f.comentario ? (
+                                            <p className="text-xs text-white/55 mt-2 flex items-start gap-1.5">
+                                              <MessageSquare className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#1e3cff]" />
+                                              {f.comentario}
+                                            </p>
+                                          ) : null}
+                                        </div>
+                                        <div className="flex items-baseline gap-1 shrink-0 tabular-nums">
+                                          <span className="text-xl font-bold text-white">{f.nota}</span>
+                                          <span className="text-white/40 text-sm">/100</span>
+                                        </div>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        {mat.sinIndicador.length > 0 ? (
+                          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
+                            <h4 className="text-sm font-semibold text-white/90 mb-3">
+                              Sin indicador asignado
+                            </h4>
+                            <p className="text-xs text-white/45 mb-3">
+                              Actividades calificadas que aún no están vinculadas a un indicador del esquema.
+                            </p>
+                            <ul className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.06]">
+                              {mat.sinIndicador.map((f) => (
+                                <li
+                                  key={f.id}
+                                  className="flex items-center justify-between gap-4 px-3 py-3 sm:px-4"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-white">{f.titulo}</p>
+                                    <p className="text-xs text-white/45 mt-1">
+                                      {new Date(f.fecha).toLocaleDateString('es-CO', {
+                                        year: 'numeric',
+                                        month: 'long',
+                                        day: 'numeric',
+                                      })}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-baseline gap-1 shrink-0 tabular-nums">
+                                    <span className="text-xl font-bold text-white">{f.nota}</span>
+                                    <span className="text-white/40 text-sm">/100</span>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl font-bold text-white">
-                          {nota.nota}
-                        </span>
-                        <span className="text-white/50">/ 100</span>
-                      </div>
-                    </div>
-                    {nota.comentario && (
-                      <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                        <div className="flex items-start gap-2">
-                          <MessageSquare className="w-4 h-4 text-[#1e3cff] mt-0.5 flex-shrink-0" />
-                          <p className="text-sm text-white/80">{nota.comentario}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    </section>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-8">

@@ -46,6 +46,7 @@ import {
   ensureAssignmentsRequiresSubmissionColumn,
   ensureAssignmentCategoryFkReferencesGradingCategories,
   ensureEvoFilesOrigenCheck,
+  ensureEvoFilesStaffOnlyColumn,
   ensureAuditLogIpColumns,
   ensureAuditLogRetentionPolicy,
   ensureEvoSendRetention,
@@ -68,6 +69,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await ensureAssignmentCategoryFkReferencesGradingCategories();
     } catch (e) {
       console.warn("[schema] Parche FK logros:", (e as Error).message);
+    }
+    try {
+      await ensureEvoFilesStaffOnlyColumn();
+      console.log("[schema] evo_files.staff_only OK");
+    } catch (e) {
+      console.warn("[schema] Parche evo_files.staff_only:", (e as Error).message);
     }
     try {
       await ensureEvoFilesOrigenCheck();

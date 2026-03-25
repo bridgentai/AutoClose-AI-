@@ -29,6 +29,11 @@ import {
   hasRecordedScore,
   type OutcomeGradeNode,
 } from '@shared/weightedGrades';
+import {
+    buildLogroBloquesForSelect,
+    countIndicadoresInBloques,
+    LogroIndicadorSelects,
+} from '@/components/assignment/logroIndicadorSelect';
 
 // =========================================================
 // 0. CELDA EDITABLE (preview table)
@@ -275,14 +280,9 @@ const fetchGradeTableAssignments = async (groupId: string, courseId: string): Pr
 // Función para obtener estudiantes de un grupo (Usado por Profesor)
 const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
     try {
-        // Normalizar groupId a mayúsculas para consistencia
         const grupoIdNormalizado = groupId.toUpperCase().trim();
-        console.log(`[FRONTEND] Buscando estudiantes para grupo: ${grupoIdNormalizado}`);
-
-        // Obtener estudiantes del grupo desde el endpoint
         const response = await apiRequest('GET', `/api/groups/${grupoIdNormalizado}/students`);
         const students = Array.isArray(response) ? response : [];
-        console.log(`[FRONTEND] Recibidos ${students.length} estudiantes para ${grupoIdNormalizado}`);
         return students;
     } catch (error) {
         console.error('Error al obtener estudiantes:', error);
@@ -376,6 +376,7 @@ export default function CourseDetailPage() {
     const [optionsModalOpen, setOptionsModalOpen] = useState(false);
     const [optionsDisplayName, setOptionsDisplayName] = useState('');
     const [optionsIcon, setOptionsIcon] = useState('');
+    const assignmentPanelRef = useRef<HTMLDivElement>(null);
 
     // Obtener mes y año actuales
     const now = new Date();
@@ -402,6 +403,7 @@ export default function CourseDetailPage() {
         enabled: isProfessor,
         staleTime: 5 * 60 * 1000, // 5 minutos
         gcTime: 10 * 60 * 1000, // 10 minutos de caché
+        refetchOnWindowFocus: false,
     });
 
     const professorGroupSubjectId = useMemo(() => {
@@ -425,11 +427,16 @@ export default function CourseDetailPage() {
     }, [isProfessor, isLoadingSubjects, subjectsForGroup, routeGroupSubjectId, cursoId, setLocation, toast]);
 
     // Query 3: Tareas del Curso/Grupo
+    const assignmentsQueryEnabled =
+        !!cursoId && (isProfessor || isStudentOrParent || userRole === 'directivo');
+
     const { data: assignments = [], isLoading: isLoadingAssignments } = useQuery<Assignment[]>({
         queryKey: ['assignments', cursoId, currentMonth, currentYear],
         queryFn: () => fetchAssignments(cursoId, isHandlingGroup, currentMonth, currentYear),
+        enabled: assignmentsQueryEnabled,
         staleTime: 2 * 60 * 1000, // 2 minutos - las tareas pueden cambiar más frecuentemente
         gcTime: 5 * 60 * 1000, // 5 minutos de caché
+        refetchOnWindowFocus: false,
     });
 
     const assignmentsForActiveSubject = useMemo(() => {
@@ -444,6 +451,7 @@ export default function CourseDetailPage() {
         enabled: isProfessor && !!cursoId,
         staleTime: 5 * 60 * 1000, // 5 minutos
         gcTime: 10 * 60 * 1000, // 10 minutos de caché
+        refetchOnWindowFocus: false,
     });
 
     // groupSubjectId para Evo Send: profesor = materia activa; estudiante = cursoId (materia actual)
@@ -696,7 +704,8 @@ export default function CourseDetailPage() {
             apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
         enabled: !!courseIdForLogros && user?.rol === 'profesor',
     });
-    const logros = logrosData?.indicadoresPlano ?? [];
+    const bloquesForAssignmentSelect = useMemo(() => buildLogroBloquesForSelect(logrosData), [logrosData]);
+    const hasIndicadoresForAssignment = countIndicadoresInBloques(bloquesForAssignmentSelect) > 0;
 
     // Evo Drive: estado de conexión y archivos de Google (para modales en formulario de asignación)
     const { data: googleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
@@ -747,11 +756,12 @@ export default function CourseDetailPage() {
         const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
         if (params.get('openAssignmentForm') === '1') {
             setShowAssignmentForm(true);
-            setAssignmentCreationPhase('form');
+            // Mismo flujo que el botón «Nueva Asignación» del detalle: primero elegir tipo de entrega
+            setAssignmentCreationPhase('choose-delivery');
             setAssignmentDeliveryMode('evo');
             const logroId = params.get('logroId');
             if (logroId) setLogroCalificacionId(logroId);
-            // Limpiar query para no reabrir al recargar
+            // Limpiar query para no reabrir al recargar (conservar ?t= trimestre y demás)
             const url = new URL(window.location.href);
             url.searchParams.delete('openAssignmentForm');
             url.searchParams.delete('logroId');
@@ -764,10 +774,16 @@ export default function CourseDetailPage() {
         mutationFn: async (payload: { data: typeof formData; newMaterialTitle?: string; materials?: { type: 'file' | 'link' | 'gdoc'; url: string; fileName?: string }[] }) => {
             const { data, newMaterialTitle: materialTitle, materials = [] } = payload;
             if (!data.courseId) throw new Error('Debes seleccionar una materia');
-            const needsLogro = logros.length > 0;
+            const needsLogro = countIndicadoresInBloques(buildLogroBloquesForSelect(logrosData)) > 0;
             if (needsLogro && !logroCalificacionId) {
                 throw new Error('Debes seleccionar el logro de calificación para esta asignación');
             }
+            const tParam =
+                typeof window !== 'undefined'
+                    ? new URLSearchParams(window.location.search).get('t')
+                    : null;
+            const trimestreCreacion =
+                tParam === '1' || tParam === '2' || tParam === '3' ? Number(tParam) : 1;
             const created = await apiRequest<{ _id: string }>('POST', '/api/assignments', {
                 titulo: data.titulo,
                 descripcion: data.descripcion,
@@ -778,6 +794,7 @@ export default function CourseDetailPage() {
                 logroCalificacionId: logroCalificacionId || undefined,
                 requiresSubmission: requiresStudentDelivery,
                 isGradable: isGradableAssignment,
+                trimestre: trimestreCreacion,
             });
             if (materialTitle?.trim()) {
                 try {
@@ -895,9 +912,15 @@ export default function CourseDetailPage() {
         const yyyy = selectedDate.getFullYear();
         const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
         const dd = String(selectedDate.getDate()).padStart(2, '0');
-        setFormData((prev) => ({ ...prev, fechaEntrega: `${yyyy}-${mm}-${dd}` }));
+        // datetime-local requiere fecha y hora (sin solo YYYY-MM-DD el control puede quedar vacío)
+        setFormData((prev) => ({ ...prev, fechaEntrega: `${yyyy}-${mm}-${dd}T23:59` }));
         setShowAssignmentForm(true);
         setAssignmentCreationPhase('form');
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                assignmentPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
     };
 
     // --------------------------------------------------
@@ -983,7 +1006,8 @@ export default function CourseDetailPage() {
 
     // 🎯 Vista para Profesor (Gestión de Grupo + materia activa)
     const renderProfessorView = () => {
-        const loading = isLoadingSubjects || isLoadingAssignments || isLoadingStudents;
+        // No bloquear el shell en estudiantes: la tarjeta y el diálogo muestran estado local de carga
+        const loading = isLoadingSubjects || isLoadingAssignments;
         const subjects = subjectsForGroup;
         const activeSubject = subjects.find((s) => s._id === professorGroupSubjectId) ?? subjects[0];
         const activeSubjectNombre = activeSubject?.nombre ?? '';
@@ -1055,7 +1079,12 @@ export default function CourseDetailPage() {
                     {/* Carta 1: Estudiantes */}
                     <Card
                         className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-[#1e3cff]/20"
-                        onClick={() => setLocation(`/course-detail/${cursoId}/estudiantes?returnTo=${encodeURIComponent(professorDetailBasePath)}`)}
+                        onClick={() => {
+                            const q = new URLSearchParams();
+                            q.set('returnTo', professorDetailBasePath);
+                            if (professorGroupSubjectId) q.set('gs', professorGroupSubjectId);
+                            setLocation(`/course-detail/${cursoId}/estudiantes?${q.toString()}`);
+                        }}
                     >
                         <CardHeader className="text-center pb-4">
                             <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-[#1e3cff] via-[#002366] to-[#00c8ff] flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#1e3cff]/30">
@@ -1063,7 +1092,13 @@ export default function CourseDetailPage() {
                             </div>
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Estudiantes</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
-                                {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} registrados
+                                {isLoadingStudents ? (
+                                    <span className="text-white/50">Cargando estudiantes…</span>
+                                ) : (
+                                    <>
+                                        {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} registrados
+                                    </>
+                                )}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="text-center pt-0" />
@@ -1190,31 +1225,32 @@ export default function CourseDetailPage() {
                 )}
 
                 {/* Botones de acción y Formulario para asignar asignación (Movido debajo del calendario) */}
-                <div className="flex flex-row items-center justify-between gap-4 mb-6 mt-8 flex-wrap">
-                    <div>
-                        <h2 className="text-2xl font-bold text-white font-['Poppins'] tracking-tight">Asignaciones</h2>
-                        <p className="text-white/60 text-sm mt-0.5">
-                            {activeSubjectNombre ? `${activeSubjectNombre} · ` : ''}Grupo {groupDisplayName}
-                        </p>
+                <div ref={assignmentPanelRef} className="scroll-mt-24">
+                    <div className="flex flex-row items-center justify-between gap-4 mb-6 mt-8 flex-wrap">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white font-['Poppins'] tracking-tight">Asignaciones</h2>
+                            <p className="text-white/60 text-sm mt-0.5">
+                                {activeSubjectNombre ? `${activeSubjectNombre} · ` : ''}Grupo {groupDisplayName}
+                            </p>
+                        </div>
+                        <Button
+                            onClick={() => {
+                                if (showAssignmentForm) {
+                                    setShowAssignmentForm(false);
+                                } else {
+                                    setShowAssignmentForm(true);
+                                    setAssignmentCreationPhase('choose-delivery');
+                                }
+                            }}
+                            className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out rounded-xl px-5 py-2.5"
+                            data-testid="button-assign-task"
+                        >
+                            <ClipboardList className="w-4 h-4 mr-2" />
+                            {showAssignmentForm ? 'Cancelar' : 'Nueva Asignación'}
+                        </Button>
                     </div>
-                    <Button
-                        onClick={() => {
-                            if (showAssignmentForm) {
-                                setShowAssignmentForm(false);
-                            } else {
-                                setShowAssignmentForm(true);
-                                setAssignmentCreationPhase('choose-delivery');
-                            }
-                        }}
-                        className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out rounded-xl px-5 py-2.5"
-                        data-testid="button-assign-task"
-                    >
-                        <ClipboardList className="w-4 h-4 mr-2" />
-                        {showAssignmentForm ? 'Cancelar' : 'Nueva Asignación'}
-                    </Button>
-                </div>
 
-                {showAssignmentForm && (
+                    {showAssignmentForm && (
                     <Card className="bg-[#0a0a2a]/80 border border-white/10 backdrop-blur-md mb-8 rounded-[14px] shadow-xl transition-colors duration-150 ease-in-out">
                         <CardHeader className="pb-2">
                             <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva asignación</CardTitle>
@@ -1412,7 +1448,7 @@ export default function CourseDetailPage() {
                                                 )}
                                             </div>
 
-                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjectsForForm.length === 0 || (logros.length > 0 && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
+                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjectsForForm.length === 0 || (hasIndicadoresForAssignment && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
                                                 {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
                                             </Button>
                                         </div>
@@ -1425,7 +1461,10 @@ export default function CourseDetailPage() {
                                                     <Label htmlFor="materia" className="text-white text-xs font-medium">Materia *</Label>
                                                     <Select
                                                         value={formData.courseId}
-                                                        onValueChange={(value) => setFormData({ ...formData, courseId: value })}
+                                                        onValueChange={(value) => {
+                                                            setFormData({ ...formData, courseId: value });
+                                                            setLogroCalificacionId('');
+                                                        }}
                                                         required
                                                     >
                                                         <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
@@ -1448,33 +1487,34 @@ export default function CourseDetailPage() {
                                                     </div>
                                                 </div>
                                             )}
-                                            {logros.length > 0 && (
+                                            {hasIndicadoresForAssignment && (
                                                 <div>
-                                                    <Label htmlFor="logro" className="text-white text-xs font-medium">Logro de Calificación *</Label>
-                                                    <Select
-                                                        value={logroCalificacionId}
-                                                        onValueChange={setLogroCalificacionId}
-                                                        required
-                                                    >
-                                                        <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20">
-                                                            <SelectValue placeholder="Selecciona el tipo de logro (ej: Tareas, Exámenes, Proyectos)" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {logros.map((logro) => (
-                                                                <SelectItem key={logro._id} value={logro._id}>
-                                                                    {logro.nombre} ({logro.porcentaje}%)
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <p className="text-white/50 text-xs mt-1">Categoría de calificación</p>
+                                                    <Label className="text-white text-xs font-medium mb-2 block">Logro de calificación *</Label>
+                                                    <LogroIndicadorSelects
+                                                        bloques={bloquesForAssignmentSelect}
+                                                        indicadorId={logroCalificacionId}
+                                                        onIndicadorIdChange={setLogroCalificacionId}
+                                                        variant="dark"
+                                                    />
                                                 </div>
                                             )}
-                                            {logros.length === 0 && courseIdForLogros && !isLoadingLogros && (
+                                            {!hasIndicadoresForAssignment && courseIdForLogros && !isLoadingLogros && (
                                                 <Alert className="bg-amber-500/10 border-amber-500/50 rounded-[10px]">
                                                     <AlertCircle className="h-4 w-4 text-amber-400" />
                                                     <AlertDescription className="text-amber-200">
-                                                        Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a <Button variant="link" className="p-0 h-auto text-amber-300 underline" onClick={() => setLocation('/profesor/academia/calificacion/logros')}>Logros de Calificación</Button>
+                                                        Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a{' '}
+                                                        <Button
+                                                            variant="link"
+                                                            className="p-0 h-auto text-amber-300 underline"
+                                                            onClick={() => {
+                                                                const q = new URLSearchParams();
+                                                                q.set('returnTo', professorDetailBasePath);
+                                                                if (professorGroupSubjectId) q.set('gs', professorGroupSubjectId);
+                                                                setLocation(`/course/${cursoId}/calificacion-logros?${q.toString()}`);
+                                                            }}
+                                                        >
+                                                            Logros de Calificación
+                                                        </Button>
                                                     </AlertDescription>
                                                 </Alert>
                                             )}
@@ -1488,7 +1528,8 @@ export default function CourseDetailPage() {
                             ) : null}
                         </CardContent>
                     </Card>
-                )}
+                    )}
+                </div>
 
                 {/* Modales Evo Drive (materiales de la asignación) */}
                 <Dialog open={addFromGoogleOpen} onOpenChange={setAddFromGoogleOpen}>
@@ -1618,7 +1659,9 @@ export default function CourseDetailPage() {
                                 Estudiantes del Grupo {groupDisplayName}
                             </DialogTitle>
                             <DialogDescription className="text-white/60">
-                                {students.length} {students.length === 1 ? 'estudiante' : 'estudiantes'} conectados a este grupo
+                                {isLoadingStudents
+                                    ? 'Cargando lista…'
+                                    : `${students.length} ${students.length === 1 ? 'estudiante' : 'estudiantes'} conectados a este grupo`}
                             </DialogDescription>
                         </DialogHeader>
                         <div className="mt-4">
@@ -1665,7 +1708,12 @@ export default function CourseDetailPage() {
                                                 key={student._id}
                                                 className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
                                                 onClick={() => {
-                                                    setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}?returnTo=${encodeURIComponent(professorDetailBasePath)}`);
+                                                    const q = new URLSearchParams();
+                                                    q.set('returnTo', professorDetailBasePath);
+                                                    if (professorGroupSubjectId) q.set('gs', professorGroupSubjectId);
+                                                    setLocation(
+                                                        `/profesor/cursos/${cursoId}/estudiantes/${student._id}?${q.toString()}`
+                                                    );
                                                     setShowStudentsDialog(false);
                                                 }}
                                             >
@@ -2226,7 +2274,11 @@ export default function CourseDetailPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Calendar assignments={assignments} onDayClick={handleDayClick} onEmptyDayClick={handleEmptyDayClick} />
+                    <Calendar
+                        assignments={assignments}
+                        onDayClick={handleDayClick}
+                        onDayBubbleClick={handleEmptyDayClick}
+                    />
                 </CardContent>
             </Card>
         </>

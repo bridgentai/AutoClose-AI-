@@ -62,3 +62,18 @@ export async function deletePersonalFile(
   );
   return r.rows.length > 0;
 }
+
+export async function updatePersonalFileNombre(
+  id: string,
+  userId: string,
+  institutionId: string,
+  nombre: string
+): Promise<EvoPersonalFileRow | null> {
+  const r = await queryPg<EvoPersonalFileRow>(
+    `UPDATE evo_personal_files SET nombre = $4
+     WHERE id = $1 AND user_id = $2 AND institution_id = $3
+     RETURNING *`,
+    [id, userId, institutionId, nombre]
+  );
+  return r.rows[0] ?? null;
+}

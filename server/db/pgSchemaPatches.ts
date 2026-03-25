@@ -82,6 +82,17 @@ export async function ensureEvoChatGroupTeacherUniqueIndex(): Promise<void> {
   evoChatGroupTeacherIndexEnsured = true;
 }
 
+let evoFilesStaffOnlyEnsured = false;
+
+/** Materiales de curso solo para docentes (no visibles para estudiantes/padres). */
+export async function ensureEvoFilesStaffOnlyColumn(): Promise<void> {
+  if (evoFilesStaffOnlyEnsured) return;
+  await queryPg(
+    `ALTER TABLE evo_files ADD COLUMN IF NOT EXISTS staff_only BOOLEAN NOT NULL DEFAULT false`
+  );
+  evoFilesStaffOnlyEnsured = true;
+}
+
 let evoFilesOrigenCheckEnsured = false;
 
 /**
@@ -111,6 +122,23 @@ export async function ensureAssignmentsCategoryWeightPctColumn(): Promise<void> 
     `ALTER TABLE assignments ADD COLUMN IF NOT EXISTS category_weight_pct NUMERIC(5,2) NULL`
   );
   assignmentsCategoryWeightPctEnsured = true;
+}
+
+let assignmentsAcademicTermEnsured = false;
+
+/** Trimestre académico (1–3) para filtrar notas por período. */
+export async function ensureAssignmentsAcademicTermColumn(): Promise<void> {
+  if (assignmentsAcademicTermEnsured) return;
+  await queryPg(
+    `ALTER TABLE assignments ADD COLUMN IF NOT EXISTS academic_term INTEGER NOT NULL DEFAULT 1`
+  );
+  await queryPg(
+    `ALTER TABLE assignments DROP CONSTRAINT IF EXISTS assignments_academic_term_check`
+  );
+  await queryPg(
+    `ALTER TABLE assignments ADD CONSTRAINT assignments_academic_term_check CHECK (academic_term >= 1 AND academic_term <= 3)`
+  );
+  assignmentsAcademicTermEnsured = true;
 }
 
 let auditLogIpColumnsEnsured = false;

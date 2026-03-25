@@ -1,12 +1,22 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Plus, Percent, Award, ChevronDown, ChevronUp, Minus } from 'lucide-react';
+import { Plus, Percent, Award, ChevronDown, ListFilter } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Button } from '@/components/ui/button';
+import { GradesInlineAssignmentPanel } from '@/components/assignment/GradesInlineAssignmentPanel';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useLocation, useRoute } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import { useForecast } from '@/hooks/useCourseGrading';
 import { motion } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
@@ -41,6 +51,8 @@ interface Assignment {
   /** Id de grading_categories (logro); usado para agrupar columnas por categoría */
   logroCalificacionId?: string;
   categoryWeightPct?: number | null;
+  /** 1–3: período académico (filtrado en servidor cuando se pide ?trimestre=) */
+  trimestre?: number;
 }
 
 interface LogroCalificacion {
@@ -88,8 +100,6 @@ interface Student {
   email?: string;
 }
 
-type TabId = string;
-
 // =========================================================
 // FETCHING
 // =========================================================
@@ -98,8 +108,36 @@ const fetchSubjectsForGroup = async (groupId: string): Promise<CourseSubject[]> 
   return apiRequest('GET', `/api/courses/for-group/${groupId}`);
 };
 
-const fetchGradeTableAssignments = async (groupId: string, courseId: string): Promise<Assignment[]> => {
-  return apiRequest('GET', `/api/assignments?groupId=${encodeURIComponent(groupId)}&courseId=${courseId}`);
+function defaultAcademicTrimestre(): 1 | 2 | 3 {
+  const m = new Date().getMonth() + 1;
+  return m <= 4 ? 1 : m <= 8 ? 2 : 3;
+}
+
+function parseTrimestreFromSearch(search: string): 1 | 2 | 3 {
+  const t = new URLSearchParams(search).get('t');
+  if (t === '1' || t === '2' || t === '3') return Number(t) as 1 | 2 | 3;
+  return defaultAcademicTrimestre();
+}
+
+function buildGradesTableSearchParams(opts: { gs: string; trimestre: 1 | 2 | 3; returnTo?: string }): string {
+  const q = new URLSearchParams();
+  if (opts.gs) q.set('gs', opts.gs);
+  q.set('t', String(opts.trimestre));
+  if (opts.returnTo?.trim()) q.set('returnTo', opts.returnTo.trim());
+  return q.toString();
+}
+
+const fetchGradeTableAssignments = async (
+  groupId: string,
+  courseId: string,
+  trimestre: 1 | 2 | 3
+): Promise<Assignment[]> => {
+  const qs = new URLSearchParams({
+    groupId,
+    courseId,
+    trimestre: String(trimestre),
+  });
+  return apiRequest('GET', `/api/assignments?${qs.toString()}`);
 };
 
 const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
@@ -111,6 +149,13 @@ const fetchStudentsByGroup = async (groupId: string): Promise<Student[]> => {
     return [];
   }
 };
+
+/** Columnas de la grilla: estudiante sticky + N actividades + promedio + predicción */
+function buildGradesGridColumns(assignCount: number): string {
+  const n = Math.max(0, assignCount);
+  if (n === 0) return `minmax(260px, 300px) minmax(104px, 120px) minmax(152px, 180px)`;
+  return `minmax(260px, 300px) repeat(${n}, minmax(132px, 150px)) minmax(104px, 120px) minmax(152px, 180px)`;
+}
 
 // =========================================================
 // PREDICCIÓN (especificación exacta)
@@ -276,14 +321,23 @@ function NoteCell({
   }
 
   return (
-    <motion.div
+    <div
       role="button"
       tabIndex={0}
-      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-      className="flex items-center justify-center w-full min-h-[44px] py-2.5 rounded-[12px] font-medium text-[#E2E8F0] cursor-text bg-white/[0.03] border border-white/[0.06] transition-all duration-200 hover:bg-[rgba(59,130,246,0.15)] hover:border-[rgba(59,130,246,0.4)] hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2)] overflow-hidden"
+      onClick={(e) => {
+        e.stopPropagation();
+        setEditing(true);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setEditing(true);
+        }
+      }}
+      className="flex items-center justify-center w-full min-h-[44px] py-2.5 rounded-[12px] font-medium text-[#E2E8F0] cursor-text bg-white/[0.03] border border-white/[0.06] transition-colors duration-150 hover:bg-[rgba(59,130,246,0.15)] hover:border-[rgba(59,130,246,0.4)] overflow-hidden"
     >
-      {isEmpty ? <span className="text-white/40">—</span> : <span>{String(value)}</span>}
-    </motion.div>
+      {isEmpty ? <span className="text-white/40">—</span> : <span className="tabular-nums">{String(value)}</span>}
+    </div>
   );
 }
 
@@ -338,6 +392,7 @@ function PredictionCellFromAI({ courseId, studentId }: { courseId: string; stude
 function StudentRow({
   student,
   assignments,
+  gridTemplateColumns,
   getGradeFor,
   getPromedioForDisplay,
   onSaveGrade,
@@ -346,6 +401,7 @@ function StudentRow({
 }: {
   student: Student;
   assignments: Assignment[];
+  gridTemplateColumns: string;
   getGradeFor: (studentId: string, assignmentId: string) => number | string;
   getPromedioForDisplay: (studentId: string) => number | string;
   onSaveGrade: (assignmentId: string, estudianteId: string, calificacion: number | null) => void;
@@ -355,21 +411,22 @@ function StudentRow({
   const promedio = getPromedioForDisplay(student._id);
 
   return (
-    <motion.div
-      layout
-      className="grid items-center gap-2 min-h-[72px] py-2 border-b border-white/[0.04] transition-colors duration-200 hover:bg-white/[0.02]"
-      style={{ gridTemplateColumns: `260px repeat(${assignments.length}, 120px) 100px 180px` }}
+    <div
+      className="grid items-center gap-x-2 gap-y-1 min-h-[68px] py-2 border-b border-white/[0.06] transition-colors duration-150 hover:bg-white/[0.025]"
+      style={{ gridTemplateColumns }}
     >
       <div
-        className="flex items-center gap-3 pl-1 cursor-pointer group sticky left-0 z-10 pr-2 -ml-px backdrop-blur-md"
-        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
+        className="flex items-center gap-3 pl-2 cursor-pointer group sticky left-0 z-10 pr-2 py-1 rounded-r-lg backdrop-blur-md min-w-0 border-r border-white/[0.06]"
+        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.42), rgba(15, 23, 42, 0.72))' }}
         onClick={() => onStudentClick(student._id)}
       >
         <StudentAvatar nombre={student.nombre} />
-        <span className="font-medium text-[#E2E8F0] truncate group-hover:text-[#3B82F6] transition-colors">{student.nombre}</span>
+        <span className="font-medium text-[#E2E8F0] text-sm leading-snug line-clamp-2 group-hover:text-[#3B82F6] transition-colors">
+          {student.nombre}
+        </span>
       </div>
       {assignments.map((assignment) => (
-        <div key={assignment._id} className="flex items-center justify-center min-w-0 overflow-hidden bg-transparent">
+        <div key={assignment._id} className="flex items-center justify-center min-w-0 px-0.5 bg-transparent">
           <NoteCell
             assignmentId={assignment._id}
             estudianteId={student._id}
@@ -391,7 +448,7 @@ function StudentRow({
       <div className="flex items-center justify-center pr-2">
         <PredictionCellFromAI courseId={courseId} studentId={student._id} />
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -406,7 +463,17 @@ export default function CourseGradesTablePage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<TabId>('');
+  const TAB_VISTA_COMPLETA = '__completa__';
+  const TAB_SIN_LOGRO = 'sin-logro';
+  /** Dentro de un logro: columnas de todos sus indicadores a la vez */
+  const TAB_LOGRO_TODOS_INDICADORES = '__logro_todos_indicadores__';
+
+  const [activePrimaryTab, setActivePrimaryTab] = useState<string>(TAB_VISTA_COMPLETA);
+  const [activeIndicadorTab, setActiveIndicadorTab] = useState<string>(TAB_LOGRO_TODOS_INDICADORES);
+  const [trimestreActivo, setTrimestreActivo] = useState<1 | 2 | 3>(() =>
+    typeof window !== 'undefined' ? parseTrimestreFromSearch(window.location.search) : defaultAcademicTrimestre()
+  );
+  const [showInlineAssignment, setShowInlineAssignment] = useState(false);
 
   const displayGroupId =
     cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
@@ -429,10 +496,22 @@ export default function CourseGradesTablePage() {
     gcTime: 10 * 60 * 1000,
   });
 
-  const gsFromQuery =
-    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('gs') || '' : '';
-  const returnToFromQuery =
-    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('returnTo') || '' : '';
+  const searchStr = typeof window !== 'undefined' ? window.location.search : '';
+  const gsFromQuery = new URLSearchParams(searchStr).get('gs') || '';
+  const returnToFromQuery = new URLSearchParams(searchStr).get('returnTo') || '';
+
+  useEffect(() => {
+    setTrimestreActivo(parseTrimestreFromSearch(window.location.search));
+  }, [cursoId]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setTrimestreActivo(parseTrimestreFromSearch(window.location.search));
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   const firstSubjectId = useMemo(() => {
     if (!subjectsForGroup.length) return '';
     if (gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)) return gsFromQuery;
@@ -448,8 +527,8 @@ export default function CourseGradesTablePage() {
   });
 
   const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
-    queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
-    queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || ''),
+    queryKey: ['gradeTableAssignments', cursoId, firstSubjectId, trimestreActivo],
+    queryFn: () => fetchGradeTableAssignments(displayGroupId, firstSubjectId || '', trimestreActivo),
     enabled: !!cursoId && !!firstSubjectId && user?.rol === 'profesor',
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
@@ -467,6 +546,11 @@ export default function CourseGradesTablePage() {
     gcTime: 10 * 60 * 1000,
   });
 
+  const logrosBloquesSorted = useMemo(
+    () => [...(logrosData?.logros ?? [])].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999)),
+    [logrosData?.logros]
+  );
+
   const flatIndicadoresOrdered = useMemo(() => {
     type Row = { _id: string; nombre: string; porcentaje: number; orden: number; grupoTitle: string };
     const out: Row[] = [];
@@ -477,8 +561,10 @@ export default function CourseGradesTablePage() {
       const grupoTitle = raw.length > 0 ? (raw.length > 52 ? `${raw.slice(0, 52)}…` : raw) : 'Logro';
       const inds = [...(L.indicadores ?? [])].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
       for (const ind of inds) {
+        const id = String(ind._id ?? '');
+        if (!id) continue;
         out.push({
-          _id: ind._id,
+          _id: id,
           nombre: ind.nombre,
           porcentaje: ind.porcentaje,
           orden: ind.orden ?? 0,
@@ -492,9 +578,9 @@ export default function CourseGradesTablePage() {
   const outcomeNodesForGrades = useMemo((): OutcomeGradeNode[] => {
     const logrosBloques = logrosData?.logros ?? [];
     return logrosBloques.map((L) => ({
-      id: L._id,
+      id: String(L._id),
       pesoEnCurso: L.pesoEnCurso,
-      indicadores: (L.indicadores ?? []).map((i) => ({ id: i._id, porcentaje: i.porcentaje })),
+      indicadores: (L.indicadores ?? []).map((i) => ({ id: String(i._id), porcentaje: i.porcentaje })),
     }));
   }, [logrosData]);
 
@@ -503,8 +589,9 @@ export default function CourseGradesTablePage() {
     const logrosOrdenados = flatIndicadoresOrdered;
     const grouped: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }> = {};
     logrosOrdenados.forEach((ind) => {
-      grouped[ind._id] = {
-        logro: { _id: ind._id, nombre: ind.nombre, porcentaje: ind.porcentaje, orden: ind.orden },
+      const kid = String(ind._id);
+      grouped[kid] = {
+        logro: { _id: kid, nombre: ind.nombre, porcentaje: ind.porcentaje, orden: ind.orden },
         assignments: [],
       };
     });
@@ -561,34 +648,61 @@ export default function CourseGradesTablePage() {
     return segs;
   }, [orderedColumnsForVista]);
 
-  const TAB_VISTA_COMPLETA = '__completa__';
-
-  const tabOrder = useMemo(() => {
-    const byId = new Map(Object.entries(assignmentsByIndicador));
-    const orderedTabs = flatIndicadoresOrdered
-      .map((ind) => {
-        if (!byId.has(ind._id)) return null;
-        return { id: ind._id, label: ind.nombre };
-      })
-      .filter(Boolean) as { id: string; label: string }[];
-    const sin = assignmentsByIndicador['sin-logro'];
-    if (sin && sin.assignments.length > 0) {
-      orderedTabs.push({ id: 'sin-logro', label: 'Sin categoría' });
-    }
-    return [{ id: TAB_VISTA_COMPLETA, label: 'Vista completa' }, ...orderedTabs];
-  }, [assignmentsByIndicador, flatIndicadoresOrdered]);
+  const filterMenuSummary = useMemo(() => {
+    if (activePrimaryTab === TAB_VISTA_COMPLETA) return 'Vista completa';
+    if (activePrimaryTab === TAB_SIN_LOGRO) return 'Sin categoría';
+    const bloque = logrosBloquesSorted.find((L) => String(L._id) === String(activePrimaryTab));
+    const logroNombre = (bloque?.descripcion ?? '').trim() || 'Logro';
+    if (activeIndicadorTab === TAB_LOGRO_TODOS_INDICADORES) return logroNombre;
+    const ind = flatIndicadoresOrdered.find((x) => String(x._id) === String(activeIndicadorTab));
+    const indNombre = (ind?.nombre ?? '').trim();
+    return indNombre ? `${logroNombre} → ${indNombre}` : logroNombre;
+  }, [
+    activePrimaryTab,
+    activeIndicadorTab,
+    logrosBloquesSorted,
+    flatIndicadoresOrdered,
+  ]);
 
   useEffect(() => {
-    if (tabOrder.length > 0 && !activeTab) setActiveTab(tabOrder[0].id);
-  }, [tabOrder, activeTab]);
+    setActivePrimaryTab(TAB_VISTA_COMPLETA);
+    setActiveIndicadorTab(TAB_LOGRO_TODOS_INDICADORES);
+  }, [trimestreActivo]);
 
   const activeAssignments = useMemo(() => {
-    if (!activeTab) return [];
-    if (activeTab === TAB_VISTA_COMPLETA) {
+    if (activePrimaryTab === TAB_VISTA_COMPLETA) {
       return orderedColumnsForVista.map((c) => c.assignment);
     }
-    return assignmentsByIndicador[activeTab]?.assignments ?? [];
-  }, [activeTab, orderedColumnsForVista, assignmentsByIndicador]);
+    if (activePrimaryTab === TAB_SIN_LOGRO) {
+      return assignmentsByIndicador[TAB_SIN_LOGRO]?.assignments ?? [];
+    }
+    const bloque = logrosBloquesSorted.find((L) => String(L._id) === String(activePrimaryTab));
+    if (!bloque) return [];
+    const indIds = (bloque.indicadores ?? [])
+      .map((i) => String(i._id ?? ''))
+      .filter(Boolean);
+    if (activeIndicadorTab === TAB_LOGRO_TODOS_INDICADORES) {
+      const all: Assignment[] = [];
+      for (const id of indIds) {
+        const g = assignmentsByIndicador[id];
+        if (g?.assignments?.length) all.push(...g.assignments);
+      }
+      return all.sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime());
+    }
+    const indKey = String(activeIndicadorTab);
+    return assignmentsByIndicador[indKey]?.assignments ?? [];
+  }, [
+    activePrimaryTab,
+    activeIndicadorTab,
+    orderedColumnsForVista,
+    assignmentsByIndicador,
+    logrosBloquesSorted,
+  ]);
+
+  const gradeGridTemplate = useMemo(
+    () => buildGradesGridColumns(activeAssignments.length),
+    [activeAssignments.length]
+  );
 
   /** Todas las asignaciones del curso, para calcular el promedio global (mismo valor en vista por categoría y vista completa). */
   const allAssignmentsForPromedio = useMemo(
@@ -597,6 +711,11 @@ export default function CourseGradesTablePage() {
         .flatMap((g) => g.assignments)
         .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()),
     [assignmentsByIndicador]
+  );
+
+  const gradeTableQueryKey = useMemo(
+    () => ['gradeTableAssignments', cursoId, firstSubjectId, trimestreActivo] as const,
+    [cursoId, firstSubjectId, trimestreActivo]
   );
 
   const updateGradeMutation = useMutation({
@@ -615,11 +734,41 @@ export default function CourseGradesTablePage() {
         manualOverride: true,
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments', cursoId, firstSubjectId] });
-      queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: gradeTableQueryKey });
+      const previous = queryClient.getQueryData<Assignment[]>([...gradeTableQueryKey]);
+      queryClient.setQueryData<Assignment[]>([...gradeTableQueryKey], (old) => {
+        if (!old) return old;
+        const sid = String(vars.estudianteId);
+        return old.map((a) => {
+          if (String(a._id) !== String(vars.assignmentId)) return a;
+          const subs = [...(a.submissions ?? a.entregas ?? [])];
+          const idx = subs.findIndex((s) => {
+            const x = s as { estudianteId?: string; studentId?: string; student_id?: string };
+            const id = x.estudianteId ?? x.studentId ?? x.student_id;
+            return String(id) === sid;
+          });
+          const nextCal = vars.calificacion;
+          if (idx >= 0) {
+            const copy = { ...subs[idx] } as Submission & { score?: number };
+            if (nextCal == null) {
+              copy.calificacion = undefined;
+              copy.score = undefined;
+            } else {
+              copy.calificacion = nextCal;
+              copy.score = nextCal;
+            }
+            subs[idx] = copy;
+          } else if (nextCal != null) {
+            subs.push({ estudianteId: sid, calificacion: nextCal });
+          }
+          return { ...a, submissions: subs, entregas: subs };
+        });
+      });
+      return { previous };
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData([...gradeTableQueryKey], ctx.previous);
       toast({ title: 'Error', description: err.message || 'No se pudo actualizar la nota', variant: 'destructive' });
     },
   });
@@ -679,7 +828,7 @@ export default function CourseGradesTablePage() {
 
   /** En Vista completa: promedio final ponderado. En una categoría: solo el promedio de esa categoría. Evita NaN. */
   const getPromedioForDisplay = (estudianteId: string): number | string => {
-    if (activeTab === TAB_VISTA_COMPLETA) return getPromedioFor(estudianteId);
+    if (activePrimaryTab === TAB_VISTA_COMPLETA) return getPromedioFor(estudianteId);
     if (activeAssignments.length === 0) return '—';
     const score = (a: Assignment): number | null => {
       const v = getGradeFor(estudianteId, a._id);
@@ -696,14 +845,40 @@ export default function CourseGradesTablePage() {
     return Number.isNaN(result) ? '—' : result;
   };
 
-  const promedioColumnLabel =
-    activeTab === TAB_VISTA_COMPLETA
-      ? 'Promedio'
-      : assignmentsByIndicador[activeTab]?.logro?.nombre
-        ? `Promedio (${assignmentsByIndicador[activeTab].logro.nombre})`
-        : 'Promedio';
+  /** Contexto del filtro (logro/indicador): se muestra arriba de la tabla; la columna solo dice «Promedio». */
+  const gradesTableContextBanner = useMemo((): string | null => {
+    if (activePrimaryTab === TAB_VISTA_COMPLETA) return null;
+    if (activePrimaryTab === TAB_SIN_LOGRO) return 'Actividades sin categoría de logro asignada.';
+    const bloque = logrosBloquesSorted.find((L) => String(L._id) === String(activePrimaryTab));
+    if (!bloque) return null;
+    const desc = (bloque.descripcion ?? '').trim();
+    if (activeIndicadorTab === TAB_LOGRO_TODOS_INDICADORES) {
+      return desc.length > 0 ? desc : null;
+    }
+    const ind = flatIndicadoresOrdered.find((x) => String(x._id) === String(activeIndicadorTab));
+    const indName = (ind?.nombre ?? '').trim();
+    if (indName && desc) return `${indName} — ${desc}`;
+    return indName || desc || null;
+  }, [activePrimaryTab, activeIndicadorTab, logrosBloquesSorted, flatIndicadoresOrdered]);
 
   const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
+  const showTrimesterEmptyState = students.length > 0 && assignmentsForTable.length === 0;
+  const showFilteredLogroEmptyState =
+    !loading &&
+    students.length > 0 &&
+    !showTrimesterEmptyState &&
+    activePrimaryTab !== TAB_VISTA_COMPLETA &&
+    activeAssignments.length === 0;
+  const filteredEmptyMessage =
+    activePrimaryTab === TAB_SIN_LOGRO
+      ? 'No hay actividades sin categoría en este trimestre.'
+      : activeIndicadorTab !== TAB_LOGRO_TODOS_INDICADORES
+        ? 'No hay notas para este indicador.'
+        : 'No hay notas para este logro.';
+  const hasSinLogroAssignments =
+    (assignmentsByIndicador[TAB_SIN_LOGRO]?.assignments?.length ?? 0) > 0;
+
+  const trimestreLabel = trimestreActivo === 1 ? 'I' : trimestreActivo === 2 ? 'II' : 'III';
 
   useEffect(() => {
     if (user && user.rol !== 'profesor') setLocation('/courses');
@@ -712,16 +887,22 @@ export default function CourseGradesTablePage() {
   const subjectLabel =
     subjectsForGroup.find((s) => s._id === firstSubjectId)?.nombre ?? subjectsForGroup[0]?.nombre ?? 'Notas';
   const pageTitle = `${groupDisplayName} – ${subjectLabel}`;
+  const initialIndicadorDesdeFiltro =
+    activeIndicadorTab !== TAB_LOGRO_TODOS_INDICADORES &&
+    activePrimaryTab !== TAB_VISTA_COMPLETA &&
+    activePrimaryTab !== TAB_SIN_LOGRO
+      ? activeIndicadorTab
+      : '';
   const backToCourseHref =
     returnToFromQuery
       ? returnToFromQuery
       : gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)
-      ? `/course-detail/${cursoId}/materia/${gsFromQuery}`
-      : `/course-detail/${cursoId}`;
+        ? `/course-detail/${cursoId}/materia/${gsFromQuery}`
+        : `/course-detail/${cursoId}`;
 
   return (
     <div
-      className="min-h-[calc(100vh-8rem)] w-full overflow-x-hidden relative flex flex-col"
+      className="min-h-[calc(100vh-8rem)] w-full max-w-full overflow-x-auto relative flex flex-col"
       style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
     >
       <div className="relative z-10 w-full flex-1 flex flex-col min-h-0">
@@ -730,33 +911,57 @@ export default function CourseGradesTablePage() {
         </div>
 
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           transition={{ duration: 0.35 }}
-          className="w-full flex-1 flex flex-col min-h-0"
+          className="w-full flex-1 flex flex-col min-h-0 min-w-0"
         >
           <header className="mb-6 flex-shrink-0">
             <h1 className="text-2xl font-semibold text-[#E2E8F0] mb-4" style={{ fontFamily: 'Inter' }}>
               {pageTitle}
             </h1>
 
-            <div className="flex flex-wrap gap-2 mb-4">
+            {showInlineAssignment && firstSubjectId ? (
+              <GradesInlineAssignmentPanel
+                key={`inline-${trimestreActivo}-${firstSubjectId}-${initialIndicadorDesdeFiltro}`}
+                cursoId={cursoId}
+                displayGroupId={displayGroupId}
+                groupSubjectId={firstSubjectId}
+                subjectNombre={subjectLabel}
+                groupDisplayName={groupDisplayName}
+                trimestre={trimestreActivo}
+                initialIndicadorId={initialIndicadorDesdeFiltro}
+                onClose={() => setShowInlineAssignment(false)}
+              />
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2 mb-4">
               <Button
                 size="sm"
-                className="rounded-[10px] bg-[#3B82F6] hover:bg-[#2563EB] text-white"
-                onClick={() => setLocation(`/course-detail/${cursoId}?openAssignmentForm=1`)}
+                className="rounded-[10px] bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white border-0 shadow-sm transition-opacity duration-150 shrink-0"
+                disabled={!firstSubjectId}
+                title={!firstSubjectId ? 'Espera a cargar la materia o elige una desde el curso' : undefined}
+                onClick={() => {
+                  if (!firstSubjectId) return;
+                  setShowInlineAssignment((prev) => !prev);
+                }}
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Nueva asignación
+                <Plus className="h-4 w-4 mr-2 shrink-0" />
+                {showInlineAssignment ? 'Cerrar' : 'Nueva asignación'}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
+                className={cn(
+                  'rounded-[10px] border-white/20 bg-white/[0.04] text-[#E2E8F0] hover:bg-white/10 shrink-0 grades-toolbar-btn-analytics'
+                )}
                 onClick={() => {
-                  const qs = firstSubjectId
-                    ? `?${new URLSearchParams({ gs: firstSubjectId }).toString()}`
-                    : '';
+                  const inner = buildGradesTableSearchParams({
+                    gs: firstSubjectId,
+                    trimestre: trimestreActivo,
+                    returnTo: returnToFromQuery || undefined,
+                  });
+                  const qs = inner ? `?${inner}` : '';
                   setLocation(`/course/${cursoId}/analytics${qs}`);
                 }}
               >
@@ -765,41 +970,148 @@ export default function CourseGradesTablePage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
-                onClick={() => setLocation('/profesor/academia/calificacion/logros')}
+                className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5 shrink-0"
+                onClick={() => {
+                  const gradesQs = buildGradesTableSearchParams({
+                    gs: firstSubjectId,
+                    trimestre: trimestreActivo,
+                    returnTo: returnToFromQuery || undefined,
+                  });
+                  const returnPath = `/course/${cursoId}/grades${gradesQs ? `?${gradesQs}` : ''}`;
+                  const q = new URLSearchParams();
+                  q.set('returnTo', returnPath);
+                  if (firstSubjectId) q.set('gs', firstSubjectId);
+                  setLocation(`/course/${cursoId}/calificacion-logros?${q.toString()}`);
+                }}
               >
-                <Percent className="h-4 w-4 mr-2" />
+                <Percent className="h-4 w-4 mr-2 shrink-0" />
                 Logros de Calificación
               </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5 gap-1.5 min-w-0 max-w-[min(100%,20rem)] shrink"
+                  >
+                    <ListFilter className="h-4 w-4 shrink-0 opacity-90" />
+                    <span className="truncate">Filtro</span>
+                    <span className="text-white/45 text-xs font-normal truncate hidden sm:inline max-w-[10rem]">
+                      · {filterMenuSummary}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[min(100vw-2rem,22rem)] max-h-[min(70vh,28rem)] border-white/10 bg-[#0f172a]/95 backdrop-blur-xl">
+                  <DropdownMenuLabel className="text-white/90 text-xs font-semibold uppercase tracking-wide">
+                    Vista y logros
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onSelect={() => {
+                      setActivePrimaryTab(TAB_VISTA_COMPLETA);
+                      setActiveIndicadorTab(TAB_LOGRO_TODOS_INDICADORES);
+                    }}
+                  >
+                    Vista completa
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/10" />
+                  {logrosBloquesSorted.map((L) => {
+                    const inds = [...(L.indicadores ?? [])].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+                    const logroTitle = (L.descripcion ?? '').trim() || 'Logro';
+                    const shortTitle = logroTitle.length > 52 ? `${logroTitle.slice(0, 52)}…` : logroTitle;
+                    const bloqueId = String(L._id);
+                    return (
+                      <div key={bloqueId} className="py-0.5 border-b border-white/[0.06] last:border-b-0">
+                        <DropdownMenuLabel
+                          className="text-[11px] text-white/45 font-normal px-2 py-1.5 whitespace-normal leading-snug"
+                          title={logroTitle}
+                        >
+                          {shortTitle}
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem
+                          className="cursor-pointer pl-4"
+                          onSelect={() => {
+                            setActivePrimaryTab(bloqueId);
+                            setActiveIndicadorTab(TAB_LOGRO_TODOS_INDICADORES);
+                          }}
+                        >
+                          Ver todo el logro
+                        </DropdownMenuItem>
+                        {inds.map((ind) => {
+                          const indId = String(ind._id ?? '');
+                          if (!indId) return null;
+                          return (
+                            <DropdownMenuItem
+                              key={indId}
+                              className="cursor-pointer pl-4 whitespace-normal items-start py-2"
+                              onSelect={() => {
+                                setActivePrimaryTab(bloqueId);
+                                setActiveIndicadorTab(indId);
+                              }}
+                            >
+                              <span className="text-sm leading-snug text-[#E2E8F0]">
+                                {(ind.nombre ?? '').trim() || 'Indicador'} ({ind.porcentaje}%)
+                              </span>
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                  {hasSinLogroAssignments ? (
+                    <>
+                      <DropdownMenuSeparator className="bg-white/10" />
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={() => {
+                          setActivePrimaryTab(TAB_SIN_LOGRO);
+                          setActiveIndicadorTab(TAB_LOGRO_TODOS_INDICADORES);
+                        }}
+                      >
+                        Sin categoría
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <div className="flex-1 min-w-[1rem]" aria-hidden />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5 shrink-0 gap-1.5"
+                  >
+                    Trimestre · {trimestreLabel}
+                    <ChevronDown className="h-4 w-4 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[10rem] border-white/10 bg-[#0f172a]/95 backdrop-blur-xl">
+                  {([1, 2, 3] as const).map((n) => (
+                    <DropdownMenuItem
+                      key={n}
+                      className={cn('cursor-pointer', trimestreActivo === n && 'bg-white/10')}
+                      onSelect={() => {
+                        setTrimestreActivo(n);
+                        const qs = buildGradesTableSearchParams({
+                          gs: firstSubjectId,
+                          trimestre: n,
+                          returnTo: returnToFromQuery || undefined,
+                        });
+                        setLocation(`/course/${cursoId}/grades?${qs}`);
+                      }}
+                    >
+                      {n === 1 ? 'I' : n === 2 ? 'II' : 'III'} trimestre
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
-            {/* Tabs */}
-            <div className="flex flex-wrap gap-2">
-              {tabOrder.map((tab) => (
-                <motion.button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className="px-4 py-2.5 rounded-[10px] text-sm font-medium transition-all duration-200"
-                  style={
-                    activeTab === tab.id
-                      ? {
-                          background: 'linear-gradient(180deg, #3B82F6, #1D4ED8)',
-                          color: '#fff',
-                          boxShadow: '0 0 20px rgba(59,130,246,0.5)',
-                        }
-                      : {
-                          background: 'rgba(255,255,255,0.05)',
-                          color: '#E2E8F0',
-                        }
-                  }
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  {tab.label}
-                </motion.button>
-              ))}
-            </div>
           </header>
 
           {loading ? (
@@ -810,21 +1122,14 @@ export default function CourseGradesTablePage() {
               <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
             </div>
           ) : students.length > 0 ? (
-            <div
-              className="overflow-x-auto overflow-y-auto flex-1 min-h-0 -mx-8 sm:-mx-16 px-4 sm:px-16 relative"
-              style={{
-                maskImage: 'linear-gradient(to right, black 260px, black calc(100% - 20px), transparent)',
-                WebkitMaskImage: 'linear-gradient(to right, black 260px, black calc(100% - 20px), transparent)',
-              }}
-            >
-              {/* Header: en Vista completa dos filas (categorías + asignaciones); en pestaña categoría una fila */}
-              {activeTab === TAB_VISTA_COMPLETA && orderedColumnsForVista.length > 0 ? (
-                <>
+            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-md shadow-[0_0_40px_rgba(37,99,235,0.12)]">
+              {showTrimesterEmptyState ? (
+                <div className="min-w-[min(100%,560px)] px-2 sm:px-4 py-2">
                   <div
-                    className="sticky top-0 z-20 grid items-center gap-2 min-h-[44px] py-2 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wider text-white/70 backdrop-blur-sm"
+                    className="sticky top-0 z-20 grid items-center gap-2 min-h-[56px] py-3 border-b border-white/[0.08] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0"
                     style={{
-                      gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
-                      background: 'rgba(255,255,255,0.02)',
+                      gridTemplateColumns: buildGradesGridColumns(0),
+                      background: 'rgba(255,255,255,0.03)',
                     }}
                   >
                     <div
@@ -833,83 +1138,147 @@ export default function CourseGradesTablePage() {
                     >
                       Estudiante
                     </div>
-                    {parentHeaderSegments
-                      .filter((seg) => seg.span > 0)
-                      .map((seg, idx) => (
-                        <div
-                          key={`${seg.title}-${idx}`}
-                          className="text-center truncate px-1 border-r border-white/10"
-                          style={{ gridColumn: `span ${seg.span}` }}
-                          title={seg.title}
-                        >
-                          {seg.title}
-                        </div>
-                      ))}
-                    <div className="text-center">{promedioColumnLabel}</div>
+                    <div className="text-center">Promedio</div>
                     <div className="text-center pr-2">Predicción</div>
                   </div>
-                  <div
-                    className="sticky top-[44px] z-20 grid items-center gap-2 min-h-[40px] py-2 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
-                    style={{
-                      gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
-                      background: 'rgba(255,255,255,0.02)',
-                    }}
-                  >
-                    <div
-                      className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
-                      style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
-                    >
-                      {' '}
-                    </div>
-                    {activeAssignments.map((a) => (
-                      <div key={a._id} className="text-center truncate px-1">
-                        {a.titulo}
-                      </div>
-                    ))}
-                    <div className="text-center" />
-                    <div className="text-center pr-2" />
+                  <div className="py-16 text-center">
+                    <p className="text-white/75 text-lg font-medium">El trimestre no ha comenzado</p>
+                    <p className="text-white/45 text-sm mt-2">No hay actividades cargadas para este trimestre.</p>
                   </div>
-                </>
+                </div>
+              ) : showFilteredLogroEmptyState ? (
+                <div className="px-4 sm:px-6 py-16 text-center">
+                  <p className="text-white/85 text-lg font-medium">{filteredEmptyMessage}</p>
+                  <p className="text-white/45 text-sm mt-2 max-w-md mx-auto">
+                    El filtro ya está aplicado: no hay columnas de tareas para esta selección. Prueba «Vista completa» en Filtro u otro logro o indicador.
+                  </p>
+                </div>
               ) : (
-                <div
-                  className="sticky top-0 z-20 grid items-center gap-2 min-h-[56px] py-3 border-b border-white/[0.06] text-xs font-semibold uppercase tracking-wider text-white/80 mb-0 backdrop-blur-sm"
-                  style={{
-                    gridTemplateColumns: `260px repeat(${activeAssignments.length}, 120px) 100px 180px`,
-                    background: 'rgba(255,255,255,0.02)',
-                  }}
-                >
-                  <div
-                    className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
-                    style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
-                  >
-                    Estudiante
-                  </div>
-                  {activeAssignments.map((a) => (
-                    <div key={a._id} className="text-center truncate px-1">
-                      {a.titulo}
+                <div className="px-2 sm:px-3 pt-2 pb-1 min-w-0">
+                  {gradesTableContextBanner ? (
+                    <div
+                      className="mb-3 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 sm:px-5 sm:py-3.5"
+                      role="note"
+                    >
+                      <p className="text-sm sm:text-base leading-relaxed text-white/[0.88] break-words">
+                        {gradesTableContextBanner}
+                      </p>
                     </div>
-                  ))}
-                  <div className="text-center">{promedioColumnLabel}</div>
-                  <div className="text-center pr-2">Predicción</div>
+                  ) : null}
+                  {/* Header: en Vista completa dos filas (categorías + asignaciones); en pestaña categoría una fila */}
+                  {activePrimaryTab === TAB_VISTA_COMPLETA && orderedColumnsForVista.length > 0 ? (
+                    <>
+                      <div
+                        className="sticky top-0 z-20 grid items-stretch gap-x-2 gap-y-1 min-h-[48px] py-2 border-b border-white/[0.08] text-[10px] font-semibold uppercase tracking-wider text-white/75"
+                        style={{
+                          gridTemplateColumns: gradeGridTemplate,
+                          background: 'rgba(255,255,255,0.03)',
+                        }}
+                      >
+                        <div
+                          className="pl-2 sticky left-0 z-30 pr-2 py-2 flex items-center border-r border-white/[0.06] rounded-r-lg"
+                          style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.42), rgba(15, 23, 42, 0.72))' }}
+                        >
+                          Estudiante
+                        </div>
+                        {parentHeaderSegments
+                          .filter((seg) => seg.span > 0)
+                          .map((seg, idx) => (
+                            <div
+                              key={`${seg.title}-${idx}`}
+                              className="text-center px-2 py-2 flex items-center justify-center border-r border-white/[0.06] last:border-r-0"
+                              style={{ gridColumn: `span ${seg.span}` }}
+                              title={seg.title}
+                            >
+                              <span className="line-clamp-2 leading-tight break-words">{seg.title}</span>
+                            </div>
+                          ))}
+                        <div className="text-center flex items-center justify-center px-1 text-[10px] uppercase tracking-wider text-white/75">
+                          Promedio
+                        </div>
+                        <div className="text-center pr-2 flex items-center justify-center text-[10px] uppercase tracking-wider text-white/75">
+                          Predicción
+                        </div>
+                      </div>
+                      <div
+                        className="sticky top-[58px] z-20 grid items-stretch gap-x-2 gap-y-1 min-h-[52px] py-2 border-b border-white/[0.08] text-[11px] font-semibold text-white/85"
+                        style={{
+                          gridTemplateColumns: gradeGridTemplate,
+                          background: 'rgba(255,255,255,0.025)',
+                        }}
+                      >
+                        <div
+                          className="pl-2 sticky left-0 z-30 pr-2 border-r border-white/[0.06] rounded-r-lg"
+                          style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.65))' }}
+                        />
+                        {activeAssignments.map((a) => (
+                          <div key={a._id} className="text-center px-1.5 py-1 flex items-center justify-center min-h-[48px]">
+                            <span className="line-clamp-3 leading-snug break-words font-medium" title={a.titulo}>
+                              {a.titulo}
+                            </span>
+                          </div>
+                        ))}
+                        <div className="text-center" />
+                        <div className="text-center pr-2" />
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      className="sticky top-0 z-20 grid items-center gap-x-2 gap-y-1 py-2 border-b border-white/[0.08] text-xs font-semibold text-white/85 mb-0"
+                      style={{
+                        gridTemplateColumns: gradeGridTemplate,
+                        background: 'rgba(255,255,255,0.03)',
+                      }}
+                    >
+                      <div
+                        className="pl-2 sticky left-0 z-30 pr-2 py-1.5 flex items-center self-center border-r border-white/[0.06] rounded-r-lg min-h-0 text-[10px] uppercase tracking-wider text-white/75"
+                        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.42), rgba(15, 23, 42, 0.72))' }}
+                      >
+                        Estudiante
+                      </div>
+                      {activeAssignments.map((a) => (
+                        <div
+                          key={a._id}
+                          className="text-center px-1.5 py-1.5 flex items-center justify-center self-center min-h-0 max-h-[4.5rem] bg-white/[0.02] rounded-lg border border-white/[0.06]"
+                        >
+                          <span
+                            className="line-clamp-2 leading-snug break-words text-[11px] font-semibold text-white/85 w-full"
+                            title={a.titulo}
+                          >
+                            {a.titulo}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="text-center flex items-center justify-center px-1 py-1 self-center min-h-0 text-[10px] uppercase tracking-wider text-white/75">
+                        Promedio
+                      </div>
+                      <div className="text-center pr-2 flex items-center justify-center py-1 self-center min-h-0 text-[10px] uppercase tracking-wider text-white/75">
+                        Predicción
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pb-3">
+                    {students.map((student) => (
+                      <StudentRow
+                        key={student._id}
+                        student={student}
+                        assignments={activeAssignments}
+                        gridTemplateColumns={gradeGridTemplate}
+                        getGradeFor={getGradeFor}
+                        getPromedioForDisplay={getPromedioForDisplay}
+                        onSaveGrade={(assignmentId, estudianteId, calificacion) =>
+                          updateGradeMutation.mutate({ assignmentId, estudianteId, calificacion })
+                        }
+                        courseId={firstSubjectId || ''}
+                        onStudentClick={(studentId) =>
+                          setLocation(`/profesor/cursos/${cursoId}/estudiantes/${studentId}/notas`)
+                        }
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
-
-              {students.map((student) => (
-                <StudentRow
-                  key={student._id}
-                  student={student}
-                  assignments={activeAssignments}
-                  getGradeFor={getGradeFor}
-                  getPromedioForDisplay={getPromedioForDisplay}
-                  onSaveGrade={(assignmentId, estudianteId, calificacion) =>
-                    updateGradeMutation.mutate({ assignmentId, estudianteId, calificacion })
-                  }
-                  courseId={firstSubjectId || ''}
-                  onStudentClick={(studentId) =>
-                    setLocation(`/profesor/cursos/${cursoId}/estudiantes/${studentId}/notas`)
-                  }
-                />
-              ))}
             </div>
           ) : (
             <div className="text-center py-16 flex-1">

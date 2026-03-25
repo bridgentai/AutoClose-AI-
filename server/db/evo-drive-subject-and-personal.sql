@@ -23,3 +23,7 @@ CREATE TABLE IF NOT EXISTS evo_personal_files (
 ALTER TABLE evo_personal_files
   ADD COLUMN IF NOT EXISTS institution_id UUID REFERENCES institutions(id) ON DELETE CASCADE;
 CREATE INDEX IF NOT EXISTS idx_evo_personal_files_user ON evo_personal_files(user_id, institution_id);
+
+-- Archivos solo visibles para docentes (recursos por curso; los estudiantes no los ven)
+ALTER TABLE evo_files ADD COLUMN IF NOT EXISTS staff_only BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_evo_files_staff_course ON evo_files(institution_id, group_id) WHERE staff_only = true AND group_subject_id IS NULL;

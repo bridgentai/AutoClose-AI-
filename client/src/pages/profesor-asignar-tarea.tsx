@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, Component } from 'react';
+import React, { useState, useRef, useEffect, useMemo, Component } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Plus, X, Paperclip, Link2, FileText, Maximize2, Bold, Italic, Underline, List, Strikethrough, Upload, Youtube, Users, HelpCircle, AlertCircle, ClipboardList, Inbox } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,11 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import {
+  buildLogroBloquesForSelect,
+  countIndicadoresInBloques,
+  LogroIndicadorSelects,
+} from '@/components/assignment/logroIndicadorSelect';
 
 interface Course {
   _id: string;
@@ -136,18 +141,20 @@ function ProfesorAsignarTareaPageInner() {
 
   const courseIdForLogros = formData.materiaId || (formData.curso ? getSubjectsForGroup(formData.curso)[0]?._id : '');
   const { data: logrosData, isLoading: isLoadingLogros, isFetched: logrosFetched } = useQuery<{
-    indicadoresPlano: { _id: string; nombre: string; porcentaje: number }[];
+    logros?: { _id: string; descripcion: string; orden?: number; indicadores: { _id: string; nombre: string; porcentaje: number; orden?: number }[] }[];
+    indicadoresPlano: { _id: string; nombre: string; porcentaje: number; orden?: number }[];
   }>({
     queryKey: ['/api/logros-calificacion', courseIdForLogros],
     queryFn: () =>
       apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
     enabled: !!courseIdForLogros,
   });
-  const indicadores = logrosData?.indicadoresPlano ?? [];
+  const bloquesForSelect = useMemo(() => buildLogroBloquesForSelect(logrosData), [logrosData]);
+  const indicadoresCount = countIndicadoresInBloques(bloquesForSelect);
   const logroBlocksCreation =
     requiresStudentDelivery &&
     !!courseIdForLogros &&
-    (isLoadingLogros || (logrosFetched && (indicadores.length === 0 || !logroCalificacionId)));
+    (isLoadingLogros || (logrosFetched && (indicadoresCount === 0 || !logroCalificacionId)));
 
 
   const createAssignmentMutation = useMutation({
@@ -267,12 +274,12 @@ function ProfesorAsignarTareaPageInner() {
 
     const courseId = formData.materiaId || subjectsForGroup[0]._id;
     if (requiresStudentDelivery) {
-      if (indicadores.length === 0) {
+      if (indicadoresCount === 0) {
         toast({ title: 'Error', description: 'Configura logros e indicadores de calificación para esta materia antes de crear asignaciones con entrega.', variant: 'destructive' });
         return;
       }
       if (!logroCalificacionId) {
-        toast({ title: 'Error', description: 'Selecciona el tipo de logro al que pertenece esta asignación (ej: Tareas, Exámenes).', variant: 'destructive' });
+        toast({ title: 'Error', description: 'Selecciona primero el logro y luego el indicador al que pertenece esta asignación.', variant: 'destructive' });
         return;
       }
     }
@@ -628,7 +635,10 @@ function ProfesorAsignarTareaPageInner() {
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">Materia</Label>
                     <Select
                       value={getSubjectsForGroup(formData.curso).some(s => s._id === formData.materiaId) ? formData.materiaId : undefined}
-                      onValueChange={(value) => setFormData({ ...formData, materiaId: value })}
+                      onValueChange={(value) => {
+                        setFormData({ ...formData, materiaId: value });
+                        setLogroCalificacionId('');
+                      }}
                     >
                       <SelectTrigger className="bg-white border-gray-300 text-gray-900">
                         <SelectValue placeholder="Selecciona la materia" />
@@ -647,31 +657,17 @@ function ProfesorAsignarTareaPageInner() {
                 {requiresStudentDelivery && courseIdForLogros && (
                   <div className="mb-6">
                     <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                      Tipo de logro<span className="text-red-500">*</span>
+                      Logro e indicador<span className="text-red-500">*</span>
                     </Label>
                     {isLoadingLogros ? (
                       <p className="text-sm text-gray-500 py-2">Cargando logros...</p>
-                    ) : indicadores.length > 0 ? (
-                      <>
-                        <Select
-                          value={logroCalificacionId}
-                          onValueChange={setLogroCalificacionId}
-                        >
-                          <SelectTrigger className="bg-white border-gray-300 text-gray-900">
-                            <SelectValue placeholder="Selecciona el logro al que pertenece esta asignación" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white">
-                            {indicadores.map((l) => (
-                              <SelectItem key={l._id} value={l._id} className="text-gray-900">
-                                {l.nombre} ({l.porcentaje}%)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-gray-500 mt-1">
-                          La calificación se calculará según el porcentaje de este logro.
-                        </p>
-                      </>
+                    ) : indicadoresCount > 0 ? (
+                      <LogroIndicadorSelects
+                        bloques={bloquesForSelect}
+                        indicadorId={logroCalificacionId}
+                        onIndicadorIdChange={setLogroCalificacionId}
+                        variant="light"
+                      />
                     ) : (
                       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                         <p className="font-medium">No hay logros configurados</p>
@@ -681,7 +677,21 @@ function ProfesorAsignarTareaPageInner() {
                           variant="outline"
                           size="sm"
                           className="mt-2 border-amber-300 text-amber-800 hover:bg-amber-100"
-                          onClick={() => setLocation('/profesor/academia/calificacion')}
+                          onClick={() => {
+                            if (formData.curso && formData.materiaId) {
+                              const q = new URLSearchParams();
+                              q.set(
+                                'returnTo',
+                                `${window.location.pathname}${window.location.search}`
+                              );
+                              q.set('gs', formData.materiaId);
+                              setLocation(
+                                `/course/${encodeURIComponent(formData.curso)}/calificacion-logros?${q.toString()}`
+                              );
+                            } else {
+                              setLocation('/profesor/academia/calificacion/logros');
+                            }
+                          }}
                         >
                           Ir a configurar logros
                         </Button>

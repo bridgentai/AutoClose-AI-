@@ -25,6 +25,12 @@ interface CalendarProps {
   assignments: Assignment[];
   onDayClick?: (assignment: Assignment) => void;
   onEmptyDayClick?: (date: Date) => void;
+  /**
+   * Clic en la burbuja del día (vacía o con tareas): recibe la fecha local de ese celda.
+   * Si está definido, el botón principal del día usa esto en lugar de navegar al primer assignment.
+   * Las filas dentro del hover card siguen usando onDayClick.
+   */
+  onDayBubbleClick?: (date: Date) => void;
   /** Estudiante: diferenciar por materia y mostrar nombre de materia. Profesor: por curso. */
   variant?: CalendarVariant;
 }
@@ -49,7 +55,7 @@ const MATERIA_PALETTE = [
 const getColorForMateriaIndex = (index: number): string =>
   MATERIA_PALETTE[index % MATERIA_PALETTE.length];
 
-export function Calendar({ assignments, onDayClick, onEmptyDayClick, variant = 'student' }: CalendarProps) {
+export function Calendar({ assignments, onDayClick, onEmptyDayClick, onDayBubbleClick, variant = 'student' }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const isStudent = variant === 'student';
   const legendTitle = isStudent ? 'Leyenda de materias' : 'Leyenda de cursos';
@@ -163,7 +169,10 @@ export function Calendar({ assignments, onDayClick, onEmptyDayClick, variant = '
           <HoverCardTrigger asChild>
             <button
               onClick={() => {
-                if (dayAssignments.length > 0) {
+                const cellDate = new Date(year, month, day);
+                if (onDayBubbleClick) {
+                  onDayBubbleClick(cellDate);
+                } else if (dayAssignments.length > 0) {
                   onDayClick?.(dayAssignments[0]);
                 }
               }}
@@ -246,7 +255,9 @@ export function Calendar({ assignments, onDayClick, onEmptyDayClick, variant = '
               })}
               <div className="pt-2 border-t border-white/10">
                 <p className="text-xs text-white/50 text-center">
-                  Clic para ver detalles
+                  {onDayBubbleClick
+                    ? 'Clic en el día: nueva tarea con esa fecha · Clic en una tarea: ver detalle'
+                    : 'Clic para ver detalles'}
                 </p>
               </div>
             </div>
@@ -259,7 +270,10 @@ export function Calendar({ assignments, onDayClick, onEmptyDayClick, variant = '
         <button
           type="button"
           key={day}
-          onClick={() => onEmptyDayClick?.(dayDate)}
+          onClick={() => {
+            if (onDayBubbleClick) onDayBubbleClick(dayDate);
+            else onEmptyDayClick?.(dayDate);
+          }}
           className="aspect-square rounded-full bg-white/5 border border-white/10 text-white/60 font-medium hover:bg-white/10 transition-colors flex items-center justify-center"
           data-testid={`calendar-day-${day}`}
         >

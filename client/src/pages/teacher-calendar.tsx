@@ -17,6 +17,11 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { NavBackButton } from '@/components/nav-back-button';
+import {
+  buildLogroBloquesForSelect,
+  countIndicadoresInBloques,
+  LogroIndicadorSelects,
+} from '@/components/assignment/logroIndicadorSelect';
 
 interface Assignment {
   _id: string;
@@ -118,18 +123,17 @@ export default function TeacherCalendarPage() {
   };
 
   const courseIdForLogros = formData.curso ? getSubjectsForGroup(formData.curso)[0]?._id : '';
-  interface LogroItem {
-    _id: string;
-    nombre: string;
-    porcentaje?: number;
-  }
-  const { data: logrosData } = useQuery<{ indicadoresPlano: LogroItem[] }>({
+  const { data: logrosData } = useQuery<{
+    logros?: { _id: string; descripcion: string; orden?: number; indicadores: { _id: string; nombre: string; porcentaje: number; orden?: number }[] }[];
+    indicadoresPlano: { _id: string; nombre: string; porcentaje: number; orden?: number }[];
+  }>({
     queryKey: ['/api/logros-calificacion', courseIdForLogros],
     queryFn: () =>
       apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
     enabled: !!courseIdForLogros,
   });
-  const logros = logrosData?.indicadoresPlano ?? [];
+  const bloquesForSelect = useMemo(() => buildLogroBloquesForSelect(logrosData), [logrosData]);
+  const indicadoresCountCalendar = countIndicadoresInBloques(bloquesForSelect);
 
   const { data: googleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
     queryKey: ['evo-drive', 'google-status'],
@@ -303,10 +307,10 @@ export default function TeacherCalendarPage() {
     const courseId = subjectsForGroup[0]._id;
     const fechaEntregaCompleta = new Date(`${formData.fechaEntrega}T${formData.horaEntrega}`);
 
-    if (logros.length > 0 && !formData.logroCalificacionId) {
+    if (indicadoresCountCalendar > 0 && !formData.logroCalificacionId) {
       toast({
-        title: 'Selecciona un indicador',
-        description: 'Este curso tiene indicadores de calificación. Elige uno para asignar la tarea.',
+        title: 'Selecciona logro e indicador',
+        description: 'Este curso tiene logros configurados. Elige primero el logro y luego el indicador.',
         variant: 'destructive',
       });
       return;
@@ -536,28 +540,18 @@ export default function TeacherCalendarPage() {
 
             {formData.curso && (
               <div className="space-y-2">
-                <Label className="text-white/90">Logro de calificación</Label>
-                {logros.length === 0 ? (
+                <Label className="text-white/90">Logro e indicador de calificación</Label>
+                {indicadoresCountCalendar === 0 ? (
                   <p className="text-sm text-white/60">
-                    No hay logros definidos para este curso. Puedes crear la tarea sin asignar a un logro.
+                    No hay logros definidos para este curso. Puedes crear la tarea sin asignar a un indicador.
                   </p>
                 ) : (
-                  <Select
-                    value={formData.logroCalificacionId}
-                    onValueChange={(value) => setFormData({ ...formData, logroCalificacionId: value })}
-                  >
-                    <SelectTrigger className="bg-white/5 border-white/10 text-white" data-testid="select-logro">
-                      <SelectValue placeholder="Selecciona el logro para esta tarea" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#0a0a2a] border-white/10">
-                      {logros.map((logro) => (
-                        <SelectItem key={logro._id} value={logro._id} className="text-white hover:bg-white/10">
-                          {logro.nombre}
-                          {logro.porcentaje != null ? ` (${logro.porcentaje}%)` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <LogroIndicadorSelects
+                    bloques={bloquesForSelect}
+                    indicadorId={formData.logroCalificacionId}
+                    onIndicadorIdChange={(id) => setFormData({ ...formData, logroCalificacionId: id })}
+                    variant="dark"
+                  />
                 )}
               </div>
             )}

@@ -16,6 +16,7 @@ import {
   getPersonalFiles,
   createPersonalFile,
   deletePersonalFile,
+  updatePersonalFileNombre,
 } from '../repositories/evoPersonalFileRepository.js';
 import {
   getGoogleToken,
@@ -89,9 +90,14 @@ function toEvoFileApi(row: Record<string, unknown>) {
     etiquetas: row.etiquetas ?? [],
     destacado: row.destacado,
     categoryId: row.category_id,
+    staffOnly: row.staff_only === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function canUsePersonalMyFolder(rol: string | undefined): boolean {
+  return rol === 'estudiante' || rol === 'profesor';
 }
 
 // GET /api/evo-drive/google/auth-url (protect: usuario debe estar logueado)
@@ -205,18 +211,31 @@ router.post('/google/create', protect, restrictTo(...ROLES_WRITE), async (req: A
   if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
   const auth = await getAuthedClient(userId);
   if (!auth) return res.status(403).json({ message: 'Google Drive no conectado.', code: 'GOOGLE_DRIVE_DISCONNECTED' });
-  const { nombre, tipo, cursoId, cursoNombre, groupSubjectId } = req.body as { nombre?: string; tipo?: string; cursoId?: string; cursoNombre?: string; groupSubjectId?: string };
+  const { nombre, tipo, cursoId, cursoNombre, groupSubjectId, staffOnly } = req.body as {
+    nombre?: string;
+    tipo?: string;
+    cursoId?: string;
+    cursoNombre?: string;
+    groupSubjectId?: string;
+    staffOnly?: boolean;
+  };
   if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
   if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
-  if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
-    return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
+  const isStaffCoursePrivate = staffOnly === true;
+  if (isStaffCoursePrivate && req.user?.rol !== 'profesor') {
+    return res.status(403).json({ message: 'Solo los docentes pueden usar la carpeta privada del curso.' });
+  }
+  if (!isStaffCoursePrivate) {
+    if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
+      return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
+    }
   }
   const mimeType = tipo && GOOGLE_CREATE_MIME[tipo] ? GOOGLE_CREATE_MIME[tipo] : GOOGLE_CREATE_MIME.doc;
   const resolved = await resolveGroupId(String(cursoId).trim(), colegioId);
   if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
-  const trimmedGroupSubjectId = String(groupSubjectId).trim();
   let validGroupSubjectId: string | null = null;
-  {
+  if (!isStaffCoursePrivate) {
+    const trimmedGroupSubjectId = String(groupSubjectId).trim();
     const gs = await findGroupSubjectById(trimmedGroupSubjectId);
     if (!gs || gs.group_id !== resolved.id || gs.institution_id !== colegioId) {
       return res.status(400).json({ message: 'Materia (groupSubjectId) no válida para este curso.' });
@@ -256,8 +275,9 @@ router.post('/google/create', protect, restrictTo(...ROLES_WRITE), async (req: A
       propietario_id: userId,
       propietario_nombre: propietarioNombre,
       propietario_rol: req.user?.rol ?? 'profesor',
-      es_publico: true,
+      es_publico: !isStaffCoursePrivate,
       group_subject_id: validGroupSubjectId,
+      staff_only: isStaffCoursePrivate,
       google_file_id: googleFileId,
       google_web_view_link: webViewLink || undefined,
       google_mime_type: mimeType,
@@ -373,10 +393,24 @@ router.get('/files', protect, async (req: AuthRequest, res) => {
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
   const cursoIdParam = req.query.cursoId as string | undefined;
   const groupSubjectIdParam = req.query.groupSubjectId as string | undefined;
+  const teacherPrivate =
+    req.query.teacherPrivate === '1' || String(req.query.teacherPrivate || '').toLowerCase() === 'true';
   if (!cursoIdParam) return res.status(400).json({ message: 'cursoId es requerido.' });
   const resolved = await resolveGroupId(cursoIdParam.trim(), colegioId);
   if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
   const groupId = resolved.id;
+  if (teacherPrivate) {
+    if (rol !== 'profesor') {
+      return res.status(403).json({ message: 'Solo el docente puede ver esta carpeta.' });
+    }
+    const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    const teachesCourse = gsList.some((gs) => gs.group_id === groupId);
+    if (!teachesCourse) {
+      return res.status(403).json({ message: 'Solo puedes ver archivos de los cursos que impartes.' });
+    }
+    const rows = await getEvoFiles(colegioId, groupId, userId, rol ?? '', null, 'teacher_course_private');
+    return res.json(rows.map(toEvoFileApi));
+  }
   if (rol === 'estudiante') {
     const myGroups = await getAllCourseGroupsForStudent(userId, colegioId);
     const canAccess = myGroups.some((g) => g.id === groupId);
@@ -393,13 +427,13 @@ router.get('/files', protect, async (req: AuthRequest, res) => {
   return res.json(rows.map(toEvoFileApi));
 });
 
-// GET /api/evo-drive/my-folder — archivos de "Mi carpeta" del estudiante (solo estudiante).
+// GET /api/evo-drive/my-folder — archivos personales (estudiante o profesor).
 router.get('/my-folder', protect, async (req: AuthRequest, res) => {
   const colegioId = req.user?.colegioId;
   const userId = req.user?.id;
   const rol = req.user?.rol;
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
-  if (rol !== 'estudiante') return res.status(403).json({ message: 'Solo para estudiantes.' });
+  if (!canUsePersonalMyFolder(rol)) return res.status(403).json({ message: 'No disponible para tu rol.' });
   try {
     const rows = await getPersonalFiles(userId, colegioId);
     return res.json(
@@ -424,13 +458,13 @@ router.get('/my-folder', protect, async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/evo-drive/my-folder — añadir ítem a Mi carpeta (enlace o ref Google). Solo estudiante.
+// POST /api/evo-drive/my-folder — añadir ítem a Mi carpeta (enlace o ref Google).
 router.post('/my-folder', protect, async (req: AuthRequest, res) => {
   const colegioId = req.user?.colegioId;
   const userId = req.user?.id;
   const rol = req.user?.rol;
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
-  if (rol !== 'estudiante') return res.status(403).json({ message: 'Solo para estudiantes.' });
+  if (!canUsePersonalMyFolder(rol)) return res.status(403).json({ message: 'No disponible para tu rol.' });
   const { nombre, tipo, url, googleFileId, googleWebViewLink, googleMimeType } = req.body as {
     nombre?: string;
     tipo?: string;
@@ -471,16 +505,37 @@ router.post('/my-folder', protect, async (req: AuthRequest, res) => {
   }
 });
 
-// DELETE /api/evo-drive/my-folder/:id — eliminar ítem de Mi carpeta. Solo estudiante.
+// DELETE /api/evo-drive/my-folder/:id — eliminar ítem de Mi carpeta.
 router.delete('/my-folder/:id', protect, async (req: AuthRequest, res) => {
   const colegioId = req.user?.colegioId;
   const userId = req.user?.id;
   const rol = req.user?.rol;
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
-  if (rol !== 'estudiante') return res.status(403).json({ message: 'Solo para estudiantes.' });
+  if (!canUsePersonalMyFolder(rol)) return res.status(403).json({ message: 'No disponible para tu rol.' });
   const deleted = await deletePersonalFile(req.params.id, userId, colegioId);
   if (!deleted) return res.status(404).json({ message: 'No encontrado.' });
   return res.json({ message: 'Eliminado.' });
+});
+
+// PATCH /api/evo-drive/my-folder/:id — renombrar ítem (solo el propietario).
+router.patch('/my-folder/:id', protect, async (req: AuthRequest, res) => {
+  const colegioId = req.user?.colegioId;
+  const userId = req.user?.id;
+  const rol = req.user?.rol;
+  if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+  if (!canUsePersonalMyFolder(rol)) return res.status(403).json({ message: 'No disponible para tu rol.' });
+  const { nombre } = req.body as { nombre?: string };
+  if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
+  const row = await updatePersonalFileNombre(req.params.id, userId, colegioId, String(nombre).trim());
+  if (!row) return res.status(404).json({ message: 'No encontrado.' });
+  return res.json({
+    id: row.id,
+    nombre: row.nombre,
+    tipo: row.tipo,
+    url: row.url || row.google_web_view_link || '',
+    googleWebViewLink: row.google_web_view_link,
+    origen: row.google_file_id ? 'google' : 'material',
+  });
 });
 
 // GET /api/evo-drive/recientes
@@ -512,6 +567,7 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
       googleMimeType,
       sizeBytes,
       groupSubjectId,
+      staffOnly,
     } = req.body as {
       nombre?: string;
       tipo?: string;
@@ -525,18 +581,25 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
       googleMimeType?: string;
       sizeBytes?: number;
       groupSubjectId?: string;
+      staffOnly?: boolean;
     };
     if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
     if (!cursoId) return res.status(400).json({ message: 'cursoId es obligatorio.' });
-    if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
-      return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
+    const isStaffCoursePrivate = staffOnly === true;
+    if (isStaffCoursePrivate && req.user?.rol !== 'profesor') {
+      return res.status(403).json({ message: 'Solo los docentes pueden usar la carpeta privada del curso.' });
+    }
+    if (!isStaffCoursePrivate) {
+      if (!groupSubjectId || typeof groupSubjectId !== 'string' || !String(groupSubjectId).trim()) {
+        return res.status(400).json({ message: 'groupSubjectId es requerido. Debes especificar la materia del archivo.' });
+      }
     }
     const resolved = await resolveGroupId(String(cursoId).trim(), colegioId);
     if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
     const groupId = resolved.id;
-    const trimmedGroupSubjectId = String(groupSubjectId).trim();
     let validGroupSubjectId: string | null = null;
-    {
+    if (!isStaffCoursePrivate) {
+      const trimmedGroupSubjectId = String(groupSubjectId).trim();
       const gs = await findGroupSubjectById(trimmedGroupSubjectId);
       if (!gs || gs.group_id !== groupId || gs.institution_id !== colegioId) {
         return res.status(400).json({ message: 'Materia (groupSubjectId) no válida para este curso.' });
@@ -546,11 +609,11 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
       }
       validGroupSubjectId = gs.id;
     }
-    if (req.user?.rol === 'profesor' && !validGroupSubjectId) {
+    if (req.user?.rol === 'profesor') {
       const gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
       const teachesCourse = gsList.some((gs) => gs.group_id === groupId);
       if (!teachesCourse) {
-        return res.status(403).json({ message: 'Solo puedes subir archivos a las materias que dictas.' });
+        return res.status(403).json({ message: 'Solo puedes subir archivos a los cursos que impartes.' });
       }
     }
     const row = await createEvoFile({
@@ -564,8 +627,9 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
       propietario_id: userId,
       propietario_nombre: propietarioNombre,
       propietario_rol: req.user?.rol ?? 'profesor',
-      es_publico: esPublico !== false,
+      es_publico: isStaffCoursePrivate ? false : esPublico !== false,
       group_subject_id: validGroupSubjectId,
+      staff_only: isStaffCoursePrivate,
       google_file_id: googleFileId,
       google_web_view_link: googleWebViewLink,
       google_mime_type: googleMimeType,

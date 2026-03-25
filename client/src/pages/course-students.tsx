@@ -39,6 +39,7 @@ export default function CourseStudentsPage() {
   const search = typeof window !== 'undefined' ? window.location.search : '';
   const searchParams = new URLSearchParams(search);
   const returnTo = searchParams.get('returnTo') || `/course-detail/${cursoId}`;
+  const gsParam = searchParams.get('gs')?.trim() || '';
   const { toast } = useToast();
   const displayGroupId = cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
     ? cursoId
@@ -103,7 +104,12 @@ export default function CourseStudentsPage() {
                 <div
                   key={student._id}
                   className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer"
-                  onClick={() => setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}?returnTo=${encodeURIComponent(returnTo)}`)}
+                  onClick={() => {
+                    const q = new URLSearchParams();
+                    q.set('returnTo', returnTo);
+                    if (gsParam) q.set('gs', gsParam);
+                    setLocation(`/profesor/cursos/${cursoId}/estudiantes/${student._id}?${q.toString()}`);
+                  }}
                 >
                   <h4 className="font-semibold text-white truncate mb-2">{student.nombre}</h4>
                   {student.email && <p className="text-white/60 text-sm truncate mb-2">{student.email}</p>}

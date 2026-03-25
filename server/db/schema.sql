@@ -265,6 +265,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   is_gradable BOOLEAN NOT NULL DEFAULT true,
   requires_submission BOOLEAN NOT NULL DEFAULT true,
   category_weight_pct NUMERIC(5,2) NULL,
+  academic_term INTEGER NOT NULL DEFAULT 1 CHECK (academic_term >= 1 AND academic_term <= 3),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -628,6 +629,7 @@ CREATE TABLE IF NOT EXISTS evo_files (
   etiquetas TEXT[] DEFAULT '{}',
   destacado BOOLEAN DEFAULT false,
   group_subject_id UUID REFERENCES group_subjects(id) ON DELETE SET NULL,
+  staff_only BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

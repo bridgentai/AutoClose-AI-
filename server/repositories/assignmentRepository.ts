@@ -2,6 +2,7 @@ import { queryPg } from '../config/db-pg.js';
 import {
   ensureAssignmentsRequiresSubmissionColumn,
   ensureAssignmentsCategoryWeightPctColumn,
+  ensureAssignmentsAcademicTermColumn,
 } from '../db/pgSchemaPatches.js';
 
 export interface AssignmentRow {
@@ -19,9 +20,11 @@ export interface AssignmentRow {
   requires_submission: boolean;
   created_at: string;
   category_weight_pct?: number | null;
+  academic_term?: number;
 }
 
 export async function findAssignmentById(id: string): Promise<AssignmentRow | null> {
+  await ensureAssignmentsAcademicTermColumn();
   await ensureAssignmentsCategoryWeightPctColumn();
   const r = await queryPg<AssignmentRow & { requires_submission?: boolean }>(
     'SELECT * FROM assignments WHERE id = $1',
@@ -34,26 +37,45 @@ export async function findAssignmentById(id: string): Promise<AssignmentRow | nu
   return { ...row, requires_submission: requires };
 }
 
-export async function findAssignmentsByGroupSubject(groupSubjectId: string): Promise<AssignmentRow[]> {
+export async function findAssignmentsByGroupSubject(
+  groupSubjectId: string,
+  academicTerm?: number | null
+): Promise<AssignmentRow[]> {
+  await ensureAssignmentsAcademicTermColumn();
   await ensureAssignmentsCategoryWeightPctColumn();
-  const r = await queryPg<AssignmentRow>(
-    'SELECT * FROM assignments WHERE group_subject_id = $1 ORDER BY due_date',
-    [groupSubjectId]
-  );
+  const filterTerm =
+    academicTerm === 1 || academicTerm === 2 || academicTerm === 3 ? academicTerm : null;
+  const r = filterTerm != null
+    ? await queryPg<AssignmentRow>(
+        'SELECT * FROM assignments WHERE group_subject_id = $1 AND academic_term = $2 ORDER BY due_date',
+        [groupSubjectId, filterTerm]
+      )
+    : await queryPg<AssignmentRow>(
+        'SELECT * FROM assignments WHERE group_subject_id = $1 ORDER BY due_date',
+        [groupSubjectId]
+      );
   return r.rows;
 }
 
 export async function findAssignmentsByGroupSubjectAndDue(
   groupSubjectId: string,
   fromDate?: string,
-  toDate?: string
+  toDate?: string,
+  academicTerm?: number | null
 ): Promise<AssignmentRow[]> {
   if (!fromDate && !toDate) {
-    return findAssignmentsByGroupSubject(groupSubjectId);
+    return findAssignmentsByGroupSubject(groupSubjectId, academicTerm);
   }
+  await ensureAssignmentsAcademicTermColumn();
   await ensureAssignmentsCategoryWeightPctColumn();
+  const filterTerm =
+    academicTerm === 1 || academicTerm === 2 || academicTerm === 3 ? academicTerm : null;
   let q = 'SELECT * FROM assignments WHERE group_subject_id = $1';
   const params: unknown[] = [groupSubjectId];
+  if (filterTerm != null) {
+    params.push(filterTerm);
+    q += ` AND academic_term = $${params.length}`;
+  }
   if (fromDate) {
     params.push(fromDate);
     q += ` AND due_date >= $${params.length}`;
@@ -80,9 +102,13 @@ export async function createAssignment(row: {
   is_gradable?: boolean;
   requires_submission?: boolean;
   category_weight_pct?: number | null;
+  academic_term?: number;
 }): Promise<AssignmentRow> {
+  await ensureAssignmentsAcademicTermColumn();
   await ensureAssignmentsCategoryWeightPctColumn();
   const requiresSubmission = row.requires_submission !== false;
+  let term = row.academic_term ?? 1;
+  if (term !== 1 && term !== 2 && term !== 3) term = 1;
   const values = [
     row.group_subject_id,
     row.title,
@@ -96,9 +122,10 @@ export async function createAssignment(row: {
     row.is_gradable ?? requiresSubmission,
     requiresSubmission,
     row.category_weight_pct ?? null,
+    term,
   ];
-  const sql = `INSERT INTO assignments (group_subject_id, title, description, content_document, due_date, max_score, assignment_category_id, created_by, "type", is_gradable, requires_submission, category_weight_pct)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`;
+  const sql = `INSERT INTO assignments (group_subject_id, title, description, content_document, due_date, max_score, assignment_category_id, created_by, "type", is_gradable, requires_submission, category_weight_pct, academic_term)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`;
   try {
     const r = await queryPg<AssignmentRow>(sql, values);
     return r.rows[0];
@@ -113,6 +140,11 @@ export async function createAssignment(row: {
       }
       if (msg.includes('category_weight_pct')) {
         await ensureAssignmentsCategoryWeightPctColumn();
+        const r = await queryPg<AssignmentRow>(sql, values);
+        return r.rows[0];
+      }
+      if (msg.includes('academic_term')) {
+        await ensureAssignmentsAcademicTermColumn();
         const r = await queryPg<AssignmentRow>(sql, values);
         return r.rows[0];
       }
@@ -131,7 +163,9 @@ export async function updateAssignment(id: string, updates: {
   is_gradable?: boolean;
   requires_submission?: boolean;
   category_weight_pct?: number | null;
+  academic_term?: number;
 }): Promise<AssignmentRow | null> {
+  await ensureAssignmentsAcademicTermColumn();
   const sets: string[] = [];
   const values: unknown[] = [];
   let i = 1;
@@ -146,6 +180,12 @@ export async function updateAssignment(id: string, updates: {
   if (updates.category_weight_pct !== undefined) {
     sets.push(`category_weight_pct = $${i++}`);
     values.push(updates.category_weight_pct);
+  }
+  if (updates.academic_term !== undefined) {
+    let t = updates.academic_term;
+    if (t !== 1 && t !== 2 && t !== 3) t = 1;
+    sets.push(`academic_term = $${i++}`);
+    values.push(t);
   }
   if (sets.length === 0) return findAssignmentById(id);
   values.push(id);

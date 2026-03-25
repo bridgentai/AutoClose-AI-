@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useRoute, useLocation } from 'wouter';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/authContext';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -37,6 +39,18 @@ interface Assignment {
   submissions?: { estudianteId: string; calificacion?: number }[];
   categoryId?: string;
   logroCalificacionId?: string;
+  trimestre?: number;
+}
+
+function defaultAcademicTrimestre(): 1 | 2 | 3 {
+  const m = new Date().getMonth() + 1;
+  return m <= 4 ? 1 : m <= 8 ? 2 : 3;
+}
+
+function parseTrimestreFromSearch(search: string): 1 | 2 | 3 {
+  const t = new URLSearchParams(search).get('t');
+  if (t === '1' || t === '2' || t === '3') return Number(t) as 1 | 2 | 3;
+  return defaultAcademicTrimestre();
 }
 
 export default function CourseGradesInputPage() {
@@ -45,6 +59,8 @@ export default function CourseGradesInputPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  const searchStr = typeof window !== 'undefined' ? window.location.search : '';
+  const trimestreActivo = parseTrimestreFromSearch(searchStr);
 
   const displayGroupId =
     cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
@@ -78,12 +94,15 @@ export default function CourseGradesInputPage() {
   const subjectName = subjectsForGroup[0]?.nombre ?? '';
 
   const { data: assignments = [] } = useQuery<Assignment[]>({
-    queryKey: ['gradeTableAssignments', cursoId, firstSubjectId],
-    queryFn: () =>
-      apiRequest(
-        'GET',
-        `/api/assignments?groupId=${encodeURIComponent(displayGroupId)}&courseId=${firstSubjectId || ''}`
-      ),
+    queryKey: ['gradeTableAssignments', cursoId, firstSubjectId, trimestreActivo],
+    queryFn: () => {
+      const qs = new URLSearchParams({
+        groupId: displayGroupId,
+        courseId: firstSubjectId || '',
+        trimestre: String(trimestreActivo),
+      });
+      return apiRequest('GET', `/api/assignments?${qs.toString()}`);
+    },
     enabled: !!displayGroupId && !!firstSubjectId && user?.rol === 'profesor',
   });
 
@@ -148,6 +167,30 @@ export default function CourseGradesInputPage() {
             </p>
           </CardHeader>
           <CardContent>
+            <div className="flex flex-wrap items-center gap-4 mb-4">
+              <span className="text-white/60 text-xs font-medium uppercase tracking-wide w-full sm:w-auto">
+                Trimestre
+              </span>
+              {([1, 2, 3] as const).map((n) => (
+                <Button
+                  key={n}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'rounded-[10px] border-white/10 bg-white/5 text-white hover:bg-white/10',
+                    trimestreActivo === n && 'border-[#1e3cff]/60 bg-[#1e3cff]/20 text-white'
+                  )}
+                  onClick={() => {
+                    const q = new URLSearchParams();
+                    q.set('t', String(n));
+                    setLocation(`/course/${cursoId}/grades/input?${q.toString()}`);
+                  }}
+                >
+                  {n === 1 ? 'I' : n === 2 ? 'II' : 'III'} trimestre
+                </Button>
+              ))}
+            </div>
             <div className="flex flex-wrap items-center gap-4">
               <label className="text-white/80 text-sm font-medium">
                 Estudiante
@@ -185,7 +228,12 @@ export default function CourseGradesInputPage() {
             <button
               type="button"
               className="text-[#00c8ff] hover:underline"
-              onClick={() => setLocation('/profesor/academia/calificacion/logros')}
+              onClick={() => {
+                const q = new URLSearchParams();
+                q.set('returnTo', `/course/${cursoId}/grades/input`);
+                if (firstSubjectId) q.set('gs', firstSubjectId);
+                setLocation(`/course/${cursoId}/calificacion-logros?${q.toString()}`);
+              }}
             >
               Ir a Logros de calificación
             </button>
