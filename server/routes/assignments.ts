@@ -1,5 +1,7 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
+import { auditAction } from '../middleware/auditMiddleware.js';
+import { requirePermission } from '../middleware/permissionMiddleware.js';
 import { findUserById } from '../repositories/userRepository.js';
 import { findGroupByNameAndInstitution, findGroupById } from '../repositories/groupRepository.js';
 import { findGroupSubjectById, findGroupSubjectsByTeacher, findGroupSubjectsByGroup, findGroupSubjectsByGroupWithDetails } from '../repositories/groupSubjectRepository.js';
@@ -98,16 +100,33 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 
     let assignments: AssignmentRow[] = [];
     const groupSubjectIds: string[] = [];
+    /** Profesor con ?groupId= (sin courseId): vista calendario del curso completo — todas las materías y tareas del grupo. */
+    let professorGroupWideCalendar = false;
 
     if (courseId && typeof courseId === 'string') {
+      if (user.role === 'estudiante') {
+        const gsCheck = await findGroupSubjectById(courseId);
+        if (!gsCheck || gsCheck.institution_id !== user.institution_id) {
+          return res.status(403).json({ message: 'No tienes acceso a las tareas de este curso.' });
+        }
+        const studentGroups = await getAllCourseGroupsForStudent(userId, user.institution_id);
+        const enrolledGroupIds = new Set(studentGroups.map((g) => g.id));
+        if (!enrolledGroupIds.has(gsCheck.group_id)) {
+          return res.status(403).json({ message: 'No tienes acceso a las tareas de este curso.' });
+        }
+      }
       groupSubjectIds.push(courseId);
     } else if (user.role === 'profesor') {
       if (groupId && typeof groupId === 'string') {
         const resolved = await resolveGroupId(groupId.trim(), user.institution_id ?? '');
         if (resolved) {
           const gsList = await findGroupSubjectsByGroupWithDetails(resolved.id, user.institution_id ?? undefined);
-          const byTeacher = gsList.filter((gs) => gs.teacher_id === userId);
-          groupSubjectIds.push(...byTeacher.map((gs) => gs.id));
+          const teachesInGroup = gsList.some((gs) => gs.teacher_id === userId);
+          if (!teachesInGroup) {
+            return res.status(403).json({ message: 'No dictas ninguna materia en este grupo.' });
+          }
+          professorGroupWideCalendar = true;
+          groupSubjectIds.push(...gsList.map((gs) => gs.id));
         }
       } else {
         const gsList = await findGroupSubjectsByTeacher(userId);
@@ -134,7 +153,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
       const list = fromDate || toDate
         ? await findAssignmentsByGroupSubjectAndDue(gsId, fromDate, toDate)
         : await findAssignmentsByGroupSubject(gsId);
-      if (user.role === 'profesor') {
+      if (user.role === 'profesor' && !professorGroupWideCalendar) {
         assignments = assignments.concat(list.filter((a) => a.created_by === userId));
       } else {
         assignments = assignments.concat(list);
@@ -187,7 +206,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 });
 
 // POST /api/assignments - Crear tarea (courseId = group_subject_id obligatorio)
-router.post('/', protect, async (req: AuthRequest, res) => {
+router.post('/', protect, requirePermission('assignments', 'create'), async (req: AuthRequest, res) => {
   try {
     const { titulo, descripcion, contenidoDocumento, courseId, fechaEntrega, type, isGradable, categoryId, grading_category_id, logroCalificacionId, requiresSubmission: bodyRequiresSubmission } = req.body;
     const userId = getUserId(req);
@@ -636,7 +655,12 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
 });
 
 // PUT /api/assignments/:id/grade - Calificar
-router.put('/:id/grade', protect, async (req: AuthRequest, res) => {
+router.put(
+  '/:id/grade',
+  protect,
+  requirePermission('grades', 'update'),
+  auditAction('grade_assignment', 'assignment'),
+  async (req: AuthRequest, res) => {
   try {
     const { estudianteId, calificacion, retroalimentacion } = req.body;
     const userId = getUserId(req);
@@ -719,7 +743,10 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
     const materiaNombre = (gsForInst.display_name?.trim() || subject?.name) ?? undefined;
     const groupId = gsForInst.group_id;
 
-    const subs = await findSubmissionsByAssignment(assignment.id);
+    let subs = await findSubmissionsByAssignment(assignment.id);
+    if (user.role === 'estudiante') {
+      subs = subs.filter((s) => s.student_id === userId);
+    }
     const submissions = subs.map((s) => {
       const attachments = s.attachments != null && Array.isArray(s.attachments) ? s.attachments : [];
       return {

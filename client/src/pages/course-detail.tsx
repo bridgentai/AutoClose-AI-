@@ -1155,10 +1155,10 @@ export default function CourseDetailPage() {
                 </div>
 
 
-                {/* Calendario */}
+                {/* Calendario: carga total del grupo (todas las materias); la lista de asignaciones debajo sigue siendo por materia activa */}
                 {renderCalendarAndAssignmentList(
-                    assignmentsForActiveSubject,
-                    activeSubjectNombre ? `${activeSubjectNombre} · Grupo ${groupDisplayName}` : `Grupo ${groupDisplayName}`
+                    assignments,
+                    `Grupo ${groupDisplayName} · todas las materias`
                 )}
 
                 {/* Botones de acción y Formulario para asignar asignación (Movido debajo del calendario) */}

@@ -27,6 +27,18 @@ export async function findGroupsByInstitution(institutionId: string): Promise<Gr
   return r.rows;
 }
 
+/** Grupos donde el profesor tiene al menos una materia (group_subject) asignada. */
+export async function findGroupsByTeacher(teacherId: string): Promise<GroupRow[]> {
+  const r = await queryPg<GroupRow>(
+    `SELECT DISTINCT ON (g.id) g.* FROM groups g
+     JOIN group_subjects gs ON gs.group_id = g.id
+     WHERE gs.teacher_id = $1
+     ORDER BY g.id, g.name`,
+    [teacherId]
+  );
+  return r.rows;
+}
+
 /** Count only grade groups (name starts with a digit), e.g. 9H, 10C, not "Física 11H". */
 export async function countGradeGroupsByInstitution(institutionId: string): Promise<number> {
   const r = await queryPg<{ c: number }>(

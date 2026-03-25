@@ -1,6 +1,7 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/authMiddleware';
 import { generateAIResponseWithFunctions } from '../services/openai';
+import { sanitizeText } from '../services/llmSanitizer.js';
 import { normalizeIdForQuery } from '../utils/idGenerator';
 import {
   validateChatOwnership,
@@ -92,7 +93,8 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
       chatId = _id.toString();
     }
 
-    await addMessage(chatId, 'user', newUserMessage);
+    const { sanitized: safeUserMessage } = sanitizeText(newUserMessage);
+    await addMessage(chatId, 'user', safeUserMessage);
 
     const visualIntent = rol === 'profesor' ? parseVisualIntent(newUserMessage) : { matched: false };
     if (visualIntent.matched && visualIntent.intent) {
@@ -170,7 +172,8 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
       throw error;
     }
 
-    await addMessage(chatId, 'assistant', aiResponse);
+    const { sanitized: safeAiResponse } = sanitizeText(aiResponse);
+    await addMessage(chatId, 'assistant', safeAiResponse);
     await touchChat(chatId);
 
     res.json({

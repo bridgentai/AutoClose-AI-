@@ -112,3 +112,107 @@ export async function ensureAssignmentsCategoryWeightPctColumn(): Promise<void> 
   );
   assignmentsCategoryWeightPctEnsured = true;
 }
+
+let auditLogIpColumnsEnsured = false;
+
+/** Columnas ip_address en tablas de auditoría (analytics). */
+export async function ensureAuditLogIpColumns(): Promise<void> {
+  if (auditLogIpColumnsEnsured) return;
+  await queryPg(
+    `ALTER TABLE analytics.activity_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45) DEFAULT NULL`
+  );
+  await queryPg(
+    `ALTER TABLE analytics.ai_action_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45) DEFAULT NULL`
+  );
+  await queryPg(`
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_ip
+    ON analytics.activity_logs(ip_address)
+    WHERE ip_address IS NOT NULL
+  `);
+  auditLogIpColumnsEnsured = true;
+}
+
+/** Elimina registros de auditoría muy antiguos al arrancar (minimización de datos). */
+export async function ensureAuditLogRetentionPolicy(): Promise<void> {
+  try {
+    await queryPg(`
+      DELETE FROM analytics.activity_logs
+      WHERE created_at < NOW() - INTERVAL '365 days'
+    `);
+
+    await queryPg(`
+      DELETE FROM analytics.ai_action_logs
+      WHERE created_at < NOW() - INTERVAL '365 days'
+    `);
+
+    console.log('[pgSchemaPatches] Retención de logs: registros > 365 días eliminados.');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[pgSchemaPatches] Error en retención de logs:', msg);
+  }
+}
+
+let evoSendRetentionEnsured = false;
+
+/** Columna derivada de retención mínima (365 días desde created_at) en mensajes EvoSend. */
+export async function ensureEvoSendRetention(): Promise<void> {
+  if (evoSendRetentionEnsured) return;
+  try {
+    await queryPg(`
+      ALTER TABLE announcement_messages
+      ADD COLUMN retention_until TIMESTAMPTZ
+      GENERATED ALWAYS AS (created_at + INTERVAL '365 days') STORED
+    `);
+    console.log('[pgSchemaPatches] EvoSend retention_until (generated) OK');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('already exists') || msg.includes('duplicate column')) {
+      evoSendRetentionEnsured = true;
+      return;
+    }
+    try {
+      await queryPg(`ALTER TABLE announcement_messages ADD COLUMN IF NOT EXISTS retention_until TIMESTAMPTZ`);
+      await queryPg(`
+        UPDATE announcement_messages
+        SET retention_until = created_at + INTERVAL '365 days'
+        WHERE retention_until IS NULL
+      `);
+      console.log('[pgSchemaPatches] EvoSend retention_until (backfill) OK');
+    } catch (e2: unknown) {
+      const m2 = e2 instanceof Error ? e2.message : String(e2);
+      console.warn('[pgSchemaPatches] EvoSend retention:', m2);
+    }
+  }
+  evoSendRetentionEnsured = true;
+}
+
+let studentActivityTableEnsured = false;
+
+/** Tabla de tracking de actividad estudiantil (vistas de tareas, Evo Send, etc.). */
+export async function ensureStudentActivityTable(): Promise<void> {
+  if (studentActivityTableEnsured) return;
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS student_activity (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      entity_type VARCHAR(50) NOT NULL,
+      entity_id UUID NOT NULL,
+      action VARCHAR(50) NOT NULL,
+      metadata JSONB,
+      duration_seconds INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_student_activity_student ON student_activity(student_id, created_at DESC)`
+  );
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_student_activity_entity ON student_activity(entity_type, entity_id, created_at DESC)`
+  );
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_student_activity_institution ON student_activity(institution_id, created_at DESC)`
+  );
+  studentActivityTableEnsured = true;
+  console.log('[pgSchemaPatches] student_activity OK');
+}

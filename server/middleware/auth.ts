@@ -5,6 +5,14 @@ import { findUserById } from '../repositories/userRepository.js';
 import { getFirstGroupNameForStudent } from '../repositories/enrollmentRepository.js';
 import { ENV } from '../config/env.js';
 
+/**
+ * NOTA DE MANTENIMIENTO:
+ * Existe también server/middleware/authMiddleware.ts (legacy).
+ * Ambos implementan `protect` pero con diferencias menores en manejo de errores.
+ * TODO: unificar en un solo archivo en la próxima iteración.
+ * Usar auth.ts como la versión canónica — authMiddleware.ts está deprecado.
+ */
+
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
@@ -81,3 +89,14 @@ export const checkAdminColegioOnly = (req: AuthRequest, res: Response, next: Nex
     message: 'Acceso denegado. Solo el administrador general del colegio puede realizar esta acción.',
   });
 };
+
+/**
+ * Verifica que el recurso solicitado pertenece a la misma institución del usuario.
+ * Usar en handlers cuando se necesita validar cross-institution.
+ */
+export function isSameInstitution(req: AuthRequest, resourceInstitutionId: string): boolean {
+  if (req.user?.rol === 'super_admin') return true;
+  return (
+    req.user?.colegioId === resourceInstitutionId || req.user?.institution_id === resourceInstitutionId
+  );
+}

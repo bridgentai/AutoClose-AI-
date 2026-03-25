@@ -145,7 +145,6 @@ export default function EvoSendPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
-  const [filterTipo, setFilterTipo] = useState<string>('all');
   const [searchQ, setSearchQ] = useState('');
   const [newMessageOpen, setNewMessageOpen] = useState(false);
   const [newAsunto, setNewAsunto] = useState('');
@@ -189,12 +188,8 @@ export default function EvoSendPage() {
       };
 
   const { data: threadsData, isLoading: loadingThreads } = useQuery({
-    queryKey: ['/api/evo-send/threads', filterTipo],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (filterTipo && filterTipo !== 'all') params.set('tipo', filterTipo);
-      return apiRequest<ThreadsResponse>('GET', `/api/evo-send/threads?${params.toString()}`);
-    },
+    queryKey: ['/api/evo-send/threads'],
+    queryFn: () => apiRequest<ThreadsResponse>('GET', '/api/evo-send/threads'),
   });
 
   const { data: writeWindow } = useQuery({
@@ -276,11 +271,12 @@ export default function EvoSendPage() {
           ],
         };
       }
-      if (user?.rol === 'directivo') {
+      if (user?.rol === 'directivo' || user?.rol === 'school_admin') {
         return {
           threads: withSupport,
           sections: [
             { label: 'Soporte', threads: [support_thread] },
+            { label: 'Cursos', threads: misCursos },
             { label: 'Grupos', threads: colegas },
             { label: 'Colegas', threads: directos },
           ],
@@ -298,10 +294,11 @@ export default function EvoSendPage() {
         ],
       };
     }
-    if (user?.rol === 'directivo') {
+    if (user?.rol === 'directivo' || user?.rol === 'school_admin') {
       return {
         threads: flat,
         sections: [
+          { label: 'Cursos', threads: misCursos },
           { label: 'Grupos', threads: colegas },
           { label: 'Colegas', threads: directos },
         ],
@@ -371,6 +368,27 @@ export default function EvoSendPage() {
       joinThread(null);
     }
   }, [selectedId]);
+
+  const trackedMessageOpenRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!selectedId || user?.rol !== 'estudiante') return;
+    const t = threadsFlat.find((x) => x._id === selectedId);
+    if (!t || t.tipo !== 'evo_chat') return;
+    if (trackedMessageOpenRef.current.has(selectedId)) return;
+    trackedMessageOpenRef.current.add(selectedId);
+    const tok = typeof window !== 'undefined' ? localStorage.getItem('autoclose_token') : null;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (tok) headers.Authorization = `Bearer ${tok}`;
+    fetch('/api/activity/track', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        entity_type: 'evo_message',
+        entity_id: selectedId,
+        action: 'message_open',
+      }),
+    }).catch(() => {});
+  }, [selectedId, user?.rol, threadsFlat]);
 
   // Abrir hilo desde query ?thread= (atajo desde página del curso)
   useEffect(() => {
@@ -533,8 +551,6 @@ export default function EvoSendPage() {
           onNewMessage={() => setNewMessageOpen(true)}
           searchQ={searchQ}
           setSearchQ={setSearchQ}
-          filterTipo={filterTipo}
-          setFilterTipo={setFilterTipo}
           showFilters={false}
           typing={typing}
           emitTyping={emitTyping}
@@ -564,8 +580,6 @@ export default function EvoSendPage() {
           onNewMessage={() => setNewMessageOpen(true)}
           searchQ={searchQ}
           setSearchQ={setSearchQ}
-          filterTipo={filterTipo}
-          setFilterTipo={setFilterTipo}
           showFilters={!isProfesorOrEstudiante}
           typing={typing}
           emitTyping={emitTyping}
@@ -741,8 +755,6 @@ interface EvoLayoutProps {
   onNewMessage: () => void;
   searchQ: string;
   setSearchQ: (s: string) => void;
-  filterTipo: string;
-  setFilterTipo: (s: string) => void;
   showFilters?: boolean;
   typing: { userId?: string; userName?: string; threadId?: string } | null;
   emitTyping: (threadId: string, userName?: string) => void;
@@ -924,8 +936,6 @@ function EvoLayout({
   onNewMessage,
   searchQ,
   setSearchQ,
-  filterTipo,
-  setFilterTipo,
   showFilters = true,
   typing,
   emitTyping,
@@ -938,7 +948,44 @@ function EvoLayout({
 }: EvoLayoutProps) {
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const [showReminderPicker, setShowReminderPicker] = useState(false);
+  const [collapsedBySection, setCollapsedBySection] = useState<Record<string, boolean>>({});
+  const [readsExpanded, setReadsExpanded] = useState(false);
   const cursoIdForThread = selectedThread?.cursoId?._id as string | undefined;
+
+  const threadIdIsUuid =
+    !!selectedId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedId);
+  const showThreadReads =
+    user?.rol === 'profesor' && selectedThread?.tipo === 'evo_chat' && threadIdIsUuid;
+
+  const { data: threadReads } = useQuery({
+    queryKey: ['/api/activity/thread', selectedId, 'reads'],
+    queryFn: () =>
+      apiRequest<{
+        total_students: number;
+        opened_count: number;
+        students: { student_id: string; full_name: string; opened_at: string }[];
+      }>('GET', `/api/activity/thread/${selectedId}/reads`),
+    enabled: showThreadReads,
+    staleTime: 20_000,
+  });
+
+  useEffect(() => {
+    setReadsExpanded(false);
+  }, [selectedId]);
+
+  const getSectionCollapsed = (label: string) => {
+    if (label === 'Chats GLC' && onToggleChatsGlc != null) return chatsGlcCollapsed === true;
+    return !!collapsedBySection[label];
+  };
+
+  const handleToggleSection = (label: string) => {
+    if (label === 'Chats GLC' && onToggleChatsGlc) {
+      onToggleChatsGlc();
+    } else {
+      setCollapsedBySection((prev) => ({ ...prev, [label]: !prev[label] }));
+    }
+  };
 
   const accent = selectedThread ? threadAccent(selectedThread) : EVO_BLUE;
   return (
@@ -967,17 +1014,6 @@ function EvoLayout({
                     className="pl-10 bg-white/[0.06] border-white/[0.08] text-[#E2E8F0] rounded-xl"
                   />
                 </div>
-                <Select value={filterTipo} onValueChange={setFilterTipo}>
-                  <SelectTrigger className="bg-white/[0.06] border-white/[0.08] text-[#E2E8F0] rounded-xl">
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    {Object.entries(tipoLabels).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{v}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </>
             )}
           </div>
@@ -987,7 +1023,15 @@ function EvoLayout({
                 <Loader2 className="w-8 h-8 animate-spin text-white/50" />
               </div>
             ) : (
-              filteredThreadsList(threads, selectedId, setSelectedId, searchQ, sections, chatsGlcCollapsed, onToggleChatsGlc)
+              filteredThreadsList(
+                threads,
+                selectedId,
+                setSelectedId,
+                searchQ,
+                sections,
+                sections && sections.length > 0 ? getSectionCollapsed : undefined,
+                sections && sections.length > 0 ? handleToggleSection : undefined
+              )
             )}
           </div>
         </div>
@@ -1070,7 +1114,7 @@ function EvoLayout({
                             key={m._id}
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
+                            className={`flex flex-col gap-1 ${isMine ? 'items-end' : 'items-start'}`}
                           >
                             {m.tipo === 'evo_drive' ? (
                               <button
@@ -1211,6 +1255,38 @@ function EvoLayout({
                                 </div>
                               </div>
                             )}
+                            {isMine && showThreadReads && threadReads != null && (
+                              <div className="max-w-[75%] w-full flex flex-col items-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setReadsExpanded((v) => !v)}
+                                  className="text-[11px] text-white/55 hover:text-white/80 transition-colors text-left"
+                                >
+                                  👁 Leído por {threadReads.opened_count}/{threadReads.total_students} estudiantes
+                                </button>
+                                {readsExpanded && (
+                                  <div className="w-full max-w-sm rounded-lg border border-white/10 bg-black/25 p-2 text-[11px] text-white/80 max-h-40 overflow-y-auto space-y-1.5">
+                                    {threadReads.students.length === 0 ? (
+                                      <p className="text-white/50">Nadie ha abierto este hilo aún.</p>
+                                    ) : (
+                                      threadReads.students.map((s) => (
+                                        <div key={s.student_id} className="flex justify-between gap-2">
+                                          <span className="truncate">{s.full_name}</span>
+                                          <span className="text-white/50 shrink-0 tabular-nums">
+                                            {new Date(s.opened_at).toLocaleString('es-CO', {
+                                              day: '2-digit',
+                                              month: 'short',
+                                              hour: '2-digit',
+                                              minute: '2-digit',
+                                            })}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </motion.div>
                         );
                       })}
@@ -1333,8 +1409,8 @@ function filteredThreadsList(
   setSelectedId: (id: string | null) => void,
   searchQ?: string,
   sections?: { label: string; threads: EvoThreadItem[] }[] | null,
-  chatsGlcCollapsed?: boolean,
-  onToggleChatsGlc?: () => void
+  getSectionCollapsed?: (label: string) => boolean,
+  onToggleSection?: (label: string) => void
 ) {
   const title = (t: EvoThreadItem) => t.displayTitle ?? t.asunto;
   const preview = (t: EvoThreadItem) => {
@@ -1365,9 +1441,6 @@ function filteredThreadsList(
       const dateB = b.ultimoMensaje?.fecha ? new Date(b.ultimoMensaje.fecha).getTime() : new Date(b.updatedAt).getTime();
       return dateB - dateA;
     });
-
-  const isChatsGlcSection = (label: string) => label === 'Chats GLC';
-  const showCollapseForSection = (label: string) => isChatsGlcSection(label) && onToggleChatsGlc != null;
 
   const renderThread = (t: EvoThreadItem) => {
     const isSelected = t._id === selectedId;
@@ -1424,36 +1497,48 @@ function filteredThreadsList(
   };
 
   if (sections && sections.length > 0) {
+    const canToggle = getSectionCollapsed != null && onToggleSection != null;
+
     return (
       <>
         {sections.map((sec) => {
           const filtered = sortByDate(filterBySearch(sec.threads));
-          const isCollapsible = showCollapseForSection(sec.label);
-          const collapsed = isCollapsible && chatsGlcCollapsed === true;
-          if (filtered.length === 0 && !isCollapsible) return null;
+          const hasNoThreadsEver = sec.threads.length === 0;
+          const q = searchQ?.trim();
+          if (filtered.length === 0 && hasNoThreadsEver && !q) return null;
+          const collapsed = canToggle ? getSectionCollapsed(sec.label) : false;
+
           return (
             <div key={sec.label}>
-              {isCollapsible ? (
+              {canToggle ? (
                 <button
                   type="button"
-                  onClick={onToggleChatsGlc}
+                  onClick={() => onToggleSection(sec.label)}
                   className="w-full px-3 pt-3 pb-1 font-medium tracking-wider flex items-center gap-2 text-left hover:bg-white/[0.04] rounded transition-colors"
                   style={SECTION_LABEL_STYLE}
                   aria-expanded={!collapsed}
                 >
                   {collapsed ? (
-                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
+                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 opacity-80" />
                   ) : (
-                    <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" />
+                    <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 opacity-80" />
                   )}
-                  {sec.label}
+                  <span className="flex-1 truncate">{sec.label}</span>
+                  <span className="text-[10px] font-normal normal-case text-white/25 tabular-nums flex-shrink-0">
+                    {sec.threads.length}
+                  </span>
                 </button>
               ) : (
                 <p className="px-3 pt-3 pb-1 font-medium tracking-wider" style={SECTION_LABEL_STYLE}>
                   {sec.label}
                 </p>
               )}
-              {!collapsed && filtered.map((t) => renderThread(t))}
+              {!collapsed &&
+                (filtered.length > 0 ? (
+                  filtered.map((t) => renderThread(t))
+                ) : (
+                  <p className="px-3 pb-3 text-white/40 text-xs">Sin resultados en esta sección.</p>
+                ))}
             </div>
           );
         })}

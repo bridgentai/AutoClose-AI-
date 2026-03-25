@@ -4,6 +4,7 @@ import {
   findGroupByNameAndInstitution,
   findGroupByNameAndInstitutionCaseInsensitive,
   findGroupsByInstitution,
+  findGroupsByTeacher,
   createGroup,
 } from '../repositories/groupRepository.js';
 import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
@@ -23,6 +24,7 @@ import { findUserById, findUsersByInstitution, updateUser } from '../repositorie
 import { findGradesByGroup } from '../repositories/gradeRepository.js';
 import { findActiveAcademicPeriodForInstitution } from '../repositories/academicPeriodRepository.js';
 import { protect, AuthRequest } from '../middleware/auth';
+import { requirePermission } from '../middleware/permissionMiddleware.js';
 import { logAdminAction } from '../services/auditLogger.js';
 
 const router = express.Router();
@@ -60,16 +62,13 @@ function calcularEstado(promedio?: number): 'excelente' | 'bueno' | 'regular' | 
 }
 
 // POST /api/groups/create
-router.post('/create', protect, async (req: AuthRequest, res) => {
+router.post('/create', protect, requirePermission('groups', 'create'), async (req: AuthRequest, res) => {
   try {
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
     const user = await findUserById(userId);
     if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
-    if (user.role !== 'admin-general-colegio' && user.role !== 'school_admin') {
-      return res.status(403).json({ message: 'Solo administradores generales del colegio pueden crear grupos' });
-    }
 
     const { nombre, seccion, directorGrupoId, sectionId } = req.body;
     if (!nombre) return res.status(400).json({ message: 'Falta el nombre del curso/grupo.' });
@@ -109,7 +108,7 @@ router.post('/create', protect, async (req: AuthRequest, res) => {
 
     await logAdminAction({
       userId,
-      role: user.role,
+      role: req.user?.rol ?? user.role,
       action: 'create_group',
       entityType: 'group',
       entityId: nuevoGrupo.id,
@@ -223,7 +222,12 @@ router.get('/all', protect, async (req: AuthRequest, res) => {
     if (!rolUser || !allowedRoles.includes(rolUser)) {
       return res.status(403).json({ message: 'Acceso denegado.' });
     }
-    const groups = await findGroupsByInstitution(colegioId);
+    let groups = await findGroupsByInstitution(colegioId);
+    if (rolUser === 'profesor' && req.user?.id) {
+      const profesorGroups = await findGroupsByTeacher(req.user.id);
+      const profesorGroupIds = new Set(profesorGroups.map((g) => g.id));
+      groups = groups.filter((g) => profesorGroupIds.has(g.id));
+    }
     const groupIds = groups.map((g) => g.id);
     const counts = await countEnrollmentsByGroupIds(groupIds);
     const result = await Promise.all(
@@ -371,6 +375,9 @@ router.get('/lookup/:objectId', protect, async (req: AuthRequest, res) => {
         objectId,
         suggestion: 'Este ID no corresponde a ningún grupo en la base de datos.',
       });
+    }
+    if (group.institution_id !== req.user?.colegioId && req.user?.rol !== 'super_admin') {
+      return res.status(403).json({ message: 'No tienes acceso a este grupo.' });
     }
     res.json({
       objectId: group.id,

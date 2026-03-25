@@ -8,6 +8,7 @@ export interface ActivityLogRow {
   entity_id: string | null;
   action: string;
   metadata: Record<string, unknown>;
+  ip_address: string | null;
   created_at: string;
 }
 
@@ -83,10 +84,13 @@ export async function createActivityLog(row: {
   entity_id?: string | null;
   action: string;
   metadata?: Record<string, unknown>;
+  ip_address?: string | null;
 }): Promise<ActivityLogRow> {
   const r = await queryPg<ActivityLogRow>(
-    `INSERT INTO analytics.activity_logs (institution_id, user_id, entity_type, entity_id, action, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    `INSERT INTO analytics.activity_logs
+       (institution_id, user_id, entity_type, entity_id, action, metadata, ip_address)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
     [
       row.institution_id,
       row.user_id,
@@ -94,6 +98,7 @@ export async function createActivityLog(row: {
       row.entity_id ?? null,
       row.action,
       row.metadata ?? {},
+      row.ip_address ?? null,
     ]
   );
   return r.rows[0];

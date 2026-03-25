@@ -41,10 +41,15 @@ import integrationsRoutes from "./routes/integrations";
 import scheduleRoutes from "./routes/schedule";
 import adminSqlRoutes, { adminSqlHandler } from "./routes/adminSql";
 import uploadsRoutes from "./routes/uploads";
+import activityRoutes from "./routes/activity";
 import {
   ensureAssignmentsRequiresSubmissionColumn,
   ensureAssignmentCategoryFkReferencesGradingCategories,
   ensureEvoFilesOrigenCheck,
+  ensureAuditLogIpColumns,
+  ensureAuditLogRetentionPolicy,
+  ensureEvoSendRetention,
+  ensureStudentActivityTable,
 } from "./db/pgSchemaPatches.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -68,6 +73,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[schema] evo_files.origen CHECK OK");
     } catch (e) {
       console.warn("[schema] Parche evo_files.origen:", (e as Error).message);
+    }
+    try {
+      await ensureAuditLogIpColumns();
+      console.log("[schema] analytics.activity_logs / ai_action_logs ip_address OK");
+    } catch (e) {
+      console.warn("[schema] Parche audit ip_address:", (e as Error).message);
+    }
+    try {
+      await ensureAuditLogRetentionPolicy();
+    } catch (e) {
+      console.warn("[schema] Parche retención audit logs:", (e as Error).message);
+    }
+    try {
+      await ensureEvoSendRetention();
+      console.log("[schema] announcement_messages.retention_until OK");
+    } catch (e) {
+      console.warn("[schema] Parche EvoSend retention_until:", (e as Error).message);
+    }
+    try {
+      await ensureStudentActivityTable();
+      console.log("[schema] student_activity OK");
+    } catch (e) {
+      console.warn("[schema] Parche student_activity:", (e as Error).message);
     }
   }
 
@@ -115,6 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/schedule', scheduleRoutes);
   app.use('/api/admin', adminSqlRoutes);
   app.use('/api/uploads', uploadsRoutes);
+  app.use('/api/activity', activityRoutes);
   // Ruta explícita para que la consola SQL (Neon) siempre esté disponible con la misma DB de la plataforma
   app.post('/api/admin/sql', protect, requireRole('admin-general-colegio', 'school_admin', 'super_admin'), adminSqlHandler);
 
