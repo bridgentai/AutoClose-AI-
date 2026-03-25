@@ -60,6 +60,19 @@ export function sanitizeText(text: string, context: SanitizerContext = {}): Sani
   return { sanitized, dictionary };
 }
 
+/**
+ * Elimina pseudónimos internos [EST_n] / EST_n del texto generado por la IA
+ * antes de mostrarlo al usuario (se siguen usando en el contexto enviado a OpenAI).
+ */
+export function stripInternalStudentTokensForDisplay(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+  let s = text.replace(/\s*\[EST_\d+\]\s*/gi, ' ');
+  s = s.replace(/\bEST_\d+\b/gi, '');
+  s = s.replace(/\bEST\d+\b/gi, '');
+  s = s.replace(/\s{2,}/g, ' ').trim();
+  return s;
+}
+
 export function sanitizeMessages(
   messages: Array<{ role: string; content: string | null | undefined; [key: string]: unknown }>,
   context: SanitizerContext = {}

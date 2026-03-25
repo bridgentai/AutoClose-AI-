@@ -6,7 +6,7 @@ import {
   formatContextForPrompt,
   buildSanitizerContextFromRoleContext,
 } from './roleContextBuilder';
-import { sanitizeMessages, sanitizeText } from './llmSanitizer';
+import { sanitizeMessages, sanitizeText, stripInternalStudentTokensForDisplay } from './llmSanitizer';
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 // La API key ahora se lee dinámicamente en cada llamada para asegurar que siempre use la más reciente del .env
@@ -688,12 +688,13 @@ export async function generateAcademicInsightsSummary(
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `Contexto del estudiante y sus notas:\n${sanitizedDataBlock}\n\nGenera el resumen e insights en prosa (solo texto, sin viñetas).`,
+          content: `Contexto del estudiante y sus notas:\n${sanitizedDataBlock}\n\nImportante: en tu respuesta no incluyas códigos internos como [EST_1] ni la forma EST_1; refiere al alumno únicamente como "el estudiante" o "el/la estudiante".\n\nGenera el resumen e insights en prosa (solo texto, sin viñetas).`,
         },
       ],
       max_tokens: 400,
     });
-    return response.choices[0]?.message?.content?.trim() || 'No se pudo generar el resumen.';
+    const raw = response.choices[0]?.message?.content?.trim() || 'No se pudo generar el resumen.';
+    return stripInternalStudentTokensForDisplay(raw);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[OpenAI] generateAcademicInsightsSummary error:', msg);

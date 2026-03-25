@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { useAuth } from '@/lib/authContext';
 import { useQuery } from '@tanstack/react-query';
@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, AlertTriangle, Lightbulb, Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -50,6 +49,13 @@ export default function CourseAnalyticsPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  /** Materia (group_subject) elegida por el profesor cuando hay varias; se sincroniza con ?gs= como en /course/:id/grades */
+  const [materiaSeleccionada, setMateriaSeleccionada] = useState<string | null>(null);
+
+  const gsFromQuery =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('gs')?.trim() || ''
+      : '';
 
   const displayGroupId =
     cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
@@ -78,17 +84,40 @@ export default function CourseAnalyticsPage() {
   });
 
   const { data: students = [] } = useQuery<Student[]>({
-    queryKey: ['students', cursoId],
+    queryKey: ['students', cursoId, displayGroupId],
     queryFn: async () => {
-      const res = await apiRequest('GET', `/api/groups/${displayGroupId}/students`);
-      return Array.isArray(res) ? res : [];
+      try {
+        const res = await apiRequest('GET', `/api/groups/${encodeURIComponent(displayGroupId)}/students`);
+        return Array.isArray(res) ? res : [];
+      } catch {
+        return [];
+      }
     },
     enabled: !!displayGroupId && !!user?.id && user?.rol !== 'estudiante',
   });
 
   const isStudent = user?.rol === 'estudiante';
-  const firstSubjectId = isStudent ? cursoId : (subjectsForGroup[0]?._id ?? '');
-  const subjectName = isStudent ? (courseDetails?.nombre ?? '') : (subjectsForGroup[0]?.nombre ?? '');
+
+  useEffect(() => {
+    if (isStudent) return;
+    setMateriaSeleccionada(null);
+  }, [cursoId, gsFromQuery, isStudent]);
+
+  const firstSubjectId = useMemo(() => {
+    if (isStudent) return cursoId;
+    if (!subjectsForGroup.length) return '';
+    if (materiaSeleccionada && subjectsForGroup.some((s) => s._id === materiaSeleccionada)) {
+      return materiaSeleccionada;
+    }
+    if (gsFromQuery && subjectsForGroup.some((s) => s._id === gsFromQuery)) {
+      return gsFromQuery;
+    }
+    return subjectsForGroup[0]._id;
+  }, [isStudent, cursoId, subjectsForGroup, gsFromQuery, materiaSeleccionada]);
+
+  const subjectName = isStudent
+    ? (courseDetails?.nombre ?? '')
+    : (subjectsForGroup.find((s) => s._id === firstSubjectId)?.nombre ?? subjectsForGroup[0]?.nombre ?? '');
   const effectiveStudentId = isStudent ? (user?.id ?? '') : (selectedStudentId || (students[0]?._id ?? ''));
 
   const {
@@ -216,20 +245,42 @@ export default function CourseAnalyticsPage() {
             </p>
           </div>
           {!isStudent && (
-            <div className="flex items-center gap-3">
-              <span className="text-white/60 text-sm">Estudiante</span>
-              <Select value={effectiveStudentId} onValueChange={setSelectedStudentId}>
-                <SelectTrigger className="w-56 bg-white/5 border-white/20 text-white rounded-lg">
-                  <SelectValue placeholder="Seleccionar" />
-                </SelectTrigger>
-                <SelectContent>
-                  {students.map((s) => (
-                    <SelectItem key={s._id} value={s._id}>
-                      {s.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
+              {subjectsForGroup.length > 1 && firstSubjectId ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-white/60 text-sm whitespace-nowrap">Materia</span>
+                  <Select value={firstSubjectId} onValueChange={(id) => setMateriaSeleccionada(id)}>
+                    <SelectTrigger className="w-[min(100vw-4rem,16rem)] sm:w-56 bg-white/5 border-white/20 text-white rounded-lg">
+                      <SelectValue placeholder="Materia" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjectsForGroup.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <span className="text-white/60 text-sm whitespace-nowrap">Estudiante</span>
+                <Select
+                  value={effectiveStudentId || undefined}
+                  onValueChange={setSelectedStudentId}
+                >
+                  <SelectTrigger className="w-[min(100vw-4rem,16rem)] sm:w-56 bg-white/5 border-white/20 text-white rounded-lg">
+                    <SelectValue placeholder={students.length ? 'Seleccionar' : 'Sin estudiantes'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {students.map((s) => (
+                      <SelectItem key={s._id} value={s._id}>
+                        {s.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
         </header>

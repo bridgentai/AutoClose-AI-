@@ -753,7 +753,12 @@ export default function CourseGradesTablePage() {
                 variant="outline"
                 size="sm"
                 className="rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
-                onClick={() => setLocation(`/course/${cursoId}/analytics`)}
+                onClick={() => {
+                  const qs = firstSubjectId
+                    ? `?${new URLSearchParams({ gs: firstSubjectId }).toString()}`
+                    : '';
+                  setLocation(`/course/${cursoId}/analytics${qs}`);
+                }}
               >
                 Vista analítica
               </Button>
