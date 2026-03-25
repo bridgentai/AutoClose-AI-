@@ -123,13 +123,13 @@ export default function TeacherCalendarPage() {
     nombre: string;
     porcentaje?: number;
   }
-  const { data: logrosData } = useQuery<{ logros: LogroItem[] }>({
+  const { data: logrosData } = useQuery<{ indicadoresPlano: LogroItem[] }>({
     queryKey: ['/api/logros-calificacion', courseIdForLogros],
     queryFn: () =>
       apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
     enabled: !!courseIdForLogros,
   });
-  const logros = logrosData?.logros ?? [];
+  const logros = logrosData?.indicadoresPlano ?? [];
 
   const { data: googleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
     queryKey: ['evo-drive', 'google-status'],
@@ -305,8 +305,8 @@ export default function TeacherCalendarPage() {
 
     if (logros.length > 0 && !formData.logroCalificacionId) {
       toast({
-        title: 'Selecciona un logro',
-        description: 'Este curso tiene logros de calificación. Elige uno para asignar la tarea.',
+        title: 'Selecciona un indicador',
+        description: 'Este curso tiene indicadores de calificación. Elige uno para asignar la tarea.',
         variant: 'destructive',
       });
       return;

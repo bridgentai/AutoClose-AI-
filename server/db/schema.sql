@@ -222,10 +222,24 @@ CREATE TABLE IF NOT EXISTS grading_schemas (
 
 CREATE INDEX IF NOT EXISTS idx_grading_schemas_group ON grading_schemas(group_id);
 
+CREATE TABLE IF NOT EXISTS grading_outcomes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  grading_schema_id UUID NOT NULL REFERENCES grading_schemas(id) ON DELETE CASCADE,
+  institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  description TEXT NOT NULL DEFAULT '',
+  weight NUMERIC(5,2) NOT NULL DEFAULT 100 CHECK (weight >= 0 AND weight <= 100),
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_grading_outcomes_schema ON grading_outcomes(grading_schema_id);
+
 CREATE TABLE IF NOT EXISTS grading_categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   grading_schema_id UUID NOT NULL REFERENCES grading_schemas(id) ON DELETE CASCADE,
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  grading_outcome_id UUID REFERENCES grading_outcomes(id) ON DELETE CASCADE,
   name VARCHAR(100) NOT NULL,
   weight NUMERIC(5,2) NOT NULL CHECK (weight >= 0 AND weight <= 100),
   sort_order INT NOT NULL DEFAULT 0,

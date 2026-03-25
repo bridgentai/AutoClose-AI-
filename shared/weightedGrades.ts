@@ -49,6 +49,35 @@ export interface LogroPct {
   porcentaje: number;
 }
 
+/** Logro (peso en curso) con indicadores que ponderan el subtotal del logro (suman 100%). */
+export interface OutcomeGradeNode {
+  id: string;
+  pesoEnCurso: number;
+  indicadores: { id: string; porcentaje: number }[];
+}
+
+/**
+ * Nota final del curso: por cada logro, subtotal ponderado por indicadores; luego ponderado por pesoEnCurso entre logros.
+ */
+export function courseGradeFromOutcomes(
+  outcomes: OutcomeGradeNode[],
+  getIndicadorGrade: (indicadorId: string) => number | null
+): number | null {
+  if (!outcomes.length) return null;
+  const getLogroGrade = (outcomeId: string): number | null => {
+    const o = outcomes.find((x) => x.id === outcomeId);
+    if (!o?.indicadores?.length) return null;
+    return courseWeightedFromLogros(
+      o.indicadores.map((i) => ({ _id: i.id, porcentaje: i.porcentaje })),
+      getIndicadorGrade
+    );
+  };
+  return courseWeightedFromLogros(
+    outcomes.map((o) => ({ _id: o.id, porcentaje: o.pesoEnCurso })),
+    getLogroGrade
+  );
+}
+
 /** Promedio del curso: solo logros con al menos una nota registrada; se renorma por % de esos logros. */
 export function courseWeightedFromLogros(
   logros: LogroPct[],

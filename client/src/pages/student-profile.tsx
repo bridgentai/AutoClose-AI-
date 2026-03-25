@@ -135,7 +135,7 @@ export default function StudentProfilePage() {
     staleTime: 0,
   });
 
-  const { data: logrosRaw } = useQuery<{ logros: LogroItem[] }>({
+  const { data: logrosRaw } = useQuery<{ indicadoresPlano: LogroItem[] }>({
     queryKey: ['logros', courseIdForData],
     queryFn: () =>
       fetch(`/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForData)}`, {
@@ -144,7 +144,7 @@ export default function StudentProfilePage() {
     enabled: !!courseIdForData,
     staleTime: 0,
   });
-  const logros = logrosRaw?.logros ?? [];
+  const logros = logrosRaw?.indicadoresPlano ?? [];
 
   const getNotaForStudent = (a: AssignmentForNotes, sid: string) => {
     const subs = a.submissions || a.entregas || [];

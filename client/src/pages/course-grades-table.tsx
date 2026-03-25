@@ -14,7 +14,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   weightedGradeWithinLogro,
   courseWeightedFromLogros,
+  courseGradeFromOutcomes,
   hasRecordedScore,
+  type OutcomeGradeNode,
 } from '@shared/weightedGrades';
 
 // =========================================================
@@ -48,10 +50,26 @@ interface LogroCalificacion {
   orden?: number;
 }
 
+interface IndicadorEnLogro {
+  _id: string;
+  nombre: string;
+  porcentaje: number;
+  orden?: number;
+}
+
+interface LogroBloqueApi {
+  _id: string;
+  descripcion: string;
+  pesoEnCurso: number;
+  orden?: number;
+  indicadores: IndicadorEnLogro[];
+}
+
 interface LogrosResponse {
-  logros: LogroCalificacion[];
-  totalPorcentaje: number;
-  completo: boolean;
+  logros: LogroBloqueApi[];
+  indicadoresPlano: LogroCalificacion[];
+  totalPesoLogros: number;
+  logrosPesoCompleto: boolean;
 }
 
 interface CourseSubject {
@@ -112,7 +130,8 @@ interface PrediccionResult {
 
 function calcularPrediccion(
   estudianteId: string,
-  assignmentsByLogro: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }>
+  assignmentsByIndicador: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }>,
+  outcomes: OutcomeGradeNode[]
 ): PrediccionResult {
   const scoreFor = (a: Assignment): number | null => {
     const subs = a.submissions || a.entregas || [];
@@ -122,7 +141,7 @@ function calcularPrediccion(
     return Number(cal);
   };
 
-  const allAssignmentsWithDates = (Object.values(assignmentsByLogro) as { logro: LogroCalificacion; assignments: Assignment[] }[])
+  const allAssignmentsWithDates = (Object.values(assignmentsByIndicador) as { logro: LogroCalificacion; assignments: Assignment[] }[])
     .flatMap((g) => g.assignments.map((a) => ({ ...a, fecha: a.fechaEntrega })))
     .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
@@ -132,20 +151,23 @@ function calcularPrediccion(
     if (hasRecordedScore(s)) orderedGrades.push(Number(s));
   });
 
-  const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
-  const logrosForCourse: { _id: string; porcentaje: number }[] = [];
-  for (const [, { logro }] of entries) {
-    if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
-    logrosForCourse.push({ _id: logro._id, porcentaje: logro.porcentaje });
-  }
   const getCategoryGrade = (catId: string): number | null => {
-    const grp = assignmentsByLogro[catId];
+    const grp = assignmentsByIndicador[catId];
     if (!grp?.assignments?.length) return null;
     const scores = grp.assignments.map((x) => scoreFor(x));
     const slots = grp.assignments.map((x) => ({ categoryWeightPct: x.categoryWeightPct ?? null }));
     return weightedGradeWithinLogro(slots, scores);
   };
-  let notaActual = courseWeightedFromLogros(logrosForCourse, getCategoryGrade);
+  let notaActual: number | null =
+    outcomes.length > 0 ? courseGradeFromOutcomes(outcomes, getCategoryGrade) : null;
+  if (notaActual == null) {
+    const flat: { _id: string; porcentaje: number }[] = [];
+    for (const [, { logro }] of Object.entries(assignmentsByIndicador)) {
+      if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
+      flat.push({ _id: logro._id, porcentaje: logro.porcentaje });
+    }
+    notaActual = courseWeightedFromLogros(flat, getCategoryGrade);
+  }
   if (notaActual == null) {
     notaActual = orderedGrades.length > 0 ? promedio(orderedGrades) : 0;
   }
@@ -445,27 +467,54 @@ export default function CourseGradesTablePage() {
     gcTime: 10 * 60 * 1000,
   });
 
-  /** Agrupa assignments por grading_category_id (logro). Cada grupo muestra nombre y porcentaje en el header. */
-  const assignmentsByLogro = useMemo(() => {
-    const logros = logrosData?.logros || [];
-    const logrosOrdenados = [...logros].sort((a, b) => {
-      const ordenA = a.orden ?? 999;
-      const ordenB = b.orden ?? 999;
-      if (ordenA !== ordenB) return ordenA - ordenB;
-      return a.nombre.localeCompare(b.nombre);
-    });
+  const flatIndicadoresOrdered = useMemo(() => {
+    type Row = { _id: string; nombre: string; porcentaje: number; orden: number; grupoTitle: string };
+    const out: Row[] = [];
+    const logrosBloques = logrosData?.logros ?? [];
+    const sortedL = [...logrosBloques].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+    for (const L of sortedL) {
+      const raw = (L.descripcion ?? '').trim();
+      const grupoTitle = raw.length > 0 ? (raw.length > 52 ? `${raw.slice(0, 52)}…` : raw) : 'Logro';
+      const inds = [...(L.indicadores ?? [])].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+      for (const ind of inds) {
+        out.push({
+          _id: ind._id,
+          nombre: ind.nombre,
+          porcentaje: ind.porcentaje,
+          orden: ind.orden ?? 0,
+          grupoTitle,
+        });
+      }
+    }
+    return out;
+  }, [logrosData]);
+
+  const outcomeNodesForGrades = useMemo((): OutcomeGradeNode[] => {
+    const logrosBloques = logrosData?.logros ?? [];
+    return logrosBloques.map((L) => ({
+      id: L._id,
+      pesoEnCurso: L.pesoEnCurso,
+      indicadores: (L.indicadores ?? []).map((i) => ({ id: i._id, porcentaje: i.porcentaje })),
+    }));
+  }, [logrosData]);
+
+  /** Agrupa assignments por indicador (grading_category_id). */
+  const assignmentsByIndicador = useMemo(() => {
+    const logrosOrdenados = flatIndicadoresOrdered;
     const grouped: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }> = {};
-    logrosOrdenados.forEach((logro) => {
-      grouped[logro._id] = { logro, assignments: [] };
+    logrosOrdenados.forEach((ind) => {
+      grouped[ind._id] = {
+        logro: { _id: ind._id, nombre: ind.nombre, porcentaje: ind.porcentaje, orden: ind.orden },
+        assignments: [],
+      };
     });
     const sinLogro: Assignment[] = [];
     assignmentsForTable.forEach((assignment) => {
       const categoryId = assignment.logroCalificacionId;
       if (categoryId) {
-        const assignmentLogroId = String(categoryId);
-        const matchingLogro = logrosOrdenados.find((l) => String(l._id) === assignmentLogroId);
-        if (matchingLogro && grouped[matchingLogro._id]) {
-          grouped[matchingLogro._id].assignments.push(assignment);
+        const idStr = String(categoryId);
+        if (grouped[idStr]) {
+          grouped[idStr].assignments.push(assignment);
         } else {
           sinLogro.push(assignment);
         }
@@ -480,50 +529,74 @@ export default function CourseGradesTablePage() {
       };
     }
     return grouped;
-  }, [assignmentsForTable, logrosData]);
+  }, [assignmentsForTable, flatIndicadoresOrdered]);
+
+  const orderedColumnsForVista = useMemo(() => {
+    const cols: { assignment: Assignment; grupoTitle: string }[] = [];
+    for (const ind of flatIndicadoresOrdered) {
+      const g = assignmentsByIndicador[ind._id];
+      const sorted = (g?.assignments ?? []).slice().sort(
+        (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+      );
+      for (const a of sorted) cols.push({ assignment: a, grupoTitle: ind.grupoTitle });
+    }
+    const sin = assignmentsByIndicador['sin-logro']?.assignments ?? [];
+    const sinSorted = sin.slice().sort(
+      (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+    );
+    for (const a of sinSorted) cols.push({ assignment: a, grupoTitle: 'Sin categoría' });
+    return cols;
+  }, [flatIndicadoresOrdered, assignmentsByIndicador]);
+
+  const parentHeaderSegments = useMemo(() => {
+    const segs: { title: string; span: number }[] = [];
+    let i = 0;
+    while (i < orderedColumnsForVista.length) {
+      const t = orderedColumnsForVista[i].grupoTitle;
+      let j = i;
+      while (j < orderedColumnsForVista.length && orderedColumnsForVista[j].grupoTitle === t) j++;
+      segs.push({ title: t, span: j - i });
+      i = j;
+    }
+    return segs;
+  }, [orderedColumnsForVista]);
 
   const TAB_VISTA_COMPLETA = '__completa__';
 
   const tabOrder = useMemo(() => {
-    const entries = Object.entries(assignmentsByLogro);
-    return [
-      { id: TAB_VISTA_COMPLETA, label: 'Vista completa' },
-      ...entries.map(([id, { logro }]) => ({ id, label: logro.nombre })),
-    ];
-  }, [assignmentsByLogro]);
+    const byId = new Map(Object.entries(assignmentsByIndicador));
+    const orderedTabs = flatIndicadoresOrdered
+      .map((ind) => {
+        if (!byId.has(ind._id)) return null;
+        return { id: ind._id, label: ind.nombre };
+      })
+      .filter(Boolean) as { id: string; label: string }[];
+    const sin = assignmentsByIndicador['sin-logro'];
+    if (sin && sin.assignments.length > 0) {
+      orderedTabs.push({ id: 'sin-logro', label: 'Sin categoría' });
+    }
+    return [{ id: TAB_VISTA_COMPLETA, label: 'Vista completa' }, ...orderedTabs];
+  }, [assignmentsByIndicador, flatIndicadoresOrdered]);
 
   useEffect(() => {
     if (tabOrder.length > 0 && !activeTab) setActiveTab(tabOrder[0].id);
   }, [tabOrder, activeTab]);
 
-  /** En Vista completa: grupos por logro (mismo orden que los tabs) para cabecera y columnas. */
-  const logroGroupsForVistaCompleta = useMemo(() => {
-    return tabOrder
-      .filter((t) => t.id !== TAB_VISTA_COMPLETA)
-      .map((t) => {
-        const group = assignmentsByLogro[t.id];
-        const assignments = (group?.assignments ?? []).slice().sort(
-          (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
-        );
-        return { id: t.id, label: t.label, logro: group?.logro, assignments };
-      });
-  }, [tabOrder, assignmentsByLogro]);
-
   const activeAssignments = useMemo(() => {
     if (!activeTab) return [];
     if (activeTab === TAB_VISTA_COMPLETA) {
-      return logroGroupsForVistaCompleta.flatMap((g) => g.assignments);
+      return orderedColumnsForVista.map((c) => c.assignment);
     }
-    return assignmentsByLogro[activeTab]?.assignments ?? [];
-  }, [activeTab, assignmentsByLogro, logroGroupsForVistaCompleta]);
+    return assignmentsByIndicador[activeTab]?.assignments ?? [];
+  }, [activeTab, orderedColumnsForVista, assignmentsByIndicador]);
 
   /** Todas las asignaciones del curso, para calcular el promedio global (mismo valor en vista por categoría y vista completa). */
   const allAssignmentsForPromedio = useMemo(
     () =>
-      (Object.values(assignmentsByLogro) as { logro: LogroCalificacion; assignments: Assignment[] }[])
+      (Object.values(assignmentsByIndicador) as { logro: LogroCalificacion; assignments: Assignment[] }[])
         .flatMap((g) => g.assignments)
         .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()),
-    [assignmentsByLogro]
+    [assignmentsByIndicador]
   );
 
   const updateGradeMutation = useMutation({
@@ -565,14 +638,8 @@ export default function CourseGradesTablePage() {
     return cal != null && !Number.isNaN(Number(cal)) ? Number(cal) : '';
   };
 
-  /** Promedio: dentro de cada logro, N/A no cuenta; 0 sí. Curso: solo logros con al menos una nota (renorma %). */
+  /** Promedio: indicadores dentro de cada logro; luego peso entre logros. N/A no cuenta; 0 sí. */
   const getPromedioFor = (estudianteId: string): number | string => {
-    const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
-    const logrosForCourse: { _id: string; porcentaje: number }[] = [];
-    for (const [, { logro }] of entries) {
-      if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
-      logrosForCourse.push({ _id: logro._id, porcentaje: logro.porcentaje });
-    }
     const score = (a: Assignment): number | null => {
       const v = getGradeFor(estudianteId, a._id);
       if (v === '' || v === undefined) return null;
@@ -580,14 +647,23 @@ export default function CourseGradesTablePage() {
       return Number.isNaN(n) ? null : n;
     };
     const getCat = (catId: string): number | null => {
-      const grp = assignmentsByLogro[catId];
+      const grp = assignmentsByIndicador[catId];
       if (!grp?.assignments?.length) return null;
       return weightedGradeWithinLogro(
         grp.assignments.map((x) => ({ categoryWeightPct: x.categoryWeightPct ?? null })),
         grp.assignments.map((x) => score(x))
       );
     };
-    let course = courseWeightedFromLogros(logrosForCourse, getCat);
+    let course: number | null =
+      outcomeNodesForGrades.length > 0 ? courseGradeFromOutcomes(outcomeNodesForGrades, getCat) : null;
+    if (course == null) {
+      const flat: { _id: string; porcentaje: number }[] = [];
+      for (const [, { logro }] of Object.entries(assignmentsByIndicador)) {
+        if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
+        flat.push({ _id: logro._id, porcentaje: logro.porcentaje });
+      }
+      course = courseWeightedFromLogros(flat, getCat);
+    }
     if (course == null) {
       const all: number[] = [];
       allAssignmentsForPromedio.forEach((a) => {
@@ -623,8 +699,8 @@ export default function CourseGradesTablePage() {
   const promedioColumnLabel =
     activeTab === TAB_VISTA_COMPLETA
       ? 'Promedio'
-      : assignmentsByLogro[activeTab]?.logro?.nombre
-        ? `Promedio (${assignmentsByLogro[activeTab].logro.nombre})`
+      : assignmentsByIndicador[activeTab]?.logro?.nombre
+        ? `Promedio (${assignmentsByIndicador[activeTab].logro.nombre})`
         : 'Promedio';
 
   const loading = isLoadingSubjects || isLoadingStudents || isLoadingGradeTable || isLoadingLogros;
@@ -737,7 +813,7 @@ export default function CourseGradesTablePage() {
               }}
             >
               {/* Header: en Vista completa dos filas (categorías + asignaciones); en pestaña categoría una fila */}
-              {activeTab === TAB_VISTA_COMPLETA && logroGroupsForVistaCompleta.length > 0 ? (
+              {activeTab === TAB_VISTA_COMPLETA && orderedColumnsForVista.length > 0 ? (
                 <>
                   <div
                     className="sticky top-0 z-20 grid items-center gap-2 min-h-[44px] py-2 border-b border-white/[0.06] text-[10px] font-semibold uppercase tracking-wider text-white/70 backdrop-blur-sm"
@@ -752,16 +828,16 @@ export default function CourseGradesTablePage() {
                     >
                       Estudiante
                     </div>
-                    {logroGroupsForVistaCompleta
-                      .filter((g) => g.assignments.length > 0)
-                      .map((g) => (
+                    {parentHeaderSegments
+                      .filter((seg) => seg.span > 0)
+                      .map((seg, idx) => (
                         <div
-                          key={g.id}
+                          key={`${seg.title}-${idx}`}
                           className="text-center truncate px-1 border-r border-white/10"
-                          style={{ gridColumn: `span ${g.assignments.length}` }}
+                          style={{ gridColumn: `span ${seg.span}` }}
+                          title={seg.title}
                         >
-                          {g.logro?.nombre ?? g.label}
-                          {g.logro?.porcentaje != null && g.logro.porcentaje > 0 ? ` ${g.logro.porcentaje}%` : ''}
+                          {seg.title}
                         </div>
                       ))}
                     <div className="text-center">{promedioColumnLabel}</div>

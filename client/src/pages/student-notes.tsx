@@ -24,8 +24,9 @@ import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import {
   weightedGradeWithinLogro,
-  courseWeightedFromLogros,
+  courseGradeFromOutcomes,
   hasRecordedScore,
+  type OutcomeGradeNode,
 } from '@shared/weightedGrades';
 
 // =========================================================
@@ -99,15 +100,32 @@ interface LogroItem {
   orden?: number;
 }
 
+interface LogroBloqueApi {
+  _id: string;
+  descripcion: string;
+  pesoEnCurso: number;
+  orden?: number;
+  indicadores: { _id: string; nombre: string; porcentaje: number; orden?: number }[];
+}
+
+interface LogrosApiResponse {
+  logros: LogroBloqueApi[];
+  indicadoresPlano: LogroItem[];
+}
+
+interface GradingPack {
+  nested: LogroBloqueApi[];
+  plano: LogroItem[];
+}
+
 /** Colores distintos por materia (icono y línea en el gráfico). */
 const SUBJECT_COLORS = ['#00c8ff', '#1e3cff', '#ffd700', '#10b981', '#f43f5e', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#ec4899'];
 
 function promedioForScoreMap(
   allNotas: NotaReal[],
-  logros: LogroItem[] | undefined,
+  nestedLogros: LogroBloqueApi[] | undefined,
   scoreByAssignmentId: Map<string, number>
 ): number | null {
-  const list = logros?.length ? [...logros].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999)) : [];
   const grouped = new Map<string, NotaReal[]>();
   for (const n of allNotas) {
     const c = n.gradingCategoryId;
@@ -123,16 +141,6 @@ function promedioForScoreMap(
     }
     return [...m.values()];
   };
-  if (list.length === 0) {
-    const vals: number[] = [];
-    for (const n of allNotas) {
-      const id = n.assignmentId || n._id;
-      const s = scoreByAssignmentId.get(id);
-      if (s !== undefined) vals.push(s);
-    }
-    if (!vals.length) return null;
-    return vals.reduce((a, b) => a + b, 0) / vals.length;
-  }
   const getCat = (lid: string) => {
     const arr = dedupe(grouped.get(lid) ?? []);
     if (!arr.length) return null;
@@ -144,16 +152,28 @@ function promedioForScoreMap(
       })
     );
   };
-  return courseWeightedFromLogros(
-    list.map((l) => ({ _id: l._id, porcentaje: l.porcentaje })),
-    getCat
-  );
+  const outcomes: OutcomeGradeNode[] = (nestedLogros ?? []).map((L) => ({
+    id: L._id,
+    pesoEnCurso: L.pesoEnCurso,
+    indicadores: (L.indicadores ?? []).map((i) => ({ id: i._id, porcentaje: i.porcentaje })),
+  }));
+  if (outcomes.length > 0) {
+    return courseGradeFromOutcomes(outcomes, getCat);
+  }
+  const vals: number[] = [];
+  for (const n of allNotas) {
+    const id = n.assignmentId || n._id;
+    const s = scoreByAssignmentId.get(id);
+    if (s !== undefined) vals.push(s);
+  }
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
 /** Evolución del promedio según notas registradas (N/A no cuenta). */
 function computeEvolucion(
   materia: MateriaConNotas,
-  logros: LogroItem[] | undefined
+  nestedLogros: LogroBloqueApi[] | undefined
 ): { date: Date; dateStr: string; promedio: number }[] {
   const notas = materia.notas ?? [];
   const graded = notas
@@ -167,7 +187,7 @@ function computeEvolucion(
       const id = x.assignmentId || x._id;
       map.set(id, Number(x.nota));
     }
-    const p = promedioForScoreMap(notas, logros, map);
+    const p = promedioForScoreMap(notas, nestedLogros, map);
     if (p == null) continue;
     const fecha = new Date(graded[i].fecha);
     if (Number.isNaN(fecha.getTime())) continue;
@@ -182,7 +202,7 @@ function computeEvolucion(
 
 function computeWeightedPromedioAndUltima(
   materia: MateriaConNotas,
-  logros: LogroItem[] | undefined
+  nestedLogros: LogroBloqueApi[] | undefined
 ): { promedioFinal: number | null; ultimaNota: number | null } {
   const notas = materia.notas ?? [];
   const map = new Map<string, number>();
@@ -191,7 +211,7 @@ function computeWeightedPromedioAndUltima(
     const id = n.assignmentId || n._id;
     map.set(id, Number(n.nota));
   }
-  let promedioFinal = promedioForScoreMap(notas, logros, map);
+  let promedioFinal = promedioForScoreMap(notas, nestedLogros, map);
   if (promedioFinal == null && materia.promedio != null) promedioFinal = materia.promedio;
   if (promedioFinal != null) promedioFinal = Math.round(promedioFinal * 10) / 10;
 
@@ -304,16 +324,20 @@ export default function StudentNotesPage() {
   const logrosQueries = useQueries({
     queries: groupSubjectIds.map((gsId) => ({
       queryKey: ['/api/logros-calificacion', gsId] as const,
-      queryFn: () => apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(gsId)}`) as Promise<{ logros: LogroItem[] }>,
+      queryFn: () =>
+        apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(gsId)}`) as Promise<LogrosApiResponse>,
       enabled: !!gsId,
     })),
   });
 
   const logrosByGsId = useMemo(() => {
-    const map: Record<string, LogroItem[]> = {};
+    const map: Record<string, GradingPack> = {};
     groupSubjectIds.forEach((id, i) => {
-      const logros = logrosQueries[i]?.data?.logros;
-      if (logros?.length) map[id] = logros;
+      const d = logrosQueries[i]?.data;
+      if (!d) return;
+      const plano = d.indicadoresPlano ?? [];
+      const nested = d.logros ?? [];
+      if (plano.length || nested.length) map[id] = { nested, plano };
     });
     return map;
   }, [groupSubjectIds, logrosQueries]);
@@ -328,8 +352,8 @@ export default function StudentNotesPage() {
       const color = SUBJECT_COLORS[index % SUBJECT_COLORS.length];
       const m = byId.get(course._id);
       if (m) {
-        const logros = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
-        const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, logros);
+        const pack = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
+        const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, pack?.nested);
         const estado: SubjectGrade['estado'] =
           promedioFinal == null ? 'sin_notas' : promedioFinal >= 65 ? 'bueno' : 'bajo';
         return {
@@ -362,22 +386,28 @@ export default function StudentNotesPage() {
 
   const courseIdForLogros = selectedSubjectData?.groupSubjectId ?? '';
 
-  const { data: logrosData } = useQuery<{ logros: LogroItem[]; totalPorcentaje?: number }>({
+  const { data: logrosData } = useQuery<LogrosApiResponse>({
     queryKey: ['/api/logros-calificacion', courseIdForLogros],
     queryFn: () => apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
     enabled: !!courseIdForLogros,
   });
 
   const subjectDetail: SubjectDetail | null = selectedSubjectData ? (() => {
-    const logros = selectedSubjectData.groupSubjectId ? logrosByGsId[selectedSubjectData.groupSubjectId] : logrosData?.logros;
-    const { promedioFinal: computedFinal, ultimaNota: computedUltima } = computeWeightedPromedioAndUltima(selectedSubjectData, logros ?? undefined);
+    const pack: GradingPack | undefined = selectedSubjectData.groupSubjectId
+      ? logrosByGsId[selectedSubjectData.groupSubjectId]
+      : logrosData
+        ? { nested: logrosData.logros ?? [], plano: logrosData.indicadoresPlano ?? [] }
+        : undefined;
+    const { promedioFinal: computedFinal, ultimaNota: computedUltima } = computeWeightedPromedioAndUltima(
+      selectedSubjectData,
+      pack?.nested
+    );
     const ultimaNota = computedUltima;
     const estado: SubjectGrade['estado'] =
       computedFinal == null ? 'sin_notas' : computedFinal >= 65 ? 'bueno' : 'bajo';
     const notas = selectedSubjectData.notas ?? [];
-    const logrosList = logros ?? [];
-    const totalPct = logrosList.reduce((s, l) => s + (l.porcentaje ?? 0), 0);
-    const hasWeightedLogros = totalPct > 0;
+    const logrosList = pack?.plano ?? [];
+    const hasWeightedLogros = logrosList.length > 0;
 
     const categorias: GradeDetail[] = [];
     const promedioFinal = computedFinal;
@@ -444,7 +474,7 @@ export default function StudentNotesPage() {
       });
     }
 
-    const evoPts = computeEvolucion(selectedSubjectData, logros ?? undefined);
+    const evoPts = computeEvolucion(selectedSubjectData, pack?.nested);
     const evolucion = evoPts.map((p) => ({
       mes: p.dateStr,
       promedio: p.promedio,
@@ -554,8 +584,8 @@ export default function StudentNotesPage() {
     for (const s of withGrades) {
       const m = byId.get(s._id);
       if (!m) continue;
-      const logros = s.groupSubjectId ? logrosByGsId[s.groupSubjectId] : undefined;
-      const ev = computeEvolucion(m, logros);
+      const pack = s.groupSubjectId ? logrosByGsId[s.groupSubjectId] : undefined;
+      const ev = computeEvolucion(m, pack?.nested);
       evolucionPorMateria[s._id] = ev;
       for (const p of ev) allPoints.push({ date: p.date, dateStr: p.dateStr });
     }

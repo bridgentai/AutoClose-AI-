@@ -216,3 +216,64 @@ export async function ensureStudentActivityTable(): Promise<void> {
   studentActivityTableEnsured = true;
   console.log('[pgSchemaPatches] student_activity OK');
 }
+
+let gradingOutcomesEnsured = false;
+
+/** Logros (párrafo + peso en curso) e indicadores (grading_categories) anidados por logro. */
+export async function ensureGradingOutcomesTable(): Promise<void> {
+  if (gradingOutcomesEnsured) return;
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS grading_outcomes (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      grading_schema_id UUID NOT NULL REFERENCES grading_schemas(id) ON DELETE CASCADE,
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      description TEXT NOT NULL DEFAULT '',
+      weight NUMERIC(5,2) NOT NULL DEFAULT 100 CHECK (weight >= 0 AND weight <= 100),
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_grading_outcomes_schema ON grading_outcomes(grading_schema_id)`
+  );
+  await queryPg(`ALTER TABLE grading_categories ADD COLUMN IF NOT EXISTS grading_outcome_id UUID`);
+
+  await queryPg(`
+    INSERT INTO grading_outcomes (grading_schema_id, institution_id, description, weight, sort_order)
+    SELECT DISTINCT gs.id, gs.institution_id, '', 100, 0
+    FROM grading_schemas gs
+    WHERE EXISTS (
+      SELECT 1 FROM grading_categories gc
+      WHERE gc.grading_schema_id = gs.id AND gc.grading_outcome_id IS NULL
+    )
+    AND NOT EXISTS (SELECT 1 FROM grading_outcomes go WHERE go.grading_schema_id = gs.id)
+  `);
+
+  await queryPg(`
+    UPDATE grading_categories gc
+    SET grading_outcome_id = (
+      SELECT go.id FROM grading_outcomes go
+      WHERE go.grading_schema_id = gc.grading_schema_id
+      ORDER BY go.sort_order, go.created_at
+      LIMIT 1
+    )
+    WHERE gc.grading_outcome_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM grading_outcomes go2 WHERE go2.grading_schema_id = gc.grading_schema_id
+      )
+  `);
+
+  try {
+    await queryPg(`
+      ALTER TABLE grading_categories
+      ADD CONSTRAINT grading_categories_grading_outcome_id_fkey
+      FOREIGN KEY (grading_outcome_id) REFERENCES grading_outcomes(id) ON DELETE CASCADE
+    `);
+  } catch {
+    /* constraint ya existe */
+  }
+
+  gradingOutcomesEnsured = true;
+  console.log('[pgSchemaPatches] grading_outcomes + grading_categories.grading_outcome_id OK');
+}

@@ -50,6 +50,7 @@ import {
   ensureAuditLogRetentionPolicy,
   ensureEvoSendRetention,
   ensureStudentActivityTable,
+  ensureGradingOutcomesTable,
 } from "./db/pgSchemaPatches.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -96,6 +97,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[schema] student_activity OK");
     } catch (e) {
       console.warn("[schema] Parche student_activity:", (e as Error).message);
+    }
+    try {
+      await ensureGradingOutcomesTable();
+      console.log("[schema] grading_outcomes OK");
+    } catch (e) {
+      console.warn("[schema] Parche grading_outcomes:", (e as Error).message);
     }
   }
 

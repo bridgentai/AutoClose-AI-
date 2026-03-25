@@ -4,6 +4,7 @@ export interface GradingCategoryRow {
   id: string;
   grading_schema_id: string;
   institution_id: string;
+  grading_outcome_id: string | null;
   name: string;
   weight: number;
   sort_order: number;
@@ -15,7 +16,10 @@ export interface GradingCategoryRow {
 
 export async function findGradingCategoriesBySchema(gradingSchemaId: string): Promise<GradingCategoryRow[]> {
   const r = await queryPg<GradingCategoryRow>(
-    'SELECT * FROM grading_categories WHERE grading_schema_id = $1 ORDER BY sort_order',
+    `SELECT gc.* FROM grading_categories gc
+     LEFT JOIN grading_outcomes go ON go.id = gc.grading_outcome_id
+     WHERE gc.grading_schema_id = $1
+     ORDER BY COALESCE(go.sort_order, 2147483647), gc.sort_order`,
     [gradingSchemaId]
   );
   return r.rows;

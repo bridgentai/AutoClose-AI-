@@ -2,6 +2,7 @@ import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth.js';
 import { findGradingSchemaById, findGradingSchemaByGroupSubject } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
+import { findGradingOutcomesBySchema } from '../repositories/gradingOutcomeRepository.js';
 import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
 import { resolveGroupSubjectId } from '../utils/resolveLegacyCourse.js';
 import { queryPg } from '../config/db-pg.js';
@@ -73,17 +74,54 @@ router.get('/:id/categories', protect, async (req: AuthRequest, res) => {
 router.post('/:id/categories', protect, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
-    const { name, weight, sort_order, evaluation_type } = req.body;
+    const { name, weight, sort_order, evaluation_type, grading_outcome_id, outcomeId } = req.body as {
+      name?: string;
+      weight?: number;
+      sort_order?: number;
+      evaluation_type?: string;
+      grading_outcome_id?: string;
+      outcomeId?: string;
+    };
     const colegioId = req.user?.colegioId;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
 
     const schema = await findGradingSchemaById(id);
     if (!schema || schema.institution_id !== colegioId) return res.status(404).json({ message: 'Esquema no encontrado.' });
 
+    let outcomeUuid = (grading_outcome_id ?? outcomeId) as string | undefined;
+    if (outcomeUuid) {
+      const o = await queryPg(`SELECT id FROM grading_outcomes WHERE id = $1 AND grading_schema_id = $2`, [
+        outcomeUuid,
+        id,
+      ]);
+      if (!o.rows[0]) return res.status(400).json({ message: 'Logro (outcome) no válido para este esquema.' });
+    } else {
+      const outs = await findGradingOutcomesBySchema(id);
+      if (outs[0]?.id) {
+        outcomeUuid = outs[0].id;
+      } else {
+        const ins = await queryPg(
+          `INSERT INTO grading_outcomes (grading_schema_id, institution_id, description, weight, sort_order)
+           VALUES ($1, $2, '', 100, 0) RETURNING id`,
+          [id, colegioId]
+        );
+        outcomeUuid = ins.rows[0]?.id as string | undefined;
+      }
+    }
+    if (!outcomeUuid) return res.status(500).json({ message: 'No se pudo asociar el indicador a un logro.' });
+
     const r = await queryPg(
-      `INSERT INTO grading_categories (grading_schema_id, institution_id, name, weight, sort_order, evaluation_type, risk_impact_multiplier)
-       VALUES ($1, $2, $3, $4, $5, $6, 1) RETURNING *`,
-      [id, colegioId, name ?? 'Categoría', weight ?? 100, sort_order ?? 0, evaluation_type ?? 'summative']
+      `INSERT INTO grading_categories (grading_schema_id, institution_id, grading_outcome_id, name, weight, sort_order, evaluation_type, risk_impact_multiplier)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 1) RETURNING *`,
+      [
+        id,
+        colegioId,
+        outcomeUuid,
+        name ?? 'Categoría',
+        weight ?? 100,
+        sort_order ?? 0,
+        evaluation_type ?? 'summative',
+      ]
     );
     return res.status(201).json(r.rows[0]);
   } catch (e: unknown) {

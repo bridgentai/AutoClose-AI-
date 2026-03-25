@@ -25,7 +25,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   weightedGradeWithinLogro,
   courseWeightedFromLogros,
+  courseGradeFromOutcomes,
   hasRecordedScore,
+  type OutcomeGradeNode,
 } from '@shared/weightedGrades';
 
 // =========================================================
@@ -133,10 +135,19 @@ interface LogroCalificacion {
     orden?: number;
 }
 
+interface LogroBloqueNotas {
+    _id: string;
+    descripcion: string;
+    pesoEnCurso: number;
+    orden?: number;
+    indicadores: { _id: string; nombre: string; porcentaje: number; orden?: number }[];
+}
+
 interface LogrosResponse {
-    logros: LogroCalificacion[];
-    totalPorcentaje: number;
-    completo: boolean;
+    logros: LogroBloqueNotas[];
+    indicadoresPlano: LogroCalificacion[];
+    totalPesoLogros: number;
+    logrosPesoCompleto: boolean;
 }
 
 // Tipos para notas del estudiante (alineados con /api/student/notes y student-notes.tsx)
@@ -164,14 +175,13 @@ function dedupeNotasStudent(notas: NotaRealStudent[]) {
         const id = n.assignmentId || n.tareaTitulo || JSON.stringify(n);
         if (!m.has(id)) m.set(id, n);
     }
-    return [...m.values()];
+    return Array.from(m.values());
 }
 function computeWeightedPromedioAndUltima(
     materia: MateriaConNotasStudent,
-    logros: { _id: string; porcentaje?: number; orden?: number }[] | undefined
+    nestedLogros: LogroBloqueNotas[] | undefined
 ): { promedioFinal: number | null; ultimaNota: number | null } {
     const notas = materia.notas ?? [];
-    const list = logros?.length ? [...logros].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999)) : [];
     const grouped = new Map<string, NotaRealStudent[]>();
     for (const n of notas) {
         const c = n.gradingCategoryId;
@@ -187,13 +197,13 @@ function computeWeightedPromedioAndUltima(
             arr.map((n) => (hasRecordedScore(n.nota) ? Number(n.nota) : null))
         );
     };
-    let promedioFinal =
-        list.length > 0
-            ? courseWeightedFromLogros(
-                  list.map((l) => ({ _id: l._id, porcentaje: l.porcentaje ?? 0 })),
-                  getCat
-              )
-            : null;
+    const outcomes: OutcomeGradeNode[] = (nestedLogros ?? []).map((L) => ({
+        id: L._id,
+        pesoEnCurso: L.pesoEnCurso,
+        indicadores: (L.indicadores ?? []).map((i) => ({ id: i._id, porcentaje: i.porcentaje })),
+    }));
+    let promedioFinal: number | null =
+        outcomes.length > 0 ? courseGradeFromOutcomes(outcomes, getCat) : null;
     if (promedioFinal == null) {
         const scored = notas.filter((n) => hasRecordedScore(n.nota)).map((n) => Number(n.nota));
         if (scored.length) promedioFinal = scored.reduce((a, b) => a + b, 0) / scored.length;
@@ -528,7 +538,8 @@ export default function CourseDetailPage() {
         enabled: isStudent && !!courseIdForStudentLogros,
         staleTime: 5 * 60 * 1000,
     });
-    const logrosStudent = logrosStudentData?.logros ?? [];
+    const logrosStudentNested = logrosStudentData?.logros ?? [];
+    const indicadoresStudentPlano = logrosStudentData?.indicadoresPlano ?? [];
 
     // Query 6: Tareas para tabla de notas (grupo + materia, sin filtro mes)
     const { data: assignmentsForTable = [], isLoading: isLoadingGradeTable } = useQuery<Assignment[]>({
@@ -548,26 +559,46 @@ export default function CourseDetailPage() {
         staleTime: 5 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
     });
-    const logrosForTable = logrosForTableData?.logros ?? [];
+    const flatIndicadoresProfesorTabla = useMemo((): LogroCalificacion[] => {
+        const nested = logrosForTableData?.logros ?? [];
+        const plano = logrosForTableData?.indicadoresPlano ?? [];
+        const out: LogroCalificacion[] = [];
+        const sortedL = [...nested].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+        for (const L of sortedL) {
+            const inds = [...(L.indicadores ?? [])].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+            for (const ind of inds) {
+                out.push({ _id: ind._id, nombre: ind.nombre, porcentaje: ind.porcentaje, orden: ind.orden });
+            }
+        }
+        return out.length > 0 ? out : plano;
+    }, [logrosForTableData]);
 
-    // Agrupar asignaciones por logro (misma estructura que tabla completa) — TODOS los logros del curso aparecen
+    const outcomeNodesProfesorTabla = useMemo((): OutcomeGradeNode[] => {
+        const nested = logrosForTableData?.logros ?? [];
+        return nested.map((L) => ({
+            id: L._id,
+            pesoEnCurso: L.pesoEnCurso,
+            indicadores: (L.indicadores ?? []).map((i) => ({ id: i._id, porcentaje: i.porcentaje })),
+        }));
+    }, [logrosForTableData]);
+
+    // Agrupar asignaciones por indicador (grading_category_id)
     const assignmentsByLogro = useMemo(() => {
-        const logros = logrosForTable;
-        const logrosOrdenados = [...logros].sort((a, b) => {
+        const logrosOrdenados = [...flatIndicadoresProfesorTabla].sort((a, b) => {
             const ordenA = a.orden ?? 999;
             const ordenB = b.orden ?? 999;
             if (ordenA !== ordenB) return ordenA - ordenB;
-            return a.nombre.localeCompare(b.nombre);
+            return (a.nombre || '').localeCompare(b.nombre || '');
         });
         const grouped: Record<string, { logro: LogroCalificacion; assignments: Assignment[] }> = {};
-        logrosOrdenados.forEach(logro => {
+        logrosOrdenados.forEach((logro) => {
             grouped[logro._id] = { logro, assignments: [] };
         });
         const sinLogro: Assignment[] = [];
-        assignmentsForTable.forEach(assignment => {
+        assignmentsForTable.forEach((assignment) => {
             if (assignment.logroCalificacionId) {
                 const assignmentLogroId = String(assignment.logroCalificacionId);
-                const matchingLogro = logrosOrdenados.find(logro => String(logro._id) === assignmentLogroId);
+                const matchingLogro = logrosOrdenados.find((logro) => String(logro._id) === assignmentLogroId);
                 if (matchingLogro && grouped[matchingLogro._id]) {
                     grouped[matchingLogro._id].assignments.push(assignment);
                 } else {
@@ -584,7 +615,7 @@ export default function CourseDetailPage() {
             };
         }
         return grouped;
-    }, [assignmentsForTable, logrosForTable]);
+    }, [assignmentsForTable, flatIndicadoresProfesorTabla]);
 
     /** Obtiene la calificación de un estudiante en una asignación (IDs normalizados a string). */
     const getGradeForTabla = (studentId: string, assignmentId: string): number | string => {
@@ -610,46 +641,43 @@ export default function CourseDetailPage() {
         [assignmentsByLogro]
     );
 
-    /** Promedio ponderado por logros (solo logros con al menos 1 nota). Misma lógica que /course/:id/grades. Normalización: (weightedSum / totalWeight) * 100. Nunca NaN. */
+    /** Promedio: indicadores dentro de cada logro y peso entre logros (alineado con tabla de notas). */
     const getPromedioForTablaGeneral = (studentId: string): number | string => {
-        const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
-        const totalPorcentaje = entries.reduce((s, [, { logro }]) => s + (logro.porcentaje ?? 0), 0);
-        const hasWeightedLogros = totalPorcentaje > 0;
+        const getCat = (catId: string): number | null => {
+            const grp = assignmentsByLogro[catId];
+            if (!grp?.assignments?.length) return null;
+            const slots = grp.assignments.map((x) => ({ categoryWeightPct: x.categoryWeightPct ?? null }));
+            const scores = grp.assignments.map((a) => {
+                const v = getGradeForTabla(studentId, a._id);
+                return typeof v === 'number' && !Number.isNaN(v) ? v : null;
+            });
+            return weightedGradeWithinLogro(slots, scores);
+        };
 
-        const notas: number[] = [];
-        allAssignmentsForPromedio.forEach((a) => {
-            const v = getGradeForTabla(studentId, a._id);
-            if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
-        });
-        if (notas.length === 0) return '—';
-        const simpleProm = notas.reduce((s, n) => s + n, 0) / notas.length;
+        let course: number | null =
+            outcomeNodesProfesorTabla.length > 0 ? courseGradeFromOutcomes(outcomeNodesProfesorTabla, getCat) : null;
 
-        if (hasWeightedLogros) {
-            let weightedSum = 0;
-            let totalWeight = 0;
-            for (const [, { logro, assignments }] of entries) {
-                const pct = logro.porcentaje ?? 0;
-                if (pct <= 0) continue;
-                const grades: number[] = [];
-                assignments.forEach((a) => {
-                    const v = getGradeForTabla(studentId, a._id);
-                    if (typeof v === 'number' && !Number.isNaN(v)) grades.push(v);
-                });
-                if (grades.length === 0) continue;
-                const prom = grades.reduce((s, n) => s + n, 0) / grades.length;
-                totalWeight += pct;
-                weightedSum += prom * (pct / 100);
+        if (course == null) {
+            const entries = Object.entries(assignmentsByLogro) as [string, { logro: LogroCalificacion; assignments: Assignment[] }][];
+            const flat: { _id: string; porcentaje: number }[] = [];
+            for (const [, { logro }] of entries) {
+                if (logro._id === 'sin-logro' || (logro.porcentaje ?? 0) <= 0) continue;
+                flat.push({ _id: logro._id, porcentaje: logro.porcentaje });
             }
-            if (totalWeight === 0) {
-                const rounded = Math.round(simpleProm * 10) / 10;
-                return Number.isNaN(rounded) ? '—' : rounded;
-            }
-            const result = (weightedSum / totalWeight) * 100;
-            if (Number.isNaN(result)) return Math.round(simpleProm * 10) / 10;
-            return Math.round(result * 10) / 10;
+            course = courseWeightedFromLogros(flat, getCat);
         }
 
-        const rounded = Math.round(simpleProm * 10) / 10;
+        if (course == null) {
+            const notas: number[] = [];
+            allAssignmentsForPromedio.forEach((a) => {
+                const v = getGradeForTabla(studentId, a._id);
+                if (typeof v === 'number' && !Number.isNaN(v)) notas.push(v);
+            });
+            if (notas.length === 0) return '—';
+            course = notas.reduce((s, n) => s + n, 0) / notas.length;
+        }
+
+        const rounded = Math.round(course * 10) / 10;
         return Number.isNaN(rounded) ? '—' : rounded;
     };
 
@@ -662,13 +690,13 @@ export default function CourseDetailPage() {
 
     // Query para obtener logros de calificación
     const courseIdForLogros = formData.courseId || professorGroupSubjectId || '';
-    const { data: logrosData, isLoading: isLoadingLogros } = useQuery<{ logros: { _id: string; nombre: string; porcentaje: number }[] }>({
+    const { data: logrosData, isLoading: isLoadingLogros } = useQuery<LogrosResponse>({
         queryKey: ['/api/logros-calificacion', courseIdForLogros],
         queryFn: () =>
             apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
         enabled: !!courseIdForLogros && user?.rol === 'profesor',
     });
-    const logros = logrosData?.logros ?? [];
+    const logros = logrosData?.indicadoresPlano ?? [];
 
     // Evo Drive: estado de conexión y archivos de Google (para modales en formulario de asignación)
     const { data: googleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
@@ -1747,7 +1775,7 @@ export default function CourseDetailPage() {
         const { promedioFinal: computedPromedio, ultimaNota: computedUltima } = materiaNotas
             ? computeWeightedPromedioAndUltima(
                   materiaNotas,
-                  logrosStudent.length > 0 ? logrosStudent : undefined
+                  logrosStudentNested.length > 0 ? logrosStudentNested : undefined
               )
             : { promedioFinal: null, ultimaNota: null };
         const promedioReal = materiaNotas != null ? computedPromedio : null;
@@ -1776,9 +1804,8 @@ export default function CourseDetailPage() {
 
         // Categorías de notas para la pestaña Notas (igual que página de notas general)
         const notasList = materiaNotas?.notas ?? [];
-        const logrosOrdenados = [...logrosStudent].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
-        const totalPctLogros = logrosOrdenados.reduce((s, l) => s + (l.porcentaje ?? 0), 0);
-        const hasWeightedLogros = totalPctLogros > 0 && logrosOrdenados.length > 0;
+        const logrosOrdenados = [...indicadoresStudentPlano].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
+        const hasWeightedLogros = logrosOrdenados.length > 0;
         type CategoriaNota = {
             categoria: string;
             promedio: number | null;
@@ -1790,7 +1817,7 @@ export default function CourseDetailPage() {
                 const id = n.assignmentId || n.tareaTitulo || '';
                 if (!m.has(id)) m.set(id, n);
             }
-            return [...m.values()];
+            return Array.from(m.values());
         };
         const categoriasNotas: CategoriaNota[] = [];
         if (hasWeightedLogros && logrosOrdenados.length > 0) {

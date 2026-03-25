@@ -176,7 +176,7 @@ export default function TeacherNotesPage() {
     queryFn: () => fetchStudentsByGroup(cursoId),
     enabled: !!cursoId,
   });
-  const { data: logrosRaw } = useQuery({
+  const { data: logrosRaw } = useQuery<{ indicadoresPlano: { _id: string; nombre: string; porcentaje: number }[] }>({
     queryKey: ['logros', courseIdForData],
     queryFn: () =>
       fetch(`/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForData)}`, {
@@ -185,7 +185,7 @@ export default function TeacherNotesPage() {
     enabled: !!courseIdForData,
   });
 
-  const logros = logrosRaw?.logros ?? [];
+  const logros = logrosRaw?.indicadoresPlano ?? [];
 
   const updateGradeMutation = useMutation({
     mutationFn: async ({

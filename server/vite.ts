@@ -40,7 +40,14 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
-  app.use(vite.middlewares);
+  // No pasar /api por el middleware de Vite (evita 404 HTML en métodos que Vite no enruta).
+  app.use((req, res, next) => {
+    const pathOnly = (req.originalUrl || "").split("?")[0] || "";
+    if (pathOnly.startsWith("/api")) {
+      return next();
+    }
+    return vite.middlewares(req, res, next);
+  });
   // Catch-all para rutas del cliente (NO para rutas de API)
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;

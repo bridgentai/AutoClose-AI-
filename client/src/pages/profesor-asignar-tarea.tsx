@@ -135,17 +135,19 @@ function ProfesorAsignarTareaPageInner() {
   };
 
   const courseIdForLogros = formData.materiaId || (formData.curso ? getSubjectsForGroup(formData.curso)[0]?._id : '');
-  const { data: logrosData, isLoading: isLoadingLogros, isFetched: logrosFetched } = useQuery<{ logros: { _id: string; nombre: string; porcentaje: number }[] }>({
+  const { data: logrosData, isLoading: isLoadingLogros, isFetched: logrosFetched } = useQuery<{
+    indicadoresPlano: { _id: string; nombre: string; porcentaje: number }[];
+  }>({
     queryKey: ['/api/logros-calificacion', courseIdForLogros],
     queryFn: () =>
       apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForLogros)}`),
     enabled: !!courseIdForLogros,
   });
-  const logros = logrosData?.logros ?? [];
+  const indicadores = logrosData?.indicadoresPlano ?? [];
   const logroBlocksCreation =
     requiresStudentDelivery &&
     !!courseIdForLogros &&
-    (isLoadingLogros || (logrosFetched && (logros.length === 0 || !logroCalificacionId)));
+    (isLoadingLogros || (logrosFetched && (indicadores.length === 0 || !logroCalificacionId)));
 
 
   const createAssignmentMutation = useMutation({
@@ -265,8 +267,8 @@ function ProfesorAsignarTareaPageInner() {
 
     const courseId = formData.materiaId || subjectsForGroup[0]._id;
     if (requiresStudentDelivery) {
-      if (logros.length === 0) {
-        toast({ title: 'Error', description: 'Configura los logros de calificación para esta materia en Calificación antes de crear asignaciones con entrega.', variant: 'destructive' });
+      if (indicadores.length === 0) {
+        toast({ title: 'Error', description: 'Configura logros e indicadores de calificación para esta materia antes de crear asignaciones con entrega.', variant: 'destructive' });
         return;
       }
       if (!logroCalificacionId) {
@@ -649,7 +651,7 @@ function ProfesorAsignarTareaPageInner() {
                     </Label>
                     {isLoadingLogros ? (
                       <p className="text-sm text-gray-500 py-2">Cargando logros...</p>
-                    ) : logros.length > 0 ? (
+                    ) : indicadores.length > 0 ? (
                       <>
                         <Select
                           value={logroCalificacionId}
@@ -659,7 +661,7 @@ function ProfesorAsignarTareaPageInner() {
                             <SelectValue placeholder="Selecciona el logro al que pertenece esta asignación" />
                           </SelectTrigger>
                           <SelectContent className="bg-white">
-                            {logros.map((l) => (
+                            {indicadores.map((l) => (
                               <SelectItem key={l._id} value={l._id} className="text-gray-900">
                                 {l.nombre} ({l.porcentaje}%)
                               </SelectItem>

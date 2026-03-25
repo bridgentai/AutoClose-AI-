@@ -23,6 +23,12 @@ import { useLocation } from 'wouter';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useInstitutionColors } from '@/hooks/useInstitutionColors';
+import {
+  weightedGradeWithinLogro,
+  courseGradeFromOutcomes,
+  hasRecordedScore,
+  type OutcomeGradeNode,
+} from '@shared/weightedGrades';
 import { AdminGeneralColegioDashboard } from './admin-general-colegio-dashboard';
 
 interface Assignment {
@@ -445,48 +451,52 @@ function EstudianteDashboard() {
       queryKey: ['/api/logros-calificacion', gsId] as const,
       queryFn: () =>
         apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(gsId)}`) as Promise<{
-          logros: { _id: string; nombre: string; porcentaje: number; orden?: number }[];
+          logros: Array<{
+            _id: string;
+            pesoEnCurso: number;
+            indicadores: { _id: string; porcentaje: number }[];
+          }>;
         }>,
       enabled: !!gsId,
     })),
   });
-  const logrosByGsId = useMemo(() => {
-    const map: Record<string, { _id: string; porcentaje: number; orden?: number }[]> = {};
+  const nestedLogrosByGsId = useMemo(() => {
+    const map: Record<string, OutcomeGradeNode[]> = {};
     groupSubjectIds.forEach((id, i) => {
       const logros = logrosQueries[i]?.data?.logros;
-      if (logros?.length) map[id] = logros;
+      if (!logros?.length) return;
+      map[id] = logros.map((L) => ({
+        id: L._id,
+        pesoEnCurso: L.pesoEnCurso,
+        indicadores: (L.indicadores ?? []).map((ind) => ({ id: ind._id, porcentaje: ind.porcentaje })),
+      }));
     });
     return map;
   }, [groupSubjectIds, logrosQueries]);
 
-  // Mismo criterio que Mis Notas: promedio ponderado por logros; reprobada = promedio < 65
+  // Mismo criterio que Mis Notas: logros anidados (indicadores + peso entre logros); reprobada = promedio < 65
   const materiasPerdidas = useMemo(() => {
     const materias = notesData?.materias ?? [];
     return materias.filter((m) => {
-      const logros = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
+      const outcomes = m.groupSubjectId ? nestedLogrosByGsId[m.groupSubjectId] : undefined;
       const notas = m.notas ?? [];
-      const totalPct = (logros ?? []).reduce((s, l) => s + (l.porcentaje ?? 0), 0);
-      const hasWeightedLogros = totalPct > 0 && (logros ?? []).length > 0;
-      let promedioFinal: number;
-      if (hasWeightedLogros && logros!.length > 0) {
-        const logrosOrdenados = [...logros!].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999));
-        let weightedSum = 0;
-        for (const logro of logrosOrdenados) {
-          const notasEnCategoria = notas.filter((n) => String(n.gradingCategoryId ?? '') === String(logro._id));
-          const promCat =
-            notasEnCategoria.length > 0
-              ? notasEnCategoria.reduce((s, x) => s + (x.nota ?? 0), 0) / notasEnCategoria.length
-              : 0;
-          weightedSum += promCat * ((logro.porcentaje ?? 0) / 100);
-        }
-        promedioFinal = weightedSum;
-      } else {
+      const getCat = (catId: string): number | null => {
+        const arr = notas.filter((n) => String(n.gradingCategoryId ?? '') === String(catId));
+        if (!arr.length) return null;
+        return weightedGradeWithinLogro(
+          arr.map((n) => ({ categoryWeightPct: n.categoryWeightPct ?? null })),
+          arr.map((n) => (hasRecordedScore(n.nota) ? Number(n.nota) : null))
+        );
+      };
+      let promedioFinal: number | null =
+        outcomes && outcomes.length > 0 ? courseGradeFromOutcomes(outcomes, getCat) : null;
+      if (promedioFinal == null) {
         promedioFinal =
           notas.length > 0 ? notas.reduce((s, x) => s + (x.nota ?? 0), 0) / notas.length : m.promedio ?? 0;
       }
       return promedioFinal < 65;
     }).length;
-  }, [notesData?.materias, logrosByGsId]);
+  }, [notesData?.materias, nestedLogrosByGsId]);
 
   const handleDayClick = (assignment: Assignment) => {
     setLocation(`/assignment/${assignment._id}`);

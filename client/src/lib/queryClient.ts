@@ -1,15 +1,33 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-// Función helper para obtener la URL base de la API
-// En desarrollo, usa URL relativa (mismo servidor)
-// En producción o si está configurada, usa VITE_API_URL
+function pagePort(): string {
+  if (typeof window === "undefined") return "";
+  const p = window.location.port;
+  if (p) return p;
+  return window.location.protocol === "https:" ? "443" : "80";
+}
+
+// Base URL del API. En `npm run dev` (mismo origen) suele ser ''. Con Vite en otro puerto, apunta a Express (PORT del .env) vía define en vite.config.
 function getApiBaseUrl(): string {
-  // Si hay una variable de entorno configurada, usarla
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  const explicit = import.meta.env.VITE_API_URL;
+  if (explicit) return String(explicit).replace(/\/$/, "");
+
+  const env = import.meta.env as Record<string, string | boolean | undefined>;
+  const backendOrigin = env.VITE_DEV_BACKEND_ORIGIN;
+  const backendPort = env.VITE_DEV_BACKEND_PORT;
+
+  if (
+    import.meta.env.DEV &&
+    typeof backendOrigin === "string" &&
+    typeof backendPort === "string" &&
+    typeof window !== "undefined"
+  ) {
+    if (pagePort() !== backendPort) {
+      return backendOrigin.replace(/\/$/, "");
+    }
   }
-  // Por defecto, usar URL relativa (funciona cuando frontend y backend están en el mismo servidor)
-  return '';
+
+  return "";
 }
 
 // Función helper para construir la URL completa
@@ -29,6 +47,20 @@ function buildApiUrl(url: string): string {
   return url;
 }
 
+function humanizeApiErrorBody(text: string, status: number): string {
+  const t = text.trim();
+  if (!t) return "";
+  if (/^<!DOCTYPE/i.test(t) || /<html[\s>]/i.test(t)) {
+    const m = t.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+    const pre = m?.[1]?.replace(/<[^>]+>/g, "")?.trim();
+    if (pre && /cannot (get|post|put|patch|delete)/i.test(pre)) {
+      return `El servidor que respondió no tiene esa ruta de API (${status}). Arranca Express (\`npm run dev\`) o, si usas solo Vite, abre el front en el puerto 5173 (no el mismo que PORT del .env) y deja el API en otro puerto. También puedes fijar VITE_API_URL en .env apuntando al backend.`;
+    }
+    return `Respuesta inválida del servidor (${status}). ¿El backend está en marcha y la URL de la API es correcta?`;
+  }
+  return t;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     let errorMessage = res.statusText;
@@ -39,7 +71,7 @@ async function throwIfResNotOk(res: Response) {
           const json = JSON.parse(text);
           errorMessage = json.message || json.error || text;
         } catch {
-          errorMessage = text;
+          errorMessage = humanizeApiErrorBody(text, res.status) || text;
         }
       }
     } catch {

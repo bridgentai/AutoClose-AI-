@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Percent, Plus, Trash2, Edit2, Loader2, CheckSquare } from "lucide-react";
+import { Percent, Plus, Trash2, Edit2, Loader2, CheckSquare, ChevronDown, ChevronUp, ListPlus } from "lucide-react";
 import { NavBackButton } from "@/components/nav-back-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -24,21 +25,31 @@ import {
 interface CourseItem {
   _id: string;
   nombre: string;
-  /** Nombre del grupo/curso (ej. "10A") — para mostrar "Materia (Grupo)" */
   cursos?: string[];
 }
 
-interface LogroItem {
+interface IndicadorItem {
   _id: string;
   nombre: string;
   porcentaje: number;
   orden?: number;
 }
 
+interface LogroBloque {
+  _id: string;
+  descripcion: string;
+  pesoEnCurso: number;
+  orden?: number;
+  indicadores: IndicadorItem[];
+  totalIndicadores: number;
+  indicadoresCompletos: boolean;
+}
+
 interface LogrosResponse {
-  logros: LogroItem[];
-  totalPorcentaje: number;
-  completo: boolean;
+  logros: LogroBloque[];
+  indicadoresPlano: IndicadorItem[];
+  totalPesoLogros: number;
+  logrosPesoCompleto: boolean;
 }
 
 const CARD_STYLE = "bg-white/5 border-white/10 backdrop-blur-md";
@@ -48,10 +59,16 @@ export default function ProfesorCalificacionLogrosPage() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [cursoSeleccionado, setCursoSeleccionado] = useState<string>("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [nombre, setNombre] = useState("");
-  const [porcentaje, setPorcentaje] = useState("");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const [dialogLogroOpen, setDialogLogroOpen] = useState(false);
+  const [editingLogroId, setEditingLogroId] = useState<string | null>(null);
+  const [descripcionLogro, setDescripcionLogro] = useState("");
+  const [pesoLogro, setPesoLogro] = useState("");
+
+  const [dialogIndicadoresOpen, setDialogIndicadoresOpen] = useState(false);
+  const [outcomeIdIndicadores, setOutcomeIdIndicadores] = useState<string | null>(null);
+  const [indicadoresDraft, setIndicadoresDraft] = useState<{ nombre: string; porcentaje: string }[]>([]);
 
   const { data: cursos = [], isLoading: loadingCursos } = useQuery<CourseItem[]>({
     queryKey: ["/api/courses"],
@@ -61,85 +78,172 @@ export default function ProfesorCalificacionLogrosPage() {
 
   const { data: logrosData, isLoading: loadingLogros } = useQuery<LogrosResponse>({
     queryKey: ["/api/logros-calificacion", cursoSeleccionado],
-    queryFn: () =>
-      apiRequest<LogrosResponse>("GET", `/api/logros-calificacion?courseId=${encodeURIComponent(cursoSeleccionado)}`),
+    queryFn: async () => {
+      const raw = await apiRequest<unknown>("GET", `/api/logros-calificacion?courseId=${encodeURIComponent(cursoSeleccionado)}`);
+      const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+      return {
+        logros: Array.isArray(o.logros) ? (o.logros as LogroBloque[]) : [],
+        indicadoresPlano: Array.isArray(o.indicadoresPlano) ? (o.indicadoresPlano as IndicadorItem[]) : [],
+        totalPesoLogros: typeof o.totalPesoLogros === "number" ? o.totalPesoLogros : 0,
+        logrosPesoCompleto: o.logrosPesoCompleto === true,
+      };
+    },
     enabled: !!cursoSeleccionado && !!user?.colegioId,
   });
 
-  const createMutation = useMutation({
-    mutationFn: (body: { nombre: string; porcentaje: number; courseId: string }) =>
-      apiRequest<LogroItem>("POST", "/api/logros-calificacion", body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/logros-calificacion", cursoSeleccionado] });
-      cerrarDialog();
-    },
-    onError: (err: Error & { message?: string }) => {
-      alert(err?.message || "Error al crear logro.");
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: { nombre?: string; porcentaje?: number } }) =>
-      apiRequest<LogroItem>("PUT", `/api/logros-calificacion/${id}`, body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/logros-calificacion", cursoSeleccionado] });
-      cerrarDialog();
-    },
-    onError: (err: Error & { message?: string }) => {
-      alert(err?.message || "Error al actualizar logro.");
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/logros-calificacion/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/logros-calificacion", cursoSeleccionado] });
-    },
-  });
-
-  const cerrarDialog = () => {
-    setDialogOpen(false);
-    setEditingId(null);
-    setNombre("");
-    setPorcentaje("");
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/logros-calificacion", cursoSeleccionado] });
   };
 
-  const abrirCrear = () => {
-    setEditingId(null);
-    setNombre("");
-    setPorcentaje("");
-    setDialogOpen(true);
+  const createLogroMutation = useMutation({
+    mutationFn: (body: { descripcion: string; pesoEnCurso?: number; courseId: string }) =>
+      apiRequest<unknown>("POST", "/api/logros-calificacion/logro", body),
+    onSuccess: () => {
+      invalidate();
+      cerrarDialogLogro();
+    },
+    onError: (err: Error & { message?: string }) => alert(err?.message || "Error al crear logro."),
+  });
+
+  const updateLogroMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { descripcion?: string; pesoEnCurso?: number } }) =>
+      apiRequest("PUT", `/api/logros-calificacion/logro/${id}`, body),
+    onSuccess: () => {
+      invalidate();
+      cerrarDialogLogro();
+    },
+    onError: (err: Error & { message?: string }) => alert(err?.message || "Error al actualizar logro."),
+  });
+
+  const deleteLogroMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/logros-calificacion/logro/${id}`),
+    onSuccess: () => invalidate(),
+  });
+
+  const syncIndicadoresMutation = useMutation({
+    mutationFn: (body: { outcomeId: string; indicadores: { nombre: string; porcentaje: number }[] }) =>
+      apiRequest("PUT", `/api/logros-calificacion/logro/${body.outcomeId}/indicadores`, {
+        indicadores: body.indicadores,
+      }),
+    onSuccess: () => {
+      invalidate();
+      cerrarDialogIndicadores();
+    },
+    onError: (err: Error & { message?: string }) => alert(err?.message || "Error al guardar indicadores."),
+  });
+
+  const cerrarDialogLogro = () => {
+    setDialogLogroOpen(false);
+    setEditingLogroId(null);
+    setDescripcionLogro("");
+    setPesoLogro("");
   };
 
-  const abrirEditar = (logro: LogroItem) => {
-    setEditingId(logro._id);
-    setNombre(logro.nombre);
-    setPorcentaje(String(logro.porcentaje));
-    setDialogOpen(true);
+  const cerrarDialogIndicadores = () => {
+    setDialogIndicadoresOpen(false);
+    setOutcomeIdIndicadores(null);
+    setIndicadoresDraft([]);
   };
 
-  const handleSubmit = () => {
-    const pct = parseFloat(porcentaje);
-    if (!nombre.trim()) {
-      alert("Ingresa el nombre del logro.");
+  const abrirCrearLogro = () => {
+    setEditingLogroId(null);
+    setDescripcionLogro("");
+    const bloques = logrosData?.logros ?? [];
+    setPesoLogro(bloques.length === 0 ? "100" : "");
+    setDialogLogroOpen(true);
+  };
+
+  const abrirEditarLogro = (L: LogroBloque) => {
+    setEditingLogroId(L._id);
+    setDescripcionLogro(L.descripcion);
+    setPesoLogro(String(L.pesoEnCurso));
+    setDialogLogroOpen(true);
+  };
+
+  const abrirDialogIndicadores = (L: LogroBloque) => {
+    setOutcomeIdIndicadores(L._id);
+    const list = Array.isArray(L.indicadores) ? L.indicadores : [];
+    setIndicadoresDraft(
+      list.length > 0
+        ? [...list]
+            .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+            .map((i) => ({ nombre: i.nombre, porcentaje: String(i.porcentaje) }))
+        : [{ nombre: "", porcentaje: "" }]
+    );
+    setDialogIndicadoresOpen(true);
+  };
+
+  const submitLogro = () => {
+    if (!descripcionLogro.trim()) {
+      alert("Describe el logro (texto del párrafo).");
       return;
     }
-    if (isNaN(pct) || pct < 0 || pct > 100) {
-      alert("El porcentaje debe estar entre 0 y 100.");
-      return;
-    }
-    if (editingId) {
-      updateMutation.mutate({
-        id: editingId,
-        body: { nombre: nombre.trim(), porcentaje: pct },
+    const bloques = logrosData?.logros ?? [];
+    if (editingLogroId) {
+      const w = parseFloat(pesoLogro);
+      if (Number.isNaN(w) || w < 0 || w > 100) {
+        alert("El peso en el curso debe estar entre 0 y 100.");
+        return;
+      }
+      updateLogroMutation.mutate({
+        id: editingLogroId,
+        body: { descripcion: descripcionLogro.trim(), pesoEnCurso: w },
       });
     } else {
-      createMutation.mutate({
-        nombre: nombre.trim(),
-        porcentaje: pct,
+      let w = parseFloat(pesoLogro);
+      if (bloques.length > 0) {
+        if (pesoLogro.trim() === "" || Number.isNaN(w)) w = 0;
+      } else {
+        w = 100;
+      }
+      if (w < 0 || w > 100) {
+        alert("El peso en el curso debe estar entre 0 y 100.");
+        return;
+      }
+      createLogroMutation.mutate({
+        descripcion: descripcionLogro.trim(),
+        pesoEnCurso: w,
         courseId: cursoSeleccionado,
       });
     }
+  };
+
+  const sumaDraftIndicadores = useMemo(() => {
+    return indicadoresDraft.reduce((s, r) => {
+      const p = parseFloat(r.porcentaje);
+      return s + (Number.isNaN(p) ? 0 : p);
+    }, 0);
+  }, [indicadoresDraft]);
+
+  const submitIndicadoresLote = () => {
+    if (!outcomeIdIndicadores) return;
+    const conDatos = indicadoresDraft.filter((r) => r.nombre.trim() || r.porcentaje.trim());
+    if (conDatos.length === 0) {
+      if (!confirm("¿Quitar todos los indicadores de este logro?")) return;
+      syncIndicadoresMutation.mutate({ outcomeId: outcomeIdIndicadores, indicadores: [] });
+      return;
+    }
+    for (const r of conDatos) {
+      if (!r.nombre.trim() || !r.porcentaje.trim()) {
+        alert("Completa nombre y porcentaje en cada fila que uses.");
+        return;
+      }
+      const p = parseFloat(r.porcentaje);
+      if (Number.isNaN(p) || p < 0 || p > 100) {
+        alert("Cada porcentaje debe estar entre 0 y 100.");
+        return;
+      }
+    }
+    const payload = conDatos.map((r) => ({
+      nombre: r.nombre.trim(),
+      porcentaje: parseFloat(r.porcentaje),
+    }));
+    const sum = payload.reduce((s, x) => s + x.porcentaje, 0);
+    if (Math.abs(sum - 100) >= 0.01) {
+      alert(`Los indicadores deben sumar exactamente 100% (suma actual: ${sum.toFixed(1)}%).`);
+      return;
+    }
+    syncIndicadoresMutation.mutate({ outcomeId: outcomeIdIndicadores, indicadores: payload });
   };
 
   if (!user || user.rol !== "profesor") {
@@ -148,10 +252,14 @@ export default function ProfesorCalificacionLogrosPage() {
   }
 
   const logros = logrosData?.logros ?? [];
-  const totalPorcentaje = logrosData?.totalPorcentaje ?? 0;
-  const completo = logrosData?.completo ?? false;
+  const totalPesoLogros = logrosData?.totalPesoLogros ?? 0;
+  const logrosPesoCompleto = logrosData?.logrosPesoCompleto ?? false;
   const cursoActual = cursos.find((c) => c._id === cursoSeleccionado);
   const cursoActualLabel = cursoActual?.nombre ?? "";
+
+  const toggleExpand = (id: string) => {
+    setExpanded((e) => ({ ...e, [id]: !e[id] }));
+  };
 
   return (
     <div className="p-4 sm:p-6 md:p-10 max-w-4xl mx-auto">
@@ -162,7 +270,7 @@ export default function ProfesorCalificacionLogrosPage() {
           Calificación: Logros
         </h1>
         <p className="text-white/60 mt-1">
-          Define los logros de calificación (tareas, exámenes, etc.) y el porcentaje de cada uno. El total debe ser 100%.
+          Puedes crear un logro (párrafo del criterio) sin indicadores y ajustar después el peso entre logros. Cuando definas indicadores para un logro, deben sumar 100% en ese logro para poder guardarlos. Idealmente los pesos entre logros suman 100% para la nota final.
         </p>
       </div>
 
@@ -170,16 +278,14 @@ export default function ProfesorCalificacionLogrosPage() {
         <CardHeader>
           <CardTitle className="text-white">Materia y grupo</CardTitle>
           <CardDescription className="text-white/60">
-            Selecciona la materia y el grupo (curso) para configurar los logros de calificación. Cada combinación materia+grupo tiene su propia configuración.
+            Selecciona la materia y el grupo para configurar logros e indicadores. Cada combinación materia+grupo tiene su propia configuración.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loadingCursos ? (
             <Skeleton className="h-10 w-full bg-white/10 rounded-md" />
           ) : cursos.length === 0 ? (
-            <p className="text-white/60 py-2">
-              No tienes cursos asignados. Contacta a tu coordinación para que te asignen materias y grupos.
-            </p>
+            <p className="text-white/60 py-2">No tienes cursos asignados.</p>
           ) : (
             <select
               value={cursoSeleccionado}
@@ -204,29 +310,30 @@ export default function ProfesorCalificacionLogrosPage() {
               <div>
                 <CardTitle className="text-white flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-[#00c8ff]" />
-                  Logros de calificación
+                  Logros e indicadores
                 </CardTitle>
                 <CardDescription className="text-white/60 mt-1">
-                  Para: <span className="text-[#00c8ff] font-medium">{cursoActualLabel}</span>. Los logros deben sumar 100%. Usa el botón &quot;Crear logro para este curso&quot; para agregar categorías.
+                  Para: <span className="text-[#00c8ff] font-medium">{cursoActualLabel}</span>. Los indicadores se guardan en bloque y solo si suman 100% en ese logro. El peso entre logros puedes completarlo cuando quieras.
                 </CardDescription>
               </div>
               <Button
-                onClick={abrirCrear}
+                onClick={abrirCrearLogro}
                 disabled={loadingLogros}
                 className="bg-[#00c8ff] hover:bg-[#00c8ff]/90 text-black font-medium shrink-0"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Crear logro para este curso
+                Crear logro
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <div
               className={`mb-4 px-4 py-2 rounded-lg ${
-                completo ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                logrosPesoCompleto ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
               }`}
             >
-              Total: {totalPorcentaje.toFixed(1)}% {completo ? "✓ Completado" : `(faltan ${(100 - totalPorcentaje).toFixed(1)}%)`}
+              Peso entre logros: {totalPesoLogros.toFixed(1)}%{" "}
+              {logrosPesoCompleto ? "✓ Listo" : `(opcional por ahora; faltan ${(100 - totalPesoLogros).toFixed(1)}% para 100%)`}
             </div>
 
             {loadingLogros ? (
@@ -237,101 +344,230 @@ export default function ProfesorCalificacionLogrosPage() {
               </div>
             ) : logros.length === 0 ? (
               <p className="text-white/60 py-6 text-center">
-                No hay logros. Haz clic en &quot;Crear logro&quot; para agregar (ej: Tareas 30%, Exámenes 50%, Proyectos 20%).
+                No hay logros. Crea uno con la descripción del criterio; los indicadores son opcionales hasta que los configures.
               </p>
             ) : (
-              <ul className="space-y-2">
-                {logros.map((l) => (
-                  <li
-                    key={l._id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10"
-                  >
-                    <div>
-                      <span className="font-medium text-white">{l.nombre}</span>
-                      <span className="ml-3 text-[#00c8ff] font-semibold">{l.porcentaje}%</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-[#00c8ff] hover:bg-[#00c8ff]/10"
-                        onClick={() => abrirEditar(l)}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:bg-red-500/10"
-                        onClick={() => {
-                          if (confirm(`¿Eliminar el logro "${l.nombre}"?`)) {
-                            deleteMutation.mutate(l._id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
+              <ul className="space-y-3">
+                {logros.map((L) => {
+                  const open = expanded[L._id] !== false;
+                  const indicadoresList = Array.isArray(L.indicadores) ? L.indicadores : [];
+                  const totalInd = typeof L.totalIndicadores === "number" ? L.totalIndicadores : indicadoresList.reduce((s, x) => s + (Number(x.porcentaje) || 0), 0);
+                  const indCompletos = L.indicadoresCompletos === true || Math.abs(totalInd - 100) < 0.01;
+                  return (
+                    <li key={L._id} className="rounded-lg bg-white/5 border border-white/10 overflow-hidden">
+                      <div className="flex items-start justify-between gap-2 p-4">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(L._id)}
+                          className="flex-1 text-left flex items-start gap-2 min-w-0"
+                        >
+                          {open ? <ChevronUp className="w-5 h-5 text-[#00c8ff] shrink-0 mt-0.5" /> : <ChevronDown className="w-5 h-5 text-[#00c8ff] shrink-0 mt-0.5" />}
+                          <div className="min-w-0">
+                            <p className="text-white/50 text-xs uppercase tracking-wide mb-1">Logro · {Number(L.pesoEnCurso) || 0}% del curso</p>
+                            <p className="text-white text-sm whitespace-pre-wrap">{L.descripcion || "(Sin descripción)"}</p>
+                            <p
+                              className={`text-xs mt-2 ${indCompletos ? "text-emerald-400" : "text-amber-300"}`}
+                            >
+                              Indicadores: {totalInd.toFixed(1)}% {indCompletos ? "✓" : "(deben sumar 100%)"}
+                            </p>
+                          </div>
+                        </button>
+                        <div className="flex gap-1 shrink-0">
+                          <Button variant="ghost" size="sm" className="text-[#00c8ff]" onClick={() => abrirEditarLogro(L)}>
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400"
+                            onClick={() => {
+                              if (confirm("¿Eliminar este logro y todos sus indicadores?")) deleteLogroMutation.mutate(L._id);
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {open && (
+                        <div className="border-t border-white/10 px-4 py-3 bg-black/20">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
+                            <span className="text-white/70 text-sm">Indicadores</span>
+                            <Button size="sm" variant="outline" className="border-[#00c8ff]/50 text-[#00c8ff]" onClick={() => abrirDialogIndicadores(L)}>
+                              <ListPlus className="w-4 h-4 mr-1" />
+                              {indicadoresList.length === 0 ? "Definir indicadores" : "Editar indicadores"}
+                            </Button>
+                          </div>
+                          {indicadoresList.length === 0 ? (
+                            <p className="text-white/40 text-sm py-2">Sin indicadores. Puedes añadirlos cuando quieras; al guardar, deben sumar 100%.</p>
+                          ) : (
+                            <ul className="space-y-2">
+                              {[...indicadoresList]
+                                .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+                                .map((ind) => (
+                                  <li
+                                    key={ind._id}
+                                    className="flex items-center py-2 px-3 rounded-md bg-white/5 border border-white/5"
+                                  >
+                                    <span className="text-white">
+                                      {ind.nombre}{" "}
+                                      <span className="text-[#00c8ff] font-semibold ml-2">{ind.porcentaje}%</span>
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </CardContent>
         </Card>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={(o) => (!o && cerrarDialog())}>
-        <DialogContent className="bg-[#0f0f0f] border-white/10">
+      <Dialog open={dialogLogroOpen} onOpenChange={(o) => !o && cerrarDialogLogro()}>
+        <DialogContent className="bg-[#0f0f0f] border-white/10 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-white">
-              {editingId ? "Editar logro" : "Crear logro"}
-            </DialogTitle>
+            <DialogTitle className="text-white">{editingLogroId ? "Editar logro" : "Crear logro"}</DialogTitle>
             <DialogDescription className="text-white/60">
-              Ejemplos: Tareas, Exámenes, Proyectos, Participación. El porcentaje debe sumar 100% en total.
+              Describe el logro en un párrafo. El primer logro queda al 100% del curso; en logros adicionales puedes dejar el peso en 0 y repartir después.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label className="text-white/80">Nombre</Label>
-              <Input
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ej: Tareas, Exámenes, Proyectos"
-                className="bg-white/10 border-white/20 text-white"
+              <Label className="text-white/80">Descripción del logro</Label>
+              <Textarea
+                value={descripcionLogro}
+                onChange={(e) => setDescripcionLogro(e.target.value)}
+                placeholder="Ej: El estudiante desarrolla pensamiento crítico al analizar fuentes históricas..."
+                rows={6}
+                className="bg-white/10 border-white/20 text-white resize-y min-h-[120px]"
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-white/80">Porcentaje (%)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={5}
-                value={porcentaje}
-                onChange={(e) => setPorcentaje(e.target.value)}
-                placeholder="Ej: 30"
-                className="bg-white/10 border-white/20 text-white"
-              />
-              {!editingId && (
-                <p className="text-white/50 text-sm">
-                  Disponible: {Math.round(100 - totalPorcentaje)}%
-                </p>
-              )}
-            </div>
+            {(editingLogroId || (logrosData?.logros?.length ?? 0) > 0) && (
+              <div className="space-y-2">
+                <Label className="text-white/80">Peso en la nota del curso (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={pesoLogro}
+                  onChange={(e) => setPesoLogro(e.target.value)}
+                  placeholder={editingLogroId ? undefined : "0 = definir después"}
+                  className="bg-white/10 border-white/20 text-white"
+                />
+                {!editingLogroId && (logrosData?.logros?.length ?? 0) > 0 && (
+                  <p className="text-white/45 text-xs">Vacío o 0: puedes repartir pesos entre logros más tarde.</p>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={cerrarDialog} className="border-white/20 text-white">
+            <Button variant="outline" onClick={cerrarDialogLogro} className="border-white/20 text-white">
               Cancelar
             </Button>
             <Button
-              onClick={handleSubmit}
-              disabled={createMutation.isPending || updateMutation.isPending}
+              onClick={submitLogro}
+              disabled={createLogroMutation.isPending || updateLogroMutation.isPending}
               className="bg-[#00c8ff] hover:bg-[#00c8ff]/90 text-black"
             >
-              {(createMutation.isPending || updateMutation.isPending) && (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              )}
-              {editingId ? "Guardar" : "Crear"}
+              {(createLogroMutation.isPending || updateLogroMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {editingLogroId ? "Guardar" : "Crear"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialogIndicadoresOpen} onOpenChange={(o) => !o && cerrarDialogIndicadores()}>
+        <DialogContent className="bg-[#0f0f0f] border-white/10 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white">Indicadores del logro</DialogTitle>
+            <DialogDescription className="text-white/60">
+              Añade filas con nombre y %. Para guardar con indicadores, la suma debe ser exactamente 100%. Deja todas las filas vacías y guarda para quitar indicadores.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <div
+              className={`text-sm px-3 py-2 rounded-md border ${
+                indicadoresDraft.every((r) => !r.nombre.trim() && !r.porcentaje.trim())
+                  ? "text-white/50 border-white/10"
+                  : Math.abs(sumaDraftIndicadores - 100) < 0.01
+                    ? "text-emerald-300 border-emerald-500/40 bg-emerald-500/10"
+                    : "text-amber-300 border-amber-500/40 bg-amber-500/10"
+              }`}
+            >
+              Suma actual: {sumaDraftIndicadores.toFixed(1)}%
+              {!indicadoresDraft.every((r) => !r.nombre.trim() && !r.porcentaje.trim()) &&
+                Math.abs(sumaDraftIndicadores - 100) >= 0.01 &&
+                " — debe ser 100% para guardar"}
+            </div>
+            <div className="space-y-2">
+              {indicadoresDraft.map((row, idx) => (
+                <div key={idx} className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-white/70 text-xs">Nombre</Label>
+                    <Input
+                      value={row.nombre}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setIndicadoresDraft((d) => d.map((x, i) => (i === idx ? { ...x, nombre: v } : x)));
+                      }}
+                      placeholder="Ej: Tareas"
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                  <div className="w-full sm:w-28 space-y-1">
+                    <Label className="text-white/70 text-xs">%</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={5}
+                      value={row.porcentaje}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setIndicadoresDraft((d) => d.map((x, i) => (i === idx ? { ...x, porcentaje: v } : x)));
+                      }}
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-400 shrink-0"
+                    onClick={() => setIndicadoresDraft((d) => (d.length <= 1 ? d : d.filter((_, i) => i !== idx)))}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-[#00c8ff]/50 text-[#00c8ff]"
+              onClick={() => setIndicadoresDraft((d) => [...d, { nombre: "", porcentaje: "" }])}
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Otra fila
+            </Button>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={cerrarDialogIndicadores} className="border-white/20 text-white">
+              Cancelar
+            </Button>
+            <Button
+              onClick={submitIndicadoresLote}
+              disabled={syncIndicadoresMutation.isPending}
+              className="bg-[#00c8ff] hover:bg-[#00c8ff]/90 text-black"
+            >
+              {syncIndicadoresMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Guardar indicadores
             </Button>
           </DialogFooter>
         </DialogContent>
