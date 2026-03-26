@@ -5,6 +5,7 @@ import kiwiChill from '@/assets/kiwi chill.png';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
   MessageSquare,
@@ -171,11 +172,23 @@ const STYLES = `
     50% { transform: translate(8px, -12px); opacity: 0.8; }
   }
   .home-particle { animation: floatParticle 6s ease-in-out infinite; }
+
+  @keyframes bellShake {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(-15deg); }
+    75% { transform: rotate(15deg); }
+  }
+  .bell-shake {
+    transform-origin: 50% 0%;
+    animation: bellShake 600ms ease-in-out;
+  }
 `;
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
+  const [bellShake, setBellShake] = useState(false);
+  const prevUnreadRef = useRef<number>(0);
 
   const { data: unreadData } = useQuery({
     queryKey: ['notifications-unread'],
@@ -185,9 +198,18 @@ export default function Home() {
     },
     enabled: isAuthenticated,
     staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    refetchInterval: 30 * 1000,
   });
   const unreadCount = unreadData?.unreadCount ?? 0;
+
+  useEffect(() => {
+    const prev = prevUnreadRef.current;
+    if (unreadCount > prev) {
+      setBellShake(true);
+      setTimeout(() => setBellShake(false), 600);
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount]);
 
   const handleCTA = () => {
     if (isAuthenticated) {
@@ -393,7 +415,7 @@ export default function Home() {
                       cursor: 'pointer',
                     }}
                   >
-                    <Bell style={{ width: 22, height: 22, color: '#fff' }} />
+                    <Bell className={bellShake ? 'bell-shake' : ''} style={{ width: 22, height: 22, color: '#fff' }} />
                     {unreadCount > 0 && (
                       <span
                         style={{

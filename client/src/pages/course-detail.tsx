@@ -810,7 +810,14 @@ export default function CourseDetailPage() {
         },
         onSuccess: () => {
             toast({ title: '¡Asignación creada!', description: 'La asignación ha sido asignada al curso exitosamente.' });
-            queryClient.invalidateQueries({ queryKey: ['assignments', cursoId] });
+            // Refrescar todas las vistas que consumen tareas (calendario del curso, listas, etc.)
+            queryClient.invalidateQueries({
+                predicate: (q) => {
+                    const key = q.queryKey as unknown[];
+                    return key[0] === 'assignments' && key.includes(cursoId);
+                },
+            });
+            queryClient.invalidateQueries({ queryKey: ['teacherAssignments'] });
             queryClient.invalidateQueries({ queryKey: ['gradeTableAssignments'] });
             queryClient.invalidateQueries({ queryKey: ['materials'] });
             queryClient.invalidateQueries({ queryKey: ['teacherMisAsignaciones'] });

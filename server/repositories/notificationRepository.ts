@@ -1,4 +1,5 @@
 import { queryPg } from '../config/db-pg.js';
+import { sendNotificationEmail } from '../services/emailService.js';
 
 export interface NotificationRow {
   id: string;
@@ -6,6 +7,10 @@ export interface NotificationRow {
   user_id: string;
   title: string;
   body: string;
+  type?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  action_url?: string | null;
   read_at: string | null;
   created_at: string;
 }
@@ -79,4 +84,52 @@ export async function createNotification(row: {
     [row.institution_id, row.user_id, row.title, row.body]
   );
   return r.rows[0];
+}
+
+export async function deleteExpiredNotifications(): Promise<void> {
+  await queryPg(
+    `DELETE FROM notifications
+     WHERE read_at IS NOT NULL
+     AND read_at < now() - interval '30 days'`
+  );
+}
+
+export async function notify(params: {
+  institution_id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  type: string;
+  entity_type?: string;
+  entity_id?: string;
+  action_url?: string;
+  user_email?: string;
+}): Promise<void> {
+  try {
+    await queryPg(
+      `INSERT INTO notifications (institution_id, user_id, title, body, type, entity_type, entity_id, action_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        params.institution_id,
+        params.user_id,
+        params.title,
+        params.body,
+        params.type,
+        params.entity_type ?? null,
+        params.entity_id ?? null,
+        params.action_url ?? null,
+      ]
+    );
+  } catch (err: unknown) {
+    console.error('[notify] Error insert notifications:', (err as Error).message);
+  }
+
+  try {
+    if (params.user_email) {
+      await sendNotificationEmail(params.user_email, params.title, params.body, params.action_url);
+    }
+  } catch (err: unknown) {
+    // best-effort: no throw
+    console.error('[notify] Error sending email:', (err as Error).message);
+  }
 }

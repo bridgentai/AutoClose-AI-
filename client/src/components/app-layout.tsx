@@ -61,7 +61,12 @@ export function AppLayout({ children }: AppLayoutProps) {
             isEvoDrive && "flex flex-col min-h-screen"
           )}
         >
-          <main className={cn("story-section", isEvoDrive && "flex flex-col flex-1 min-h-0")}>
+          <main
+            className={cn(
+              "story-section",
+              isEvoDrive ? "flex flex-col flex-1 min-h-0" : "min-h-screen"
+            )}
+          >
             {isEvoDrive ? (
               <div className="flex flex-col flex-1 min-h-0 w-full">
                 {children}

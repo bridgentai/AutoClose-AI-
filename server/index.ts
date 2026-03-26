@@ -9,6 +9,8 @@ import type { AuthRequest } from "./middleware/auth.js";
 import { setupVite, serveStatic, log } from "./vite";
 import { exec } from "child_process";
 import http from "http";
+import { queryPg } from "./config/db-pg.js";
+import { deleteExpiredNotifications, notify } from "./repositories/notificationRepository.js";
 
 // Verificación del .env al iniciar
 console.log('\n=== VERIFICACIÓN DE .ENV ===');
@@ -125,6 +127,109 @@ app.use((req, res, next) => {
         .then(({ ensureEvoSendStaffAndDirectThreads }) => ensureEvoSendStaffAndDirectThreads())
         .then(() => console.log('[evoSendBootstrap] Staff and direct threads OK'))
         .catch((err) => console.error('[evoSendBootstrap]', err));
+    }
+
+    // ---- Notificaciones: expiración automática (best-effort) ----
+    if (process.env.DATABASE_URL) {
+      const runCleanup = async () => {
+        try {
+          await deleteExpiredNotifications();
+        } catch (e: unknown) {
+          console.error('[notifications] deleteExpiredNotifications:', (e as Error).message);
+        }
+      };
+      // ejecutar una vez al iniciar y luego cada 24h
+      runCleanup().catch(() => {});
+      setInterval(() => {
+        runCleanup().catch(() => {});
+      }, 24 * 60 * 60 * 1000);
+    }
+
+    // ---- Job nocturno: tarea vence en 24h (corre diario a las 8am local) ----
+    if (process.env.DATABASE_URL) {
+      const getUserEmail = async (userId: string): Promise<string | undefined> => {
+        try {
+          const r = await queryPg<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+          const email = r.rows[0]?.email;
+          return typeof email === 'string' && email.trim() ? email.trim() : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+
+      const runDueSoonJob = async () => {
+        try {
+          const r = await queryPg<{
+            assignment_id: string;
+            due_date: string;
+            title: string;
+            institution_id: string;
+            group_id: string;
+            subject_name: string;
+          }>(
+            `SELECT a.id AS assignment_id, a.due_date, a.title, gs.institution_id, gs.group_id,
+                    COALESCE(gs.display_name, s.name) AS subject_name
+             FROM assignments a
+             JOIN group_subjects gs ON gs.id = a.group_subject_id
+             JOIN subjects s ON s.id = gs.subject_id
+             WHERE a.due_date >= now()
+               AND a.due_date < now() + interval '24 hours'
+             ORDER BY a.due_date ASC
+             LIMIT 500`,
+            []
+          );
+
+          for (const a of r.rows) {
+            if (!a.institution_id) continue;
+            const students = await queryPg<{ student_id: string }>(
+              `SELECT e.student_id
+               FROM enrollments e
+               WHERE e.group_id = $1
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM submissions sub
+                 WHERE sub.assignment_id = $2
+                   AND sub.student_id = e.student_id
+                   AND sub.submitted_at IS NOT NULL
+               )`,
+              [a.group_id, a.assignment_id]
+            );
+
+            for (const s of students.rows) {
+              const email = await getUserEmail(s.student_id);
+              await notify({
+                institution_id: a.institution_id,
+                user_id: s.student_id,
+                user_email: email,
+                type: 'tarea_vence',
+                entity_type: 'assignment',
+                entity_id: a.assignment_id,
+                action_url: `/assignment/${a.assignment_id}`,
+                title: 'Tu tarea vence mañana',
+                body: `${a.title} en ${a.subject_name} vence el ${new Date(a.due_date).toLocaleString('es-CO')}`,
+              });
+            }
+          }
+        } catch (e: unknown) {
+          console.error('[notifications] dueSoonJob:', (e as Error).message);
+        }
+      };
+
+      const scheduleDailyAt8 = () => {
+        const now = new Date();
+        const next = new Date(now);
+        next.setHours(8, 0, 0, 0);
+        if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+        const ms = next.getTime() - now.getTime();
+        setTimeout(() => {
+          runDueSoonJob().catch(() => {});
+          setInterval(() => {
+            runDueSoonJob().catch(() => {});
+          }, 24 * 60 * 60 * 1000);
+        }, ms);
+      };
+
+      scheduleDailyAt8();
     }
     
     // Abrir el navegador automáticamente en modo desarrollo

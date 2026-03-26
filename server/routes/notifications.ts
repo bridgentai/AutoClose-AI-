@@ -9,7 +9,18 @@ import {
 
 const router = express.Router();
 
-function toNotificationResponse(row: { id: string; title: string; body: string; read_at: string | null; created_at: string; user_id: string }) {
+function toNotificationResponse(row: {
+  id: string;
+  title: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  user_id: string;
+  type?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  action_url?: string | null;
+}) {
   return {
     _id: row.id,
     id: row.id,
@@ -18,6 +29,10 @@ function toNotificationResponse(row: { id: string; title: string; body: string; 
     title: row.title,
     cuerpo: row.body,
     body: row.body,
+    type: row.type ?? 'general',
+    entityType: row.entity_type ?? null,
+    entityId: row.entity_id ?? null,
+    actionUrl: row.action_url ?? null,
     leido: !!row.read_at,
     fecha: row.created_at,
     createdAt: row.created_at,

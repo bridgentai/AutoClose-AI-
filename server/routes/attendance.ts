@@ -8,7 +8,10 @@ import { findGroupsByInstitution } from '../repositories/groupRepository.js';
 import { resolveGroupId, resolveGroupSubjectId } from '../utils/resolveLegacyCourse.js';
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { findUsersByIds } from '../repositories/userRepository.js';
-import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
+import { findGuardianStudent, findGuardianStudentsByStudent } from '../repositories/guardianStudentRepository.js';
+import { findUsersByInstitutionAndRoles } from '../repositories/userRepository.js';
+import { notify } from '../repositories/notificationRepository.js';
+import { queryPg } from '../config/db-pg.js';
 import {
   findAttendanceByGroupSubjectAndDate,
   findAttendanceByStudent,
@@ -20,6 +23,16 @@ import {
 } from '../repositories/attendanceRepository.js';
 
 const router = express.Router();
+
+async function getUserEmail(userId: string): Promise<string | undefined> {
+  try {
+    const r = await queryPg<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+    const email = r.rows[0]?.email;
+    return typeof email === 'string' && email.trim() ? email.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function restrictTo(...roles: string[]) {
   return (req: AuthRequest, res: express.Response, next: express.NextFunction) => {
@@ -357,6 +370,8 @@ router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-col
     }
     const gsId = await resolveGroupSubjectId(cursoId, colegioId);
     if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const gs = await findGroupSubjectById(gsId);
+    if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
     const dateStr = startOfDay(new Date(fecha)).toISOString().slice(0, 10);
     const row = await upsertAttendance({
       institution_id: colegioId,
@@ -367,6 +382,41 @@ router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-col
       recorded_by_id: userId,
     });
     const user = await findUserById(estudianteId);
+
+    if (row.status === 'absent' && user) {
+      const subjectName = (gs as { display_name?: string | null }).display_name?.trim() || '';
+      const body = `${user.full_name} fue marcado ausente en ${subjectName || 'una materia'} el ${new Date(dateStr).toLocaleDateString('es-CO')}`;
+      const title = 'Ausencia registrada';
+
+      const guardians = await findGuardianStudentsByStudent(estudianteId);
+      for (const g of guardians) {
+        const email = await getUserEmail(g.guardian_id);
+        await notify({
+          institution_id: colegioId,
+          user_id: g.guardian_id,
+          user_email: email,
+          type: 'ausencia',
+          title,
+          body,
+          action_url: '/dashboard',
+        });
+      }
+
+      const directivos = await findUsersByInstitutionAndRoles(colegioId, ['directivo']);
+      for (const d of directivos) {
+        const email = await getUserEmail(d.id);
+        await notify({
+          institution_id: colegioId,
+          user_id: d.id,
+          user_email: email,
+          type: 'ausencia',
+          title,
+          body,
+          action_url: '/dashboard',
+        });
+      }
+    }
+
     return res.json({
       _id: row.id,
       estudianteId: user ? { _id: user.id, nombre: user.full_name, correo: user.email, curso: (user.config as { curso?: string })?.curso } : estudianteId,
@@ -396,6 +446,8 @@ router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general
     }
     const gsId = await resolveGroupSubjectId(cursoId, colegioId);
     if (!gsId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const gs = await findGroupSubjectById(gsId);
+    if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
     const dateStr = startOfDay(new Date(fecha)).toISOString().slice(0, 10);
     for (const r of registros) {
       await upsertAttendance({
@@ -409,6 +461,48 @@ router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general
         recorded_by_id: userId,
       });
     }
+
+    const absentIds = registros.filter((r) => r.estado === 'ausente').map((r) => r.estudianteId);
+    if (absentIds.length) {
+      const users = await findUsersByIds(Array.from(new Set(absentIds)));
+      const byId = new Map(users.map((u) => [u.id, u]));
+      const subjectName = (gs as { display_name?: string | null }).display_name?.trim() || '';
+      const directivos = await findUsersByInstitutionAndRoles(colegioId, ['directivo']);
+
+      for (const sid of absentIds) {
+        const stu = byId.get(sid);
+        if (!stu) continue;
+        const body = `${stu.full_name} fue marcado ausente en ${subjectName || 'una materia'} el ${new Date(dateStr).toLocaleDateString('es-CO')}`;
+        const title = 'Ausencia registrada';
+
+        const guardians = await findGuardianStudentsByStudent(sid);
+        for (const g of guardians) {
+          const email = await getUserEmail(g.guardian_id);
+          await notify({
+            institution_id: colegioId,
+            user_id: g.guardian_id,
+            user_email: email,
+            type: 'ausencia',
+            title,
+            body,
+            action_url: '/dashboard',
+          });
+        }
+        for (const d of directivos) {
+          const email = await getUserEmail(d.id);
+          await notify({
+            institution_id: colegioId,
+            user_id: d.id,
+            user_email: email,
+            type: 'ausencia',
+            title,
+            body,
+            action_url: '/dashboard',
+          });
+        }
+      }
+    }
+
     const list = await findAttendanceByGroupSubjectAndDate(gsId, dateStr);
     const userIds = Array.from(new Set(list.map((a) => a.user_id)));
     const users = userIds.length ? await findUsersByIds(userIds) : [];

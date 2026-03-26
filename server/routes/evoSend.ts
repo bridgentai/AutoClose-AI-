@@ -22,7 +22,7 @@ import {
 import { findUserById, findUsersByIds, findUsersByInstitutionAndRoles } from '../repositories/userRepository.js';
 import { findGroupById } from '../repositories/groupRepository.js';
 import { findAssignmentById } from '../repositories/assignmentRepository.js';
-import { createNotification } from '../repositories/notificationRepository.js';
+import { notify } from '../repositories/notificationRepository.js';
 import {
   findGroupSubjectsByTeacher,
   findGroupSubjectsByTeacherWithDetails,
@@ -139,6 +139,16 @@ function truncateText(s: string, max = 240) {
   const str = String(s ?? '');
   if (str.length <= max) return str;
   return `${str.slice(0, Math.max(0, max - 1))}…`;
+}
+
+async function getUserEmail(userId: string): Promise<string | undefined> {
+  try {
+    const r = await queryPg<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+    const email = r.rows[0]?.email;
+    return typeof email === 'string' && email.trim() ? email.trim() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function buildThreadFromAnnouncement(a: {
@@ -685,14 +695,20 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
     });
     const recipientsWithoutSender = recipientIds.filter((rid) => rid !== userId);
     await Promise.all(
-      recipientsWithoutSender.map((rid) =>
-        createNotification({
+      recipientsWithoutSender.map(async (rid) => {
+        const email = await getUserEmail(rid);
+        await notify({
           institution_id: colegioId,
           user_id: rid,
+          user_email: email,
+          type: 'mensaje',
+          entity_type: 'evo_send_thread',
+          entity_id: id,
+          action_url: `/evo-send?thread=${encodeURIComponent(id)}`,
           title: `EvoSend · ${a.title}`,
           body: truncateText(isStructured ? `Adjunto: ${ct}` : (safeText || '(mensaje vacío)')),
-        })
-      )
+        });
+      })
     );
 
     const sender = await findUserById(userId);

@@ -29,16 +29,27 @@ import {
 } from '../repositories/gradeRepository.js';
 import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
-import { findEnrollmentsByStudent, getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
+import { findEnrollmentsByStudent, findEnrollmentsByGroup, getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
 import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
 import { createAnnouncement } from '../repositories/announcementRepository.js';
 import { queryPg } from '../config/db-pg.js';
+import { notify } from '../repositories/notificationRepository.js';
 
 const router = express.Router();
 
 function getUserId(req: AuthRequest): string {
   return (req.user?.id ?? req.userId ?? '') as string;
+}
+
+async function getUserEmail(userId: string): Promise<string | undefined> {
+  try {
+    const r = await queryPg<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+    const email = r.rows[0]?.email;
+    return typeof email === 'string' && email.trim() ? email.trim() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function getDefaultGradingCategoryIdForGroup(groupId: string, institutionId?: string): Promise<string | null> {
@@ -61,7 +72,7 @@ function assignmentToApi(a: {
   is_gradable: boolean;
   created_at: string;
   requires_submission?: boolean;
-}, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string; categoryWeightPct?: number | null } = {}) {
+}, extra: { submissions?: unknown[]; estado?: string; materiaNombre?: string; curso?: string; groupId?: string; subjectId?: string; logroCalificacionId?: string; categoryWeightPct?: number | null; pendientesCalificar?: number } = {}) {
   const requiresSubmission =
     a.type === 'reminder' ? false : a.requires_submission === false ? false : true;
   const term = (a as { academic_term?: number }).academic_term;
@@ -243,7 +254,9 @@ router.post('/', protect, requirePermission('assignments', 'create'), async (req
     const gs = await findGroupSubjectById(courseIdStr);
     if (!gs || gs.teacher_id !== userId) return res.status(403).json({ message: 'No tienes permiso para crear tareas en este curso.' });
 
-    let assignmentCategoryId: string | null = categoryId ?? grading_category_id ?? logroCalificacionId ?? null;
+    const rawCat = categoryId ?? grading_category_id ?? logroCalificacionId ?? null;
+    let assignmentCategoryId: string | null =
+      typeof rawCat === 'string' && rawCat.trim() ? rawCat.trim() : null;
     if (!assignmentCategoryId) {
       assignmentCategoryId = await getDefaultGradingCategoryIdForGroup(gs.group_id, gs.institution_id);
     }
@@ -313,6 +326,33 @@ router.post('/', protect, requirePermission('assignments', 'create'), async (req
       assignment_id: created.id,
       created_by_id: userId,
     }).catch((err) => console.error('Error al crear notificación académica:', (err as Error).message));
+
+    // Notificar a estudiantes del grupo (best-effort)
+    try {
+      const enrollments = await findEnrollmentsByGroup(gs.group_id);
+      const studentIds = enrollments.map((e) => e.student_id);
+      const subject = await findSubjectById(gs.subject_id);
+      const materia = (gs.display_name?.trim() || subject?.name || 'Materia').trim();
+      const dueLabel = new Date(created.due_date).toLocaleString('es-CO');
+      await Promise.all(
+        studentIds.map(async (sid) => {
+          const email = await getUserEmail(sid);
+          await notify({
+            institution_id: gs.institution_id,
+            user_id: sid,
+            user_email: email,
+            type: 'nueva_tarea',
+            entity_type: 'assignment',
+            entity_id: created.id,
+            action_url: `/assignment/${created.id}`,
+            title: `Nueva tarea: ${created.title}`,
+            body: `Tienes una nueva tarea en ${materia} con vencimiento ${dueLabel}`,
+          });
+        })
+      );
+    } catch (e: unknown) {
+      console.error('[assignments] notify nueva_tarea:', (e as Error).message);
+    }
 
     return res.status(201).json(assignmentToApi(created));
   } catch (err: unknown) {
@@ -683,6 +723,26 @@ router.post('/:id/submit', protect, async (req: AuthRequest, res) => {
       });
     }
 
+    // Notificar al profesor (best-effort)
+    try {
+      const subject = await findSubjectById(gs.subject_id);
+      const materia = (gs.display_name?.trim() || subject?.name || 'Materia').trim();
+      const teacherEmail = await getUserEmail(gs.teacher_id);
+      await notify({
+        institution_id: gs.institution_id,
+        user_id: gs.teacher_id,
+        user_email: teacherEmail,
+        type: 'entrega_recibida',
+        entity_type: 'assignment',
+        entity_id: assignment.id,
+        action_url: `/assignment/${assignment.id}`,
+        title: `${user.full_name} entregó una tarea`,
+        body: `${user.full_name} entregó ${assignment.title} en ${materia}`,
+      });
+    } catch (e: unknown) {
+      console.error('[assignments] notify entrega_recibida:', (e as Error).message);
+    }
+
     const updatedAssignment = await findAssignmentById(req.params.id);
     return res.json({ message: 'Entrega enviada exitosamente.', assignment: updatedAssignment ? assignmentToApi(updatedAssignment) : null });
   } catch (err: unknown) {
@@ -748,6 +808,28 @@ router.put(
         score: clearGrade ? null : numericScore,
         feedback: retroalimentacion ?? sub.feedback,
       });
+    }
+
+    // Notificar al estudiante cuando hay calificación (best-effort)
+    try {
+      if (!clearGrade) {
+        const subject = await findSubjectById(gs.subject_id);
+        const materia = (gs.display_name?.trim() || subject?.name || 'Materia').trim();
+        const studentEmail = await getUserEmail(estudianteId);
+        await notify({
+          institution_id: gs.institution_id,
+          user_id: estudianteId,
+          user_email: studentEmail,
+          type: 'tarea_calificada',
+          entity_type: 'assignment',
+          entity_id: assignment.id,
+          action_url: `/assignment/${assignment.id}`,
+          title: `Tarea calificada: ${assignment.title}`,
+          body: `Tu tarea en ${materia} fue calificada con ${numericScore}/${maxScore}`,
+        });
+      }
+    } catch (e: unknown) {
+      console.error('[assignments] notify tarea_calificada:', (e as Error).message);
     }
 
     return res.json({ message: 'Calificación guardada.' });

@@ -5,12 +5,12 @@ import { findUserById, updateUser } from '../repositories/userRepository.js';
 import { findGroupSubjectsByGroup, findGroupSubjectsByGroupWithDetails, findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
 import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
-import { getFirstGroupNameForStudent, getAllCourseGroupsForStudent, findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
+import { getFirstGroupNameForStudent, getAllCourseGroupsForStudent, findEnrollmentsByGroup, getFirstGroupForStudent } from '../repositories/enrollmentRepository.js';
 import { findGroupById, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
 import { findGradesByUserAndGroup } from '../repositories/gradeRepository.js';
 import { buildMateriasNotasForStudent } from '../services/studentNotesBuilder.js';
 import { findUsersByInstitutionAndRoles, findUserById as findUserPgById } from '../repositories/userRepository.js';
-import { createNotification } from '../repositories/notificationRepository.js';
+import { notify } from '../repositories/notificationRepository.js';
 import {
   createDisciplinaryAction,
   listDisciplinaryActionsByStudent,
@@ -155,6 +155,7 @@ router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequ
     // Notificar a directivos via Evo Send (hilo directo profesor <-> directivo) + notificación
     const directivos = await findUsersByInstitutionAndRoles(institutionId, ['directivo']);
     const grupoNombre = (await getFirstGroupNameForStudent(estudianteId)) ?? undefined;
+    const group = await getFirstGroupForStudent(estudianteId, institutionId);
     const title = `Amonestación · ${estudiante.full_name}${grupoNombre ? ` (${grupoNombre})` : ''}`;
     const content =
       `Se registró una amonestación.\n\n` +
@@ -200,9 +201,14 @@ router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequ
         [d.id, requesterId]
       );
 
-      await createNotification({
+      await notify({
         institution_id: institutionId,
         user_id: d.id,
+        user_email: d.email,
+        type: 'amonestacion',
+        entity_type: 'student',
+        entity_id: estudianteId,
+        action_url: group?.id ? `/directivo/cursos/${group.id}/estudiantes/${estudianteId}/notas` : '/dashboard',
         title,
         body: content,
       });
