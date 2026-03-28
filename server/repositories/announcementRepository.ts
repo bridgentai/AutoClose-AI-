@@ -14,6 +14,15 @@ export interface AnnouncementRow {
   created_at: string;
   updated_at: string;
   support_staff_id?: string | null;
+  status?: string | null;
+  scheduled_send_at?: string | null;
+  sent_at?: string | null;
+  cancelled_at?: string | null;
+  corrected_at?: string | null;
+  correction_of?: string | null;
+  audience?: string | null;
+  category?: string | null;
+  priority?: string | null;
 }
 
 export interface AnnouncementMessageRow {

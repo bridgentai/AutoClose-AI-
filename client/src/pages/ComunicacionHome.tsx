@@ -1,4 +1,4 @@
-import { Briefcase, Users, AlertTriangle, ChevronRight, Send } from 'lucide-react';
+import { Users, AlertTriangle, ChevronRight, Send, Megaphone } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
@@ -14,20 +14,23 @@ export interface ResumenUrgente {
 export interface ResumenAcademicoData {
   mensajesNuevos: number;
   mensajesSinLeer: number;
+  respuestasPendientes: number;
   materiasDiferentes: number;
   urgente: ResumenUrgente | null;
 }
 
-export interface ResumenComunidadData {
+export interface ResumenInstitucionalData {
   mensajesNuevos: number;
   mensajesSinLeer: number;
+  comunicadosMes: number;
+  ultimoPublicado: string | null;
   gruposDiferentes: number;
   urgente: ResumenUrgente | null;
 }
 
 interface CommunicationSummaryResponse {
   academico: ResumenAcademicoData;
-  comunidad: ResumenComunidadData;
+  institucional: ResumenInstitucionalData;
 }
 
 const fetchCommunicationSummary = async (): Promise<CommunicationSummaryResponse> => {
@@ -42,13 +45,16 @@ const fetchCommunicationSummary = async (): Promise<CommunicationSummaryResponse
 const defaultResumenAcademico: ResumenAcademicoData = {
   mensajesNuevos: 0,
   mensajesSinLeer: 0,
+  respuestasPendientes: 0,
   materiasDiferentes: 0,
   urgente: null,
 };
 
-const defaultResumenComunidad: ResumenComunidadData = {
+const defaultResumenInstitucional: ResumenInstitucionalData = {
   mensajesNuevos: 0,
   mensajesSinLeer: 0,
+  comunicadosMes: 0,
+  ultimoPublicado: null,
   gruposDiferentes: 0,
   urgente: null,
 };
@@ -56,49 +62,65 @@ const defaultResumenComunidad: ResumenComunidadData = {
 interface ResumenCardProps {
   title: string;
   icon: React.ReactElement;
-  data: ResumenAcademicoData | ResumenComunidadData;
-  type: 'academico' | 'comunidad';
+  data: ResumenAcademicoData | ResumenInstitucionalData;
+  variant: 'padres' | 'institucional';
   onClick?: () => void;
 }
 
-// Evo Send debe estar disponible para todos los roles autenticados.
-
-const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onClick }) => {
-  const isAcademico = type === 'academico';
-  const IconWithStyle = () => {
-    const iconClass = `w-10 h-10 ${isAcademico ? 'text-[#1e3cff]' : 'text-teal-400'}`;
-    return <span className={iconClass}>{icon}</span>;
-  };
+const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, variant, onClick }) => {
+  const isPadres = variant === 'padres';
+  const ac = isPadres ? (data as ResumenAcademicoData) : null;
+  const ins = !isPadres ? (data as ResumenInstitucionalData) : null;
 
   return (
     <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 flex flex-col justify-between h-full hover:shadow-xl transition-shadow duration-300">
       <CardContent className="p-0">
         <div className="flex items-center gap-4 mb-6">
-          <div className={`w-10 h-10 ${isAcademico ? 'text-[#1e3cff]' : 'text-teal-400'}`}>
-            {isAcademico ? <Briefcase className="w-10 h-10" /> : <Users className="w-10 h-10" />}
+          <div className={`w-10 h-10 ${isPadres ? 'text-[#3B82F6]' : 'text-teal-400'}`}>
+            {icon}
           </div>
           <h2 className="text-3xl font-extrabold text-white">{title}</h2>
         </div>
 
         <div className="space-y-4 text-white/80 mt-4">
-          <p className="text-lg font-medium flex justify-between">
-            <span>Mensajes Nuevos:</span>
-            <span className="text-3xl font-bold text-white">{data.mensajesNuevos}</span>
-          </p>
-          <p className="text-base flex justify-between border-t border-white/10 pt-4">
-            <span>Mensajes Sin Leer:</span>
-            <span className="text-xl font-bold text-yellow-400">{data.mensajesSinLeer}</span>
-          </p>
-          <p className="text-base flex justify-between">
-            <span>{isAcademico ? 'Materias Diferentes:' : 'Grupos Diferentes:'}</span>
-            <span className="text-xl font-bold text-white/90">{isAcademico ? (data as ResumenAcademicoData).materiasDiferentes : (data as ResumenComunidadData).gruposDiferentes}</span>
-          </p>
+          {isPadres && ac && (
+            <>
+              <p className="text-lg font-medium flex justify-between">
+                <span>Mensajes sin leer</span>
+                <span className="text-3xl font-bold text-yellow-400">{ac.mensajesSinLeer}</span>
+              </p>
+              <p className="text-base flex justify-between border-t border-white/10 pt-4">
+                <span>Respuestas pendientes</span>
+                <span className="text-xl font-bold text-white/90">{ac.respuestasPendientes}</span>
+              </p>
+              <p className="text-base flex justify-between">
+                <span>Cursos / materias con actividad</span>
+                <span className="text-xl font-bold text-white/90">{ac.materiasDiferentes}</span>
+              </p>
+            </>
+          )}
+          {!isPadres && ins && (
+            <>
+              <p className="text-lg font-medium flex justify-between">
+                <span>Comunicados este mes</span>
+                <span className="text-3xl font-bold text-white">{ins.comunicadosMes}</span>
+              </p>
+              <p className="text-base flex justify-between border-t border-white/10 pt-4">
+                <span>Sin leer</span>
+                <span className="text-xl font-bold text-yellow-400">{ins.mensajesSinLeer}</span>
+              </p>
+              <p className="text-sm text-white/60 border-t border-white/10 pt-4 line-clamp-2">
+                Último publicado:{' '}
+                <span className="text-white/90 font-medium">{ins.ultimoPublicado || '—'}</span>
+              </p>
+            </>
+          )}
         </div>
 
         {data.urgente && (
           <div className="mt-8 p-4 bg-red-900/40 border border-red-700/50 rounded-lg">
             <div className="flex items-center gap-2 text-red-400 font-semibold mb-2">
-              <AlertTriangle className="w-5 h-5" /> MENSAJE URGENTE
+              <AlertTriangle className="w-5 h-5" /> Destacado
             </div>
             <p className="text-sm text-white font-medium">{data.urgente.remitente}</p>
             <p className="text-xs text-white/70 mt-1 italic truncate">{data.urgente.extracto}</p>
@@ -106,12 +128,12 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, type, onCl
         )}
       </CardContent>
 
-      <Button 
+      <Button
         className="w-full mt-8 flex items-center justify-center gap-2 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
-        data-testid={`button-bandeja-${type}`}
+        data-testid={`button-bandeja-${variant}`}
         onClick={onClick}
       >
-        Ir a la Bandeja de {title}
+        Ir a {title}
         <ChevronRight className="w-5 h-5" />
       </Button>
     </Card>
@@ -156,14 +178,14 @@ const ComunicacionHome: React.FC = () => {
   });
 
   const resumenAcademico = summary?.academico ?? defaultResumenAcademico;
-  const resumenComunidad = summary?.comunidad ?? defaultResumenComunidad;
+  const resumenInstitucional = summary?.institucional ?? defaultResumenInstitucional;
 
-  const handleAcademicoClick = () => {
+  const handlePadresClick = () => {
     setLocation('/comunicacion/academico');
   };
 
-  const handleComunidadClick = () => {
-    setLocation('/comunicacion/comunidad');
+  const handleInstitucionalClick = () => {
+    setLocation('/comunidad/noticias');
   };
 
   const handleEvoSendClick = () => {
@@ -175,7 +197,9 @@ const ComunicacionHome: React.FC = () => {
       <NavBackButton to={backTo} label={backLabel} />
       <div className="mb-10">
         <h1 className="text-4xl font-extrabold tracking-tight text-white">Centro de Comunicacion</h1>
-        <p className="text-lg text-white/70 mt-2">Selecciona tu area de interes para gestionar conversaciones academicas o comunitarias.</p>
+        <p className="text-lg text-white/70 mt-2">
+          Comunicados a familias, circulares institucionales y Evo Send.
+        </p>
       </div>
 
       {isLoading ? (
@@ -190,24 +214,22 @@ const ComunicacionHome: React.FC = () => {
       ) : (
         <div className={`grid grid-cols-1 gap-8 min-h-[60vh] ${showEvoSend ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
           <ResumenCard
-            title="Academico"
-            icon={<Briefcase />}
+            title="Comunicados a Padres"
+            icon={<Megaphone className="w-10 h-10" />}
             data={resumenAcademico}
-            type="academico"
-            onClick={handleAcademicoClick}
+            variant="padres"
+            onClick={handlePadresClick}
           />
 
           <ResumenCard
-            title="Comunidad"
-            icon={<Users />}
-            data={resumenComunidad}
-            type="comunidad"
-            onClick={handleComunidadClick}
+            title="Comunicados Institucionales"
+            icon={<Users className="w-10 h-10" />}
+            data={resumenInstitucional}
+            variant="institucional"
+            onClick={handleInstitucionalClick}
           />
 
-          {showEvoSend && (
-            <EvoSendCard onClick={handleEvoSendClick} />
-          )}
+          {showEvoSend && <EvoSendCard onClick={handleEvoSendClick} />}
         </div>
       )}
     </div>

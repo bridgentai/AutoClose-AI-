@@ -19,7 +19,7 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET no está configurado');
 }
 
-export type UserRole = 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
+export type UserRole = 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin' | 'rector';
 
 export interface AuthRequest extends Request {
   userId?: string;

@@ -52,7 +52,9 @@ import {
   ensureEvoSendRetention,
   ensureStudentActivityTable,
   ensureGradingOutcomesTable,
+  ensureComunicacionModule,
 } from "./db/pgSchemaPatches.js";
+import institucionalComunicadosRoutes from "./routes/institucionalComunicados.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   if (ENV.DATABASE_URL) {
@@ -111,6 +113,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e) {
       console.warn("[schema] Parche grading_outcomes:", (e as Error).message);
     }
+    try {
+      await ensureComunicacionModule();
+    } catch (e) {
+      console.warn("[schema] Parche comunicación:", (e as Error).message);
+    }
   }
 
   // CORS - Configuración explícita para permitir todas las solicitudes
@@ -127,6 +134,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/ai', aiRoutes);
   console.log('[Routes] Ruta /api/ai registrada correctamente');
   app.use('/api/courses', coursesRoutes);
+  app.use('/api/institucional', institucionalComunicadosRoutes);
   app.use('/api/materials', materialsRoutes);
   app.use('/api/assignments', assignmentsRoutes);
   // GET /api/subjects registrado explícitamente para evitar "Cannot GET /api/subjects"

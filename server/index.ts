@@ -129,6 +129,22 @@ app.use((req, res, next) => {
         .catch((err) => console.error('[evoSendBootstrap]', err));
     }
 
+    if (process.env.DATABASE_URL) {
+      const runReleaseComunicados = async () => {
+        try {
+          const { releasePendingAnnouncements } = await import(
+            './repositories/comunicacionRepository.js'
+          );
+          await releasePendingAnnouncements();
+        } catch (e: unknown) {
+          console.error('[comunicacion] releasePending:', (e as Error).message);
+        }
+      };
+      setInterval(() => {
+        runReleaseComunicados().catch(() => {});
+      }, 10_000);
+    }
+
     // ---- Notificaciones: expiración automática (best-effort) ----
     if (process.env.DATABASE_URL) {
       const runCleanup = async () => {

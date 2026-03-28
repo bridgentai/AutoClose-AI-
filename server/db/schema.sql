@@ -485,7 +485,16 @@ CREATE TABLE IF NOT EXISTS announcements (
   created_by_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   published_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status VARCHAR(20) DEFAULT 'sent',
+  scheduled_send_at TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  corrected_at TIMESTAMPTZ,
+  correction_of UUID REFERENCES announcements(id),
+  audience VARCHAR(50) DEFAULT 'parents',
+  category VARCHAR(50) DEFAULT 'general',
+  priority VARCHAR(20) DEFAULT 'normal'
 );
 
 CREATE INDEX IF NOT EXISTS idx_announcements_institution ON announcements(institution_id);
@@ -509,6 +518,17 @@ CREATE TABLE IF NOT EXISTS announcement_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_announcement_messages_announcement ON announcement_messages(announcement_id);
+
+CREATE TABLE IF NOT EXISTS announcement_reads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  announcement_id UUID NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(announcement_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ann_reads ON announcement_reads(announcement_id);
+CREATE INDEX IF NOT EXISTS idx_ann_institution_type ON announcements(institution_id, type, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

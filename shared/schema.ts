@@ -6,7 +6,7 @@ export interface User {
   nombre: string;
   email: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin' | 'rector';
   curso?: string;
   materias?: string[];
   colegioId: string;
@@ -21,7 +21,7 @@ export interface InsertUser {
   nombre: string;
   email: string;
   password: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin' | 'rector';
   curso?: string;
   materias?: string[];
   colegioId: string;
@@ -136,7 +136,7 @@ export interface AuthResponse {
   _id?: string; // Alias para compatibilidad
   nombre: string;
   email: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin';
+  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin' | 'rector';
   curso?: string;
   materias?: string[];
   colegioId: string;

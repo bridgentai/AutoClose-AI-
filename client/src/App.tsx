@@ -69,7 +69,7 @@ import EvoDrivePage from "@/pages/evo-drive";
 
 import ComunidadLayout from "@/pages/ComunidadLayout";
 import CalendarioEventos from "@/pages/CalendarioEventos";
-import AvisosNoticias from "@/pages/AvisosNoticias";
+import ComunicadosInstitucionales from "@/pages/ComunicadosInstitucionales";
 
 import GroupAssignmentPage from "@/pages/GroupAssignmentPage";
 import AsignacionHorariosPage from "@/pages/asignacion-horarios/index";
@@ -351,7 +351,7 @@ function AppRouter() {
               <AuthGuard><CalendarioEventos /></AuthGuard>
             </Route>
             <Route path="/comunidad/noticias">
-              <AuthGuard><AvisosNoticias /></AuthGuard>
+              <AuthGuard><ComunicadosInstitucionales /></AuthGuard>
             </Route>
 
             <Route path="/calendar">

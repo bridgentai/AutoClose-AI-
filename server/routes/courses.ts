@@ -22,7 +22,32 @@ import {
   findGroupSubjectById,
   createGroupSubject,
 } from '../repositories/groupSubjectRepository.js';
-import { findAcademicFeedWithDetails, createAnnouncement } from '../repositories/announcementRepository.js';
+import {
+  findAcademicFeedWithDetails,
+  createAnnouncement,
+  createAnnouncementMessage,
+  isUserRecipientOfAnnouncement,
+  addAnnouncementRecipients,
+} from '../repositories/announcementRepository.js';
+import {
+  findParentUserIdsForGroupSubject,
+  countParentsForGroupSubject,
+  createComunicacionAnnouncement,
+  cancelComunicadoPending,
+  findComunicadoById,
+  markAnnouncementCorrected,
+  copyRecipientsToAnnouncement,
+  listComunicadosPadresForStaff,
+  listComunicadosPadresForPadre,
+  listUnreadComunicadosPadresForPadre,
+  statsComunicadosPadresByGroupSubject,
+  countPendingParentRepliesForTeacher,
+  countUnreadComunicadosPadresForPadre,
+  countUnreadInstitucionalForUser,
+  countInstitucionalThisMonth,
+  lastInstitucionalTitle,
+  markComunicadoRead,
+} from '../repositories/comunicacionRepository.js';
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
 import { findUsersByIds } from '../repositories/userRepository.js';
@@ -192,23 +217,323 @@ router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
         }
       : null;
 
+    let pendingPadres = 0;
+    let awaitingReadPadres = 0;
+    let respuestasPendientes = 0;
+    if (groupSubjectIds?.length && user.role === 'profesor') {
+      const st = await statsComunicadosPadresByGroupSubject(colegioId, groupSubjectIds);
+      for (const v of Object.values(st)) {
+        pendingPadres += v.pending;
+        awaitingReadPadres += v.awaiting_read;
+      }
+      respuestasPendientes = await countPendingParentRepliesForTeacher(colegioId, userId, groupSubjectIds);
+    } else if (
+      groupSubjectIds?.length &&
+      ['directivo', 'admin-general-colegio', 'asistente', 'school_admin'].includes(user.role)
+    ) {
+      const st = await statsComunicadosPadresByGroupSubject(colegioId, groupSubjectIds);
+      for (const v of Object.values(st)) {
+        pendingPadres += v.pending;
+        awaitingReadPadres += v.awaiting_read;
+      }
+    }
+
+    let mensajesSinLeerPadres = awaitingReadPadres + pendingPadres;
+    if (user.role === 'padre') {
+      mensajesSinLeerPadres = await countUnreadComunicadosPadresForPadre(colegioId, userId);
+    }
+
+    const comMes = await countInstitucionalThisMonth(colegioId);
+    const ultimoInst = await lastInstitucionalTitle(colegioId);
+    let instSinLeer = 0;
+    if (['padre', 'profesor', 'estudiante', 'asistente', 'school_admin'].includes(user.role)) {
+      instSinLeer = await countUnreadInstitucionalForUser(colegioId, userId);
+    }
+
     return res.json({
       academico: {
-        mensajesNuevos: total,
-        mensajesSinLeer: total,
+        mensajesNuevos: total + pendingPadres,
+        mensajesSinLeer: mensajesSinLeerPadres,
+        respuestasPendientes,
         materiasDiferentes,
         urgente,
       },
-      comunidad: {
-        mensajesNuevos: 0,
-        mensajesSinLeer: 0,
+      institucional: {
+        mensajesNuevos: comMes,
+        mensajesSinLeer: instSinLeer,
+        comunicadosMes: comMes,
+        ultimoPublicado: ultimoInst,
         gruposDiferentes: 0,
-        urgente: null,
+        urgente: ultimoInst
+          ? { remitente: 'Comunicados institucionales', extracto: ultimoInst }
+          : null,
       },
     });
   } catch (error: unknown) {
     console.error('Error al obtener resumen de comunicación:', (error as Error).message);
     res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
+// --- Comunicados a padres (curso/materia) ---
+const COMUNICADO_PADRES_PUBLISH = ['profesor', 'directivo', 'admin-general-colegio', 'asistente'] as const;
+
+// POST /api/courses/comunicado-padres
+router.post('/comunicado-padres', protect, requireRole(...COMUNICADO_PADRES_PUBLISH), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
+    const body = req.body as { group_subject_id?: string; title?: string; body?: string; priority?: string };
+    const groupSubjectId = body.group_subject_id;
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const text = typeof body.body === 'string' ? body.body.trim() : '';
+    const priority = typeof body.priority === 'string' ? body.priority.trim() : 'normal';
+    if (!title) return res.status(400).json({ message: 'El título es obligatorio.' });
+    if (!groupSubjectId) return res.status(400).json({ message: 'group_subject_id es obligatorio.' });
+    const gs = await findGroupSubjectById(groupSubjectId);
+    if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(401).json({ message: 'Usuario no encontrado' });
+    if (user.role === 'profesor') {
+      const myGs = await findGroupSubjectsByTeacher(userId, colegioId);
+      if (!myGs.some((x) => x.id === groupSubjectId)) {
+        return res.status(403).json({ message: 'Solo puede enviar a sus propios cursos.' });
+      }
+    }
+    const parentIds = await findParentUserIdsForGroupSubject(groupSubjectId, colegioId);
+    const scheduled = new Date(Date.now() + 30_000).toISOString();
+    const created = await createComunicacionAnnouncement({
+      institution_id: colegioId,
+      title,
+      body: text || null,
+      type: 'comunicado_padres',
+      group_id: gs.group_id,
+      group_subject_id: groupSubjectId,
+      created_by_id: userId,
+      status: 'pending',
+      scheduled_send_at: scheduled,
+      sent_at: null,
+      audience: 'parents',
+      category: 'general',
+      priority,
+    });
+    await addAnnouncementRecipients(created.id, parentIds);
+    return res.status(201).json({ id: created.id, scheduled_send_at: scheduled });
+  } catch (e: unknown) {
+    console.error('comunicado-padres:', (e as Error).message);
+    return res.status(500).json({ message: 'Error al crear comunicado.' });
+  }
+});
+
+// GET /api/courses/comunicados-padres-stats
+router.get('/comunicados-padres-stats', protect, requireRole('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'school_admin'), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    type GsDetails = Awaited<ReturnType<typeof findGroupSubjectsByGroupWithDetails>>[number];
+    let gsList: GsDetails[] = [];
+    if (user.role === 'profesor') {
+      gsList = await findGroupSubjectsByTeacherWithDetails(userId, colegioId);
+    } else {
+      const groups = await findGroupsByInstitution(colegioId);
+      for (const g of groups) gsList.push(...(await findGroupSubjectsByGroupWithDetails(g.id, colegioId)));
+    }
+    const ids = gsList.map((g) => g.id);
+    const stats = await statsComunicadosPadresByGroupSubject(colegioId, ids);
+    return res.json(
+      ids.map((id) => ({
+        group_subject_id: id,
+        pending: stats[id]?.pending ?? 0,
+        awaiting_read: stats[id]?.awaiting_read ?? 0,
+        badge: (stats[id]?.pending ?? 0) + (stats[id]?.awaiting_read ?? 0),
+      }))
+    );
+  } catch (e: unknown) {
+    console.error('comunicados-padres-stats:', (e as Error).message);
+    return res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
+// GET /api/courses/comunicados-padres — padre: todos sus comunicados
+router.get('/comunicados-padres', protect, requireRole('padre'), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const list = await listComunicadosPadresForPadre(colegioId, userId);
+    return res.json(list);
+  } catch (e: unknown) {
+    console.error('comunicados-padres (padre):', (e as Error).message);
+    return res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
+// GET /api/courses/comunicados-padres-unread — padre: vista dashboard (top no leídos + total)
+router.get('/comunicados-padres-unread', protect, requireRole('padre'), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const limit = Math.min(10, Math.max(1, parseInt(String(req.query.limit ?? '3'), 10) || 3));
+    const items = await listUnreadComunicadosPadresForPadre(colegioId, userId, limit);
+    const count = await countUnreadComunicadosPadresForPadre(colegioId, userId);
+    return res.json({ items, count });
+  } catch (e: unknown) {
+    console.error('comunicados-padres-unread:', (e as Error).message);
+    return res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
+// GET /api/courses/padres-vinculados/:groupSubjectId
+router.get('/padres-vinculados/:groupSubjectId', protect, requireRole(...COMUNICADO_PADRES_PUBLISH, 'school_admin'), async (req: AuthRequest, res) => {
+  try {
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    const { groupSubjectId } = req.params;
+    if (!colegioId || !groupSubjectId) return res.status(401).json({ message: 'No autorizado' });
+    const gs = await findGroupSubjectById(groupSubjectId);
+    if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado' });
+    const n = await countParentsForGroupSubject(groupSubjectId, colegioId);
+    return res.json({ count: n });
+  } catch (e: unknown) {
+    console.error('padres-vinculados:', (e as Error).message);
+    return res.status(500).json({ message: 'Error' });
+  }
+});
+
+// GET /api/courses/comunicados-padres/:groupSubjectId — staff
+router.get('/comunicados-padres/:groupSubjectId', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId;
+    const { groupSubjectId } = req.params;
+    if (!userId || !colegioId || !groupSubjectId) return res.status(401).json({ message: 'No autorizado' });
+    const user = await findUserById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+    const gs = await findGroupSubjectById(groupSubjectId);
+    if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado' });
+    if (user.role === 'profesor') {
+      if (gs.teacher_id !== userId) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
+    } else if (!['directivo', 'admin-general-colegio', 'asistente', 'school_admin', 'super_admin'].includes(user.role)) {
+      return res.status(403).json({ message: 'Sin acceso' });
+    }
+    const list = await listComunicadosPadresForStaff(colegioId, groupSubjectId);
+    return res.json(list);
+  } catch (e: unknown) {
+    console.error('comunicados-padres/:gs:', (e as Error).message);
+    return res.status(500).json({ message: 'Error en el servidor.' });
+  }
+});
+
+// DELETE /api/courses/comunicado/:id/cancel
+router.delete('/comunicado/:id/cancel', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    const { id } = req.params;
+    if (!userId || !colegioId || !id) return res.status(401).json({ message: 'No autorizado' });
+    const row = await findComunicadoById(id, colegioId);
+    if (!row || row.type !== 'comunicado_padres') return res.status(404).json({ message: 'No encontrado' });
+    const result = await cancelComunicadoPending(id, userId, colegioId);
+    if (!result.ok) return res.status(400).json({ message: result.message });
+    return res.json({ ok: true });
+  } catch (e: unknown) {
+    console.error('comunicado cancel:', (e as Error).message);
+    return res.status(500).json({ message: 'Error' });
+  }
+});
+
+// POST /api/courses/comunicado/:id/correccion
+router.post('/comunicado/:id/correccion', protect, requireRole(...COMUNICADO_PADRES_PUBLISH), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    const { id } = req.params;
+    if (!userId || !colegioId || !id) return res.status(401).json({ message: 'No autorizado' });
+    const original = await findComunicadoById(id, colegioId);
+    if (!original || original.type !== 'comunicado_padres') return res.status(404).json({ message: 'No encontrado' });
+    if (original.created_by_id !== userId) return res.status(403).json({ message: 'Solo el autor puede corregir.' });
+    if (!original.sent_at) return res.status(400).json({ message: 'Aún no enviado.' });
+    if (Date.now() - new Date(original.sent_at).getTime() > 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ message: 'Pasaron más de 24 horas.' });
+    }
+    const dup = await queryPg<{ x: string }>(`SELECT id::text AS x FROM announcements WHERE correction_of = $1 LIMIT 1`, [id]);
+    if (dup.rows.length) return res.status(400).json({ message: 'Ya existe corrección.' });
+    const body = req.body as { title?: string; body?: string };
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const text = typeof body.body === 'string' ? body.body.trim() : '';
+    if (!title) return res.status(400).json({ message: 'Título obligatorio.' });
+    if (!original.group_subject_id || !original.group_id) return res.status(400).json({ message: 'Datos incompletos.' });
+    const created = await createComunicacionAnnouncement({
+      institution_id: colegioId,
+      title,
+      body: text || null,
+      type: 'comunicado_padres',
+      group_id: original.group_id,
+      group_subject_id: original.group_subject_id,
+      created_by_id: userId,
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      audience: 'parents',
+      category: 'general',
+      priority: original.priority ?? 'normal',
+      correction_of: id,
+    });
+    await copyRecipientsToAnnouncement(id, created.id);
+    await markAnnouncementCorrected(id, colegioId);
+    return res.status(201).json({ id: created.id, sent_at: created.sent_at });
+  } catch (e: unknown) {
+    console.error('comunicado correccion:', (e as Error).message);
+    return res.status(500).json({ message: 'Error' });
+  }
+});
+
+// POST /api/courses/comunicado/:id/read
+router.post('/comunicado/:id/read', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    const { id } = req.params;
+    if (!userId || !colegioId || !id) return res.status(401).json({ message: 'No autorizado' });
+    const row = await findComunicadoById(id, colegioId);
+    if (!row || row.type !== 'comunicado_padres') return res.status(404).json({ message: 'No encontrado' });
+    const ok = await isUserRecipientOfAnnouncement(id, userId);
+    if (!ok) return res.status(403).json({ message: 'No eres destinatario.' });
+    await markComunicadoRead(id, userId);
+    return res.json({ ok: true });
+  } catch (e: unknown) {
+    console.error('comunicado read:', (e as Error).message);
+    return res.status(500).json({ message: 'Error' });
+  }
+});
+
+// POST /api/courses/comunicado/:id/reply — solo padres
+router.post('/comunicado/:id/reply', protect, requireRole('padre'), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    const { id } = req.params;
+    if (!userId || !colegioId || !id) return res.status(401).json({ message: 'No autorizado' });
+    const row = await findComunicadoById(id, colegioId);
+    if (!row || row.type !== 'comunicado_padres') return res.status(404).json({ message: 'No encontrado' });
+    const ok = await isUserRecipientOfAnnouncement(id, userId);
+    if (!ok) return res.status(403).json({ message: 'No eres destinatario.' });
+    const body = req.body as { content?: string };
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    if (!content) return res.status(400).json({ message: 'Escribe un mensaje.' });
+    const msg = await createAnnouncementMessage({
+      announcement_id: id,
+      sender_id: userId,
+      sender_role: 'padre',
+      content: content.slice(0, 4000),
+    });
+    return res.status(201).json({ id: msg.id, created_at: msg.created_at });
+  } catch (e: unknown) {
+    console.error('comunicado reply:', (e as Error).message);
+    return res.status(500).json({ message: 'Error' });
   }
 });
 
