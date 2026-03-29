@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useRoute } from 'wouter';
 import { useAuth } from '@/lib/authContext';
@@ -138,6 +138,7 @@ const ComunicacionAcademico: React.FC = () => {
   const [corrBody, setCorrBody] = useState('');
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [openedRead, setOpenedRead] = useState<Set<string>>(() => new Set());
+  const draftTitleRef = useRef<HTMLInputElement>(null);
 
   const { data: courses = [], isLoading: loadingCourses } = useQuery({
     queryKey: ['courses', 'comunicacion-academico'],
@@ -359,7 +360,7 @@ const ComunicacionAcademico: React.FC = () => {
       </div>
 
       <div
-        className={`grid gap-4 min-h-[520px] grid-cols-1 ${!isPadre && canPublish ? 'lg:grid-cols-[280px_1fr]' : ''}`}
+        className={`grid min-h-0 gap-4 grid-cols-1 lg:min-h-[480px] ${!isPadre && canPublish ? 'lg:grid-cols-[280px_1fr]' : ''}`}
       >
         {!isPadre && canPublish && (
           <aside className="rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-3 flex flex-col">
@@ -369,8 +370,10 @@ const ComunicacionAcademico: React.FC = () => {
                 size="sm"
                 className="h-8 bg-[#3B82F6] hover:bg-[#2563EB] text-white"
                 disabled={!selectedGs}
+                type="button"
                 onClick={() => {
-                  if (selectedGs) document.getElementById('redaccion-comunicado')?.scrollIntoView({ behavior: 'smooth' });
+                  if (!selectedGs) return;
+                  requestAnimationFrame(() => draftTitleRef.current?.focus());
                 }}
               >
                 <Plus className="w-4 h-4 mr-1" /> Nuevo
@@ -417,7 +420,7 @@ const ComunicacionAcademico: React.FC = () => {
           </aside>
         )}
 
-        <main className="flex flex-col rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md min-h-[480px]">
+        <main className="flex max-h-[min(720px,calc(100dvh-11rem))] min-h-[280px] flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md">
           {!isPadre && !selectedGs && (
             <div className="flex-1 flex items-center justify-center text-white/50 p-8">
               Selecciona un curso en la izquierda
@@ -427,7 +430,7 @@ const ComunicacionAcademico: React.FC = () => {
           {(isPadre || selectedGs) && (
             <>
               {!isPadre && activeCourse && (
-                <div className="border-b border-white/10 px-4 py-3">
+                <div className="border-b border-white/10 px-4 py-3 shrink-0">
                   <h3 className="text-white font-semibold text-lg">
                     {activeCourse.nombre}
                     {activeCourse.cursos?.[0] ? ` · ${activeCourse.cursos[0]}` : ''}
@@ -436,7 +439,42 @@ const ComunicacionAcademico: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {!isPadre && canPublish && selectedGs && (
+                <div
+                  id="redaccion-comunicado"
+                  className="border-b border-white/10 p-4 bg-black/20 shrink-0"
+                >
+                  <p className="text-white/70 text-sm mb-2">Redactar comunicado</p>
+                  <Input
+                    ref={draftTitleRef}
+                    value={draftTitle}
+                    onChange={(e) => setDraftTitle(e.target.value)}
+                    placeholder="Título"
+                    className="bg-white/5 border-white/15 text-white mb-2"
+                  />
+                  <Textarea
+                    value={draftBody}
+                    onChange={(e) => setDraftBody(e.target.value)}
+                    placeholder="Mensaje para padres…"
+                    className="bg-white/5 border-white/15 text-white min-h-[100px] mb-2"
+                  />
+                  <Button
+                    className="bg-[#3B82F6] hover:bg-[#2563EB]"
+                    disabled={!draftTitle.trim() || sendComunicadoMutation.isPending}
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Enviar
+                  </Button>
+                  {sendComunicadoMutation.isError && (
+                    <p className="text-red-400 text-sm mt-2">
+                      {(sendComunicadoMutation.error as Error).message}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
                 {loadingCom && (
                   <div className="flex justify-center py-12 text-white/60">
                     <Loader2 className="w-8 h-8 animate-spin" />
@@ -556,40 +594,6 @@ const ComunicacionAcademico: React.FC = () => {
                   <p className="text-white/50 text-center py-12">No hay comunicados en este curso</p>
                 )}
               </div>
-
-              {!isPadre && canPublish && selectedGs && (
-                <div
-                  id="redaccion-comunicado"
-                  className="border-t border-white/10 p-4 bg-black/20"
-                >
-                  <p className="text-white/70 text-sm mb-2">Redactar comunicado</p>
-                  <Input
-                    value={draftTitle}
-                    onChange={(e) => setDraftTitle(e.target.value)}
-                    placeholder="Título"
-                    className="bg-white/5 border-white/15 text-white mb-2"
-                  />
-                  <Textarea
-                    value={draftBody}
-                    onChange={(e) => setDraftBody(e.target.value)}
-                    placeholder="Mensaje para padres…"
-                    className="bg-white/5 border-white/15 text-white min-h-[100px] mb-2"
-                  />
-                  <Button
-                    className="bg-[#3B82F6] hover:bg-[#2563EB]"
-                    disabled={!draftTitle.trim() || sendComunicadoMutation.isPending}
-                    onClick={() => setPreviewOpen(true)}
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    Enviar
-                  </Button>
-                  {sendComunicadoMutation.isError && (
-                    <p className="text-red-400 text-sm mt-2">
-                      {(sendComunicadoMutation.error as Error).message}
-                    </p>
-                  )}
-                </div>
-              )}
             </>
           )}
         </main>
