@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useRoute } from 'wouter';
 import { useAuth } from '@/lib/authContext';
@@ -9,6 +9,7 @@ import {
   Loader2,
   MessageCircle,
   Pencil,
+  Users,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,12 +23,25 @@ import {
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useToast } from '@/hooks/use-toast';
+import {
+  ComunicadoWorkspaceAttachments,
+  ComunicadoAttachmentLinks,
+} from '@/components/ComunicadoWorkspaceAttachments';
+import {
+  parseComunicadoAttachments,
+  type ComunicadoAttachment,
+} from '@/lib/comunicadoAttachments';
 
 interface CourseListItem {
   id: string;
   _id?: string;
   nombre: string;
   cursos?: string[];
+  groupId?: string;
 }
 
 interface SidebarStat {
@@ -57,6 +71,9 @@ interface ComunicadoPadresItem {
   corrected_at: string | null;
   correction_of: string | null;
   created_by_id: string;
+  group_id?: string | null;
+  group_subject_id?: string | null;
+  attachments_json?: unknown;
   reads_count: number;
   total_recipients: number;
   has_correction: boolean;
@@ -85,6 +102,22 @@ function formatRelative(iso: string): string {
   if (h < 24) return `hace ${h} h`;
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
 }
+
+type ComunicadoDraftSlice = {
+  title: string;
+  body: string;
+  attachments: ComunicadoAttachment[];
+  recipientMode: 'all' | 'selected';
+  selectedParentIds: string[];
+};
+
+const EMPTY_COMUNICADO_DRAFT: ComunicadoDraftSlice = {
+  title: '',
+  body: '',
+  attachments: [],
+  recipientMode: 'all',
+  selectedParentIds: [],
+};
 
 const CountdownBanner: React.FC<{
   scheduledAt: string;
@@ -122,6 +155,7 @@ const ComunicacionAcademico: React.FC = () => {
   const [, setLocation] = useLocation();
   const [matchRoute, paramsRoute] = useRoute('/comunicacion/academico/:materiaId');
   const { user } = useAuth();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const isPadre = user?.rol === 'padre';
   const canPublish =
@@ -130,15 +164,53 @@ const ComunicacionAcademico: React.FC = () => {
 
   const selectedGs = matchRoute && paramsRoute?.materiaId ? paramsRoute.materiaId : '';
 
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftBody, setDraftBody] = useState('');
+  const [draftsByGs, setDraftsByGs] = useState<Record<string, ComunicadoDraftSlice>>({});
   const [previewOpen, setPreviewOpen] = useState(false);
   const [correctionFor, setCorrectionFor] = useState<ComunicadoPadresItem | null>(null);
   const [corrTitle, setCorrTitle] = useState('');
   const [corrBody, setCorrBody] = useState('');
+  const [corrAttachments, setCorrAttachments] = useState<ComunicadoAttachment[]>([]);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [openedRead, setOpenedRead] = useState<Set<string>>(() => new Set());
+  const [nuevoDestDialogOpen, setNuevoDestDialogOpen] = useState(false);
+  const [destDraftMode, setDestDraftMode] = useState<'all' | 'selected'>('all');
+  const [destDraftIds, setDestDraftIds] = useState<Set<string>>(() => new Set());
   const draftTitleRef = useRef<HTMLInputElement>(null);
+
+  const draftSlice = selectedGs ? draftsByGs[selectedGs] ?? EMPTY_COMUNICADO_DRAFT : EMPTY_COMUNICADO_DRAFT;
+  const draftTitle = draftSlice.title;
+  const draftBody = draftSlice.body;
+  const draftAttachments = draftSlice.attachments;
+  const recipientMode = draftSlice.recipientMode;
+  const selectedParentIds = draftSlice.selectedParentIds;
+
+  const setDraftTitle = useCallback((v: string) => {
+    if (!selectedGs) return;
+    setDraftsByGs((m) => ({
+      ...m,
+      [selectedGs]: { ...(m[selectedGs] ?? EMPTY_COMUNICADO_DRAFT), title: v },
+    }));
+  }, [selectedGs]);
+
+  const setDraftBody = useCallback((v: string) => {
+    if (!selectedGs) return;
+    setDraftsByGs((m) => ({
+      ...m,
+      [selectedGs]: { ...(m[selectedGs] ?? EMPTY_COMUNICADO_DRAFT), body: v },
+    }));
+  }, [selectedGs]);
+
+  const setDraftAttachments: Dispatch<SetStateAction<ComunicadoAttachment[]>> = useCallback(
+    (action) => {
+      if (!selectedGs) return;
+      setDraftsByGs((m) => {
+        const cur = m[selectedGs] ?? EMPTY_COMUNICADO_DRAFT;
+        const nextAtt = typeof action === 'function' ? action(cur.attachments) : action;
+        return { ...m, [selectedGs]: { ...cur, attachments: nextAtt } };
+      });
+    },
+    [selectedGs]
+  );
 
   const { data: courses = [], isLoading: loadingCourses } = useQuery({
     queryKey: ['courses', 'comunicacion-academico'],
@@ -166,18 +238,49 @@ const ComunicacionAcademico: React.FC = () => {
     return m;
   }, [sidebarStats]);
 
-  const { data: padresCount = 0 } = useQuery({
+  const { data: padresCtx } = useQuery({
     queryKey: ['padres-vinculados', selectedGs],
     queryFn: async () => {
-      const res = await fetch(`/api/courses/padres-vinculados/${selectedGs}`, {
+      const res = await fetch(`/api/courses/padres-vinculados/${selectedGs}?list=1`, {
         headers: authHeaders(),
       });
-      if (!res.ok) return 0;
-      const j = (await res.json()) as { count: number };
-      return j.count ?? 0;
+      if (!res.ok) {
+        return {
+          count: 0,
+          group_id: '' as string | undefined,
+          group_name: null as string | null,
+          subject_name: null as string | null,
+          parents: [] as { id: string; full_name: string }[],
+        };
+      }
+      return (await res.json()) as {
+        count: number;
+        group_id?: string;
+        group_name?: string | null;
+        subject_name?: string | null;
+        parents?: { id: string; full_name: string }[];
+      };
     },
     enabled: !!selectedGs && !isPadre && canPublish,
   });
+
+  const padresList = padresCtx?.parents ?? [];
+
+  const nuevoDialogWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (nuevoDestDialogOpen && selectedGs) {
+      if (!nuevoDialogWasOpenRef.current) {
+        const d = draftsByGs[selectedGs];
+        setDestDraftMode(d?.recipientMode ?? 'all');
+        setDestDraftIds(new Set(d?.selectedParentIds ?? []));
+      }
+      nuevoDialogWasOpenRef.current = true;
+    } else {
+      nuevoDialogWasOpenRef.current = false;
+    }
+  }, [nuevoDestDialogOpen, selectedGs, draftsByGs]);
+
+  const padresCount = padresCtx?.count ?? 0;
 
   const {
     data: comunicados = [],
@@ -244,16 +347,29 @@ const ComunicacionAcademico: React.FC = () => {
   });
 
   const sendComunicadoMutation = useMutation({
-    mutationFn: async (payload: { title: string; body: string; priority: string }) => {
+    mutationFn: async (payload: {
+      groupSubjectId: string;
+      title: string;
+      body: string;
+      priority: string;
+      attachments: ComunicadoAttachment[];
+      recipientMode: 'all' | 'selected';
+      selectedParentIds: string[];
+    }) => {
+      const body: Record<string, unknown> = {
+        group_subject_id: payload.groupSubjectId,
+        title: payload.title,
+        body: payload.body,
+        priority: payload.priority,
+        attachments: payload.attachments,
+      };
+      if (payload.recipientMode === 'selected' && payload.selectedParentIds.length > 0) {
+        body.recipient_parent_ids = payload.selectedParentIds;
+      }
       const res = await fetch('/api/courses/comunicado-padres', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({
-          group_subject_id: selectedGs,
-          title: payload.title,
-          body: payload.body,
-          priority: payload.priority,
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -261,22 +377,35 @@ const ComunicacionAcademico: React.FC = () => {
       }
       return res.json() as { id: string; scheduled_send_at: string };
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['comunicados-padres'] });
       queryClient.invalidateQueries({ queryKey: ['comunicados-padres-stats'] });
       queryClient.invalidateQueries({ queryKey: ['communication-summary'] });
       setPreviewOpen(false);
-      setDraftTitle('');
-      setDraftBody('');
+      const gsKey = variables.groupSubjectId;
+      setDraftsByGs((m) => {
+        const next = { ...m };
+        delete next[gsKey];
+        return next;
+      });
     },
   });
 
   const correctionMutation = useMutation({
-    mutationFn: async (payload: { id: string; title: string; body: string }) => {
+    mutationFn: async (payload: {
+      id: string;
+      title: string;
+      body: string;
+      attachments: ComunicadoAttachment[];
+    }) => {
       const res = await fetch(`/api/courses/comunicado/${payload.id}/correccion`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ title: payload.title, body: payload.body }),
+        body: JSON.stringify({
+          title: payload.title,
+          body: payload.body,
+          attachments: payload.attachments,
+        }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -288,6 +417,7 @@ const ComunicacionAcademico: React.FC = () => {
       setCorrectionFor(null);
       setCorrTitle('');
       setCorrBody('');
+      setCorrAttachments([]);
     },
   });
 
@@ -312,6 +442,13 @@ const ComunicacionAcademico: React.FC = () => {
     if (!selectedGs) return null;
     return courses.find((c) => c.id === selectedGs || c._id === selectedGs) ?? null;
   }, [courses, selectedGs]);
+
+  const comunicadoGroupId = padresCtx?.group_id || activeCourse?.groupId || '';
+  const cursoNombreForDrive =
+    [padresCtx?.group_name, padresCtx?.subject_name].filter(Boolean).join(' — ') ||
+    (activeCourse?.nombre
+      ? `${activeCourse.nombre}${activeCourse.cursos?.[0] ? ` · ${activeCourse.cursos[0]}` : ''}`
+      : 'Curso');
 
   const comunicacionBackTo =
     user?.rol === 'directivo'
@@ -373,7 +510,7 @@ const ComunicacionAcademico: React.FC = () => {
                 type="button"
                 onClick={() => {
                   if (!selectedGs) return;
-                  requestAnimationFrame(() => draftTitleRef.current?.focus());
+                  setNuevoDestDialogOpen(true);
                 }}
               >
                 <Plus className="w-4 h-4 mr-1" /> Nuevo
@@ -435,7 +572,18 @@ const ComunicacionAcademico: React.FC = () => {
                     {activeCourse.nombre}
                     {activeCourse.cursos?.[0] ? ` · ${activeCourse.cursos[0]}` : ''}
                   </h3>
-                  <p className="text-white/50 text-sm">{padresCount} padres vinculados</p>
+                  <p className="text-white/50 text-sm">
+                    {padresCount} padres vinculados
+                    {recipientMode === 'all' ? (
+                      <span className="text-white/40"> · Enviar a todos</span>
+                    ) : (
+                      <span className="text-[#00c8ff]/90">
+                        {' '}
+                        · {selectedParentIds.length} seleccionado
+                        {selectedParentIds.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </p>
                 </div>
               )}
 
@@ -458,10 +606,33 @@ const ComunicacionAcademico: React.FC = () => {
                     placeholder="Mensaje para padres…"
                     className="bg-white/5 border-white/15 text-white min-h-[100px] mb-2"
                   />
+                  <ComunicadoWorkspaceAttachments
+                    postGroupId={comunicadoGroupId}
+                    postGroupSubjectId={selectedGs}
+                    postCursoNombre={cursoNombreForDrive}
+                    attachments={draftAttachments}
+                    onAttachmentsChange={setDraftAttachments}
+                    disabled={sendComunicadoMutation.isPending}
+                    showTeacherPrivateFolder={user?.rol === 'profesor'}
+                  />
                   <Button
                     className="bg-[#3B82F6] hover:bg-[#2563EB]"
-                    disabled={!draftTitle.trim() || sendComunicadoMutation.isPending}
-                    onClick={() => setPreviewOpen(true)}
+                    disabled={
+                      !draftTitle.trim() ||
+                      sendComunicadoMutation.isPending ||
+                      (recipientMode === 'selected' && selectedParentIds.length === 0)
+                    }
+                    onClick={() => {
+                      if (recipientMode === 'selected' && selectedParentIds.length === 0) {
+                        toast({
+                          variant: 'destructive',
+                          title: 'Destinatarios',
+                          description: 'Pulsa «Nuevo» y elige padres, o usa «Todos los padres».',
+                        });
+                        return;
+                      }
+                      setPreviewOpen(true);
+                    }}
                   >
                     <Send className="w-4 h-4 mr-2" />
                     Enviar
@@ -518,6 +689,9 @@ const ComunicacionAcademico: React.FC = () => {
                         </div>
                         <h4 className="text-white font-bold text-base">{c.title}</h4>
                         {c.body && <p className="text-white/80 text-sm whitespace-pre-wrap">{c.body}</p>}
+                        <ComunicadoAttachmentLinks
+                          items={parseComunicadoAttachments(c.attachments_json)}
+                        />
                         <p className="text-white/45 text-xs">
                           Leído por {c.reads_count}/{c.total_recipients || 0} padres
                         </p>
@@ -546,6 +720,7 @@ const ComunicacionAcademico: React.FC = () => {
                               setCorrectionFor(c);
                               setCorrTitle(c.title);
                               setCorrBody(c.body || '');
+                              setCorrAttachments(parseComunicadoAttachments(c.attachments_json));
                             }}
                           >
                             <Pencil className="w-3.5 h-3.5 mr-1" /> Enviar corrección
@@ -599,6 +774,131 @@ const ComunicacionAcademico: React.FC = () => {
         </main>
       </div>
 
+      <Dialog open={nuevoDestDialogOpen} onOpenChange={setNuevoDestDialogOpen}>
+        <DialogContent className="bg-[#0a0a2a] border-white/10 text-white max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-['Poppins'] text-white flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#00c8ff]" />
+              Nuevo comunicado — destinatarios
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-white/55 text-sm">
+            Elige si el mensaje va a todos los acudientes del curso o solo a algunos.
+          </p>
+          <RadioGroup
+            value={destDraftMode}
+            onValueChange={(v) => setDestDraftMode(v as 'all' | 'selected')}
+            className="gap-3"
+          >
+            <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+              <RadioGroupItem value="all" id="dest-all" className="mt-0.5 border-[#1e3cff] text-[#1e3cff]" />
+              <div className="flex-1 min-w-0">
+                <Label htmlFor="dest-all" className="text-white font-medium cursor-pointer">
+                  Todos los padres
+                </Label>
+                <p className="text-white/45 text-xs mt-0.5">
+                  {padresCount} acudiente{padresCount !== 1 ? 's' : ''} vinculado{padresCount !== 1 ? 's' : ''} a este curso
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+              <RadioGroupItem value="selected" id="dest-sel" className="mt-0.5 border-[#00c8ff] text-[#00c8ff]" />
+              <div className="flex-1 min-w-0">
+                <Label htmlFor="dest-sel" className="text-white font-medium cursor-pointer">
+                  Solo algunos padres
+                </Label>
+                <p className="text-white/45 text-xs mt-0.5">Marca los acudientes que deben recibir este aviso</p>
+              </div>
+            </div>
+          </RadioGroup>
+          {destDraftMode === 'selected' && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/20 text-white/90 h-8"
+                  onClick={() => setDestDraftIds(new Set(padresList.map((p) => p.id)))}
+                >
+                  Marcar todos
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/20 text-white/90 h-8"
+                  onClick={() => setDestDraftIds(new Set())}
+                >
+                  Quitar todos
+                </Button>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-white/10 bg-black/25 divide-y divide-white/5">
+                {padresList.length === 0 ? (
+                  <p className="text-white/45 text-sm p-3">No hay padres vinculados en este curso.</p>
+                ) : (
+                  padresList.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.04] cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={destDraftIds.has(p.id)}
+                        onCheckedChange={() => {
+                          setDestDraftIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(p.id)) next.delete(p.id);
+                            else next.add(p.id);
+                            return next;
+                          });
+                        }}
+                        className="border-white/30 data-[state=checked]:bg-[#1e3cff] data-[state=checked]:border-[#1e3cff]"
+                      />
+                      <span className="text-sm text-white/90 truncate">{p.full_name}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              className="border-white/20 text-white"
+              onClick={() => setNuevoDestDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+              onClick={() => {
+                if (!selectedGs) return;
+                if (destDraftMode === 'selected' && destDraftIds.size === 0) {
+                  toast({
+                    variant: 'destructive',
+                    title: 'Elige padres',
+                    description: 'Marca al menos un acudiente o elige «Todos los padres».',
+                  });
+                  return;
+                }
+                setDraftsByGs((m) => ({
+                  ...m,
+                  [selectedGs]: {
+                    ...(m[selectedGs] ?? EMPTY_COMUNICADO_DRAFT),
+                    recipientMode: destDraftMode,
+                    selectedParentIds: destDraftMode === 'all' ? [] : Array.from(destDraftIds),
+                  },
+                }));
+                setNuevoDestDialogOpen(false);
+                requestAnimationFrame(() => draftTitleRef.current?.focus());
+              }}
+            >
+              Continuar a redactar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="bg-[#0f172a] border-white/10 text-white max-w-lg">
           <DialogHeader>
@@ -608,8 +908,12 @@ const ComunicacionAcademico: React.FC = () => {
             <p className="text-white/70">
               Para:{' '}
               <span className="text-white font-medium">
-                {padresCount} padres de {activeCourse?.nombre}
-                {activeCourse?.cursos?.[0] ? ` ${activeCourse.cursos[0]}` : ''}
+                {recipientMode === 'all'
+                  ? `Todos los padres vinculados (${padresCount})`
+                  : `${selectedParentIds.length} padre(s) seleccionado(s)`}
+                {activeCourse?.nombre
+                  ? ` · ${activeCourse.nombre}${activeCourse.cursos?.[0] ? ` ${activeCourse.cursos[0]}` : ''}`
+                  : ''}
               </span>
             </p>
             <div>
@@ -620,6 +924,12 @@ const ComunicacionAcademico: React.FC = () => {
               <p className="text-white/50 text-xs mb-0.5">Mensaje</p>
               <p className="text-white/85 whitespace-pre-wrap">{draftBody || '—'}</p>
             </div>
+            {draftAttachments.length > 0 && (
+              <div>
+                <p className="text-white/50 text-xs mb-0.5">Adjuntos</p>
+                <ComunicadoAttachmentLinks items={draftAttachments} />
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" className="border-white/20 text-white" onClick={() => setPreviewOpen(false)}>
@@ -630,9 +940,13 @@ const ComunicacionAcademico: React.FC = () => {
               disabled={sendComunicadoMutation.isPending}
               onClick={() =>
                 sendComunicadoMutation.mutate({
+                  groupSubjectId: selectedGs,
                   title: draftTitle.trim(),
                   body: draftBody.trim(),
                   priority: 'normal',
+                  attachments: draftAttachments,
+                  recipientMode,
+                  selectedParentIds,
                 })
               }
             >
@@ -655,8 +969,22 @@ const ComunicacionAcademico: React.FC = () => {
           <Textarea
             value={corrBody}
             onChange={(e) => setCorrBody(e.target.value)}
-            className="bg-white/5 border-white/15 text-white min-h-[120px]"
+            className="bg-white/5 border-white/15 text-white min-h-[120px] mb-3"
           />
+          {correctionFor?.group_id && correctionFor?.group_subject_id && (
+            <ComunicadoWorkspaceAttachments
+              postGroupId={correctionFor.group_id}
+              postGroupSubjectId={correctionFor.group_subject_id}
+              postCursoNombre={
+                [correctionFor.group_name, correctionFor.subject_name].filter(Boolean).join(' — ') ||
+                cursoNombreForDrive
+              }
+              attachments={corrAttachments}
+              onAttachmentsChange={setCorrAttachments}
+              disabled={correctionMutation.isPending}
+              showTeacherPrivateFolder={user?.rol === 'profesor'}
+            />
+          )}
           <DialogFooter>
             <Button variant="outline" className="border-white/20 text-white" onClick={() => setCorrectionFor(null)}>
               Cerrar
@@ -670,6 +998,7 @@ const ComunicacionAcademico: React.FC = () => {
                   id: correctionFor.id,
                   title: corrTitle.trim(),
                   body: corrBody.trim(),
+                  attachments: corrAttachments,
                 });
               }}
             >

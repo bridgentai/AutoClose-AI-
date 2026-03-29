@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
+import { parseComunicadoAttachments } from '@/lib/comunicadoAttachments';
 
 interface UnreadComItem {
   id: string;
@@ -12,6 +13,7 @@ interface UnreadComItem {
   subject_name: string | null;
   group_name: string | null;
   created_at: string;
+  attachments_json?: unknown;
 }
 
 export default function ParentPage() {
@@ -81,6 +83,9 @@ export default function ParentPage() {
                     <p className="text-white font-medium text-sm line-clamp-1">{c.title}</p>
                     <p className="text-white/45 text-xs mt-1">
                       {[c.subject_name, c.group_name].filter(Boolean).join(' · ')}
+                      {parseComunicadoAttachments(c.attachments_json).some((a) => a.url) && (
+                        <span className="ml-2 text-[#00c8ff]/90">· Adjuntos</span>
+                      )}
                     </p>
                   </li>
                 ))}

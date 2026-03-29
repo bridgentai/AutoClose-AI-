@@ -87,14 +87,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           icon: Mail, 
           label: "Comunicación", 
           path: "/comunicacion",
-          keywords: ["mensajes", "comunicacion", "bandeja", "correo"],
-          roles: ["estudiante"]
-        },
-        { 
-          icon: UsersRound, 
-          label: "Comunidad", 
-          path: "/comunidad",
-          keywords: ["comunidad", "eventos", "calendario", "noticias", "avisos"],
+          keywords: ["mensajes", "comunicacion", "bandeja", "correo", "comunidad", "eventos", "calendario", "noticias", "avisos"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
         { 
@@ -392,16 +385,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         },
         { 
           icon: Calendar, 
-          label: "Comunidad - Calendario de Eventos", 
+          label: "Comunicación - Calendario de Eventos", 
           path: "/comunidad/calendario",
-          keywords: ["eventos", "calendario", "comunidad"],
+          keywords: ["eventos", "calendario", "comunidad", "comunicacion"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
         { 
           icon: Mail, 
-          label: "Comunidad - Avisos y Noticias", 
+          label: "Comunicación - Avisos y Noticias", 
           path: "/comunidad/noticias",
-          keywords: ["noticias", "avisos", "comunidad"],
+          keywords: ["noticias", "avisos", "comunidad", "comunicacion"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
       ],

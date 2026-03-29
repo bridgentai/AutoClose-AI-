@@ -23,6 +23,7 @@ export interface AnnouncementRow {
   audience?: string | null;
   category?: string | null;
   priority?: string | null;
+  attachments_json?: unknown;
 }
 
 export interface AnnouncementMessageRow {

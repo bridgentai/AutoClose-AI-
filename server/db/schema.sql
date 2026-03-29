@@ -494,7 +494,8 @@ CREATE TABLE IF NOT EXISTS announcements (
   correction_of UUID REFERENCES announcements(id),
   audience VARCHAR(50) DEFAULT 'parents',
   category VARCHAR(50) DEFAULT 'general',
-  priority VARCHAR(20) DEFAULT 'normal'
+  priority VARCHAR(20) DEFAULT 'normal',
+  attachments_json JSONB DEFAULT '[]'::jsonb
 );
 
 CREATE INDEX IF NOT EXISTS idx_announcements_institution ON announcements(institution_id);

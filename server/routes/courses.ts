@@ -13,6 +13,37 @@ import {
   createSubject,
   updateSubject,
 } from '../repositories/subjectRepository.js';
+
+type ComunicadoAttachmentNormalized = {
+  name: string;
+  url?: string;
+  fileId?: string;
+  source?: string;
+};
+
+function normalizeComunicadoAttachments(raw: unknown): ComunicadoAttachmentNormalized[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ComunicadoAttachmentNormalized[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue;
+    const o = item as Record<string, unknown>;
+    const name = typeof o.name === 'string' ? o.name.trim().slice(0, 200) : '';
+    if (!name) continue;
+    const url =
+      typeof o.url === 'string' && o.url.trim().length > 0 ? o.url.trim().slice(0, 2000) : undefined;
+    const fileId =
+      typeof o.fileId === 'string' && o.fileId.trim().length > 0
+        ? o.fileId.trim().slice(0, 200)
+        : undefined;
+    const source =
+      typeof o.source === 'string' && o.source.trim().length > 0
+        ? o.source.trim().slice(0, 50)
+        : undefined;
+    out.push({ name, url, fileId, source });
+    if (out.length >= 10) break;
+  }
+  return out;
+}
 import {
   findGroupSubjectsByGroup,
   findGroupSubjectsByGroupWithDetails,
@@ -32,6 +63,7 @@ import {
 import {
   findParentUserIdsForGroupSubject,
   countParentsForGroupSubject,
+  listParentRecipientsForGroupSubject,
   createComunicacionAnnouncement,
   cancelComunicadoPending,
   findComunicadoById,
@@ -80,6 +112,7 @@ function toCourseResponse(gs: { id: string; subject_id: string; group_id: string
     cursos: groupName ? [groupName] : [],
     profesorIds: teacher ? [{ _id: teacher.id, nombre: teacher.full_name, email: teacher.email }] : [],
     colegioId: gs.institution_id,
+    groupId: gs.group_id,
   };
 }
 
@@ -284,11 +317,19 @@ router.post('/comunicado-padres', protect, requireRole(...COMUNICADO_PADRES_PUBL
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId ?? req.user?.institution_id;
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
-    const body = req.body as { group_subject_id?: string; title?: string; body?: string; priority?: string };
+    const body = req.body as {
+      group_subject_id?: string;
+      title?: string;
+      body?: string;
+      priority?: string;
+      attachments?: unknown;
+      recipient_parent_ids?: unknown;
+    };
     const groupSubjectId = body.group_subject_id;
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const text = typeof body.body === 'string' ? body.body.trim() : '';
     const priority = typeof body.priority === 'string' ? body.priority.trim() : 'normal';
+    const attachments = normalizeComunicadoAttachments(body.attachments);
     if (!title) return res.status(400).json({ message: 'El título es obligatorio.' });
     if (!groupSubjectId) return res.status(400).json({ message: 'group_subject_id es obligatorio.' });
     const gs = await findGroupSubjectById(groupSubjectId);
@@ -301,7 +342,23 @@ router.post('/comunicado-padres', protect, requireRole(...COMUNICADO_PADRES_PUBL
         return res.status(403).json({ message: 'Solo puede enviar a sus propios cursos.' });
       }
     }
-    const parentIds = await findParentUserIdsForGroupSubject(groupSubjectId, colegioId);
+    let parentIds = await findParentUserIdsForGroupSubject(groupSubjectId, colegioId);
+    if (Array.isArray(body.recipient_parent_ids)) {
+      const requested = body.recipient_parent_ids.filter(
+        (x): x is string => typeof x === 'string' && x.trim().length > 0
+      );
+      if (requested.length === 0) {
+        return res.status(400).json({ message: 'Indica al menos un destinatario (padre).' });
+      }
+      const allowed = new Set(parentIds);
+      const uniqueRequested = Array.from(new Set(requested.map((id) => id.trim())));
+      parentIds = uniqueRequested.filter((id) => allowed.has(id));
+      if (parentIds.length === 0) {
+        return res
+          .status(400)
+          .json({ message: 'Los destinatarios deben ser padres vinculados a este curso.' });
+      }
+    }
     const scheduled = new Date(Date.now() + 30_000).toISOString();
     const created = await createComunicacionAnnouncement({
       institution_id: colegioId,
@@ -317,6 +374,7 @@ router.post('/comunicado-padres', protect, requireRole(...COMUNICADO_PADRES_PUBL
       audience: 'parents',
       category: 'general',
       priority,
+      attachments_json: JSON.stringify(attachments),
     });
     await addAnnouncementRecipients(created.id, parentIds);
     return res.status(201).json({ id: created.id, scheduled_send_at: scheduled });
@@ -391,13 +449,41 @@ router.get('/comunicados-padres-unread', protect, requireRole('padre'), async (r
 // GET /api/courses/padres-vinculados/:groupSubjectId
 router.get('/padres-vinculados/:groupSubjectId', protect, requireRole(...COMUNICADO_PADRES_PUBLISH, 'school_admin'), async (req: AuthRequest, res) => {
   try {
+    const userId = req.user?.id;
     const colegioId = req.user?.colegioId ?? req.user?.institution_id;
     const { groupSubjectId } = req.params;
-    if (!colegioId || !groupSubjectId) return res.status(401).json({ message: 'No autorizado' });
+    if (!userId || !colegioId || !groupSubjectId) return res.status(401).json({ message: 'No autorizado' });
     const gs = await findGroupSubjectById(groupSubjectId);
     if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado' });
+    const staffUser = await findUserById(userId);
+    if (staffUser?.role === 'profesor') {
+      const myGs = await findGroupSubjectsByTeacher(userId, colegioId);
+      if (!myGs.some((x) => x.id === groupSubjectId)) {
+        return res.status(403).json({ message: 'Solo puedes ver padres de tus cursos.' });
+      }
+    }
     const n = await countParentsForGroupSubject(groupSubjectId, colegioId);
-    return res.json({ count: n });
+    const group = await findGroupById(gs.group_id);
+    const subject = await findSubjectById(gs.subject_id);
+    const subjectName = (gs.display_name?.trim() || subject?.name || '').trim() || null;
+    const withList =
+      String(req.query.list ?? '') === '1' || String(req.query.list ?? '').toLowerCase() === 'true';
+    const payload: {
+      count: number;
+      group_id: string;
+      group_name: string | null;
+      subject_name: string | null;
+      parents?: { id: string; full_name: string }[];
+    } = {
+      count: n,
+      group_id: gs.group_id,
+      group_name: group?.name ?? null,
+      subject_name: subjectName,
+    };
+    if (withList) {
+      payload.parents = await listParentRecipientsForGroupSubject(groupSubjectId, colegioId);
+    }
+    return res.json(payload);
   } catch (e: unknown) {
     console.error('padres-vinculados:', (e as Error).message);
     return res.status(500).json({ message: 'Error' });
@@ -462,9 +548,10 @@ router.post('/comunicado/:id/correccion', protect, requireRole(...COMUNICADO_PAD
     }
     const dup = await queryPg<{ x: string }>(`SELECT id::text AS x FROM announcements WHERE correction_of = $1 LIMIT 1`, [id]);
     if (dup.rows.length) return res.status(400).json({ message: 'Ya existe corrección.' });
-    const body = req.body as { title?: string; body?: string };
+    const body = req.body as { title?: string; body?: string; attachments?: unknown };
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const text = typeof body.body === 'string' ? body.body.trim() : '';
+    const attachments = normalizeComunicadoAttachments(body.attachments);
     if (!title) return res.status(400).json({ message: 'Título obligatorio.' });
     if (!original.group_subject_id || !original.group_id) return res.status(400).json({ message: 'Datos incompletos.' });
     const created = await createComunicacionAnnouncement({
@@ -481,6 +568,7 @@ router.post('/comunicado/:id/correccion', protect, requireRole(...COMUNICADO_PAD
       category: 'general',
       priority: original.priority ?? 'normal',
       correction_of: id,
+      attachments_json: JSON.stringify(attachments),
     });
     await copyRecipientsToAnnouncement(id, created.id);
     await markAnnouncementCorrected(id, colegioId);

@@ -24,7 +24,7 @@ export function AppSidebar() {
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
-    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["estudiante", "profesor"] },
+    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["estudiante", "profesor", "directivo", "padre"] },
     { 
       icon: Send, 
       label: "Evo Send", 
@@ -48,8 +48,6 @@ export function AppSidebar() {
 
     { icon: Mail, label: "Comunicación padres", path: "/asistente/comunicacion", roles: ["asistente"] },
     { icon: FileCheck, label: "Permisos de salida", path: "/permisos", roles: ["asistente"] },
-
-    { icon: Calendar, label: "Comunidad", path: "/comunidad", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
     { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },

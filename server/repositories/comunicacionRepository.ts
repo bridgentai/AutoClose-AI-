@@ -46,6 +46,25 @@ export async function countParentsForGroupSubject(
   return ids.length;
 }
 
+/** Padres vinculados al curso de la materia (para elegir destinatarios del comunicado). */
+export async function listParentRecipientsForGroupSubject(
+  groupSubjectId: string,
+  institutionId: string
+): Promise<{ id: string; full_name: string }[]> {
+  const r = await queryPg<{ id: string; full_name: string }>(
+    `SELECT DISTINCT u.id,
+            COALESCE(NULLIF(TRIM(u.full_name), ''), NULLIF(TRIM(u.email), ''), u.id::text) AS full_name
+     FROM group_subjects gs
+     JOIN enrollments e ON e.group_id = gs.group_id
+     JOIN guardian_students g ON g.student_id = e.student_id AND g.institution_id = gs.institution_id
+     JOIN users u ON u.id = g.guardian_id AND u.role = 'padre'
+     WHERE gs.id = $1 AND gs.institution_id = $2
+     ORDER BY full_name`,
+    [groupSubjectId, institutionId]
+  );
+  return r.rows;
+}
+
 export async function createComunicacionAnnouncement(row: {
   institution_id: string;
   title: string;
@@ -61,14 +80,16 @@ export async function createComunicacionAnnouncement(row: {
   category?: string;
   priority?: string;
   correction_of?: string | null;
+  attachments_json?: string;
 }): Promise<AnnouncementRow> {
+  const attachmentsPayload = row.attachments_json ?? '[]';
   const r = await queryPg<AnnouncementRow>(
     `INSERT INTO announcements (
        institution_id, title, body, type, group_id, group_subject_id, assignment_id, created_by_id, published_at,
-       status, scheduled_send_at, sent_at, audience, category, priority, correction_of
+       status, scheduled_send_at, sent_at, audience, category, priority, correction_of, attachments_json
      )
      VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, now(),
-       $8, $9, $10, $11, $12, $13, $14)
+       $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
      RETURNING *`,
     [
       row.institution_id,
@@ -85,6 +106,7 @@ export async function createComunicacionAnnouncement(row: {
       row.category ?? 'general',
       row.priority ?? 'normal',
       row.correction_of ?? null,
+      attachmentsPayload,
     ]
   );
   const ins = r.rows[0];

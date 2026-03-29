@@ -72,7 +72,7 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
         return "/mi-perfil";
       }
       if (pathParts[0] === "comunidad") {
-        return "/comunidad";
+        return "/comunicacion";
       }
 
       return parentPath;
@@ -103,9 +103,9 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
       if (pathParts[0] === "comunicacion") {
         return "/comunicacion";
       }
-      // Si es comunidad, volver a comunidad
+      // Rutas bajo /comunidad (calendario, noticias): el hub es Comunicación
       if (pathParts[0] === "comunidad") {
-        return "/comunidad";
+        return "/comunicacion";
       }
       return "/dashboard";
     }
@@ -189,7 +189,7 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
       "/mi-aprendizaje/horario": "Horario",
       "/mi-aprendizaje/calendario": "Calendario",
       "/mi-perfil": "Mi Perfil",
-      "/comunidad": "Comunidad",
+      "/comunidad": "Comunicación",
       "/comunicacion": "Comunicación",
       "/comunicacion/academico": "Comunicación Académica",
       "/courses": "Cursos",

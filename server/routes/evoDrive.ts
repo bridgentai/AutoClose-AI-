@@ -66,7 +66,14 @@ async function getAuthedClient(userId: string) {
   }
   return oauth2;
 }
-const ROLES_WRITE = ['profesor', 'directivo', 'school_admin', 'super_admin', 'admin-general-colegio'];
+const ROLES_WRITE = [
+  'profesor',
+  'directivo',
+  'school_admin',
+  'super_admin',
+  'admin-general-colegio',
+  'asistente',
+];
 
 function toEvoFileApi(row: Record<string, unknown>) {
   return {

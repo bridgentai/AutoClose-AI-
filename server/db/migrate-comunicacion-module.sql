@@ -10,7 +10,8 @@ ALTER TABLE announcements
   ADD COLUMN IF NOT EXISTS correction_of uuid REFERENCES announcements(id),
   ADD COLUMN IF NOT EXISTS audience varchar(50) DEFAULT 'parents',
   ADD COLUMN IF NOT EXISTS category varchar(50) DEFAULT 'general',
-  ADD COLUMN IF NOT EXISTS priority varchar(20) DEFAULT 'normal';
+  ADD COLUMN IF NOT EXISTS priority varchar(20) DEFAULT 'normal',
+  ADD COLUMN IF NOT EXISTS attachments_json jsonb DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS announcement_reads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

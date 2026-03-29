@@ -307,7 +307,7 @@ const ComunicadosInstitucionales: React.FC = () => {
 
   return (
     <div className="p-2 md:p-4 min-h-[70vh]">
-      <NavBackButton to="/comunidad" label="Comunidad" />
+      <NavBackButton to="/comunicacion" label="Comunicación" />
 
       <div className="grid gap-4 mt-6 grid-cols-1 md:grid-cols-[240px_1fr]">
         <aside className="rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-3 h-fit">

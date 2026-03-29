@@ -321,7 +321,8 @@ export async function ensureComunicacionModule(): Promise<void> {
       ADD COLUMN IF NOT EXISTS correction_of uuid REFERENCES announcements(id),
       ADD COLUMN IF NOT EXISTS audience varchar(50) DEFAULT 'parents',
       ADD COLUMN IF NOT EXISTS category varchar(50) DEFAULT 'general',
-      ADD COLUMN IF NOT EXISTS priority varchar(20) DEFAULT 'normal'
+      ADD COLUMN IF NOT EXISTS priority varchar(20) DEFAULT 'normal',
+      ADD COLUMN IF NOT EXISTS attachments_json jsonb DEFAULT '[]'::jsonb
   `);
   await queryPg(`
     CREATE TABLE IF NOT EXISTS announcement_reads (
