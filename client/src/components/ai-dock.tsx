@@ -45,6 +45,89 @@ interface AIDockProps {
   onChatStateChange?: (isOpen: boolean, isExpanded: boolean) => void;
 }
 
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = hex.replace("#", "").trim();
+  const full = normalized.length === 3
+    ? normalized.split("").map((c) => c + c).join("")
+    : normalized;
+
+  if (full.length !== 6) return null;
+  const n = Number.parseInt(full, 16);
+  if (Number.isNaN(n)) return null;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function rgbaFromHex(hex: string, alpha: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(255,255,255,${alpha})`;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+type DockCardProps = {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  accentHex: string;
+  onClick: () => void;
+  rightSlot?: React.ReactNode;
+  isActive?: boolean;
+};
+
+function DockCard({
+  icon: Icon,
+  title,
+  description,
+  accentHex,
+  onClick,
+  rightSlot,
+  isActive,
+}: DockCardProps) {
+  const bg = rgbaFromHex(accentHex, 0.08);
+  const border = rgbaFromHex(accentHex, 0.15);
+  const borderActive = rgbaFromHex(accentHex, 0.28);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-xl p-3 text-left",
+        "transition-all duration-300 transition-bounce",
+        "flex items-center justify-between gap-3",
+        "shadow-sm shadow-black/20 hover:shadow-md",
+        "group hover-lift",
+        "min-h-[74px]",
+      )}
+      style={{
+        background: bg,
+        border: `1px solid ${isActive ? borderActive : border}`,
+      }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="h-9 w-9 rounded-lg flex items-center justify-center shadow-inner border border-white/10"
+          style={{ background: rgbaFromHex(accentHex, 0.22) }}
+        >
+          <Icon className="w-4 h-4 text-white" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white font-['Poppins'] truncate">
+            {title}
+          </p>
+          <p className="text-[11px] text-white/60 leading-snug truncate">
+            {description}
+          </p>
+        </div>
+      </div>
+      {rightSlot ? (
+        <div className="flex-shrink-0">{rightSlot}</div>
+      ) : (
+        <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-[#ffd700] transition-colors flex-shrink-0" />
+      )}
+    </button>
+  );
+}
+
 export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps) {
   const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
@@ -86,11 +169,11 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     // Vista directivo: Dashboard, Comunicación, Academia, Evo Drive
     if (user?.rol === "directivo") {
       return [
-        { icon: Home, label: "Dashboard", path: "/dashboard", roles: ["directivo"] },
+        { icon: Home, label: "Dashboard", description: "Resumen y métricas del colegio", path: "/dashboard", roles: ["directivo"], accentHex: "#3B82F6" },
         { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["directivo"], action: "chat" },
-        { icon: Mail, label: "Comunicación", path: "/directivo/comunicacion", roles: ["directivo"] },
-        { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
-        { icon: FolderOpen, label: "Evo Drive", path: "/evo-drive", roles: ["directivo"] },
+        { icon: Mail, label: "Comunicación", description: "Mensajes, anuncios y novedades", path: "/directivo/comunicacion", roles: ["directivo"], accentHex: "#00c8ff" },
+        { icon: BookOpen, label: "Academia", description: "Cursos, planes y gestión académica", path: "/directivo/academia", roles: ["directivo"], accentHex: "#1e3cff" },
+        { icon: FolderOpen, label: "Evo Drive", description: "Archivos y documentos del colegio", path: "/evo-drive", roles: ["directivo"], accentHex: "#10B981" },
       ];
     }
 
@@ -98,6 +181,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       {
         icon: Home,
         label: "Dashboard",
+        description: "Resumen de tu actividad y accesos",
         path: "/dashboard",
         roles: [
           "estudiante",
@@ -109,13 +193,15 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           "school_admin",
           "super_admin",
         ],
+        accentHex: "#3B82F6",
       },
       { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"], action: "chat" },
-      { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
-      { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["estudiante"] },
+      { icon: GraduationCap, label: "Mi Aprendizaje", description: "Cursos, tareas, notas y materiales", path: "/mi-aprendizaje", roles: ["estudiante"], accentHex: "#1e3cff" },
+      { icon: Mail, label: "Comunicación", description: "Mensajes y avisos de clase", path: "/comunicacion", roles: ["estudiante"], accentHex: "#00c8ff" },
       { 
         icon: FolderOpen, 
         label: "Evo Drive", 
+        description: "Tus archivos y recursos",
         path: "/evo-drive", 
         roles: [
           "estudiante",
@@ -125,12 +211,12 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           "admin-general-colegio",
           "school_admin",
           "super_admin"
-        ]
+        ],
+        accentHex: "#10B981"
       },
-      { icon: BookOpen, label: "Academia", path: "/profesor/academia", roles: ["profesor"] },
-      { icon: Mail, label: "Comunicación", path: "/comunicacion", roles: ["profesor"] },
-      { icon: FileCheck, label: "Permisos", path: "/permisos", roles: ["padre"] },
-      { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["padre"] },
+      { icon: BookOpen, label: "Academia", description: "Planeación, cursos y recursos", path: "/profesor/academia", roles: ["profesor"], accentHex: "#1e3cff" },
+      { icon: Mail, label: "Comunicación", description: "Mensajes y comunicados", path: "/comunicacion", roles: ["profesor"], accentHex: "#00c8ff" },
+      { icon: FileCheck, label: "Permisos", description: "Solicitudes y autorizaciones", path: "/permisos", roles: ["padre"], accentHex: "#F59E0B" },
     ];
 
     return baseItems.filter(item => item.roles.includes(user?.rol || ""));
@@ -467,45 +553,26 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
               ) : (
                 /* Navigation Panel */
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {/* Chat Button - Prominent - Hidden on chat page and dashboard */}
+                  {/* Chat Button - Hidden on chat page and dashboard */}
                   {!isChatPage && !isDashboardPage && (
-                  <button
-                    onClick={() => {
-                      setIsChatOpen(true);
-                    }}
-                    className={cn(
-                      "w-full p-4 rounded-xl",
-                      "bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8]",
-                      "hover:from-[#2563EB] hover:to-[#3B82F6]",
-                      "transition-all duration-300 transition-bounce",
-                      "flex items-center gap-3",
-                      "text-white font-medium text-expressive-subtitle",
-                      "shadow-lg shadow-[#3B82F6]/35",
-                      "hover:shadow-xl hover:shadow-[#3B82F6]/45",
-                      "hover-lift pulse-blue",
-                    )}
-                  >
-                    <MessageSquare className="w-5 h-5 animate-float" />
-                    <span>Abrir Chat AI</span>
-                  </button>
+                    <DockCard
+                      icon={MessageSquare}
+                      title="Chat AI"
+                      description="Preguntas, tareas y automatizaciones"
+                      accentHex="#3B82F6"
+                      onClick={() => setIsChatOpen(true)}
+                    />
                   )}
 
                   {/* Acceso Rápido Button */}
-                  <button
+                  <DockCard
+                    icon={Command}
+                    title="Acceso Rápido"
+                    description="Acciones y navegación por teclado"
+                    accentHex="#ffd700"
                     onClick={handleOpenCommandPalette}
-                    className={cn(
-                      "w-full p-3 rounded-lg",
-                      "bg-white/5 hover:bg-white/10",
-                      "border border-white/10 hover:border-white/20",
-                      "transition-all duration-300 transition-bounce",
-                      "flex items-center gap-3",
-                      "group hover-lift",
-                    )}
-                  >
-                    <Command className="w-4 h-4 text-white/70 group-hover:text-[#ffd700] transition-colors group-hover:scale-110" />
-                    <span className="text-sm text-white/80 group-hover:text-white text-expressive-subtitle">Acceso Rápido</span>
-                    <span className="ml-auto text-xs text-white/50">⌘K</span>
-                  </button>
+                    rightSlot={<span className="text-xs text-white/50">⌘K</span>}
+                  />
 
                   {user?.rol === "padre" && (
                     <div className="space-y-2">
@@ -513,88 +580,67 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                         Comunicación
                       </p>
                       <div className="grid grid-cols-1 gap-2">
-                        <button
-                          type="button"
+                        <DockCard
+                          icon={GraduationCap}
+                          title="Academia"
+                          description="Docentes, tareas y avisos del aula"
+                          accentHex="#1e3cff"
                           onClick={() => setLocation("/comunicacion/academico")}
-                          className={cn(
-                            "w-full rounded-xl p-3 text-left",
-                            "bg-gradient-to-br from-[#1e3cff]/20 via-white/[0.04] to-slate-950/40",
-                            "border border-[#1e3cff]/25 hover:border-[#00c8ff]/35",
-                            "shadow-md shadow-black/20 hover:shadow-lg hover:shadow-[#1e3cff]/10",
-                            "transition-all duration-300 flex flex-col gap-2 group hover-lift",
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] flex items-center justify-center shadow-inner border border-white/10">
-                                <GraduationCap className="w-4 h-4 text-white" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-white font-['Poppins'] truncate">
-                                  Academia
-                                </p>
-                                <p className="text-[11px] text-white/55 leading-snug">
-                                  Docentes, tareas y avisos del aula
-                                </p>
-                              </div>
-                            </div>
-                            {academiaUnread > 0 ? (
-                              <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#00c8ff]/25 text-[#7dd3fc] border border-[#00c8ff]/35">
+                          rightSlot={
+                            academiaUnread > 0 ? (
+                              <span
+                                className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#7dd3fc]"
+                                style={{
+                                  background: rgbaFromHex("#00c8ff", 0.18),
+                                  border: `1px solid ${rgbaFromHex("#00c8ff", 0.35)}`,
+                                }}
+                              >
                                 {academiaUnread > 99 ? "99+" : academiaUnread}
                               </span>
                             ) : (
-                              <Inbox className="w-4 h-4 text-white/35 group-hover:text-[#00c8ff] transition-colors flex-shrink-0 mt-1" />
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
-                            <span className="text-[10px] text-white/40 flex items-center gap-1">
-                              <Mail className="w-3 h-3" /> Comunicación académica
-                            </span>
-                            <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-[#ffd700]" />
-                          </div>
-                        </button>
+                              <Inbox className="w-4 h-4 text-white/35 group-hover:text-[#00c8ff] transition-colors" />
+                            )
+                          }
+                        />
 
-                        <button
-                          type="button"
+                        <DockCard
+                          icon={Building2}
+                          title="GLC"
+                          description="Circulares y comunicados institucionales"
+                          accentHex="#ffd700"
                           onClick={() => setLocation("/comunidad/noticias")}
-                          className={cn(
-                            "w-full rounded-xl p-3 text-left",
-                            "bg-gradient-to-br from-[#002366]/35 via-white/[0.03] to-slate-950/45",
-                            "border border-white/10 hover:border-[#ffd700]/25",
-                            "shadow-md shadow-black/25 hover:shadow-lg",
-                            "transition-all duration-300 flex flex-col gap-2 group hover-lift",
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#002366] to-[#0a0a2a] flex items-center justify-center shadow-inner border border-[#ffd700]/20">
-                                <Building2 className="w-4 h-4 text-[#ffd700]" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-white font-['Poppins'] truncate">
-                                  GLC
-                                </p>
-                                <p className="text-[11px] text-white/55 leading-snug">
-                                  Circulares y comunicados institucionales
-                                </p>
-                              </div>
-                            </div>
-                            {glcUnread > 0 ? (
-                              <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#ffd700]/20 text-[#fde047] border border-[#ffd700]/35">
+                          rightSlot={
+                            glcUnread > 0 ? (
+                              <span
+                                className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#fde047]"
+                                style={{
+                                  background: rgbaFromHex("#ffd700", 0.16),
+                                  border: `1px solid ${rgbaFromHex("#ffd700", 0.35)}`,
+                                }}
+                              >
                                 {glcUnread > 99 ? "99+" : glcUnread}
                               </span>
                             ) : (
-                              <Megaphone className="w-4 h-4 text-white/35 group-hover:text-[#ffd700] transition-colors flex-shrink-0 mt-1" />
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
-                            <span className="text-[10px] text-white/40 flex items-center gap-1">
-                              <Globe className="w-3 h-3" /> Colegio
-                            </span>
-                            <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-[#ffd700]" />
-                          </div>
-                        </button>
+                              <Megaphone className="w-4 h-4 text-white/35 group-hover:text-[#ffd700] transition-colors" />
+                            )
+                          }
+                        />
                       </div>
+                    </div>
+                  )}
+
+                  {user?.rol === "padre" && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
+                        Aprendizaje
+                      </p>
+                      <DockCard
+                        icon={BookOpen}
+                        title="Aprendizaje"
+                        description="Cursos, notas, tareas, materiales, horario y calendario"
+                        accentHex="#1e3cff"
+                        onClick={() => setLocation("/parent/aprendizaje")}
+                      />
                     </div>
                   )}
 
@@ -611,29 +657,14 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                         return (
                           <Tooltip key={item.path}>
                             <TooltipTrigger asChild>
-                              <button
+                              <DockCard
+                                icon={Icon}
+                                title={item.label}
+                                description={("description" in item && typeof item.description === "string") ? item.description : "Acceso directo"}
+                                accentHex={("accentHex" in item && typeof item.accentHex === "string") ? item.accentHex : "#3B82F6"}
+                                isActive={isActive}
                                 onClick={() => handleNavClick(item.path, item.action)}
-                                className={cn(
-                                  "w-full p-3 rounded-lg text-left",
-                                  "bg-white/5 hover:bg-white/10",
-                                  "border border-white/10 hover:border-white/20",
-                                  "transition-all duration-300 transition-bounce",
-                                  "flex items-center gap-3",
-                                  "group hover-lift",
-                                  isActive && "bg-[#3B82F6]/25 border-[#3B82F6]/40 hover-glow"
-                                )}
-                              >
-                                <Icon className={cn(
-                                  "w-4 h-4 text-white/70 mt-0.5 transition-all duration-300",
-                                  isActive ? "text-[#ffd700] animate-float" : "group-hover:text-[#ffd700] group-hover:scale-110"
-                                )} />
-                                <span className={cn(
-                                  "text-sm transition-colors text-expressive-subtitle",
-                                  isActive ? "text-white font-medium" : "text-white/80 group-hover:text-white"
-                                )}>
-                                  {item.label}
-                                </span>
-                              </button>
+                              />
                             </TooltipTrigger>
                             <TooltipContent side="left">
                               <p>{item.label}</p>
