@@ -24,6 +24,36 @@ export function courseDisplayLabel(a: AssignmentCourseInfo): string {
   return 'Curso';
 }
 
+/**
+ * Día calendario local para pintar burbujas en el calendario.
+ * Si el valor es solo `YYYY-MM-DD`, se usa tal cual (evita desfase por UTC medianoche).
+ * En cualquier otro caso se usa la fecha local de `Date`.
+ */
+export function getAssignmentCalendarLocalParts(fechaEntrega: string): {
+  year: number;
+  monthIndex: number;
+  day: number;
+} | null {
+  const s = String(fechaEntrega ?? '').trim();
+  const only = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (only) {
+    const year = Number(only[1]);
+    const monthIndex = Number(only[2]) - 1;
+    const day = Number(only[3]);
+    if (!Number.isFinite(year) || monthIndex < 0 || monthIndex > 11 || day < 1 || day > 31) {
+      return null;
+    }
+    return { year, monthIndex, day };
+  }
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    year: d.getFullYear(),
+    monthIndex: d.getMonth(),
+    day: d.getDate(),
+  };
+}
+
 export type CalendarVariant = 'student' | 'teacher';
 
 /** Clave estable para color en calendario: por materia (estudiante) o por curso (profesor). */

@@ -26,7 +26,7 @@ import {
 } from '../repositories/googleTokenRepository.js';
 import {
   getEvoFiles,
-  getRecentFiles,
+  getRecentCourseFilesForUser,
   createEvoFile,
   deleteEvoFile,
   toggleDestacado,
@@ -545,12 +545,64 @@ router.patch('/my-folder/:id', protect, async (req: AuthRequest, res) => {
   });
 });
 
-// GET /api/evo-drive/recientes
+// GET /api/evo-drive/recientes — hasta 10 ítems más recientes (curso + Mi carpeta si aplica), por fecha de creación.
 router.get('/recientes', protect, async (req: AuthRequest, res) => {
   const colegioId = req.user?.colegioId;
-  if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
-  const rows = await getRecentFiles(colegioId);
-  return res.json(rows.map(toEvoFileApi));
+  const userId = req.user?.id;
+  const rol = req.user?.rol ?? '';
+  if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+
+  const courseRows = await getRecentCourseFilesForUser(colegioId, userId, rol, 15);
+  type Sortable = { api: ReturnType<typeof toEvoFileApi>; ts: number };
+  const merged: Sortable[] = courseRows.map((row) => ({
+    api: toEvoFileApi(row),
+    ts: Math.max(
+      new Date(String(row.created_at ?? 0)).getTime(),
+      new Date(String(row.updated_at ?? 0)).getTime()
+    ),
+  }));
+
+  if (canUsePersonalMyFolder(rol)) {
+    try {
+      const personal = await getPersonalFiles(userId, colegioId);
+      for (const p of personal.slice(0, 15)) {
+        const row: Record<string, unknown> = {
+          id: p.id,
+          nombre: p.nombre,
+          tipo: p.tipo,
+          origen: p.google_file_id ? 'google' : 'material',
+          mime_type: p.google_mime_type,
+          group_id: null,
+          curso_nombre: 'Mi carpeta',
+          propietario_id: userId,
+          propietario_nombre: null,
+          propietario_rol: rol,
+          es_publico: false,
+          google_file_id: p.google_file_id,
+          google_web_view_link: p.google_web_view_link,
+          google_mime_type: p.google_mime_type,
+          evo_storage_key: null,
+          evo_storage_url: p.url,
+          size_bytes: null,
+          etiquetas: [],
+          destacado: false,
+          category_id: null,
+          staff_only: false,
+          created_at: p.created_at,
+          updated_at: p.created_at,
+        };
+        merged.push({
+          api: toEvoFileApi(row),
+          ts: new Date(p.created_at).getTime(),
+        });
+      }
+    } catch {
+      /* Mi carpeta no disponible: solo curso */
+    }
+  }
+
+  merged.sort((a, b) => b.ts - a.ts);
+  return res.json(merged.slice(0, 10).map((m) => m.api));
 });
 
 // POST /api/evo-drive/files — crear archivo (material subido o desde Picker). groupSubjectId = materia para que el estudiante vea el archivo solo en esa carpeta.

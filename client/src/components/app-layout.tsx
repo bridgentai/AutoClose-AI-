@@ -56,24 +56,20 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Content Area - with dynamic padding for AI Dock and Chat */}
         <div
           className={cn(
-            "transition-all duration-500 ease-in-out",
-            isChatOpen ? "pr-96" : isDockExpanded ? "pr-80" : "pr-16",
-            isEvoDrive && "flex flex-col min-h-screen"
+            "flex flex-col min-h-screen transition-all duration-500 ease-in-out",
+            isChatOpen ? "pr-96" : isDockExpanded ? "pr-80" : "pr-16"
           )}
         >
-          <main
-            className={cn(
-              "story-section",
-              isEvoDrive ? "flex flex-col flex-1 min-h-0" : "min-h-screen"
-            )}
-          >
+          <main className="story-section flex flex-col flex-1 min-h-0">
             {isEvoDrive ? (
               <div className="flex flex-col flex-1 min-h-0 w-full">
                 {children}
               </div>
             ) : (
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
-                {children}
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
+                  {children}
+                </div>
               </div>
             )}
           </main>

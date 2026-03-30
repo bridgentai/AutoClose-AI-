@@ -21,7 +21,11 @@ import {
   Mail,
   FileCheck,
   Bell,
-  FolderOpen
+  FolderOpen,
+  Building2,
+  ChevronRight,
+  Inbox,
+  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
@@ -143,6 +147,18 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     enabled: !!user && (user.rol === 'estudiante' || user.rol === 'padre' || user.rol === 'profesor' || user.rol === 'directivo'),
   });
   const unreadNotifCount = notifData?.unreadCount ?? 0;
+
+  const { data: padreComSummary } = useQuery<{
+    academico?: { mensajesSinLeer?: number };
+    institucional?: { mensajesSinLeer?: number; ultimoPublicado?: string | null };
+  }>({
+    queryKey: ["communication-summary"],
+    queryFn: async () => apiRequest("GET", "/api/courses/communication-summary"),
+    enabled: !!user && user.rol === "padre",
+    staleTime: 60 * 1000,
+  });
+  const academiaUnread = padreComSummary?.academico?.mensajesSinLeer ?? 0;
+  const glcUnread = padreComSummary?.institucional?.mensajesSinLeer ?? 0;
 
   const handleNavClick = (path: string, action?: string) => {
     if (action === "chat") {
@@ -490,6 +506,97 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     <span className="text-sm text-white/80 group-hover:text-white text-expressive-subtitle">Acceso Rápido</span>
                     <span className="ml-auto text-xs text-white/50">⌘K</span>
                   </button>
+
+                  {user?.rol === "padre" && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
+                        Comunicación
+                      </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLocation("/comunicacion/academico")}
+                          className={cn(
+                            "w-full rounded-xl p-3 text-left",
+                            "bg-gradient-to-br from-[#1e3cff]/20 via-white/[0.04] to-slate-950/40",
+                            "border border-[#1e3cff]/25 hover:border-[#00c8ff]/35",
+                            "shadow-md shadow-black/20 hover:shadow-lg hover:shadow-[#1e3cff]/10",
+                            "transition-all duration-300 flex flex-col gap-2 group hover-lift",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] flex items-center justify-center shadow-inner border border-white/10">
+                                <GraduationCap className="w-4 h-4 text-white" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white font-['Poppins'] truncate">
+                                  Academia
+                                </p>
+                                <p className="text-[11px] text-white/55 leading-snug">
+                                  Docentes, tareas y avisos del aula
+                                </p>
+                              </div>
+                            </div>
+                            {academiaUnread > 0 ? (
+                              <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#00c8ff]/25 text-[#7dd3fc] border border-[#00c8ff]/35">
+                                {academiaUnread > 99 ? "99+" : academiaUnread}
+                              </span>
+                            ) : (
+                              <Inbox className="w-4 h-4 text-white/35 group-hover:text-[#00c8ff] transition-colors flex-shrink-0 mt-1" />
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
+                            <span className="text-[10px] text-white/40 flex items-center gap-1">
+                              <Mail className="w-3 h-3" /> Comunicación académica
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-[#ffd700]" />
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setLocation("/comunidad/noticias")}
+                          className={cn(
+                            "w-full rounded-xl p-3 text-left",
+                            "bg-gradient-to-br from-[#002366]/35 via-white/[0.03] to-slate-950/45",
+                            "border border-white/10 hover:border-[#ffd700]/25",
+                            "shadow-md shadow-black/25 hover:shadow-lg",
+                            "transition-all duration-300 flex flex-col gap-2 group hover-lift",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#002366] to-[#0a0a2a] flex items-center justify-center shadow-inner border border-[#ffd700]/20">
+                                <Building2 className="w-4 h-4 text-[#ffd700]" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-white font-['Poppins'] truncate">
+                                  GLC
+                                </p>
+                                <p className="text-[11px] text-white/55 leading-snug">
+                                  Circulares y comunicados institucionales
+                                </p>
+                              </div>
+                            </div>
+                            {glcUnread > 0 ? (
+                              <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#ffd700]/20 text-[#fde047] border border-[#ffd700]/35">
+                                {glcUnread > 99 ? "99+" : glcUnread}
+                              </span>
+                            ) : (
+                              <Megaphone className="w-4 h-4 text-white/35 group-hover:text-[#ffd700] transition-colors flex-shrink-0 mt-1" />
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
+                            <span className="text-[10px] text-white/40 flex items-center gap-1">
+                              <Globe className="w-3 h-3" /> Colegio
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-[#ffd700]" />
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Navigation Items */}
                   <div className="space-y-2">

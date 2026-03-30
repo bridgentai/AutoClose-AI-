@@ -63,6 +63,7 @@ import FichaMedica from "@/pages/FichaMedica";
 
 import ComunicacionHome from "@/pages/ComunicacionHome";
 import ComunicacionAcademico from "@/pages/ComunicacionAcademico";
+import ComunicacionAcademicoRespuestas from "@/pages/ComunicacionAcademicoRespuestas";
 import BandejaDeEntrada from "@/pages/BandejaDeEntrada";
 import EvoSendPage from "@/pages/evo-send";
 import EvoDrivePage from "@/pages/evo-drive";
@@ -330,6 +331,9 @@ function AppRouter() {
             </Route>
             <Route path="/comunicacion/academico">
               <AuthGuard><ComunicacionAcademico /></AuthGuard>
+            </Route>
+            <Route path="/comunicacion/academico/:materiaId/respuestas/:comunicadoId">
+              <AuthGuard><ComunicacionAcademicoRespuestas /></AuthGuard>
             </Route>
             <Route path="/comunicacion/academico/:materiaId">
               <AuthGuard><ComunicacionAcademico /></AuthGuard>

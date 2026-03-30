@@ -189,7 +189,7 @@ export default function ParentPage() {
 
       <Card className="bg-white/5 border-white/10 backdrop-blur-md">
         <CardHeader>
-          <CardTitle className="text-white">Comunicacion con Docentes</CardTitle>
+          <CardTitle className="text-white">Comunicación con docentes</CardTitle>
           <CardDescription className="text-white/60">Usa el chat AI para consultas</CardDescription>
         </CardHeader>
         <CardContent>

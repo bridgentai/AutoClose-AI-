@@ -507,8 +507,8 @@ export default function EvoSendPage() {
         )}
         <div className="flex items-center gap-3 mt-3">
           <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"
-            style={{ background: 'linear-gradient(145deg, #3B82F6, #1E40AF)' }}
+            className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg shadow-red-500/30"
+            style={{ background: 'linear-gradient(135deg, #ef4444, #e11d48)' }}
           >
             <Send className="w-6 h-6 text-white" />
           </div>
@@ -1107,8 +1107,19 @@ function EvoLayout({
                         })();
                         const remMeta =
                           m.tipo === 'assignment_reminder'
-                            ? safeParseJson<{ title?: string; dueAt?: string; url?: string }>(m.contenido)
+                            ? safeParseJson<{
+                                title?: string;
+                                dueAt?: string;
+                                url?: string;
+                                description?: string;
+                                accent?: string;
+                                attachments?: { name?: string; url?: string }[];
+                              }>(m.contenido)
                             : null;
+                        const remAccent =
+                          m.tipo === 'assignment_reminder' && remMeta?.accent
+                            ? remMeta.accent
+                            : accent;
                         return (
                           <motion.div
                             key={m._id}
@@ -1182,9 +1193,9 @@ function EvoLayout({
                                 }}
                                 className="max-w-[75%] w-[460px] rounded-2xl px-4 py-3 shadow-md text-left border border-white/[0.10]"
                                 style={{
-                                  background: `linear-gradient(180deg, rgba(2,6,23,0.6), color-mix(in srgb, ${accent} 14%, transparent))`,
+                                  background: `linear-gradient(180deg, rgba(2,6,23,0.6), color-mix(in srgb, ${remAccent} 14%, transparent))`,
                                   borderLeftWidth: 4,
-                                  borderLeftColor: accent,
+                                  borderLeftColor: remAccent,
                                 }}
                               >
                                 {!isMine && (
@@ -1192,10 +1203,17 @@ function EvoLayout({
                                 )}
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="min-w-0">
-                                    <p className="text-xs uppercase tracking-wide text-white/60">Recordatorio</p>
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55">
+                                      Recordatorio
+                                    </p>
                                     <p className="text-sm font-semibold text-white truncate mt-0.5">
                                       {remMeta?.title || 'Tarea'}
                                     </p>
+                                    {remMeta?.description ? (
+                                      <p className="text-[11px] text-white/65 mt-1 line-clamp-3 whitespace-pre-wrap">
+                                        {remMeta.description}
+                                      </p>
+                                    ) : null}
                                     {remMeta?.dueAt && (
                                       <p className="text-[11px] text-white/60 mt-1">
                                         Entrega:{' '}
@@ -1207,9 +1225,20 @@ function EvoLayout({
                                         })}
                                       </p>
                                     )}
+                                    {Array.isArray(remMeta?.attachments) && remMeta.attachments.length > 0 ? (
+                                      <p className="text-[10px] text-white/50 mt-1.5">
+                                        Adjuntos:{' '}
+                                        {remMeta.attachments
+                                          .map((a) => (a?.name || a?.url || '').trim())
+                                          .filter(Boolean)
+                                          .slice(0, 4)
+                                          .join(' · ')}
+                                        {remMeta.attachments.length > 4 ? '…' : ''}
+                                      </p>
+                                    ) : null}
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
-                                    <Bell className="w-5 h-5" style={{ color: accent }} />
+                                    <Bell className="w-5 h-5" style={{ color: remAccent }} />
                                     <span className="text-xs text-white/70">Ir</span>
                                   </div>
                                 </div>
@@ -1362,7 +1391,7 @@ function EvoLayout({
           ) : (
             <div className="flex flex-col items-center justify-center flex-1 text-white/50 py-16">
               <Inbox className="w-16 h-16 mb-4" style={{ color: EVO_BLUE }} />
-              <p className="text-lg">Selecciona un hilo para ver la conversación.</p>
+              <p className="text-lg">Selecciona un chat para ver la conversación.</p>
             </div>
           )}
         </div>

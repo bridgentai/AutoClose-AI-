@@ -67,69 +67,82 @@ interface ResumenCardProps {
   onClick?: () => void;
 }
 
+const cardShellBase =
+  'bg-white/5 backdrop-blur-md p-8 flex flex-col h-full min-h-[28rem] hover:shadow-xl transition-shadow duration-300';
+const cardShellClass = `${cardShellBase} border-white/10`;
+const evoSendCardShellClass = `${cardShellBase} border-red-500/25`;
+
 const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, variant, onClick }) => {
   const isPadres = variant === 'padres';
   const ac = isPadres ? (data as ResumenAcademicoData) : null;
   const ins = !isPadres ? (data as ResumenInstitucionalData) : null;
 
   return (
-    <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 flex flex-col justify-between h-full hover:shadow-xl transition-shadow duration-300">
-      <CardContent className="p-0">
+    <Card className={cardShellClass}>
+      <CardContent className="p-0 flex flex-col flex-1 min-h-0">
         <div className="flex items-center gap-4 mb-6">
-          <div className={`w-10 h-10 ${isPadres ? 'text-[#3B82F6]' : 'text-teal-400'}`}>
+          <div
+            className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-lg ${
+              isPadres ? 'bg-blue-500/20 text-blue-400' : 'bg-teal-500/20 text-teal-400'
+            }`}
+          >
             {icon}
           </div>
-          <h2 className="text-3xl font-extrabold text-white">{title}</h2>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight">{title}</h2>
         </div>
 
-        <div className="space-y-4 text-white/80 mt-4">
-          {isPadres && ac && (
-            <>
-              <p className="text-lg font-medium flex justify-between">
-                <span>Mensajes sin leer</span>
-                <span className="text-3xl font-bold text-yellow-400">{ac.mensajesSinLeer}</span>
-              </p>
-              <p className="text-base flex justify-between border-t border-white/10 pt-4">
-                <span>Respuestas pendientes</span>
-                <span className="text-xl font-bold text-white/90">{ac.respuestasPendientes}</span>
-              </p>
-              <p className="text-base flex justify-between">
-                <span>Cursos / materias con actividad</span>
-                <span className="text-xl font-bold text-white/90">{ac.materiasDiferentes}</span>
-              </p>
-            </>
-          )}
-          {!isPadres && ins && (
-            <>
-              <p className="text-lg font-medium flex justify-between">
-                <span>Comunicados este mes</span>
-                <span className="text-3xl font-bold text-white">{ins.comunicadosMes}</span>
-              </p>
-              <p className="text-base flex justify-between border-t border-white/10 pt-4">
-                <span>Sin leer</span>
-                <span className="text-xl font-bold text-yellow-400">{ins.mensajesSinLeer}</span>
-              </p>
-              <p className="text-sm text-white/60 border-t border-white/10 pt-4 line-clamp-2">
-                Último publicado:{' '}
-                <span className="text-white/90 font-medium">{ins.ultimoPublicado || '—'}</span>
-              </p>
-            </>
-          )}
-        </div>
-
-        {data.urgente && (
-          <div className="mt-8 p-4 bg-red-900/40 border border-red-700/50 rounded-lg">
-            <div className="flex items-center gap-2 text-red-400 font-semibold mb-2">
-              <AlertTriangle className="w-5 h-5" /> Destacado
-            </div>
-            <p className="text-sm text-white font-medium">{data.urgente.remitente}</p>
-            <p className="text-xs text-white/70 mt-1 italic truncate">{data.urgente.extracto}</p>
+        <div className="flex-1 flex flex-col min-h-[220px]">
+          <div className="space-y-4 text-white/80">
+            {isPadres && ac && (
+              <>
+                <p className="text-base font-medium flex justify-between gap-3 items-baseline">
+                  <span className="text-white/70">Mensajes sin leer</span>
+                  <span className="text-2xl font-bold text-yellow-400 tabular-nums shrink-0">{ac.mensajesSinLeer}</span>
+                </p>
+                <p className="text-base flex justify-between gap-3 border-t border-white/10 pt-4 items-baseline">
+                  <span className="text-white/70">Respuestas pendientes</span>
+                  <span className="text-xl font-bold text-white/90 tabular-nums shrink-0">{ac.respuestasPendientes}</span>
+                </p>
+                <p className="text-base flex justify-between gap-3 items-baseline">
+                  <span className="text-white/70">Cursos / materias con actividad</span>
+                  <span className="text-xl font-bold text-white/90 tabular-nums shrink-0">{ac.materiasDiferentes}</span>
+                </p>
+              </>
+            )}
+            {!isPadres && ins && (
+              <>
+                <p className="text-base font-medium flex justify-between gap-3 items-baseline">
+                  <span className="text-white/70">Comunicados este mes</span>
+                  <span className="text-2xl font-bold text-white tabular-nums shrink-0">{ins.comunicadosMes}</span>
+                </p>
+                <p className="text-base flex justify-between gap-3 border-t border-white/10 pt-4 items-baseline">
+                  <span className="text-white/70">Sin leer</span>
+                  <span className="text-xl font-bold text-yellow-400 tabular-nums shrink-0">{ins.mensajesSinLeer}</span>
+                </p>
+                <p className="text-base flex justify-between gap-3 border-t border-white/10 pt-4 items-start">
+                  <span className="text-white/70 shrink-0">Último publicado</span>
+                  <span className="text-white/90 font-medium text-right line-clamp-2">{ins.ultimoPublicado || '—'}</span>
+                </p>
+              </>
+            )}
           </div>
-        )}
+
+          {data.urgente ? (
+            <div className="mt-6 p-4 bg-red-900/40 border border-red-700/50 rounded-lg">
+              <div className="flex items-center gap-2 text-red-400 font-semibold mb-2">
+                <AlertTriangle className="w-5 h-5 shrink-0" /> Destacado
+              </div>
+              <p className="text-sm text-white font-medium">{data.urgente.remitente}</p>
+              <p className="text-xs text-white/70 mt-1 italic line-clamp-2">{data.urgente.extracto}</p>
+            </div>
+          ) : (
+            <div className="mt-6 flex-1 min-h-[5.5rem]" aria-hidden />
+          )}
+        </div>
       </CardContent>
 
       <Button
-        className="w-full mt-8 flex items-center justify-center gap-2 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90"
+        className="w-full mt-8 flex items-center justify-center gap-2 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 shrink-0"
         data-testid={`button-bandeja-${variant}`}
         onClick={onClick}
       >
@@ -141,26 +154,43 @@ const ResumenCard: React.FC<ResumenCardProps> = ({ title, icon, data, variant, o
 };
 
 const EvoSendCard: React.FC<{ onClick: () => void }> = ({ onClick }) => (
-  <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 flex flex-col justify-between h-full hover:shadow-xl transition-shadow duration-300 border-emerald-500/20">
-    <CardContent className="p-0">
+  <Card className={evoSendCardShellClass}>
+    <CardContent className="p-0 flex flex-col flex-1 min-h-0">
       <div className="flex items-center gap-4 mb-6">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-emerald-500/20 text-emerald-400">
-          <Send className="w-10 h-10" />
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-red-500/30 bg-gradient-to-br from-red-500 via-red-600 to-rose-500">
+          <Send className="w-10 h-10 text-white" />
         </div>
-        <h2 className="text-3xl font-extrabold text-white">Evo Send</h2>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight">Evo Send</h2>
       </div>
-      <p className="text-white/80 text-base mt-2">
-        Chat por curso y materia, tipo WhatsApp. El profesor ve sus cursos como grupos; el estudiante ve cada materia con el nombre del profesor.
-      </p>
-      <Button
-        className="w-full mt-8 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white"
-        data-testid="button-evo-send"
-        onClick={onClick}
-      >
-        Abrir Evo Send
-        <ChevronRight className="w-5 h-5" />
-      </Button>
+
+      <div className="flex-1 flex flex-col min-h-[220px]">
+        <div className="space-y-4 text-white/80">
+          <p className="text-base font-medium flex justify-between gap-3 items-baseline">
+            <span className="text-white/70">Profesor</span>
+            <span className="text-xl font-bold text-white/90 text-right">Grupos por curso</span>
+          </p>
+          <p className="text-base flex justify-between gap-3 border-t border-white/10 pt-4 items-baseline">
+            <span className="text-white/70">Estudiante</span>
+            <span className="text-xl font-bold text-white/90 text-right">Chat por materia</span>
+          </p>
+          <p className="text-base flex justify-between gap-3 border-t border-white/10 pt-4 items-start">
+            <span className="text-white/70 shrink-0">Experiencia</span>
+            <span className="text-white/90 font-medium text-right line-clamp-2">Tipo WhatsApp, en tiempo real</span>
+          </p>
+        </div>
+
+        <div className="mt-6 flex-1 min-h-[5.5rem]" aria-hidden />
+      </div>
     </CardContent>
+
+    <Button
+      className="w-full mt-8 flex items-center justify-center gap-2 shrink-0 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white"
+      data-testid="button-evo-send"
+      onClick={onClick}
+    >
+      Abrir Evo Send
+      <ChevronRight className="w-5 h-5" />
+    </Button>
   </Card>
 );
 
@@ -196,20 +226,27 @@ const ComunicacionHome: React.FC = () => {
     <div data-testid="comunicacion-page">
       <NavBackButton to={backTo} label={backLabel} />
       <div className="mb-10">
-        <h1 className="text-4xl font-extrabold tracking-tight text-white">Centro de Comunicacion</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight text-white">Centro de Comunicación</h1>
         <p className="text-lg text-white/70 mt-2">
           Comunicados a familias, circulares institucionales y Evo Send.
         </p>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-8 min-h-[60vh] lg:grid-cols-2">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 animate-pulse">
+        <div
+          className={`grid grid-cols-1 gap-8 min-h-[60vh] ${showEvoSend ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}
+        >
+          <Card className={`${cardShellClass} animate-pulse`}>
             <CardContent className="p-0 h-64 rounded bg-white/5" />
           </Card>
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md p-8 animate-pulse">
+          <Card className={`${cardShellClass} animate-pulse`}>
             <CardContent className="p-0 h-64 rounded bg-white/5" />
           </Card>
+          {showEvoSend && (
+            <Card className={`${cardShellClass} animate-pulse`}>
+              <CardContent className="p-0 h-64 rounded bg-white/5" />
+            </Card>
+          )}
         </div>
       ) : (
         <div className={`grid grid-cols-1 gap-8 min-h-[60vh] ${showEvoSend ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>

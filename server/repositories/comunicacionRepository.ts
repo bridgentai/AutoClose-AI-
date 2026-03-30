@@ -1,5 +1,6 @@
 import { queryPg } from '../config/db-pg.js';
-import type { AnnouncementRow, AnnouncementMessageRow } from './announcementRepository.js';
+import { ensureEvoSendSupportAndReads } from '../db/pgSchemaPatches.js';
+import type { AnnouncementRow } from './announcementRepository.js';
 
 export interface ComunicadoPadresListItem extends AnnouncementRow {
   reads_count: number;
@@ -10,7 +11,16 @@ export interface ComunicadoPadresListItem extends AnnouncementRow {
   group_name: string | null;
   author_name: string | null;
   author_role: string | null;
-  parent_replies: { id: string; content: string; created_at: string; sender_id: string }[];
+  parent_replies: ParentReplyEnriched[];
+}
+
+export interface ParentReplyEnriched {
+  id: string;
+  content: string;
+  created_at: string;
+  sender_id: string;
+  parent_display_name: string;
+  linked_student_names: string | null;
 }
 
 export interface InstitucionalListItem extends AnnouncementRow {
@@ -19,6 +29,150 @@ export interface InstitucionalListItem extends AnnouncementRow {
   has_correction: boolean;
   author_name: string | null;
   author_role: string | null;
+}
+
+/** Texto para tarjeta «Destacado» en Centro de Comunicación. */
+export interface ComunicadoResumenHighlight {
+  remitente: string;
+  extracto: string;
+}
+
+/** Último comunicado a padres enviado que recibió este acudiente (orden real de llegada). */
+export async function findLastSentComunicadoPadresHighlightForPadre(
+  institutionId: string,
+  padreUserId: string
+): Promise<ComunicadoResumenHighlight | null> {
+  const r = await queryPg<{
+    title: string;
+    body: string | null;
+    subject_name: string | null;
+    group_name: string | null;
+  }>(
+    `SELECT a.title, a.body,
+            COALESCE(gs.display_name, s.name) AS subject_name,
+            g.name AS group_name
+     FROM announcements a
+     INNER JOIN announcement_recipients ar ON ar.announcement_id = a.id AND ar.user_id = $2::uuid
+     LEFT JOIN group_subjects gs ON gs.id = a.group_subject_id
+     LEFT JOIN subjects s ON s.id = gs.subject_id
+     LEFT JOIN groups g ON g.id = a.group_id
+     WHERE a.institution_id = $1::uuid AND a.type = 'comunicado_padres' AND a.status = 'sent'
+     ORDER BY COALESCE(a.sent_at, a.created_at) DESC NULLS LAST, a.created_at DESC
+     LIMIT 1`,
+    [institutionId, padreUserId]
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  const remitente = [row.subject_name, row.group_name].filter(Boolean).join(' - ') || 'Comunicación';
+  const extracto = (row.title || row.body || '').trim().slice(0, 280);
+  if (!extracto) return { remitente, extracto: '(Sin texto)' };
+  return { remitente, extracto };
+}
+
+/** Cursos/materias distintos donde este padre ha recibido al menos un comunicado enviado. */
+export async function countDistinctPadresComunicadoGroupSubjectsForPadre(
+  institutionId: string,
+  padreUserId: string
+): Promise<number> {
+  const r = await queryPg<{ c: string }>(
+    `SELECT COUNT(DISTINCT a.group_subject_id)::text AS c
+     FROM announcements a
+     INNER JOIN announcement_recipients ar ON ar.announcement_id = a.id AND ar.user_id = $2::uuid
+     WHERE a.institution_id = $1::uuid
+       AND a.type = 'comunicado_padres'
+       AND a.status = 'sent'
+       AND a.group_subject_id IS NOT NULL`,
+    [institutionId, padreUserId]
+  );
+  return parseInt(r.rows[0]?.c ?? '0', 10) || 0;
+}
+
+/**
+ * Última respuesta de un padre en comunicados del ámbito (docente: solo hilos que él creó; staff: cualquier hilo en esas materias).
+ */
+export async function findLastParentReplyHighlightForStaff(
+  institutionId: string,
+  viewerUserId: string,
+  viewerRole: string,
+  groupSubjectIds: string[]
+): Promise<ComunicadoResumenHighlight | null> {
+  if (groupSubjectIds.length === 0) return null;
+  const isProfesor = viewerRole === 'profesor';
+  const r = isProfesor
+    ? await queryPg<{
+        content: string;
+        title: string;
+        subject_name: string | null;
+        group_name: string | null;
+      }>(
+        `SELECT m.content, a.title,
+                COALESCE(gs.display_name, s.name) AS subject_name,
+                g.name AS group_name
+         FROM announcement_messages m
+         INNER JOIN announcements a ON a.id = m.announcement_id
+         LEFT JOIN group_subjects gs ON gs.id = a.group_subject_id
+         LEFT JOIN subjects s ON s.id = gs.subject_id
+         LEFT JOIN groups g ON g.id = a.group_id
+         WHERE a.institution_id = $1::uuid
+           AND a.type = 'comunicado_padres'
+           AND a.group_subject_id = ANY($2::uuid[])
+           AND a.created_by_id = $3::uuid
+           AND m.sender_role = 'padre'
+         ORDER BY m.created_at DESC
+         LIMIT 1`,
+        [institutionId, groupSubjectIds, viewerUserId]
+      )
+    : await queryPg<{
+        content: string;
+        title: string;
+        subject_name: string | null;
+        group_name: string | null;
+      }>(
+        `SELECT m.content, a.title,
+                COALESCE(gs.display_name, s.name) AS subject_name,
+                g.name AS group_name
+         FROM announcement_messages m
+         INNER JOIN announcements a ON a.id = m.announcement_id
+         LEFT JOIN group_subjects gs ON gs.id = a.group_subject_id
+         LEFT JOIN subjects s ON s.id = gs.subject_id
+         LEFT JOIN groups g ON g.id = a.group_id
+         WHERE a.institution_id = $1::uuid
+           AND a.type = 'comunicado_padres'
+           AND a.group_subject_id = ANY($2::uuid[])
+           AND m.sender_role = 'padre'
+         ORDER BY m.created_at DESC
+         LIMIT 1`,
+        [institutionId, groupSubjectIds]
+      );
+  const row = r.rows[0];
+  if (!row) return null;
+  const remitente = [row.subject_name, row.group_name].filter(Boolean).join(' - ') || 'Familia';
+  const extracto = (row.content || row.title || '').trim().slice(0, 280);
+  if (!extracto) return { remitente, extracto: '(Mensaje sin texto)' };
+  return { remitente, extracto };
+}
+
+/** Último comunicado institucional que este usuario recibió (destinatario explícito). */
+export async function findLastInstitucionalHighlightForViewer(
+  institutionId: string,
+  viewerUserId: string
+): Promise<ComunicadoResumenHighlight | null> {
+  const r = await queryPg<{ title: string; body: string | null; category: string | null }>(
+    `SELECT a.title, a.body, a.category
+     FROM announcements a
+     INNER JOIN announcement_recipients ar ON ar.announcement_id = a.id AND ar.user_id = $2::uuid
+     WHERE a.institution_id = $1::uuid AND a.type = 'comunicado_institucional' AND a.status = 'sent'
+     ORDER BY COALESCE(a.sent_at, a.created_at) DESC NULLS LAST, a.created_at DESC
+     LIMIT 1`,
+    [institutionId, viewerUserId]
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  const cat = (row.category || '').trim();
+  const remitente = cat ? `GLC · ${cat}` : 'Comunicados institucionales';
+  const extracto = (row.title || row.body || '').trim().slice(0, 280);
+  if (!extracto) return { remitente, extracto: '(Sin texto)' };
+  return { remitente, extracto };
 }
 
 /** Padres (usuarios role padre) vinculados vía guardian_students a estudiantes del grupo del group_subject. */
@@ -72,6 +226,7 @@ export async function createComunicacionAnnouncement(row: {
   type: 'comunicado_padres' | 'comunicado_institucional';
   group_id?: string | null;
   group_subject_id?: string | null;
+  assignment_id?: string | null;
   created_by_id: string;
   status: 'pending' | 'sent';
   scheduled_send_at?: string | null;
@@ -88,8 +243,8 @@ export async function createComunicacionAnnouncement(row: {
        institution_id, title, body, type, group_id, group_subject_id, assignment_id, created_by_id, published_at,
        status, scheduled_send_at, sent_at, audience, category, priority, correction_of, attachments_json
      )
-     VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, now(),
-       $8, $9, $10, $11, $12, $13, $14, $15::jsonb)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(),
+       $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
      RETURNING *`,
     [
       row.institution_id,
@@ -98,6 +253,7 @@ export async function createComunicacionAnnouncement(row: {
       row.type,
       row.group_id ?? null,
       row.group_subject_id ?? null,
+      row.assignment_id ?? null,
       row.created_by_id,
       row.status,
       row.scheduled_send_at ?? null,
@@ -188,25 +344,67 @@ export async function markComunicadoRead(announcementId: string, userId: string)
   );
 }
 
-async function loadParentRepliesMap(
-  announcementIds: string[]
-): Promise<Record<string, { id: string; content: string; created_at: string; sender_id: string }[]>> {
+async function loadParentRepliesMap(announcementIds: string[]): Promise<Record<string, ParentReplyEnriched[]>> {
   if (announcementIds.length === 0) return {};
-  const r = await queryPg<AnnouncementMessageRow>(
-    `SELECT * FROM announcement_messages
-     WHERE announcement_id = ANY($1::uuid[])
-       AND sender_role = 'padre'
-     ORDER BY created_at ASC`,
+  const r = await queryPg<{
+    id: string;
+    announcement_id: string;
+    content: string;
+    created_at: string;
+    sender_id: string;
+    parent_display_name: string;
+    linked_student_names: string | null;
+  }>(
+    `SELECT m.id,
+            m.announcement_id,
+            m.content,
+            m.created_at,
+            m.sender_id,
+            COALESCE(NULLIF(TRIM(p.full_name), ''), NULLIF(TRIM(p.email), ''), p.id::text) AS parent_display_name,
+            COALESCE(
+              (
+                SELECT string_agg(sub.sn, ' · ' ORDER BY sub.sn)
+                FROM (
+                  SELECT DISTINCT COALESCE(NULLIF(TRIM(st2.full_name), ''), NULLIF(TRIM(st2.email), ''), st2.id::text) AS sn
+                  FROM enrollments e2
+                  INNER JOIN guardian_students gs2
+                    ON gs2.student_id = e2.student_id
+                   AND gs2.guardian_id = m.sender_id
+                   AND gs2.institution_id = a.institution_id
+                  INNER JOIN users st2 ON st2.id = e2.student_id
+                  WHERE e2.group_id = COALESCE(gs_join.group_id, a.group_id)
+                ) sub
+              ),
+              (
+                SELECT string_agg(sub2.sn, ' · ' ORDER BY sub2.sn)
+                FROM (
+                  SELECT DISTINCT COALESCE(NULLIF(TRIM(st3.full_name), ''), NULLIF(TRIM(st3.email), ''), st3.id::text) AS sn
+                  FROM guardian_students gs3
+                  INNER JOIN users st3 ON st3.id = gs3.student_id
+                  WHERE gs3.guardian_id = m.sender_id
+                    AND gs3.institution_id = a.institution_id
+                ) sub2
+              )
+            ) AS linked_student_names
+     FROM announcement_messages m
+     INNER JOIN announcements a ON a.id = m.announcement_id
+     LEFT JOIN group_subjects gs_join ON gs_join.id = a.group_subject_id
+     INNER JOIN users p ON p.id = m.sender_id
+     WHERE m.announcement_id = ANY($1::uuid[])
+       AND m.sender_role = 'padre'
+     ORDER BY m.created_at ASC`,
     [announcementIds]
   );
-  const out: Record<string, { id: string; content: string; created_at: string; sender_id: string }[]> = {};
-  for (const m of r.rows) {
-    if (!out[m.announcement_id]) out[m.announcement_id] = [];
-    out[m.announcement_id].push({
-      id: m.id,
-      content: m.content,
-      created_at: m.created_at,
-      sender_id: m.sender_id,
+  const out: Record<string, ParentReplyEnriched[]> = {};
+  for (const row of r.rows) {
+    if (!out[row.announcement_id]) out[row.announcement_id] = [];
+    out[row.announcement_id].push({
+      id: row.id,
+      content: row.content,
+      created_at: row.created_at,
+      sender_id: row.sender_id,
+      parent_display_name: row.parent_display_name,
+      linked_student_names: row.linked_student_names,
     });
   }
   return out;
@@ -405,6 +603,57 @@ export async function statsComunicadosPadresByGroupSubject(
   }
 
   return out;
+}
+
+/** Mensajes de padres (entrantes) no leídos por el docente/staff, por materia–curso. No cuenta envíos del profesor. */
+export async function countUnreadParentMessagesByGroupSubjectForUser(
+  institutionId: string,
+  viewerUserId: string,
+  groupSubjectIds: string[]
+): Promise<Record<string, number>> {
+  await ensureEvoSendSupportAndReads();
+  const out: Record<string, number> = {};
+  for (const id of groupSubjectIds) out[id] = 0;
+  if (groupSubjectIds.length === 0) return out;
+
+  const r = await queryPg<{ group_subject_id: string; c: string }>(
+    `SELECT a.group_subject_id::text, COUNT(m.id)::text AS c
+     FROM announcement_messages m
+     INNER JOIN announcements a ON a.id = m.announcement_id
+     LEFT JOIN evo_thread_reads r ON r.announcement_id = m.announcement_id AND r.user_id = $2::uuid
+     WHERE a.institution_id = $1::uuid
+       AND a.type = 'comunicado_padres'
+       AND a.group_subject_id = ANY($3::uuid[])
+       AND m.sender_role = 'padre'
+       AND m.created_at > COALESCE(r.last_read_at, '1970-01-01'::timestamptz)
+     GROUP BY a.group_subject_id`,
+    [institutionId, viewerUserId, groupSubjectIds]
+  );
+  for (const row of r.rows) {
+    if (row.group_subject_id && out[row.group_subject_id] !== undefined) {
+      out[row.group_subject_id] = parseInt(row.c, 10) || 0;
+    }
+  }
+  return out;
+}
+
+/** Marca todos los hilos de comunicados a padres de esa materia como vistos por el usuario (actualiza last_read_at). */
+export async function markComunicadosPadresThreadsReadForGroupSubject(
+  institutionId: string,
+  viewerUserId: string,
+  groupSubjectId: string
+): Promise<void> {
+  await ensureEvoSendSupportAndReads();
+  await queryPg(
+    `INSERT INTO evo_thread_reads (user_id, announcement_id, last_read_at)
+     SELECT $1::uuid, a.id, now()
+     FROM announcements a
+     WHERE a.institution_id = $2::uuid
+       AND a.type = 'comunicado_padres'
+       AND a.group_subject_id = $3::uuid
+     ON CONFLICT (user_id, announcement_id) DO UPDATE SET last_read_at = now()`,
+    [viewerUserId, institutionId, groupSubjectId]
+  );
 }
 
 export async function countPendingParentRepliesForTeacher(

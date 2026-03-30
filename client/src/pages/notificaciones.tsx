@@ -25,6 +25,8 @@ interface NotifItem {
   leido: boolean;
   fecha: string;
   type?: string;
+  /** Desde API PG (entity_type) */
+  entityType?: string | null;
   actionUrl?: string | null;
 }
 
@@ -67,6 +69,7 @@ function sectionLabel(iso: string): 'Hoy' | 'Ayer' | 'Esta semana' | 'Anteriores
 function typeLabel(t?: string) {
   switch (t) {
     case 'nueva_tarea':
+    case 'nueva_asignacion':
       return 'Tarea';
     case 'tarea_calificada':
       return 'Calificación';
@@ -75,6 +78,7 @@ function typeLabel(t?: string) {
     case 'tarea_vence':
       return 'Vence';
     case 'mensaje':
+    case 'evo_chat_direct':
       return 'Mensaje';
     case 'ausencia':
       return 'Asistencia';
@@ -88,6 +92,7 @@ function typeLabel(t?: string) {
 function typeMeta(t?: string) {
   switch (t) {
     case 'nueva_tarea':
+    case 'nueva_asignacion':
       return { Icon: ClipboardList, bg: 'rgba(37,99,235,0.15)', fg: '#60a5fa' };
     case 'tarea_calificada':
       return { Icon: CheckCircle2, bg: 'rgba(22,163,74,0.12)', fg: '#4ade80' };
@@ -98,6 +103,7 @@ function typeMeta(t?: string) {
     case 'amonestacion':
       return { Icon: ShieldAlert, bg: 'rgba(239,68,68,0.1)', fg: '#f87171' };
     case 'mensaje':
+    case 'evo_chat_direct':
       return { Icon: MessageCircle, bg: 'rgba(6,182,212,0.1)', fg: '#67e8f9' };
     case 'tarea_vence':
       return { Icon: Clock, bg: 'rgba(245,158,11,0.1)', fg: '#fbbf24' };
@@ -106,14 +112,40 @@ function typeMeta(t?: string) {
   }
 }
 
+const TASK_NOTIFICATION_TYPES = new Set([
+  'nueva_tarea',
+  'nueva_asignacion',
+  'tarea_calificada',
+  'entrega_recibida',
+  'tarea_vence',
+]);
+
+function isTaskNotification(n: NotifItem): boolean {
+  const t = (n.type ?? 'general').toLowerCase();
+  if (TASK_NOTIFICATION_TYPES.has(t)) return true;
+  if (n.entityType === 'assignment') return true;
+  return false;
+}
+
+function isMessageNotification(n: NotifItem): boolean {
+  const t = (n.type ?? '').toLowerCase();
+  if (t === 'mensaje' || t === 'evo_chat_direct') return true;
+  if (n.entityType === 'evo_send_thread') return true;
+  return false;
+}
+
+function isAttendanceNotification(n: NotifItem): boolean {
+  const t = (n.type ?? '').toLowerCase();
+  return t === 'ausencia' || t === 'asistencia';
+}
+
 function matchesFilter(n: NotifItem, filter: FilterKey) {
-  const t = n.type ?? 'general';
   if (filter === 'todas') return true;
   if (filter === 'sin_leer') return !n.leido;
-  if (filter === 'mensajes') return t === 'mensaje';
-  if (filter === 'asistencia') return t === 'ausencia';
-  if (filter === 'amonestaciones') return t === 'amonestacion';
-  if (filter === 'tareas') return ['nueva_tarea', 'tarea_calificada', 'entrega_recibida', 'tarea_vence'].includes(t);
+  if (filter === 'tareas') return isTaskNotification(n);
+  if (filter === 'mensajes') return isMessageNotification(n);
+  if (filter === 'asistencia') return isAttendanceNotification(n);
+  if (filter === 'amonestaciones') return (n.type ?? '').toLowerCase() === 'amonestacion';
   return true;
 }
 
@@ -123,8 +155,9 @@ export default function NotificacionesPage() {
   const [filter, setFilter] = useState<FilterKey>('todas');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['/api/notifications'],
-    queryFn: () => apiRequest<{ list: NotifItem[]; unreadCount: number }>('GET', '/api/notifications'),
+    queryKey: ['/api/notifications', 'v2'],
+    queryFn: () =>
+      apiRequest<{ list: NotifItem[]; unreadCount: number }>('GET', '/api/notifications?limit=100'),
   });
 
   const markOneMutation = useMutation({
@@ -147,6 +180,18 @@ export default function NotificacionesPage() {
   const unreadCount = data?.unreadCount ?? 0;
 
   const list = useMemo(() => rawList.filter((n) => matchesFilter(n, filter)), [rawList, filter]);
+
+  const chipCounts = useMemo(() => {
+    const sinLeer = rawList.filter((n) => !n.leido).length;
+    return {
+      todas: rawList.length,
+      sin_leer: sinLeer,
+      tareas: rawList.filter((n) => matchesFilter(n, 'tareas')).length,
+      mensajes: rawList.filter((n) => matchesFilter(n, 'mensajes')).length,
+      asistencia: rawList.filter((n) => matchesFilter(n, 'asistencia')).length,
+      amonestaciones: rawList.filter((n) => matchesFilter(n, 'amonestaciones')).length,
+    } as Record<FilterKey, number>;
+  }, [rawList]);
 
   const grouped = useMemo(() => {
     const buckets: Record<'Hoy' | 'Ayer' | 'Esta semana' | 'Anteriores', NotifItem[]> = {
@@ -188,6 +233,8 @@ export default function NotificacionesPage() {
     { key: 'amonestaciones', label: 'Amonestaciones' },
   ];
 
+  const chipCount = (key: FilterKey) => chipCounts[key];
+
   const renderSection = (title: keyof typeof grouped) => {
     const items = grouped[title];
     if (!items.length) return null;
@@ -199,7 +246,15 @@ export default function NotificacionesPage() {
         </div>
         <ul className="space-y-2">
           {items.map((n) => {
-            const { Icon, bg, fg } = typeMeta(n.type);
+            const visualType =
+              !n.type || n.type === 'general'
+                ? n.entityType === 'assignment'
+                  ? 'nueva_tarea'
+                  : n.entityType === 'evo_send_thread'
+                    ? 'mensaje'
+                    : n.type
+                : n.type;
+            const { Icon, bg, fg } = typeMeta(visualType);
             const body = n.cuerpo ?? n.body ?? '';
             const handleClick = async () => {
               if (!n.leido) {
@@ -259,7 +314,7 @@ export default function NotificacionesPage() {
 
                       <div className="mt-2">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border border-white/10 bg-white/[0.03] text-white/60">
-                          {typeLabel(n.type)}
+                          {typeLabel(visualType)}
                         </span>
                       </div>
                     </div>
@@ -311,19 +366,29 @@ export default function NotificacionesPage() {
         <div className="mt-6 flex flex-wrap gap-2">
           {chips.map((c) => {
             const active = c.key === filter;
+            const count = chipCount(c.key);
             return (
               <button
                 key={c.key}
                 type="button"
+                aria-pressed={active}
                 onClick={() => setFilter(c.key)}
                 className={[
-                  'px-3 py-1.5 rounded-full text-sm border transition-colors',
+                  'inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border transition-colors',
                   active
                     ? 'text-[#93c5fd] border-[rgba(37,99,235,0.3)] bg-[rgba(37,99,235,0.15)]'
                     : 'text-white/60 border-white/10 bg-white/[0.02] hover:bg-white/[0.04]',
                 ].join(' ')}
               >
-                {c.label}
+                <span>{c.label}</span>
+                <span
+                  className={[
+                    'tabular-nums text-[11px] font-semibold min-w-[1.25rem] text-center px-1.5 py-0 rounded-full',
+                    active ? 'bg-[rgba(37,99,235,0.35)] text-white' : 'bg-white/[0.08] text-white/55',
+                  ].join(' ')}
+                >
+                  {count}
+                </span>
               </button>
             );
           })}

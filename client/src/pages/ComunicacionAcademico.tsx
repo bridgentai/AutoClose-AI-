@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Pencil,
   Users,
+  ClipboardList,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ import {
   parseComunicadoAttachments,
   type ComunicadoAttachment,
 } from '@/lib/comunicadoAttachments';
+import { cn } from '@/lib/utils';
 
 interface CourseListItem {
   id: string;
@@ -56,6 +58,8 @@ interface ParentReply {
   content: string;
   created_at: string;
   sender_id: string;
+  parent_display_name?: string;
+  linked_student_names?: string | null;
 }
 
 interface ComunicadoPadresItem {
@@ -64,6 +68,8 @@ interface ComunicadoPadresItem {
   body: string | null;
   status: string | null;
   priority: string | null;
+  category?: string | null;
+  assignment_id?: string | null;
   created_at: string;
   sent_at: string | null;
   scheduled_send_at: string | null;
@@ -304,6 +310,32 @@ const ComunicacionAcademico: React.FC = () => {
     enabled: isPadre || !!selectedGs,
   });
 
+  /** Tras cargar la bandeja del curso, marca hilos como vistos para que el badge solo cuente mensajes entrantes (padre) posteriores. */
+  useEffect(() => {
+    if (isPadre || !canPublish || !selectedGs || loadingCom || errCom) return;
+
+    const gs = selectedGs;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/courses/comunicados-padres/${gs}/mark-threads-viewed`, {
+          method: 'POST',
+          headers: authHeaders(),
+        });
+        if (!res.ok || cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ['comunicados-padres-stats'] });
+        queryClient.invalidateQueries({ queryKey: ['communication-summary'] });
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGs, loadingCom, errCom, isPadre, canPublish, queryClient]);
+
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/courses/comunicado/${id}/read`, {
@@ -478,17 +510,21 @@ const ComunicacionAcademico: React.FC = () => {
     );
   };
 
+  const staffTwoColumn = !isPadre && canPublish;
+
   return (
-    <div className="space-y-4 min-h-[70vh]">
+    <div className="space-y-6 min-h-[70vh]">
       <NavBackButton to={comunicacionBackTo} label="Comunicación" />
 
       <div className="flex items-center gap-3">
-        <Megaphone className="w-9 h-9 text-[#3B82F6]" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] shadow-lg shadow-blue-500/25">
+          <Megaphone className="w-6 h-6 text-white" />
+        </div>
         <div>
-          <h1 className="text-3xl font-bold text-white font-['Poppins'] tracking-tight">
+          <h1 className="text-3xl font-bold text-[#E2E8F0] font-['Poppins'] tracking-tight">
             {isPadre ? 'Comunicados de tus hijos' : 'Comunicados a padres'}
           </h1>
-          <p className="text-white/60 text-sm mt-0.5">
+          <p className="text-white/60 text-sm mt-0.5 max-w-2xl">
             {isPadre
               ? 'Mensajes de docentes y coordinación por curso'
               : 'Gestiona avisos con retención de 30 s y correcciones dentro de 24 h'}
@@ -497,12 +533,18 @@ const ComunicacionAcademico: React.FC = () => {
       </div>
 
       <div
-        className={`grid min-h-0 gap-4 grid-cols-1 lg:min-h-[480px] ${!isPadre && canPublish ? 'lg:grid-cols-[280px_1fr]' : ''}`}
+        className={cn(
+          'grid min-h-0 grid-cols-1',
+          staffTwoColumn &&
+            'lg:grid-cols-[minmax(260px,300px)_1fr] lg:grid-rows-1 lg:min-h-[calc(100dvh-11rem)] gap-0 rounded-2xl panel-grades overflow-hidden border border-white/[0.08] shadow-[0_0_48px_rgba(37,99,235,0.18)]',
+          !staffTwoColumn &&
+            'rounded-2xl panel-grades overflow-hidden border border-white/[0.08] shadow-[0_0_48px_rgba(37,99,235,0.18)] min-h-[min(70vh,calc(100dvh-12rem))]',
+        )}
       >
-        {!isPadre && canPublish && (
-          <aside className="rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-3 flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-white font-semibold text-sm">Mis cursos</h2>
+        {staffTwoColumn && (
+          <aside className="flex flex-col min-h-0 max-h-[40vh] lg:max-h-none h-full border-b border-white/10 lg:border-b-0 lg:border-r lg:border-white/10 bg-black/20 p-4 lg:py-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[#E2E8F0] font-semibold text-sm tracking-wide">Mis cursos</h2>
               <Button
                 size="sm"
                 className="h-8 bg-[#3B82F6] hover:bg-[#2563EB] text-white"
@@ -516,7 +558,7 @@ const ComunicacionAcademico: React.FC = () => {
                 <Plus className="w-4 h-4 mr-1" /> Nuevo
               </Button>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 -mr-1">
               {loadingCourses ? (
                 <p className="text-white/50 text-sm p-2">Cargando…</p>
               ) : courses.length === 0 ? (
@@ -532,10 +574,10 @@ const ComunicacionAcademico: React.FC = () => {
                       key={id}
                       type="button"
                       onClick={() => setLocation(`/comunicacion/academico/${id}`)}
-                      className={`w-full text-left rounded-lg px-3 py-2.5 transition-colors border-l-2 ${
+                      className={`w-full text-left rounded-xl px-3 py-3 transition-all border-l-2 ${
                         active
-                          ? 'border-[#3B82F6] bg-[rgba(37,99,235,0.08)]'
-                          : 'border-transparent hover:bg-white/5'
+                          ? 'border-[#3B82F6] bg-[rgba(37,99,235,0.14)] shadow-[inset_0_0_0_1px_rgba(59,130,246,0.2)]'
+                          : 'border-transparent hover:bg-white/[0.06]'
                       }`}
                     >
                       <div className="flex justify-between gap-2">
@@ -557,22 +599,32 @@ const ComunicacionAcademico: React.FC = () => {
           </aside>
         )}
 
-        <main className="flex max-h-[min(720px,calc(100dvh-11rem))] min-h-[280px] flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md">
+        <main
+          className={cn(
+            'flex min-h-0 flex-col overflow-hidden',
+            staffTwoColumn
+              ? 'min-h-[50vh] lg:min-h-0 lg:h-full bg-gradient-to-b from-black/25 via-transparent to-black/20'
+              : 'min-h-[min(70vh,calc(100dvh-12rem))] bg-gradient-to-b from-black/20 via-transparent to-black/25',
+          )}
+        >
           {!isPadre && !selectedGs && (
-            <div className="flex-1 flex items-center justify-center text-white/50 p-8">
-              Selecciona un curso en la izquierda
+            <div className="flex-1 flex flex-col items-center justify-center text-white/50 p-10 gap-3">
+              <div className="h-14 w-14 rounded-2xl border border-white/10 bg-white/[0.04] flex items-center justify-center">
+                <Users className="w-7 h-7 text-white/35" />
+              </div>
+              <p className="text-sm text-center max-w-xs">Selecciona un curso a la izquierda para redactar y ver el historial</p>
             </div>
           )}
 
           {(isPadre || selectedGs) && (
             <>
               {!isPadre && activeCourse && (
-                <div className="border-b border-white/10 px-4 py-3 shrink-0">
-                  <h3 className="text-white font-semibold text-lg">
+                <div className="border-b border-white/10 px-5 py-4 sm:px-6 shrink-0 bg-gradient-to-r from-[#1e3a8a]/20 via-transparent to-transparent">
+                  <h3 className="text-[#E2E8F0] font-semibold text-lg sm:text-xl tracking-tight">
                     {activeCourse.nombre}
                     {activeCourse.cursos?.[0] ? ` · ${activeCourse.cursos[0]}` : ''}
                   </h3>
-                  <p className="text-white/50 text-sm">
+                  <p className="text-white/55 text-sm mt-1">
                     {padresCount} padres vinculados
                     {recipientMode === 'all' ? (
                       <span className="text-white/40"> · Enviar a todos</span>
@@ -590,21 +642,23 @@ const ComunicacionAcademico: React.FC = () => {
               {!isPadre && canPublish && selectedGs && (
                 <div
                   id="redaccion-comunicado"
-                  className="border-b border-white/10 p-4 bg-black/20 shrink-0"
+                  className="border-b border-white/10 p-5 sm:p-6 shrink-0 bg-black/30 backdrop-blur-sm"
                 >
-                  <p className="text-white/70 text-sm mb-2">Redactar comunicado</p>
+                  <p className="text-[#93C5FD] text-xs font-semibold uppercase tracking-wider mb-3">
+                    Redactar comunicado
+                  </p>
                   <Input
                     ref={draftTitleRef}
                     value={draftTitle}
                     onChange={(e) => setDraftTitle(e.target.value)}
                     placeholder="Título"
-                    className="bg-white/5 border-white/15 text-white mb-2"
+                    className="bg-white/[0.06] border-white/12 text-[#E2E8F0] placeholder:text-white/35 mb-3 rounded-xl h-11"
                   />
                   <Textarea
                     value={draftBody}
                     onChange={(e) => setDraftBody(e.target.value)}
                     placeholder="Mensaje para padres…"
-                    className="bg-white/5 border-white/15 text-white min-h-[100px] mb-2"
+                    className="bg-white/[0.06] border-white/12 text-[#E2E8F0] placeholder:text-white/35 min-h-[140px] mb-3 rounded-xl resize-y"
                   />
                   <ComunicadoWorkspaceAttachments
                     postGroupId={comunicadoGroupId}
@@ -645,7 +699,7 @@ const ComunicacionAcademico: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 scroll-smooth">
                 {loadingCom && (
                   <div className="flex justify-center py-12 text-white/60">
                     <Loader2 className="w-8 h-8 animate-spin" />
@@ -655,8 +709,18 @@ const ComunicacionAcademico: React.FC = () => {
                   <p className="text-red-400 text-center">No se pudieron cargar los comunicados</p>
                 )}
                 {!loadingCom &&
-                  comunicados.map((c) => (
-                    <Card key={c.id} className="bg-white/[0.03] border-white/10">
+                  comunicados.map((c) => {
+                    const isTaskComunicado = (c.category || '').toLowerCase() === 'tareas';
+                    return (
+                    <Card
+                      key={c.id}
+                      className={cn(
+                        'backdrop-blur-md shadow-lg shadow-black/15',
+                        isTaskComunicado
+                          ? 'border border-white/10 border-l-[4px] border-l-[#84cc16] bg-gradient-to-br from-[#84cc16]/[0.08] via-slate-950/30 to-slate-950/50'
+                          : 'bg-white/[0.03] border-white/10',
+                      )}
+                    >
                       <CardContent
                         className="p-4 space-y-2 cursor-default"
                         onClick={() => markOpenedIfPadre(c.id)}
@@ -674,6 +738,12 @@ const ComunicacionAcademico: React.FC = () => {
                           />
                         )}
                         <div className="flex flex-wrap gap-2 items-center">
+                          {isTaskComunicado && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#84cc16]/20 text-lime-200 border border-[#84cc16]/45 flex items-center gap-1">
+                              <ClipboardList className="w-3 h-3" />
+                              Tareas
+                            </span>
+                          )}
                           {c.correction_of && (
                             <span className="text-xs px-2 py-0.5 rounded bg-violet-500/25 text-violet-200 border border-violet-500/40">
                               Corrección
@@ -688,28 +758,55 @@ const ComunicacionAcademico: React.FC = () => {
                           <span className="text-xs text-white/40">{formatRelative(c.created_at)}</span>
                         </div>
                         <h4 className="text-white font-bold text-base">{c.title}</h4>
-                        {c.body && <p className="text-white/80 text-sm whitespace-pre-wrap">{c.body}</p>}
+                        {c.body && (
+                          <p
+                            className={cn(
+                              'text-sm whitespace-pre-wrap',
+                              isTaskComunicado ? 'text-white/85' : 'text-white/80',
+                            )}
+                          >
+                            {c.body}
+                          </p>
+                        )}
                         <ComunicadoAttachmentLinks
                           items={parseComunicadoAttachments(c.attachments_json)}
                         />
+                        {c.assignment_id && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className={cn(
+                              'mt-1 rounded-xl',
+                              isTaskComunicado
+                                ? 'bg-[#84cc16]/25 border border-[#84cc16]/50 text-lime-100 hover:bg-[#84cc16]/35'
+                                : 'bg-[#3B82F6]/20 border border-[#3B82F6]/45 text-[#93C5FD] hover:bg-[#3B82F6]/30',
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLocation(`/assignment/${c.assignment_id}`);
+                            }}
+                          >
+                            <ClipboardList className="w-3.5 h-3.5 mr-1.5" />
+                            Abrir tarea
+                          </Button>
+                        )}
                         <p className="text-white/45 text-xs">
                           Leído por {c.reads_count}/{c.total_recipients || 0} padres
                         </p>
-                        {c.parent_replies.length > 0 && (
-                          <div className="mt-2 space-y-2 pl-3 border-l-2 border-violet-500/30">
-                            {c.parent_replies.map((r) => (
-                              <div
-                                key={r.id}
-                                className="rounded-lg px-3 py-2 text-sm text-white/85"
-                                style={{ background: 'rgba(124,58,237,0.04)' }}
-                              >
-                                {r.content}
-                                <div className="text-white/40 text-xs mt-1">
-                                  {formatRelative(r.created_at)}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                        {!isPadre && c.parent_replies.length > 0 && selectedGs && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 border-violet-500/45 text-violet-100 hover:bg-violet-500/15"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLocation(`/comunicacion/academico/${selectedGs}/respuestas/${c.id}`);
+                            }}
+                          >
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            Ver respuestas ({c.replies_count || c.parent_replies.length})
+                          </Button>
                         )}
                         {canPublish && canCorrect(c) && (
                           <Button
@@ -763,7 +860,8 @@ const ComunicacionAcademico: React.FC = () => {
                         )}
                       </CardContent>
                     </Card>
-                  ))}
+                  );
+                  })}
 
                 {!loadingCom && comunicados.length === 0 && (
                   <p className="text-white/50 text-center py-12">No hay comunicados en este curso</p>

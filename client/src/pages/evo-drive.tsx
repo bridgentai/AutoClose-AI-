@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/authContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -38,7 +46,6 @@ import {
   Search,
   LayoutGrid,
   List,
-  MoreVertical,
   Upload,
   FileSpreadsheet,
   Presentation,
@@ -48,6 +55,8 @@ import {
   Trash2,
   Pencil,
   Lock,
+  RotateCcw,
+  Clock,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'wouter';
@@ -89,6 +98,8 @@ interface EvoFile {
   googleWebViewLink?: string;
   evoStorageUrl?: string;
   cursoNombre: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 /** Ítem de Mi carpeta (personal del estudiante). */
@@ -107,6 +118,124 @@ interface GoogleDriveFile {
   mimeType?: string;
   webViewLink?: string;
   size?: string;
+}
+
+/** Arrastrar archivos del curso a la papelera (sidebar). */
+const EVO_DRIVE_FILE_DRAG_TYPE = 'application/x-evo-drive-file-id';
+
+export type EvoDriveTrashContextValue = {
+  canManageTrash: boolean;
+  trashIds: string[];
+  toggleTrash: (id: string) => void;
+  openTrashSection: () => void;
+};
+
+export const EvoDriveTrashContext = React.createContext<EvoDriveTrashContextValue | null>(null);
+
+/** Abrir en Google (usa webViewLink de la API o URL construida por tipo MIME). */
+function googleDrivePreviewUrl(file: GoogleDriveFile): string {
+  const link = file.webViewLink?.trim();
+  if (link) return link;
+  const m = (file.mimeType || '').toLowerCase();
+  const id = file.id;
+  if (m.includes('folder') || m === 'application/vnd.google-apps.folder') {
+    return `https://drive.google.com/drive/folders/${id}`;
+  }
+  if (m.includes('spreadsheet') || m.includes('sheet') || m === 'application/vnd.google-apps.spreadsheet') {
+    return `https://docs.google.com/spreadsheets/d/${id}/edit`;
+  }
+  if (m.includes('presentation') || m === 'application/vnd.google-apps.presentation') {
+    return `https://docs.google.com/presentation/d/${id}/edit`;
+  }
+  if (m.includes('document') || m.includes('word') || m === 'application/vnd.google-apps.document') {
+    return `https://docs.google.com/document/d/${id}/edit`;
+  }
+  return `https://drive.google.com/file/d/${id}/view`;
+}
+
+function googleDriveKindMeta(mimeType?: string): {
+  label: string;
+  iconBox: string;
+  Icon: LucideIcon;
+} {
+  const m = (mimeType || '').toLowerCase();
+  if (m.includes('folder')) {
+    return { label: 'Carpeta', iconBox: 'bg-sky-500/25 border-sky-400/30', Icon: FolderOpen };
+  }
+  if (m.includes('spreadsheet') || m.includes('sheet')) {
+    return { label: 'Hoja de cálculo', iconBox: 'bg-emerald-500/25 border-emerald-400/35', Icon: FileSpreadsheet };
+  }
+  if (m.includes('presentation')) {
+    return { label: 'Presentación', iconBox: 'bg-amber-500/25 border-amber-400/35', Icon: Presentation };
+  }
+  if (m.includes('document') || m.includes('word') || m === 'application/vnd.google-apps.document') {
+    return { label: 'Documento', iconBox: 'bg-[#4285f4]/25 border-[#5a9fff]/35', Icon: FileText };
+  }
+  if (m.includes('pdf')) {
+    return { label: 'PDF', iconBox: 'bg-red-500/20 border-red-400/30', Icon: FileText };
+  }
+  if (m.startsWith('image/')) {
+    return { label: 'Imagen', iconBox: 'bg-fuchsia-500/20 border-fuchsia-400/30', Icon: FileText };
+  }
+  if (m.startsWith('video/')) {
+    return { label: 'Video', iconBox: 'bg-violet-500/20 border-violet-400/30', Icon: FileText };
+  }
+  return { label: 'Archivo', iconBox: 'bg-white/10 border-white/15', Icon: FileText };
+}
+
+function GoogleDrivePickerRow({
+  file,
+  onAdd,
+  addPending,
+  buttonClassName,
+}: {
+  file: GoogleDriveFile;
+  onAdd: (f: GoogleDriveFile) => void;
+  addPending: boolean;
+  buttonClassName: string;
+}) {
+  const { label, iconBox, Icon } = googleDriveKindMeta(file.mimeType);
+  return (
+    <li className="group flex items-stretch gap-3 p-3 rounded-xl border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07] hover:border-[#00c8ff]/20 transition-all">
+      <div
+        className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${iconBox}`}
+        aria-hidden
+      >
+        <Icon className="w-6 h-6 text-white" />
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+        <p className="text-sm font-medium text-white truncate pr-2" title={file.name}>
+          {file.name}
+        </p>
+        <p className="text-[11px] text-white/45 uppercase tracking-wide">{label}</p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-9 rounded-xl border border-white/15 text-white/80 hover:text-[#7dd3fc] hover:bg-white/[0.08] hover:border-[#00c8ff]/35 px-3 text-[13px] font-medium"
+          onClick={() => {
+            window.open(googleDrivePreviewUrl(file), '_blank', 'noopener,noreferrer');
+          }}
+          title="Abrir en Google para previsualizar"
+          aria-label={`Abrir ${file.name} en una pestaña nueva`}
+        >
+          <ExternalLink className="w-4 h-4 mr-1.5 shrink-0 opacity-90" />
+          Abrir
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className={buttonClassName}
+          onClick={() => onAdd(file)}
+          disabled={addPending}
+        >
+          {addPending ? 'Agregando…' : 'Agregar'}
+        </Button>
+      </div>
+    </li>
+  );
 }
 
 const ROLES_WRITE = ['profesor', 'directivo', 'school_admin', 'super_admin', 'admin-general-colegio'];
@@ -134,16 +263,23 @@ function SubjectFolder({
   folder,
   onTeacherSelect,
   teacherSelected,
+  subjectSelected,
   nameSuffix,
 }: {
   folder: SubjectFolder;
   /** Profesor: al elegir carpeta para subir archivos (toolbar global). */
   onTeacherSelect?: () => void;
   teacherSelected?: boolean;
+  /** Estudiante (o vista sin toolbar docente): carpeta activa desde el sidebar. */
+  subjectSelected?: boolean;
   /** Ej. nombre del curso debajo del título de la materia */
   nameSuffix?: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
+  const rowActive = Boolean(teacherSelected || subjectSelected);
+  useEffect(() => {
+    if (rowActive) setOpen(true);
+  }, [rowActive]);
   const { data: files = [], isLoading } = useQuery<EvoFile[]>({
     queryKey: ['evo-drive', 'files', folder.groupId, folder.id],
     queryFn: () =>
@@ -157,10 +293,10 @@ function SubjectFolder({
   );
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={setOpen} id={`evo-drive-subject-${folder.id}`}>
       <Card
         className={`bg-[#1E3A8A]/25 border-white/10 overflow-hidden ${
-          teacherSelected ? 'ring-2 ring-[#3B82F6]/80 ring-offset-2 ring-offset-[#020617]' : ''
+          rowActive ? 'ring-2 ring-[#3B82F6]/80 ring-offset-2 ring-offset-[#020617]' : ''
         }`}
       >
         <CollapsibleTrigger asChild>
@@ -226,6 +362,9 @@ function ProfessorTeacherPrivateFolder({
   onSelect: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (selected) setOpen(true);
+  }, [selected]);
   const { data: privFiles = [], isLoading } = useQuery<EvoFile[]>({
     queryKey: ['evo-drive', 'files', groupId, 'teacher-private'],
     queryFn: () =>
@@ -276,7 +415,7 @@ function ProfessorTeacherPrivateFolder({
             ) : (
               <ul className="space-y-2 pl-12">
                 {sorted.map((f) => (
-                  <FileRow key={f.id} file={f} />
+                  <FileRow key={f.id} file={f} allowCourseTrash={false} />
                 ))}
               </ul>
             )}
@@ -304,7 +443,14 @@ function ProfessorCourseBlock({
   onSelectFolder: (f: TeacherFolder) => void;
   onSelectTeacherPrivate: (gid: string, gname: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
+  const shouldExpandCourse =
+    selectedTeacherPrivate === true ||
+    (!!selectedGroupSubjectId &&
+      folders.some((tf) => tf.groupSubjectId === selectedGroupSubjectId));
+  useEffect(() => {
+    if (shouldExpandCourse) setOpen(true);
+  }, [shouldExpandCourse]);
   return (
     <div id={`evo-drive-course-${groupId}`}>
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -382,6 +528,31 @@ interface SelectedFolder {
   isTeacherPrivate?: boolean;
 }
 
+/** Conteo real de archivos por materia (misma queryKey que SubjectFolder → caché compartida). */
+function SidebarSubjectFileCount({ groupId, subjectId }: { groupId: string; subjectId: string }) {
+  const { data = [] } = useQuery<EvoFile[]>({
+    queryKey: ['evo-drive', 'files', groupId, subjectId],
+    queryFn: () =>
+      apiRequest(
+        'GET',
+        `/api/evo-drive/files?cursoId=${encodeURIComponent(groupId)}&groupSubjectId=${encodeURIComponent(subjectId)}`
+      ),
+    enabled: !!groupId && !!subjectId,
+  });
+  return <>{data.length}</>;
+}
+
+/** Conteo archivos de Mi carpeta (solo docente) por curso. */
+function SidebarTeacherPrivateFileCount({ groupId }: { groupId: string }) {
+  const { data = [] } = useQuery<EvoFile[]>({
+    queryKey: ['evo-drive', 'files', groupId, 'teacher-private'],
+    queryFn: () =>
+      apiRequest('GET', `/api/evo-drive/files?cursoId=${encodeURIComponent(groupId)}&teacherPrivate=1`),
+    enabled: !!groupId,
+  });
+  return <>{data.length}</>;
+}
+
 export default function EvoDrivePage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -399,10 +570,18 @@ export default function EvoDrivePage() {
   const [createNewType, setCreateNewType] = useState<'doc' | 'sheet' | 'slide'>('doc');
   const [createNewNombre, setCreateNewNombre] = useState('');
   const [expandedAdminCourseId, setExpandedAdminCourseId] = useState<string | null>(null);
-  const [librarySection, setLibrarySection] = useState<'all' | 'recent' | 'starred' | 'trash'>('all');
+  const [librarySection, setLibrarySection] = useState<'all' | 'recent' | 'trash'>('all');
+  /** Resumen global (Todos los archivos) vs. navegación por carpetas. */
+  const [driveMainView, setDriveMainView] = useState<'overview' | 'browse'>('browse');
+  const [overviewTypeFilter, setOverviewTypeFilter] = useState<
+    'all' | 'doc' | 'sheet' | 'slide' | 'pdf' | 'link' | 'other'
+  >('all');
+  const [overviewSearch, setOverviewSearch] = useState('');
+  const [personalRootOpen, setPersonalRootOpen] = useState(false);
   const [sortMode, setSortMode] = useState<'recent' | 'oldest' | 'name-asc' | 'name-desc'>('recent');
   const [starredIds, setStarredIds] = useState<string[]>([]);
   const [trashIds, setTrashIds] = useState<string[]>([]);
+  const [trashDropActive, setTrashDropActive] = useState(false);
   const isTeacher = user?.rol && ROLES_WRITE.includes(user.rol);
   const isProfesor = user?.rol === 'profesor';
   const isAdminOrDirectivo = ['admin-general-colegio', 'directivo', 'school_admin', 'super_admin'].includes(user?.rol || '');
@@ -439,6 +618,20 @@ export default function EvoDrivePage() {
     queryFn: () => apiRequest('GET', '/api/evo-drive/google/status'),
   });
 
+  const { data: recentFilesFromApi = [], isLoading: recentLoading, dataUpdatedAt } = useQuery<EvoFile[]>({
+    queryKey: ['evo-drive', 'recientes', user?.id],
+    queryFn: () => apiRequest<EvoFile[]>('GET', '/api/evo-drive/recientes'),
+    enabled: !!user?.id,
+    refetchInterval: 60_000,
+    staleTime: 25_000,
+    refetchOnWindowFocus: true,
+  });
+
+  const recentVisible = useMemo(
+    () => recentFilesFromApi.filter((f) => !trashIds.includes(f.id)),
+    [recentFilesFromApi, trashIds]
+  );
+
   const { data: groupsData = [] } = useQuery<TeacherFolder[] | EvoGroupWithSubjects[]>({
     queryKey: ['evo-drive', 'groups'],
     queryFn: () => apiRequest('GET', '/api/evo-drive/groups'),
@@ -455,13 +648,13 @@ export default function EvoDrivePage() {
       if (!map.has(f.groupId)) map.set(f.groupId, []);
       map.get(f.groupId)!.push(f);
     }
-    return [...map.entries()]
-      .map(([groupId, folders]) => {
-        const groupName = parseTeacherFolderName(folders[0].name).curso || folders[0].name;
-        const sorted = [...folders].sort((a, b) => a.name.localeCompare(b.name, 'es'));
-        return { groupId, groupName, folders: sorted };
-      })
-      .sort((a, b) => a.groupName.localeCompare(b.groupName, 'es'));
+    const grouped: { groupId: string; groupName: string; folders: TeacherFolder[] }[] = [];
+    map.forEach((folders, groupId) => {
+      const groupName = parseTeacherFolderName(folders[0].name).curso || folders[0].name;
+      const sorted = [...folders].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      grouped.push({ groupId, groupName, folders: sorted });
+    });
+    return grouped.sort((a, b) => a.groupName.localeCompare(b.groupName, 'es'));
   }, [isProfesor, teacherFolders]);
 
   // Misma API que "Mis Materias Asignadas" para que el estudiante vea sus carpetas por materia (Física, Matemáticas, etc.)
@@ -486,6 +679,147 @@ export default function EvoDrivePage() {
     enabled: showPersonalMyFolder,
   });
 
+  type EvoDriveAggQuery = {
+    queryKey: readonly unknown[];
+    queryFn: () => Promise<EvoFile[]>;
+    sourceLabel: string;
+  };
+
+  const evoDriveAggregateQueries = useMemo((): EvoDriveAggQuery[] => {
+    const out: EvoDriveAggQuery[] = [];
+    if (isProfesor) {
+      for (const c of professorCourses) {
+        for (const f of c.folders) {
+          const { materia, curso } = parseTeacherFolderName(f.name);
+          const sourceLabel = curso ? `${materia} · ${curso}` : f.name;
+          out.push({
+            queryKey: ['evo-drive', 'files', f.groupId, f.groupSubjectId],
+            queryFn: () =>
+              apiRequest(
+                'GET',
+                `/api/evo-drive/files?cursoId=${encodeURIComponent(f.groupId)}&groupSubjectId=${encodeURIComponent(f.groupSubjectId)}`
+              ),
+            sourceLabel,
+          });
+        }
+        out.push({
+          queryKey: ['evo-drive', 'files', c.groupId, 'teacher-private'],
+          queryFn: () =>
+            apiRequest('GET', `/api/evo-drive/files?cursoId=${encodeURIComponent(c.groupId)}&teacherPrivate=1`),
+          sourceLabel: `Mi carpeta (docente) · ${c.groupName}`,
+        });
+      }
+    } else if (isAdminOrDirectivo) {
+      for (const g of adminGroups) {
+        for (const sub of g.groupSubjects ?? []) {
+          out.push({
+            queryKey: ['evo-drive', 'files', sub.groupId, sub.groupSubjectId],
+            queryFn: () =>
+              apiRequest(
+                'GET',
+                `/api/evo-drive/files?cursoId=${encodeURIComponent(sub.groupId)}&groupSubjectId=${encodeURIComponent(sub.groupSubjectId)}`
+              ),
+            sourceLabel: sub.name,
+          });
+        }
+      }
+    } else if (!isTeacher) {
+      for (const folder of subjectFolders) {
+        out.push({
+          queryKey: ['evo-drive', 'files', folder.groupId, folder.id],
+          queryFn: () =>
+            apiRequest(
+              'GET',
+              `/api/evo-drive/files?cursoId=${encodeURIComponent(folder.groupId)}&groupSubjectId=${encodeURIComponent(folder.id)}`
+            ),
+          sourceLabel: folder.name,
+        });
+      }
+    }
+    return out;
+  }, [isProfesor, isAdminOrDirectivo, isTeacher, professorCourses, adminGroups, subjectFolders]);
+
+  const evoDriveAggregateResults = useQueries({
+    queries: evoDriveAggregateQueries.map((q) => ({
+      queryKey: [...q.queryKey],
+      queryFn: q.queryFn,
+      enabled: evoDriveAggregateQueries.length > 0,
+    })),
+  });
+
+  const overviewFlatRows = useMemo(() => {
+    const rows: { file: EvoFile; sourceLabel: string; rowKey: string }[] = [];
+    evoDriveAggregateResults.forEach((res, i) => {
+      const meta = evoDriveAggregateQueries[i];
+      if (!meta) return;
+      const k2 = String(meta.queryKey[2] ?? '');
+      const k3 = String(meta.queryKey[3] ?? '');
+      for (const f of res.data ?? []) {
+        rows.push({
+          file: { ...f, cursoNombre: meta.sourceLabel },
+          sourceLabel: meta.sourceLabel,
+          rowKey: `${k2}-${k3}-${f.id}`,
+        });
+      }
+    });
+    if (showPersonalMyFolder) {
+      for (const pf of myFolderFiles) {
+        rows.push({
+          file: {
+            id: pf.id,
+            nombre: pf.nombre,
+            tipo: pf.tipo,
+            origen: pf.origen,
+            googleWebViewLink: pf.googleWebViewLink,
+            evoStorageUrl: pf.url,
+            cursoNombre: personalFolderTitle,
+          },
+          sourceLabel: personalFolderTitle,
+          rowKey: `personal-${pf.id}`,
+        });
+      }
+    }
+    return rows;
+  }, [
+    evoDriveAggregateResults,
+    evoDriveAggregateQueries,
+    myFolderFiles,
+    showPersonalMyFolder,
+    personalFolderTitle,
+  ]);
+
+  const overviewFilteredRows = useMemo(() => {
+    const q = overviewSearch.trim().toLowerCase();
+    let list = overviewFlatRows.filter((r) => !trashIds.includes(r.file.id));
+    if (q) {
+      list = list.filter(
+        (r) =>
+          (r.file.nombre || '').toLowerCase().includes(q) || r.sourceLabel.toLowerCase().includes(q)
+      );
+    }
+    if (overviewTypeFilter !== 'all') {
+      const core = new Set(['doc', 'sheet', 'slide', 'pdf', 'link']);
+      if (overviewTypeFilter === 'other') {
+        list = list.filter((r) => !core.has(r.file.tipo));
+      } else {
+        list = list.filter((r) => r.file.tipo === overviewTypeFilter);
+      }
+    }
+    return [...list].sort((a, b) =>
+      (a.file.nombre || '').localeCompare(b.file.nombre || '', 'es', { sensitivity: 'base' })
+    );
+  }, [overviewFlatRows, overviewSearch, overviewTypeFilter, trashIds]);
+
+  const overviewLoading =
+    evoDriveAggregateQueries.length > 0 &&
+    evoDriveAggregateResults.some((r) => r.isPending || r.isFetching);
+
+  const showAllFilesOverview = driveMainView === 'overview' && librarySection === 'all';
+
+  const totalSidebarDriveFiles =
+    evoDriveAggregateResults.reduce((acc, r) => acc + (r.data?.length ?? 0), 0) +
+    (showPersonalMyFolder ? myFolderFiles.length : 0);
+
   const isTeacherPrivateFolder = selectedFolder?.isTeacherPrivate === true;
   const cursoId = selectedFolder?.groupId ?? '';
   const selectedGroupSubjectId = selectedFolder && !isTeacherPrivateFolder ? selectedFolder.groupSubjectId : '';
@@ -501,7 +835,7 @@ export default function EvoDrivePage() {
             'GET',
             `/api/evo-drive/files?cursoId=${encodeURIComponent(cursoId)}&groupSubjectId=${encodeURIComponent(selectedGroupSubjectId)}`
           ),
-    enabled: !!cursoId && (isTeacherPrivateFolder || !!selectedGroupSubjectId),
+    enabled: isTeacher && !!cursoId && (isTeacherPrivateFolder || !!selectedGroupSubjectId),
   });
 
   const group = selectedFolder ? { name: selectedFolder.groupName } : null;
@@ -527,19 +861,6 @@ export default function EvoDrivePage() {
   });
   const myFolderGoogleFiles = myFolderGoogleFilesRes?.files ?? [];
   const myFolderGoogleDriveDisconnected = !googleStatus.connected || (!!googleStatus.connected && myFolderGoogleFilesError);
-
-  useEffect(() => {
-    if (isProfesor && teacherFolders.length > 0 && !selectedFolder) {
-      const f = teacherFolders[0];
-      const { curso } = parseTeacherFolderName(f.name);
-      setSelectedFolder({
-        groupId: f.groupId,
-        groupSubjectId: f.groupSubjectId,
-        folderName: f.name,
-        groupName: curso || f.name,
-      });
-    }
-  }, [isProfesor, teacherFolders, selectedFolder]);
 
   const connectGoogle = async () => {
     try {
@@ -591,6 +912,7 @@ export default function EvoDrivePage() {
         setEvoLinkUrl('');
         toast({ title: 'Archivo agregado', description: 'Se añadió el enlace a Evo Drive.' });
       }
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'recientes'] });
     },
     onError: (e: Error) => {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -616,6 +938,7 @@ export default function EvoDrivePage() {
       setCreateNewOpen(false);
       setCreateNewNombre('');
       toast({ title: 'Documento creado', description: 'Se creó en Google Drive y se añadió a Evo Drive.' });
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'recientes'] });
     },
     onError: (e: Error) => {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -626,6 +949,7 @@ export default function EvoDrivePage() {
     mutationFn: (body: Record<string, unknown>) => apiRequest('POST', '/api/evo-drive/my-folder', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['evo-drive', 'my-folder'] });
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'recientes'] });
       toast({ title: 'Agregado', description: 'Se añadió a Mi carpeta.' });
     },
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
@@ -635,7 +959,17 @@ export default function EvoDrivePage() {
     mutationFn: (id: string) => apiRequest('DELETE', `/api/evo-drive/my-folder/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['evo-drive', 'my-folder'] });
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'recientes'] });
       toast({ title: 'Eliminado', description: 'Se quitó de Mi carpeta.' });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const deleteEvoFileMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/evo-drive/files/${encodeURIComponent(id)}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['evo-drive'] });
+      toast({ title: 'Eliminado', description: 'El archivo se eliminó de Evo Drive.' });
     },
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
@@ -713,37 +1047,49 @@ export default function EvoDrivePage() {
     }
   }, [queryClient, toast]);
 
+  const trashStorageKey = user?.id ? `evo-drive-trash:${user.id}` : 'evo-drive-trash';
+  const starredStorageKey = user?.id ? `evo-drive-starred:${user.id}` : 'evo-drive-starred';
+
   useEffect(() => {
     try {
-      const rawStarred = localStorage.getItem('evo-drive-starred');
-      const rawTrash = localStorage.getItem('evo-drive-trash');
+      const rawStarred = localStorage.getItem(starredStorageKey) ?? localStorage.getItem('evo-drive-starred');
+      let rawTrash = localStorage.getItem(trashStorageKey);
+      if (!rawTrash && user?.id) rawTrash = localStorage.getItem('evo-drive-trash');
       if (rawStarred) setStarredIds(JSON.parse(rawStarred));
       if (rawTrash) setTrashIds(JSON.parse(rawTrash));
     } catch {
       setStarredIds([]);
       setTrashIds([]);
     }
-  }, []);
+  }, [starredStorageKey, trashStorageKey, user?.id]);
 
   useEffect(() => {
-    localStorage.setItem('evo-drive-starred', JSON.stringify(starredIds));
-  }, [starredIds]);
+    localStorage.setItem(starredStorageKey, JSON.stringify(starredIds));
+  }, [starredIds, starredStorageKey]);
 
   useEffect(() => {
-    localStorage.setItem('evo-drive-trash', JSON.stringify(trashIds));
-  }, [trashIds]);
+    localStorage.setItem(trashStorageKey, JSON.stringify(trashIds));
+  }, [trashIds, trashStorageKey]);
 
-  const allFilesSorted = [...files];
+  const aggregateCourseFilesOnly = useMemo(
+    () => overviewFlatRows.filter((r) => !r.rowKey.startsWith('personal-')).map((r) => r.file),
+    [overviewFlatRows]
+  );
+
+  const useAggregateAsFileList = librarySection === 'trash' && isTeacher;
+  const filesSource = useAggregateAsFileList ? aggregateCourseFilesOnly : files;
+  const filesLoadingSource = useAggregateAsFileList ? overviewLoading : filesLoading;
+
+  const allFilesSorted = [...filesSource];
   const withSearch = fileSearch.trim()
     ? allFilesSorted.filter((f) =>
         (f.nombre || '').toLowerCase().includes(fileSearch.trim().toLowerCase())
       )
     : allFilesSorted;
   const nonTrash = withSearch.filter((f) => !trashIds.includes(f.id));
-  const activeSectionFiles = librarySection === 'trash'
-    ? withSearch.filter((f) => trashIds.includes(f.id))
-    : librarySection === 'starred'
-      ? nonTrash.filter((f) => starredIds.includes(f.id))
+  const activeSectionFiles =
+    librarySection === 'trash'
+      ? withSearch.filter((f) => trashIds.includes(f.id))
       : librarySection === 'recent'
         ? [...nonTrash]
         : nonTrash;
@@ -758,12 +1104,27 @@ export default function EvoDrivePage() {
     return 0;
   }).map((x) => x.f);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollDriveElementIntoView = (elementId: string) => {
+    window.setTimeout(() => {
+      document.getElementById(elementId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 150);
+  };
   const toggleStar = (id: string) => {
     setStarredIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
   const toggleTrash = (id: string) => {
     setTrashIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
+
+  const evoDriveTrashContextValue = useMemo(
+    () => ({
+      canManageTrash: Boolean(isTeacher),
+      trashIds,
+      toggleTrash,
+      openTrashSection: () => setLibrarySection('trash'),
+    }),
+    [isTeacher, trashIds]
+  );
 
   // Enlace para abrir en Drive cuando la API no devuelve webViewLink
   const driveViewLink = (id: string, mimeType?: string) => {
@@ -868,40 +1229,249 @@ export default function EvoDrivePage() {
     });
   };
 
+  const overviewTypeChips: ReadonlyArray<{
+    key: 'all' | 'doc' | 'sheet' | 'slide' | 'pdf' | 'link' | 'other';
+    label: string;
+  }> = [
+    { key: 'all', label: 'Todos' },
+    { key: 'doc', label: 'Documentos' },
+    { key: 'sheet', label: 'Hojas' },
+    { key: 'slide', label: 'Presentaciones' },
+    { key: 'pdf', label: 'PDF' },
+    { key: 'link', label: 'Enlaces' },
+    { key: 'other', label: 'Otros' },
+  ];
+
+  const renderAllFilesOverview = () => (
+    <div className="flex-1 min-h-0 flex flex-col px-6 py-6 overflow-auto">
+      <div className="shrink-0 mb-5">
+        <h2 className="text-xl font-semibold text-white font-['Poppins'] tracking-tight">Todos los archivos</h2>
+        <p className="text-sm text-white/45 mt-1 max-w-2xl leading-relaxed">
+          Resumen de todo lo que tienes en Evo Drive. Filtra por tipo (documentos, hojas, presentaciones…), busca por
+          nombre o por la carpeta de origen.
+        </p>
+      </div>
+      <div className="shrink-0 flex flex-col lg:flex-row lg:items-start gap-4 mb-5">
+        <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-[#1E3A8A]/40 border border-white/10 py-2.5 px-3">
+          <Search className="w-4 h-4 text-white/50 shrink-0" />
+          <input
+            type="search"
+            value={overviewSearch}
+            onChange={(e) => setOverviewSearch(e.target.value)}
+            placeholder="Buscar por nombre o ubicación…"
+            className="flex-1 min-w-0 bg-transparent text-[13px] text-[#E2E8F0] placeholder:text-white/40 outline-none"
+            aria-label="Buscar archivos en el resumen"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2 lg:max-w-[min(100%,520px)] lg:justify-end">
+          {overviewTypeChips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setOverviewTypeFilter(c.key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                overviewTypeFilter === c.key
+                  ? 'text-[#93c5fd] border-[#3b82f6]/50 bg-[#3b82f6]/20'
+                  : 'text-white/60 border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {overviewLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+          <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+          <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+        </div>
+      ) : overviewFilteredRows.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] py-16 text-center px-4">
+          <FolderOpen className="w-12 h-12 text-white/20 mx-auto mb-3" />
+          <p className="text-white/65 font-medium">Sin resultados</p>
+          <p className="text-white/45 text-sm mt-1">
+            {overviewFlatRows.length === 0
+              ? 'Aún no hay archivos en tus carpetas o en Mi carpeta personal.'
+              : 'Prueba otro filtro o otra búsqueda.'}
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-2 min-h-0 pb-4">
+          {overviewFilteredRows.map(({ file, rowKey }) => (
+            <FileRow
+              key={rowKey}
+              file={file}
+              isStarred={starredIds.includes(file.id)}
+              onToggleStar={isTeacher ? toggleStar : undefined}
+              isInTrash={trashIds.includes(file.id)}
+              allowCourseTrash={!rowKey.startsWith('personal-')}
+            />
+          ))}
+        </ul>
+      )}
+      {!overviewLoading && overviewFlatRows.length > 0 ? (
+        <p className="text-[11px] text-white/35 mt-2 shrink-0">
+          Mostrando {overviewFilteredRows.length} de {overviewFlatRows.length} archivo
+          {overviewFlatRows.length === 1 ? '' : 's'} en el resumen.
+        </p>
+      ) : null}
+    </div>
+  );
+
+  const renderRecentQuickAccess = () => (
+    <div className="flex-1 min-h-0 flex flex-col px-6 py-6 overflow-auto">
+      <div className="shrink-0 mb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-white font-['Poppins'] tracking-tight flex items-center gap-2">
+            <Clock className="w-6 h-6 text-[#00c8ff] shrink-0" />
+            Recientes
+          </h2>
+          <p className="text-sm text-white/45 mt-1 max-w-2xl leading-relaxed">
+            Los últimos 10 archivos añadidos a Evo Drive (tus materias y Mi carpeta). La lista se actualiza al volver a la
+            pestaña y cada minuto mientras permaneces aquí.
+          </p>
+        </div>
+        {dataUpdatedAt ? (
+          <p className="text-[11px] text-white/35 shrink-0 tabular-nums">
+            Última actualización: {new Date(dataUpdatedAt).toLocaleString('es')}
+          </p>
+        ) : null}
+      </div>
+      {recentLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+          <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+        </div>
+      ) : recentVisible.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] py-16 text-center px-4">
+          <Clock className="w-12 h-12 text-white/20 mx-auto mb-3" />
+          <p className="text-white/65 font-medium">Aún no hay archivos recientes</p>
+          <p className="text-white/45 text-sm mt-1 max-w-md mx-auto">
+            Cuando tu profesor o tú agreguen materiales en las carpetas del curso o en Mi carpeta, aparecerán aquí en
+            orden de alta.
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-2 min-h-0 pb-4">
+          {recentVisible.map((f) => (
+            <FileRow
+              key={f.id}
+              file={{
+                ...f,
+                cursoNombre: f.cursoNombre || '—',
+              }}
+              isStarred={starredIds.includes(f.id)}
+              onToggleStar={isTeacher ? toggleStar : undefined}
+              isInTrash={trashIds.includes(f.id)}
+              allowCourseTrash={f.cursoNombre !== 'Mi carpeta'}
+            />
+          ))}
+        </ul>
+      )}
+      {!recentLoading && recentVisible.length > 0 ? (
+        <p className="text-[11px] text-white/35 mt-2 shrink-0">
+          Mostrando {recentVisible.length} archivo{recentVisible.length === 1 ? '' : 's'} más reciente
+          {recentVisible.length === 1 ? '' : 's'} (máximo 10).
+        </p>
+      ) : null}
+    </div>
+  );
+
   return (
     <>
     <div className="flex-1 min-h-0 flex overflow-hidden min-w-0">
+      <EvoDriveTrashContext.Provider value={evoDriveTrashContextValue}>
       <aside
         className="w-[220px] shrink-0 self-stretch flex flex-col border-r border-white/[0.08] overflow-y-auto"
         style={{ background: 'linear-gradient(180deg, #1E3A8A 0%, #0F172A 50%, #020617 100%)' }}
       >
-        <div className="pt-5 pb-4 px-4 flex items-center gap-2 shrink-0">
-          <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
-            <FileText className="w-5 h-5 text-white" />
+        <div className="pt-5 pb-4 px-4 flex items-center gap-3 shrink-0">
+          <div
+            className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 via-[#00c8ff] to-cyan-300 flex items-center justify-center shrink-0 shadow-lg shadow-sky-500/35 border border-white/25"
+            aria-hidden
+          >
+            <FolderOpen className="w-6 h-6 text-white drop-shadow-sm" />
           </div>
-          <span className="text-white font-semibold text-base tracking-tight">Evo Drive</span>
+          <span className="text-white font-semibold text-base tracking-tight font-['Poppins']">Evo Drive</span>
         </div>
         <section className="mb-4">
           <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Navegación</p>
-          <button type="button" onClick={() => setLibrarySection('all')} className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'all' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
+          <button
+            type="button"
+            onClick={() => {
+              setLibrarySection('all');
+              setDriveMainView('overview');
+            }}
+            className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 transition-colors text-left ${
+              showAllFilesOverview ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'
+            }`}
+          >
             <span className="flex items-center gap-2">
               <FolderOpen className="w-4 h-4 text-white" />
               Todos los archivos
             </span>
-            <span className="bg-[#3B82F6]/30 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full">{allFiles.length}</span>
+            <span className="bg-[#3B82F6]/30 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full">
+              {totalSidebarDriveFiles}
+            </span>
           </button>
-          <button type="button" onClick={() => setLibrarySection('recent')} className={`w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'recent' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
+          <button
+            type="button"
+            onClick={() => {
+              setLibrarySection('recent');
+              setDriveMainView('browse');
+            }}
+            className={`w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'recent' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}
+          >
             <FileText className="w-4 h-4 text-white" />
             Recientes
           </button>
-          <button type="button" onClick={() => setLibrarySection('starred')} className={`w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'starred' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
-            <Star className="w-4 h-4 text-white" />
-            Destacados
-          </button>
-          <button type="button" onClick={() => setLibrarySection('trash')} className={`w-[calc(100%-16px)] flex items-center gap-2 px-3 py-2 rounded-xl mx-2 transition-colors text-left ${librarySection === 'trash' ? 'text-white bg-[#3B82F6]/30 border border-white/20' : 'text-white/80 hover:bg-white/10'}`}>
-            <Trash2 className="w-4 h-4 text-white" />
-            Papelera
-          </button>
+          {isTeacher && (
+            <button
+              type="button"
+              onClick={() => {
+                setLibrarySection('trash');
+                setDriveMainView('browse');
+              }}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes(EVO_DRIVE_FILE_DRAG_TYPE) && !e.dataTransfer.types.includes('text/plain')) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                setTrashDropActive(true);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setTrashDropActive(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setTrashDropActive(false);
+                const id =
+                  e.dataTransfer.getData(EVO_DRIVE_FILE_DRAG_TYPE) || e.dataTransfer.getData('text/plain').trim();
+                if (!id || trashIds.includes(id)) return;
+                setTrashIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+                toast({ title: 'En la papelera', description: 'El archivo se ocultó de las carpetas. Restáuralo o elimínalo aquí.' });
+                setLibrarySection('trash');
+              }}
+              className={`w-[calc(100%-16px)] flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl mx-2 transition-all text-left border ${
+                trashDropActive
+                  ? 'text-white bg-rose-500/35 border-rose-400/60 ring-2 ring-rose-400/40 scale-[1.02]'
+                  : librarySection === 'trash'
+                    ? 'text-white bg-[#3B82F6]/30 border-white/20'
+                    : 'text-white/80 hover:bg-white/10 border-transparent'
+              }`}
+              title="Suelta aquí un archivo arrastrado o usa el menú contextual"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <Trash2 className="w-4 h-4 text-white shrink-0" />
+                <span className="truncate">Papelera</span>
+              </span>
+              {trashIds.length > 0 ? (
+                <span className="shrink-0 min-w-[22px] h-[22px] rounded-full bg-rose-600/90 text-white text-[11px] font-bold flex items-center justify-center px-1 border border-rose-400/50">
+                  {trashIds.length > 99 ? '99+' : trashIds.length}
+                </span>
+              ) : null}
+            </button>
+          )}
         </section>
         <section className="mb-4">
           <p className="text-[10px] uppercase font-bold text-white/30 tracking-widest mx-2 mb-2" style={{ letterSpacing: '0.12em' }}>Cursos</p>
@@ -917,7 +1487,9 @@ export default function EvoDrivePage() {
                 </p>
                 {course.folders.map((f) => {
                   const isActive =
-                    !selectedFolder?.isTeacherPrivate && selectedFolder?.groupSubjectId === f.groupSubjectId;
+                    !selectedFolder?.isTeacherPrivate &&
+                    selectedFolder?.groupId === f.groupId &&
+                    selectedFolder?.groupSubjectId === f.groupSubjectId;
                   const { materia } = parseTeacherFolderName(f.name);
                   return (
                     <button
@@ -925,14 +1497,15 @@ export default function EvoDrivePage() {
                       type="button"
                       onClick={() => {
                         const { curso } = parseTeacherFolderName(f.name);
+                        setDriveMainView('browse');
+                        setLibrarySection('all');
                         setSelectedFolder({
                           groupId: f.groupId,
                           groupSubjectId: f.groupSubjectId,
                           folderName: f.name,
                           groupName: curso || f.name,
                         });
-                        const el = document.getElementById(`evo-drive-course-${f.groupId}`);
-                        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        scrollDriveElementIntoView(`evo-drive-subject-${f.groupSubjectId}`);
                       }}
                       className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'}`}
                     >
@@ -941,7 +1514,7 @@ export default function EvoDrivePage() {
                         <span className="truncate">{materia}</span>
                       </span>
                       <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">
-                        {isActive ? allFiles.length : 0}
+                        <SidebarSubjectFileCount groupId={f.groupId} subjectId={f.groupSubjectId} />
                       </span>
                     </button>
                   );
@@ -949,6 +1522,8 @@ export default function EvoDrivePage() {
                 <button
                   type="button"
                   onClick={() => {
+                    setDriveMainView('browse');
+                    setLibrarySection('all');
                     setSelectedFolder({
                       groupId: course.groupId,
                       groupSubjectId: EVO_TEACHER_PRIVATE_SENTINEL,
@@ -956,10 +1531,7 @@ export default function EvoDrivePage() {
                       groupName: course.groupName,
                       isTeacherPrivate: true,
                     });
-                    document.getElementById(`evo-drive-course-${course.groupId}`)?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'nearest',
-                    });
+                    scrollDriveElementIntoView(`evo-drive-course-${course.groupId}`);
                   }}
                   className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${
                     selectedFolder?.isTeacherPrivate && selectedFolder.groupId === course.groupId
@@ -972,9 +1544,7 @@ export default function EvoDrivePage() {
                     <span className="truncate">Mi carpeta</span>
                   </span>
                   <span className="bg-violet-500/25 text-white border border-violet-400/30 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">
-                    {selectedFolder?.isTeacherPrivate && selectedFolder.groupId === course.groupId
-                      ? files.length
-                      : '—'}
+                    <SidebarTeacherPrivateFileCount groupId={course.groupId} />
                   </span>
                 </button>
               </div>
@@ -1001,26 +1571,89 @@ export default function EvoDrivePage() {
                     <button
                       key={sub.groupSubjectId}
                       type="button"
-                      onClick={() => setSelectedFolder({ groupId: sub.groupId, groupSubjectId: sub.groupSubjectId, folderName: sub.name, groupName })}
+                      onClick={() => {
+                        setDriveMainView('browse');
+                        setLibrarySection('all');
+                        setSelectedFolder({ groupId: sub.groupId, groupSubjectId: sub.groupSubjectId, folderName: sub.name, groupName });
+                        scrollDriveElementIntoView(`evo-drive-course-${sub.groupId}`);
+                      }}
                       className={`w-[calc(100%-16px)] ml-6 flex items-center justify-between px-3 py-2 rounded-xl text-left transition-colors ${isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'}`}
                     >
                       <span className="flex items-center gap-2 min-w-0 truncate">
                         <FolderOpen className="w-4 h-4 shrink-0 text-white" />
                         <span className="truncate">{sub.name}</span>
                       </span>
-                      <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">{isActive ? allFiles.length : 0}</span>
+                      <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">
+                        <SidebarSubjectFileCount groupId={sub.groupId} subjectId={sub.groupSubjectId} />
+                      </span>
                     </button>
                   );
                 })}
               </div>
             );
           })}
-          {!isTeacher && subjectFolders.map((folder) => (
-            <button key={folder.id} type="button" className="w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-white/80 hover:bg-white/10 transition-colors text-left">
-              <span className="truncate">{folder.name}</span>
-              <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0">0</span>
+          {showPersonalMyFolder && user?.rol === 'estudiante' && (
+            <button
+              type="button"
+              onClick={() => {
+                setDriveMainView('browse');
+                setSelectedFolder(null);
+                setLibrarySection('all');
+                setPersonalRootOpen(true);
+                scrollDriveElementIntoView('evo-drive-personal-root');
+              }}
+              className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${
+                !selectedFolder && personalRootOpen
+                  ? 'bg-amber-500/25 border border-amber-400/35 text-white'
+                  : 'text-white/80 hover:bg-white/10'
+              }`}
+            >
+              <span className="flex items-center gap-2 min-w-0 truncate">
+                <FolderOpen className="w-4 h-4 shrink-0 text-[#ffd700]" />
+                <span className="truncate">{personalFolderTitle}</span>
+              </span>
+              <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">
+                {myFolderFiles.length}
+              </span>
             </button>
-          ))}
+          )}
+          {!isTeacher &&
+            subjectFolders.map((folder) => {
+              const isActive =
+                !!selectedFolder &&
+                !selectedFolder.isTeacherPrivate &&
+                selectedFolder.groupSubjectId === folder.id &&
+                selectedFolder.groupId === folder.groupId;
+              return (
+                <button
+                  key={folder.id}
+                  type="button"
+                  onClick={() => {
+                    setDriveMainView('browse');
+                    setLibrarySection('all');
+                    setPersonalRootOpen(false);
+                    setSelectedFolder({
+                      groupId: folder.groupId,
+                      groupSubjectId: folder.id,
+                      folderName: folder.name,
+                      groupName: folder.groupName,
+                    });
+                    scrollDriveElementIntoView(`evo-drive-subject-${folder.id}`);
+                  }}
+                  className={`w-[calc(100%-16px)] flex items-center justify-between px-3 py-2 rounded-xl mx-2 text-left transition-colors ${
+                    isActive ? 'bg-[#3B82F6]/40 border border-white/20 text-white' : 'text-white/80 hover:bg-white/10'
+                  }`}
+                >
+                  <span className="flex items-center gap-2 min-w-0 truncate">
+                    <FolderOpen className="w-4 h-4 shrink-0 text-white" />
+                    <span className="truncate">{folder.name}</span>
+                  </span>
+                  <span className="bg-white/20 text-white border border-white/20 text-[10px] font-semibold px-2 rounded-full shrink-0 ml-1">
+                    <SidebarSubjectFileCount groupId={folder.groupId} subjectId={folder.id} />
+                  </span>
+                </button>
+              );
+            })}
         </section>
         <section className="mt-auto pt-4 border-t border-white/10">
           <div className="mx-2 mb-2 rounded-xl p-3 border border-white/10 bg-[#0F172A]/60">
@@ -1037,7 +1670,7 @@ export default function EvoDrivePage() {
       </aside>
 
       <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-auto relative">
-        {isTeacher && selectedFolder && (
+        {isTeacher && selectedFolder && !showAllFilesOverview && (
           <div className="shrink-0 px-6 pt-4">
             <Button
               type="button"
@@ -1056,7 +1689,7 @@ export default function EvoDrivePage() {
             </Button>
           </div>
         )}
-        {isTeacher && selectedFolder && !isProfesor && (
+        {isTeacher && selectedFolder && !isProfesor && !showAllFilesOverview && (
           <div className="shrink-0 flex items-center gap-4 px-6 py-3 border-b border-white/10">
             <div className="flex-1 flex items-center gap-2 min-w-0 rounded-xl bg-[#1E3A8A]/40 border border-white/10 py-2 px-3">
               <Search className="w-4 h-4 text-white/50 shrink-0" />
@@ -1108,7 +1741,7 @@ export default function EvoDrivePage() {
           </div>
         )}
 
-        {isTeacher && selectedFolder && (
+        {isTeacher && selectedFolder && !showAllFilesOverview && (
           <div className="shrink-0 flex flex-wrap items-center gap-2.5 px-6 py-2 border-b border-white/10">
             {!googleStatus.connected && (
               <Button onClick={connectGoogle} variant="outline" size="sm" className="h-9 rounded-xl border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] text-xs font-medium hover:bg-[#22c55e]/20">
@@ -1137,10 +1770,6 @@ export default function EvoDrivePage() {
                     <div className="w-8 h-8 rounded-lg bg-[#00c8ff]/20 flex items-center justify-center shrink-0"><Link2 className="w-4 h-4 text-[#00c8ff]" /></div>
                     Enlace
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#00c8ff]/10 focus:bg-[#00c8ff]/10 mx-0 rounded-none">
-                    <div className="w-8 h-8 rounded-lg bg-[#00c8ff]/20 flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-[#00c8ff]" /></div>
-                    Archivo
-                  </DropdownMenuItem>
                 </div>
                 <div className="border-t border-white/10" />
                 <div className="py-2">
@@ -1163,17 +1792,25 @@ export default function EvoDrivePage() {
           </div>
         )}
 
-        {isProfesor ? (
+        {showAllFilesOverview ? (
+          renderAllFilesOverview()
+        ) : librarySection === 'recent' ? (
+          renderRecentQuickAccess()
+        ) : isProfesor ? (
           <>
             <div className="flex-1 p-6 overflow-auto space-y-4 min-h-0">
               <Card className="overflow-hidden border-[#00c8ff]/30 bg-[#00c8ff]/[0.06]">
-                <Collapsible defaultOpen>
+                <Collapsible open={personalRootOpen} onOpenChange={setPersonalRootOpen}>
                   <CollapsibleTrigger asChild>
                     <button
                       type="button"
                       className="w-full flex items-center gap-3 p-4 text-left hover:bg-[#00c8ff]/10 transition-colors"
                     >
-                      <ChevronDown className="w-5 h-5 text-[#00c8ff] shrink-0" />
+                      {personalRootOpen ? (
+                        <ChevronDown className="w-5 h-5 text-[#00c8ff] shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-[#00c8ff] shrink-0" />
+                      )}
                       <FolderOpen className="w-6 h-6 text-[#00c8ff] shrink-0" />
                       <span className="font-semibold text-white truncate flex-1 text-left">{personalFolderTitle}</span>
                       <Button
@@ -1374,14 +2011,14 @@ export default function EvoDrivePage() {
                       materiales; los estudiantes no tienen acceso.
                     </span>
                   </p>
-                  {filesLoading ? (
+                  {filesLoadingSource ? (
                     <Skeleton className="h-12 w-full bg-violet-900/40 rounded-lg" />
-                  ) : files.length === 0 ? (
+                  ) : filesSource.length === 0 ? (
                     <p className="text-violet-200/70 text-sm pl-6">Sin archivos. Usa &quot;Añadir o crear&quot; en la barra superior.</p>
                   ) : (
                     <ul className="space-y-2 pl-6">
-                      {files.map((f) => (
-                        <FileRow key={f.id} file={f} />
+                      {filesSource.map((f) => (
+                        <FileRow key={f.id} file={f} allowCourseTrash={false} />
                       ))}
                     </ul>
                   )}
@@ -1433,16 +2070,71 @@ export default function EvoDrivePage() {
         ) : isTeacher ? (
           <>
             <div className="flex-1 p-6 overflow-auto">
-              {!selectedFolder ? (
+              {librarySection === 'trash' && (
+                <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <h2 className="text-white font-semibold font-['Poppins'] flex items-center gap-2">
+                      <Trash2 className="w-5 h-5 text-rose-300" />
+                      Papelera
+                    </h2>
+                    <p className="text-sm text-white/55 mt-1 max-w-xl">
+                      Los documentos dejan de mostrarse en las carpetas del curso. Para borrarlos del servidor, usa{' '}
+                      <strong className="text-white/80">Eliminar definitivamente</strong> (clic derecho o botón en la fila).
+                    </p>
+                  </div>
+                  {trashIds.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={deleteEvoFileMutation.isPending}
+                      className="border-rose-500/50 text-rose-100 hover:bg-rose-500/20 shrink-0"
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `¿Eliminar permanentemente ${trashIds.length} archivo(s) de Evo Drive? Esta acción no se puede deshacer.`
+                          )
+                        ) {
+                          return;
+                        }
+                        const ids = [...trashIds];
+                        void (async () => {
+                          for (const id of ids) {
+                            try {
+                              await apiRequest('DELETE', `/api/evo-drive/files/${encodeURIComponent(id)}`);
+                            } catch {
+                              /* continuar con el resto */
+                            }
+                          }
+                          setTrashIds([]);
+                          queryClient.invalidateQueries({ queryKey: ['evo-drive'] });
+                          toast({ title: 'Papelera vaciada', description: 'Se procesó la eliminación en el servidor.' });
+                        })();
+                      }}
+                    >
+                      Vaciar papelera (definitivo)
+                    </Button>
+                  )}
+                </div>
+              )}
+              {!selectedFolder && librarySection !== 'trash' ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <FolderOpen className="w-12 h-12 text-white/30 mb-4" />
                   <p className="text-white/70 font-medium">Selecciona una carpeta</p>
                   <p className="text-white/50 text-sm mt-1">Elige una materia — curso en el sidebar para ver y gestionar archivos.</p>
                 </div>
-              ) : filesLoading ? (
+              ) : filesLoadingSource ? (
                 <div className="space-y-3">
                   <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
                   <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+                </div>
+              ) : librarySection === 'trash' && allFiles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border border-white/10 bg-white/[0.03]">
+                  <Trash2 className="w-12 h-12 text-white/25 mb-3" />
+                  <p className="text-white/65 font-medium">La papelera está vacía</p>
+                  <p className="text-white/45 text-sm mt-1 max-w-md">
+                    Arrastra un archivo aquí en el sidebar, usa el menú contextual (clic derecho) o el icono de papelera en la fila.
+                  </p>
                 </div>
               ) : viewMode === 'grid' ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-4">
@@ -1456,6 +2148,16 @@ export default function EvoDrivePage() {
                       onToggleStar={toggleStar}
                       onToggleTrash={toggleTrash}
                       onOpenTrash={() => setLibrarySection('trash')}
+                      onDeletePermanent={
+                        librarySection === 'trash'
+                          ? (id) => {
+                              if (!window.confirm('¿Eliminar este archivo permanentemente de Evo Drive?')) return;
+                              deleteEvoFileMutation.mutate(id, {
+                                onSuccess: () => setTrashIds((prev) => prev.filter((x) => x !== id)),
+                              });
+                            }
+                          : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -1469,6 +2171,7 @@ export default function EvoDrivePage() {
                         <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Tipo</th>
                         <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Modificado</th>
                         <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-left">Tamaño</th>
+                        <th className="text-[11px] uppercase text-white/40 font-semibold py-2.5 px-4 text-right w-[120px]">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1481,13 +2184,24 @@ export default function EvoDrivePage() {
                           isInTrash={trashIds.includes(f.id)}
                           onToggleStar={toggleStar}
                           onToggleTrash={toggleTrash}
+                          onOpenTrash={() => setLibrarySection('trash')}
+                          onDeletePermanent={
+                            librarySection === 'trash'
+                              ? (id) => {
+                                  if (!window.confirm('¿Eliminar este archivo permanentemente de Evo Drive?')) return;
+                                  deleteEvoFileMutation.mutate(id, {
+                                    onSuccess: () => setTrashIds((prev) => prev.filter((x) => x !== id)),
+                                  });
+                                }
+                              : undefined
+                          }
                         />
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-              {selectedFolder && !filesLoading && (
+              {selectedFolder && !filesLoadingSource && librarySection !== 'trash' && (
                 <div
                   className="mt-6 rounded-xl border-2 border-dashed border-white/10 py-7 px-6 flex flex-col items-center justify-center gap-2 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06] transition-colors cursor-pointer"
                   onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; }}
@@ -1524,14 +2238,18 @@ export default function EvoDrivePage() {
             <>
               <div className="flex-1 p-6 overflow-auto space-y-3">
                 {/* Mi carpeta: acento dorado sobre azul de plataforma */}
-              <Card className="overflow-hidden border-white/10 bg-white/[0.04]">
-                <Collapsible defaultOpen>
+              <Card id="evo-drive-personal-root" className="overflow-hidden border-white/10 bg-white/[0.04] scroll-mt-4">
+                <Collapsible open={personalRootOpen} onOpenChange={setPersonalRootOpen}>
                   <CollapsibleTrigger asChild>
                     <button
                       type="button"
                       className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/5 transition-colors"
                     >
-                      <ChevronDown className="w-5 h-5 text-[#ffd700] shrink-0" />
+                      {personalRootOpen ? (
+                        <ChevronDown className="w-5 h-5 text-[#ffd700] shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-[#ffd700] shrink-0" />
+                      )}
                       <FolderOpen className="w-6 h-6 text-[#ffd700] shrink-0" />
                       <span className="font-semibold text-white truncate flex-1 text-left">{personalFolderTitle}</span>
                       <Button
@@ -1708,34 +2426,50 @@ export default function EvoDrivePage() {
                   </p>
                 </div>
               ) : (
-                subjectFolders.map((folder) => <SubjectFolder key={folder.id} folder={folder} />)
+                subjectFolders.map((folder) => (
+                  <SubjectFolder
+                    key={folder.id}
+                    folder={folder}
+                    subjectSelected={
+                      !!selectedFolder &&
+                      !selectedFolder.isTeacherPrivate &&
+                      selectedFolder.groupSubjectId === folder.id &&
+                      selectedFolder.groupId === folder.groupId
+                    }
+                  />
+                ))
               )}
               </div>
             </>
           )}
         </main>
+      </EvoDriveTrashContext.Provider>
     </div>
 
     {/* Agregar desde Google Drive */}
       <Dialog open={addFromGoogleOpen} onOpenChange={setAddFromGoogleOpen}>
-        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2 overflow-hidden [&+[data-radix-dialog-overlay]]:bg-black/45">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[11px] bg-[#00c8ff]/20 flex items-center justify-center shrink-0">
-                <Cloud className="w-5 h-5 text-[#00c8ff]" />
+        <DialogContent className="bg-[#0b1120] border border-white/[0.1] w-[min(96vw,920px)] max-w-[920px] max-h-[min(90vh,760px)] p-0 gap-0 flex flex-col rounded-2xl overflow-hidden shadow-2xl shadow-black/60 data-[state=open]:animate-in data-[state=open]:zoom-in-95 [&+[data-radix-dialog-overlay]]:bg-black/55">
+          <DialogHeader className="px-6 sm:px-8 pt-6 pb-4 border-b border-white/[0.07] shrink-0 bg-gradient-to-r from-[#0c1929] via-[#0f172a] to-[#0c1322]">
+            <DialogTitle className="text-white flex items-start sm:items-center gap-4 pr-8">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-400 via-[#00c8ff] to-cyan-300 flex items-center justify-center shrink-0 shadow-lg shadow-sky-500/30 border border-white/20">
+                <Cloud className="w-7 h-7 text-white drop-shadow-sm" />
               </div>
-              <div>
-                <span className="text-base font-semibold text-white block">Agregar desde Google Drive</span>
-                <span className="text-xs text-white/60 mt-0.5 block">Selecciona un archivo de tu Drive</span>
+              <div className="min-w-0 flex-1">
+                <span className="text-lg sm:text-xl font-semibold text-white block font-['Poppins'] tracking-tight">
+                  Tu Google Drive
+                </span>
+                <span className="text-sm text-white/55 mt-1 block leading-snug">
+                  Busca por nombre y vincula archivos con icono y tipo visibles. Solo tú ves tu cuenta de Google.
+                </span>
               </div>
             </DialogTitle>
           </DialogHeader>
           {googleDriveDisconnectedInModal ? (
-            <div className="space-y-4 py-2">
-              <p className="text-white/60 text-sm">
+            <div className="space-y-4 px-6 sm:px-8 py-6">
+              <p className="text-white/65 text-sm leading-relaxed">
                 {googleFilesError ? 'Google Drive se desconectó. Reconéctalo para seguir usando tus archivos.' : 'Conecta Google Drive para agregar archivos desde tu cuenta.'}
               </p>
-              <Button type="button" onClick={connectGoogle} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium">
+              <Button type="button" onClick={connectGoogle} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium h-11">
                 <Cloud className="w-4 h-4 mr-2" />
                 Reconectar Google Drive
               </Button>
@@ -1743,56 +2477,65 @@ export default function EvoDrivePage() {
             </div>
           ) : !selectedFolder ||
             (!selectedFolder.isTeacherPrivate && !selectedFolder.groupSubjectId) ? (
-            <p className="text-white/60 text-sm py-4">
-              Selecciona una materia o la carpeta <strong className="text-white/80">Mi carpeta</strong> (solo docente) en
+            <p className="text-white/65 text-sm px-6 sm:px-8 py-8 leading-relaxed">
+              Selecciona una materia o la carpeta <strong className="text-white/90">Mi carpeta</strong> (solo docente) en
               el panel lateral.
             </p>
           ) : (
-            <>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-white/60">Buscar en Drive</Label>
-                <Input
-                  value={googleSearch}
-                  onChange={(e) => setGoogleSearch(e.target.value)}
-                  placeholder="Nombre del archivo..."
-                  className="bg-white/[0.06] border border-white/[0.08] rounded-xl py-2.5 px-3 text-sm text-white placeholder:text-white/50 focus:border-white/20"
-                />
+            <div className="flex flex-col flex-1 min-h-0 px-6 sm:px-8 pt-5 pb-2 gap-4">
+              <div className="space-y-2 shrink-0">
+                <Label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Buscar en tu Drive</Label>
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/35 pointer-events-none" />
+                  <Input
+                    value={googleSearch}
+                    onChange={(e) => setGoogleSearch(e.target.value)}
+                    placeholder="Nombre del archivo, carpeta o tipo…"
+                    className="bg-white/[0.06] border border-white/[0.1] rounded-xl py-3 pl-10 pr-3 text-sm text-white placeholder:text-white/45 focus:border-[#00c8ff]/40 focus:ring-1 focus:ring-[#00c8ff]/20"
+                  />
+                </div>
               </div>
-              <ScrollArea className="h-[280px] rounded-xl border border-white/[0.08]">
-                {googleFilesLoading ? (
-                  <div className="p-4 space-y-2">
-                    <Skeleton className="h-12 w-full bg-white/10 rounded-lg" />
-                    <Skeleton className="h-12 w-full bg-white/10 rounded-lg" />
-                  </div>
-                ) : googleFiles.length === 0 ? (
-                  <p className="text-white/50 text-sm p-4">No se encontraron archivos o escribe para buscar.</p>
-                ) : (
-                  <ul className="p-2 space-y-1">
-                    {googleFiles.map((gf) => (
-                      <li
-                        key={gf.id}
-                        className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/10 text-white border border-transparent hover:border-white/10"
-                      >
-                        <span className="truncate text-sm flex-1 min-w-0">{gf.name}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0 border-white/20 bg-white/10 text-white hover:bg-white/15 font-medium"
-                          onClick={() => handleAddFromGoogle(gf)}
-                          disabled={addFileMutation.isPending}
-                        >
-                          {addFileMutation.isPending ? 'Agregando…' : 'Agregar'}
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <ScrollArea className="min-h-[min(52vh,520px)] max-h-[min(52vh,520px)] rounded-xl border border-white/[0.08] bg-[#020617]/80">
+                <div className="p-3 sm:p-4">
+                  {googleFilesLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} className="h-[72px] w-full bg-white/[0.08] rounded-xl" />
+                      ))}
+                    </div>
+                  ) : googleFiles.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                      <div className="w-14 h-14 rounded-2xl bg-white/[0.06] border border-white/10 flex items-center justify-center mb-3">
+                        <FolderOpen className="w-7 h-7 text-white/30" />
+                      </div>
+                      <p className="text-white/70 text-sm font-medium">Sin resultados</p>
+                      <p className="text-white/45 text-xs mt-1 max-w-sm">
+                        Escribe en el buscador para listar archivos de tu Google Drive.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {googleFiles.map((gf) => (
+                        <GoogleDrivePickerRow
+                          key={gf.id}
+                          file={gf}
+                          onAdd={handleAddFromGoogle}
+                          addPending={addFileMutation.isPending}
+                          buttonClassName="shrink-0 rounded-xl border-[#00c8ff]/40 bg-[#00c8ff]/15 text-[#7dd3fc] hover:bg-[#00c8ff]/25 font-medium px-4"
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </ScrollArea>
-            </>
+            </div>
           )}
-          <DialogFooter className="gap-2 sm:gap-2 mt-4">
-            <Button variant="outline" onClick={() => setAddFromGoogleOpen(false)} className="flex-1 border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">
+          <DialogFooter className="gap-2 px-6 sm:px-8 py-4 border-t border-white/[0.07] shrink-0 bg-[#0a0f1a]/90">
+            <Button
+              variant="outline"
+              onClick={() => setAddFromGoogleOpen(false)}
+              className="border border-white/15 bg-white/[0.04] text-[13px] font-medium text-white/80 hover:bg-white/10 rounded-xl"
+            >
               Cerrar
             </Button>
           </DialogFooter>
@@ -1943,24 +2686,28 @@ export default function EvoDrivePage() {
 
       {/* Modales Mi carpeta (estudiante) */}
       <Dialog open={myFolderAddGoogleOpen} onOpenChange={setMyFolderAddGoogleOpen}>
-        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-3">
-              <div className="w-10 h-10 rounded-[11px] bg-amber-500/20 flex items-center justify-center shrink-0">
-                <Cloud className="w-5 h-5 text-amber-400" />
+        <DialogContent className="bg-[#0b1120] border border-white/[0.1] w-[min(96vw,920px)] max-w-[920px] max-h-[min(90vh,760px)] p-0 gap-0 flex flex-col rounded-2xl overflow-hidden shadow-2xl shadow-black/60 [&+[data-radix-dialog-overlay]]:bg-black/55">
+          <DialogHeader className="px-6 sm:px-8 pt-6 pb-4 border-b border-white/[0.07] shrink-0 bg-gradient-to-r from-amber-950/40 via-[#0f172a] to-[#0c1322]">
+            <DialogTitle className="text-white flex items-start sm:items-center gap-4 pr-8">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 via-[#ffd700] to-amber-200 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/25 border border-white/20">
+                <Cloud className="w-7 h-7 text-amber-950 drop-shadow-sm" />
               </div>
-              <div>
-                <span className="text-base font-semibold text-white block">Agregar desde Google Drive</span>
-                <span className="text-xs text-white/60 mt-0.5 block">Se añadirá a Mi carpeta</span>
+              <div className="min-w-0 flex-1">
+                <span className="text-lg sm:text-xl font-semibold text-white block font-['Poppins'] tracking-tight">
+                  Tu Google Drive
+                </span>
+                <span className="text-sm text-white/55 mt-1 block leading-snug">
+                  Los archivos que elijas se añaden a <strong className="text-[#fde68a]">Mi carpeta</strong> personal.
+                </span>
               </div>
             </DialogTitle>
           </DialogHeader>
           {myFolderGoogleDriveDisconnected ? (
-            <div className="space-y-4 py-2">
-              <p className="text-white/60 text-sm">
+            <div className="space-y-4 px-6 sm:px-8 py-6">
+              <p className="text-white/65 text-sm leading-relaxed">
                 {myFolderGoogleFilesError ? 'Google Drive se desconectó. Reconéctalo para usar tus archivos.' : 'Conecta Google Drive para usar tus archivos.'}
               </p>
-              <Button type="button" onClick={connectGoogle} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium">
+              <Button type="button" onClick={connectGoogle} className="w-full rounded-xl border border-[#22c55e]/40 bg-[#22c55e]/10 text-[#22c55e] hover:bg-[#22c55e]/20 font-medium h-11">
                 <Cloud className="w-4 h-4 mr-2" />
                 Reconectar Google Drive
               </Button>
@@ -1968,45 +2715,59 @@ export default function EvoDrivePage() {
             </div>
           ) : (
             <>
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-white/60">Buscar en Drive</Label>
-                <Input
-                  value={myFolderGoogleSearch}
-                  onChange={(e) => setMyFolderGoogleSearch(e.target.value)}
-                  placeholder="Nombre del archivo..."
-                  className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50"
-                />
+              <div className="flex flex-col flex-1 min-h-0 px-6 sm:px-8 pt-5 pb-2 gap-4">
+                <div className="space-y-2 shrink-0">
+                  <Label className="text-xs font-semibold text-white/50 uppercase tracking-wider">Buscar en tu Drive</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400/50 pointer-events-none" />
+                    <Input
+                      value={myFolderGoogleSearch}
+                      onChange={(e) => setMyFolderGoogleSearch(e.target.value)}
+                      placeholder="Nombre del archivo, carpeta o tipo…"
+                      className="bg-white/[0.06] border border-amber-500/15 rounded-xl py-3 pl-10 pr-3 text-sm text-white placeholder:text-white/45 focus:border-amber-400/35 focus:ring-1 focus:ring-amber-400/15"
+                    />
+                  </div>
+                </div>
+                <ScrollArea className="min-h-[min(52vh,520px)] max-h-[min(52vh,520px)] rounded-xl border border-amber-500/10 bg-[#020617]/80">
+                  <div className="p-3 sm:p-4">
+                    {myFolderGoogleFilesLoading ? (
+                      <div className="space-y-3">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                          <Skeleton key={i} className="h-[72px] w-full bg-white/[0.08] rounded-xl" />
+                        ))}
+                      </div>
+                    ) : myFolderGoogleFiles.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                        <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-3">
+                          <FolderOpen className="w-7 h-7 text-amber-400/40" />
+                        </div>
+                        <p className="text-white/70 text-sm font-medium">Sin resultados</p>
+                        <p className="text-white/45 text-xs mt-1 max-w-sm">
+                          Escribe en el buscador para listar archivos de tu Google Drive.
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {myFolderGoogleFiles.map((gf) => (
+                          <GoogleDrivePickerRow
+                            key={gf.id}
+                            file={gf}
+                            onAdd={handleMyFolderAddFromGoogle}
+                            addPending={addToMyFolderMutation.isPending}
+                            buttonClassName="shrink-0 rounded-xl border-amber-500/50 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 font-medium px-4"
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </ScrollArea>
               </div>
-              <ScrollArea className="h-[280px] rounded-md border border-white/10">
-                {myFolderGoogleFilesLoading ? (
-                  <p className="text-white/50 text-sm p-4">Cargando…</p>
-                ) : myFolderGoogleFiles.length === 0 ? (
-                  <p className="text-white/50 text-sm p-4">Escribe para buscar o no hay archivos.</p>
-                ) : (
-                  <ul className="p-2 space-y-1">
-                    {myFolderGoogleFiles.map((gf) => (
-                      <li
-                        key={gf.id}
-                        className="flex items-center justify-between gap-3 p-3 rounded-lg hover:bg-white/10 text-white"
-                      >
-                        <span className="truncate text-sm flex-1 min-w-0">{gf.name}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="shrink-0 border-amber-500/50 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 font-medium"
-                          onClick={() => handleMyFolderAddFromGoogle(gf)}
-                          disabled={addToMyFolderMutation.isPending}
-                        >
-                          Agregar
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </ScrollArea>
-              <DialogFooter className="gap-2 mt-4">
-                <Button variant="outline" onClick={() => setMyFolderAddGoogleOpen(false)} className="flex-1 border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10">
+              <DialogFooter className="gap-2 px-6 sm:px-8 py-4 border-t border-white/[0.07] shrink-0 bg-[#0a0f1a]/90">
+                <Button
+                  variant="outline"
+                  onClick={() => setMyFolderAddGoogleOpen(false)}
+                  className="border border-white/15 bg-white/[0.04] text-[13px] font-medium text-white/80 hover:bg-white/10 rounded-xl"
+                >
                   Cerrar
                 </Button>
               </DialogFooter>
@@ -2211,28 +2972,123 @@ function FileRow({
   variant,
   isStarred = false,
   isInTrash = false,
+  allowCourseTrash = true,
   onToggleStar,
   onToggleTrash,
   onOpenTrash,
+  onDeletePermanent,
 }: {
   file: EvoFile;
   isNew?: boolean;
   variant?: 'grid' | 'list';
   isStarred?: boolean;
   isInTrash?: boolean;
+  /** Si es false, no se ofrece papelera (p. ej. Mi carpeta privada del docente). */
+  allowCourseTrash?: boolean;
   onToggleStar?: (id: string) => void;
   onToggleTrash?: (id: string) => void;
   /** Tras enviar a la papelera, activa la sección Papelera (sidebar). */
   onOpenTrash?: () => void;
+  /** Solo en vista Papelera: borrado permanente en servidor. */
+  onDeletePermanent?: (id: string) => void;
 }) {
+  const trashCtx = useContext(EvoDriveTrashContext);
+  const allowTrash = allowCourseTrash !== false && trashCtx?.canManageTrash === true;
+  const effectiveToggleTrash =
+    onToggleTrash ?? (allowTrash && trashCtx ? trashCtx.toggleTrash : undefined);
+  const effectiveOpenTrash =
+    onOpenTrash ?? (allowTrash && trashCtx ? trashCtx.openTrashSection : undefined);
+
   const link = file.googleWebViewLink || file.evoStorageUrl || '#';
   const isGoogle = file.origen === 'google';
   const style = FILE_TYPE_STYLES[file.tipo] || defaultStyle;
   const hex = style.hex || style.color;
 
+  const draggable = Boolean(effectiveToggleTrash && !isInTrash);
+  const onDragStart = (e: React.DragEvent) => {
+    if (!draggable) return;
+    e.dataTransfer.setData(EVO_DRIVE_FILE_DRAG_TYPE, file.id);
+    e.dataTransfer.setData('text/plain', file.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const moveToTrash = () => {
+    if (!effectiveToggleTrash) return;
+    if (!isInTrash) {
+      effectiveToggleTrash(file.id);
+      effectiveOpenTrash?.();
+    } else {
+      effectiveToggleTrash(file.id);
+    }
+  };
+
+  const cmItem =
+    'text-white/90 focus:bg-white/10 focus:text-white cursor-pointer data-[highlighted]:bg-white/10 data-[highlighted]:text-white';
+
+  const contextMenuBody = (
+    <>
+      {link !== '#' && (
+        <ContextMenuItem
+          className={cmItem}
+          onSelect={() => window.open(link, '_blank', 'noopener,noreferrer')}
+        >
+          <ExternalLink className="mr-2 h-4 w-4 shrink-0" />
+          Abrir
+        </ContextMenuItem>
+      )}
+      {onToggleStar && (
+        <ContextMenuItem className={cmItem} onSelect={() => onToggleStar(file.id)}>
+          <Star className={`mr-2 h-4 w-4 shrink-0 ${isStarred ? 'text-amber-400' : ''}`} />
+          {isStarred ? 'Quitar de destacados' : 'Destacar'}
+        </ContextMenuItem>
+      )}
+      {((link !== '#' || !!onToggleStar) &&
+        (!!effectiveToggleTrash || (!!onDeletePermanent && isInTrash))) && (
+        <ContextMenuSeparator className="bg-white/10" />
+      )}
+      {effectiveToggleTrash && !isInTrash && (
+        <ContextMenuItem className={cmItem} onSelect={moveToTrash}>
+          <Trash2 className="mr-2 h-4 w-4 shrink-0" />
+          Mover a la papelera
+        </ContextMenuItem>
+      )}
+      {effectiveToggleTrash && isInTrash && (
+        <ContextMenuItem
+          className={cmItem}
+          onSelect={() => {
+            effectiveToggleTrash(file.id);
+          }}
+        >
+          <RotateCcw className="mr-2 h-4 w-4 shrink-0" />
+          Restaurar
+        </ContextMenuItem>
+      )}
+      {onDeletePermanent && isInTrash && (
+        <ContextMenuItem
+          className={`${cmItem} text-rose-300 focus:text-rose-200 focus:bg-rose-500/20`}
+          onSelect={() => onDeletePermanent(file.id)}
+        >
+          <Trash2 className="mr-2 h-4 w-4 shrink-0" />
+          Eliminar definitivamente
+        </ContextMenuItem>
+      )}
+    </>
+  );
+
+  const contextMenuWrap = (child: React.ReactElement) => (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{child}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[220px] border-white/10 bg-[#0f172a]/98 text-white">{contextMenuBody}</ContextMenuContent>
+    </ContextMenu>
+  );
+
   if (variant === 'grid') {
-    return (
-      <div className="flex flex-col items-center gap-1.5">
+    const gridInner = (
+      <div
+        className={`flex flex-col items-center gap-1.5 outline-none ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        draggable={draggable}
+        onDragStart={onDragStart}
+      >
         <div
           className="relative w-16 h-16 rounded-2xl bg-[#1E3A8A]/40 border border-white/10 transition-colors group/icon hover:bg-[#1E3A8A]/60"
           style={{ borderColor: `${hex}47` }}
@@ -2249,25 +3105,29 @@ function FileRow({
             <button type="button" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Renombrar">
               <Pencil className="w-4 h-4" />
             </button>
-            {onToggleTrash ? (
+            {effectiveToggleTrash && (
               <button
                 type="button"
                 className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10"
                 aria-label={isInTrash ? 'Restaurar desde la papelera' : 'Mover a la papelera'}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!isInTrash) {
-                    onToggleTrash(file.id);
-                    onOpenTrash?.();
-                  } else {
-                    onToggleTrash(file.id);
-                  }
+                  moveToTrash();
                 }}
               >
-                <Trash2 className="w-4 h-4" />
+                {isInTrash ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
               </button>
-            ) : (
-              <button type="button" className="w-7 h-7 rounded-xl flex items-center justify-center text-white/80 hover:bg-white/10" aria-label="Eliminar">
+            )}
+            {onDeletePermanent && isInTrash && (
+              <button
+                type="button"
+                className="w-7 h-7 rounded-xl flex items-center justify-center text-rose-300 hover:bg-rose-500/20"
+                aria-label="Eliminar definitivamente"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeletePermanent(file.id);
+                }}
+              >
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
@@ -2277,14 +3137,21 @@ function FileRow({
         <p className="text-[10.5px] text-white/30 text-center">{file.cursoNombre}</p>
       </div>
     );
+    return contextMenuWrap(gridInner);
   }
 
   if (variant === 'list') {
-    return (
-      <tr className="border-b border-white/10 hover:bg-[#1E3A8A]/30 transition-colors">
+    const row = (
+      <tr
+        className={`border-b border-white/10 hover:bg-[#1E3A8A]/30 transition-colors ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        draggable={draggable}
+        onDragStart={onDragStart}
+      >
         <td className="py-2.5 px-4">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${hex}26` }}>{style.icon}</div>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${hex}26` }}>
+              {style.icon}
+            </div>
             <span className="text-white font-medium truncate">{file.nombre}</span>
           </div>
         </td>
@@ -2292,15 +3159,73 @@ function FileRow({
         <td className="py-2.5 px-4 text-[#E2E8F0]/70">{file.tipo}</td>
         <td className="py-2.5 px-4 text-[#E2E8F0]/70">—</td>
         <td className="py-2.5 px-4 text-[#E2E8F0]/70">—</td>
+        <td className="py-2.5 px-4 text-right">
+          <div className="inline-flex items-center justify-end gap-1">
+            {link !== '#' && (
+              <a
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/10"
+                aria-label="Abrir"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+            {onToggleStar && (
+              <button
+                type="button"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center ${isStarred ? 'text-amber-400' : 'text-white/70 hover:bg-white/10'}`}
+                aria-label="Destacar"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStar(file.id);
+                }}
+              >
+                <Star className="w-4 h-4" />
+              </button>
+            )}
+            {effectiveToggleTrash && (
+              <button
+                type="button"
+                className={`w-8 h-8 rounded-lg flex items-center justify-center ${isInTrash ? 'text-rose-300' : 'text-white/70 hover:bg-white/10'}`}
+                aria-label={isInTrash ? 'Restaurar' : 'Mover a la papelera'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveToTrash();
+                }}
+              >
+                {isInTrash ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+              </button>
+            )}
+            {onDeletePermanent && isInTrash && (
+              <button
+                type="button"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-400 hover:bg-rose-500/20"
+                aria-label="Eliminar definitivamente"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeletePermanent(file.id);
+                }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </td>
       </tr>
     );
+    return contextMenuWrap(row);
   }
 
-  return (
+  const listItem = (
     <li
-      className={`group flex items-center justify-between gap-4 py-[13px] px-4 rounded-xl border transition-colors ${
+      className={`group flex items-center justify-between gap-4 py-[13px] px-4 rounded-xl border transition-colors outline-none ${
         isNew ? 'border-white/20 bg-white/[0.06] animate-in fade-in slide-in-from-top-2 duration-300' : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/20'
-      }`}
+      } ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      draggable={draggable}
+      onDragStart={onDragStart}
     >
       <div className="flex items-center gap-4 min-w-0 flex-1">
         <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0" style={{ backgroundColor: `${hex}26` }}>
@@ -2348,33 +3273,30 @@ function FileRow({
             <Star className="w-4 h-4" />
           </button>
         )}
-        {onToggleTrash && (
+        {effectiveToggleTrash && (
           <button
             type="button"
             className={`w-[30px] h-[30px] rounded-lg flex items-center justify-center transition-colors ${
               isInTrash ? 'text-rose-400 bg-rose-500/10' : 'text-[#E2E8F0]/70 hover:bg-[#1E3A8A]/50 hover:text-white'
             }`}
             aria-label={isInTrash ? 'Restaurar desde la papelera' : 'Mover a la papelera'}
-            onClick={() => {
-              if (!isInTrash) {
-                onToggleTrash(file.id);
-                onOpenTrash?.();
-              } else {
-                onToggleTrash(file.id);
-              }
-            }}
+            onClick={moveToTrash}
+          >
+            {isInTrash ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+          </button>
+        )}
+        {onDeletePermanent && isInTrash && (
+          <button
+            type="button"
+            className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-colors"
+            aria-label="Eliminar definitivamente"
+            onClick={() => onDeletePermanent(file.id)}
           >
             <Trash2 className="w-4 h-4" />
           </button>
         )}
-        <button
-          type="button"
-          className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-[#E2E8F0]/70 hover:bg-[#1E3A8A]/50 hover:text-white transition-colors"
-          aria-label="Más opciones"
-        >
-          <MoreVertical className="w-4 h-4" />
-        </button>
       </div>
     </li>
   );
+  return contextMenuWrap(listItem);
 }

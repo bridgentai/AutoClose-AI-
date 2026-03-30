@@ -6,7 +6,13 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
-import { courseDisplayLabel, calendarColorKey, calendarDisplayLabel, type CalendarVariant } from '@/lib/assignmentUtils';
+import {
+  courseDisplayLabel,
+  calendarColorKey,
+  calendarDisplayLabel,
+  getAssignmentCalendarLocalParts,
+  type CalendarVariant,
+} from '@/lib/assignmentUtils';
 
 interface Assignment {
   _id: string;
@@ -117,17 +123,16 @@ export function Calendar({ assignments, onDayClick, onEmptyDayClick, onDayBubble
     return map;
   }, [uniqueKeys]);
 
-  // Agrupar tareas por día
+  // Agrupar tareas por día (fecha local coherente con el día elegido al crear la tarea)
   const assignmentsByDay: Record<number, Assignment[]> = {};
   assignments.forEach((assignment) => {
-    const date = new Date(assignment.fechaEntrega);
-    if (date.getMonth() === month && date.getFullYear() === year) {
-      const day = date.getDate();
-      if (!assignmentsByDay[day]) {
-        assignmentsByDay[day] = [];
-      }
-      assignmentsByDay[day].push(assignment);
+    const parts = getAssignmentCalendarLocalParts(assignment.fechaEntrega);
+    if (!parts || parts.monthIndex !== month || parts.year !== year) return;
+    const day = parts.day;
+    if (!assignmentsByDay[day]) {
+      assignmentsByDay[day] = [];
     }
+    assignmentsByDay[day].push(assignment);
   });
 
   // Generar días del calendario

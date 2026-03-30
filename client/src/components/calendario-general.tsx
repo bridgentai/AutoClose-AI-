@@ -13,7 +13,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '@/components/ui/hover-card';
-import { courseDisplayLabel } from '@/lib/assignmentUtils';
+import { courseDisplayLabel, getAssignmentCalendarLocalParts } from '@/lib/assignmentUtils';
 
 interface Assignment {
   _id: string;
@@ -65,13 +65,10 @@ export function CalendarioGeneral() {
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
 
-  // Obtener todas las tareas del profesor
+  // Misma fuente que /teacher-calendar (el endpoint /profesor/:id/:mes/:año era un stub vacío)
   const { data: assignments = [] } = useQuery<Assignment[]>({
-    queryKey: ['teacherAssignments', user?.id, currentMonth, currentYear],
-    queryFn: async () => {
-      const result = await apiRequest('GET', `/api/assignments/profesor/${user?.id}/${currentMonth}/${currentYear}`);
-      return result;
-    },
+    queryKey: ['teacherAssignments', user?.id],
+    queryFn: () => apiRequest<Assignment[]>('GET', '/api/assignments'),
     enabled: !!user?.id,
     staleTime: 0,
   });
@@ -128,14 +125,13 @@ export function CalendarioGeneral() {
     const map = new Map<number, { assignments: Assignment[]; events: CalendarEvent[] }>();
     
     assignments.forEach((assignment) => {
-      const date = new Date(assignment.fechaEntrega);
-      if (date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear) {
-        const day = date.getDate();
-        if (!map.has(day)) {
-          map.set(day, { assignments: [], events: [] });
-        }
-        map.get(day)!.assignments.push(assignment);
+      const parts = getAssignmentCalendarLocalParts(assignment.fechaEntrega);
+      if (!parts || parts.monthIndex + 1 !== currentMonth || parts.year !== currentYear) return;
+      const day = parts.day;
+      if (!map.has(day)) {
+        map.set(day, { assignments: [], events: [] });
       }
+      map.get(day)!.assignments.push(assignment);
     });
 
     institutionalEvents.forEach((event) => {

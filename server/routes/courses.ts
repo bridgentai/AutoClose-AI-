@@ -73,12 +73,19 @@ import {
   listComunicadosPadresForPadre,
   listUnreadComunicadosPadresForPadre,
   statsComunicadosPadresByGroupSubject,
+  countUnreadParentMessagesByGroupSubjectForUser,
+  markComunicadosPadresThreadsReadForGroupSubject,
   countPendingParentRepliesForTeacher,
   countUnreadComunicadosPadresForPadre,
   countUnreadInstitucionalForUser,
   countInstitucionalThisMonth,
   lastInstitucionalTitle,
   markComunicadoRead,
+  findLastSentComunicadoPadresHighlightForPadre,
+  countDistinctPadresComunicadoGroupSubjectsForPadre,
+  findLastParentReplyHighlightForStaff,
+  findLastInstitucionalHighlightForViewer,
+  type ComunicadoResumenHighlight,
 } from '../repositories/comunicacionRepository.js';
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
@@ -241,37 +248,47 @@ router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
     const feed = await findAcademicFeedWithDetails(colegioId, { groupSubjectIds });
 
     const total = feed.length;
-    const materiasDiferentes = new Set(feed.map((r) => r.group_subject_id).filter(Boolean)).size;
-    const ultimoMensaje = feed.find((r) => r.type === 'mensaje_academico') ?? feed[0] ?? null;
-    const urgente = ultimoMensaje
-      ? {
-          remitente: [ultimoMensaje.subject_name, ultimoMensaje.group_name].filter(Boolean).join(' - ') || 'Comunicación',
-          extracto: ultimoMensaje.title || ultimoMensaje.body || '',
-        }
-      : null;
+    let materiasDiferentes = new Set(feed.map((r) => r.group_subject_id).filter(Boolean)).size;
 
-    let pendingPadres = 0;
-    let awaitingReadPadres = 0;
-    let respuestasPendientes = 0;
-    if (groupSubjectIds?.length && user.role === 'profesor') {
-      const st = await statsComunicadosPadresByGroupSubject(colegioId, groupSubjectIds);
-      for (const v of Object.values(st)) {
-        pendingPadres += v.pending;
-        awaitingReadPadres += v.awaiting_read;
-      }
-      respuestasPendientes = await countPendingParentRepliesForTeacher(colegioId, userId, groupSubjectIds);
+    let urgente: ComunicadoResumenHighlight | null = null;
+    if (user.role === 'padre') {
+      materiasDiferentes = await countDistinctPadresComunicadoGroupSubjectsForPadre(colegioId, userId);
+      urgente = await findLastSentComunicadoPadresHighlightForPadre(colegioId, userId);
     } else if (
       groupSubjectIds?.length &&
-      ['directivo', 'admin-general-colegio', 'asistente', 'school_admin'].includes(user.role)
+      ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'school_admin'].includes(user.role)
+    ) {
+      urgente = await findLastParentReplyHighlightForStaff(colegioId, userId, user.role, groupSubjectIds);
+    }
+    if (!urgente && user.role !== 'padre' && feed.length > 0) {
+      const ult = feed[0];
+      const extracto = (ult.title || ult.body || '').trim().slice(0, 280);
+      urgente = {
+        remitente:
+          [ult.subject_name, ult.group_name].filter(Boolean).join(' - ') || 'Comunicación académica',
+        extracto: extracto || '(Sin texto)',
+      };
+    }
+
+    let pendingPadres = 0;
+    let incomingUnreadPadres = 0;
+    let respuestasPendientes = 0;
+    if (
+      groupSubjectIds?.length &&
+      ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'school_admin'].includes(user.role)
     ) {
       const st = await statsComunicadosPadresByGroupSubject(colegioId, groupSubjectIds);
       for (const v of Object.values(st)) {
         pendingPadres += v.pending;
-        awaitingReadPadres += v.awaiting_read;
+      }
+      const unreadByGs = await countUnreadParentMessagesByGroupSubjectForUser(colegioId, userId, groupSubjectIds);
+      incomingUnreadPadres = Object.values(unreadByGs).reduce((sum, n) => sum + n, 0);
+      if (user.role === 'profesor') {
+        respuestasPendientes = await countPendingParentRepliesForTeacher(colegioId, userId, groupSubjectIds);
       }
     }
 
-    let mensajesSinLeerPadres = awaitingReadPadres + pendingPadres;
+    let mensajesSinLeerPadres = incomingUnreadPadres;
     if (user.role === 'padre') {
       mensajesSinLeerPadres = await countUnreadComunicadosPadresForPadre(colegioId, userId);
     }
@@ -281,6 +298,12 @@ router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
     let instSinLeer = 0;
     if (['padre', 'profesor', 'estudiante', 'asistente', 'school_admin'].includes(user.role)) {
       instSinLeer = await countUnreadInstitucionalForUser(colegioId, userId);
+    }
+
+    let urgenteInstitucional: ComunicadoResumenHighlight | null =
+      await findLastInstitucionalHighlightForViewer(colegioId, userId);
+    if (!urgenteInstitucional && ultimoInst) {
+      urgenteInstitucional = { remitente: 'Comunicados institucionales', extracto: ultimoInst };
     }
 
     return res.json({
@@ -297,9 +320,7 @@ router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
         comunicadosMes: comMes,
         ultimoPublicado: ultimoInst,
         gruposDiferentes: 0,
-        urgente: ultimoInst
-          ? { remitente: 'Comunicados institucionales', extracto: ultimoInst }
-          : null,
+        urgente: urgenteInstitucional,
       },
     });
   } catch (error: unknown) {
@@ -402,12 +423,13 @@ router.get('/comunicados-padres-stats', protect, requireRole('profesor', 'direct
     }
     const ids = gsList.map((g) => g.id);
     const stats = await statsComunicadosPadresByGroupSubject(colegioId, ids);
+    const unreadIncoming = await countUnreadParentMessagesByGroupSubjectForUser(colegioId, userId, ids);
     return res.json(
       ids.map((id) => ({
         group_subject_id: id,
         pending: stats[id]?.pending ?? 0,
         awaiting_read: stats[id]?.awaiting_read ?? 0,
-        badge: (stats[id]?.pending ?? 0) + (stats[id]?.awaiting_read ?? 0),
+        badge: unreadIncoming[id] ?? 0,
       }))
     );
   } catch (e: unknown) {
@@ -513,6 +535,34 @@ router.get('/comunicados-padres/:groupSubjectId', protect, async (req: AuthReque
     return res.status(500).json({ message: 'Error en el servidor.' });
   }
 });
+
+// POST /api/courses/comunicados-padres/:groupSubjectId/mark-threads-viewed — docente/staff: marca hilos como leídos (badge solo entrantes)
+router.post(
+  '/comunicados-padres/:groupSubjectId/mark-threads-viewed',
+  protect,
+  async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user?.id;
+      const colegioId = req.user?.colegioId;
+      const { groupSubjectId } = req.params;
+      if (!userId || !colegioId || !groupSubjectId) return res.status(401).json({ message: 'No autorizado' });
+      const user = await findUserById(userId);
+      if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
+      const gs = await findGroupSubjectById(groupSubjectId);
+      if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado' });
+      if (user.role === 'profesor') {
+        if (gs.teacher_id !== userId) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
+      } else if (!['directivo', 'admin-general-colegio', 'asistente', 'school_admin', 'super_admin'].includes(user.role)) {
+        return res.status(403).json({ message: 'Sin acceso' });
+      }
+      await markComunicadosPadresThreadsReadForGroupSubject(colegioId, userId, groupSubjectId);
+      return res.json({ ok: true });
+    } catch (e: unknown) {
+      console.error('mark-threads-viewed:', (e as Error).message);
+      return res.status(500).json({ message: 'Error en el servidor.' });
+    }
+  }
+);
 
 // DELETE /api/courses/comunicado/:id/cancel
 router.delete('/comunicado/:id/cancel', protect, async (req: AuthRequest, res) => {

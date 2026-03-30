@@ -35,6 +35,7 @@ import { findSubjectById } from '../repositories/subjectRepository.js';
 import { createAnnouncement } from '../repositories/announcementRepository.js';
 import { queryPg } from '../config/db-pg.js';
 import { notify } from '../repositories/notificationRepository.js';
+import { runAfterAssignmentCreatedPg } from '../services/assignmentSideEffectsService.js';
 
 const router = express.Router();
 
@@ -169,12 +170,23 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 
     if (groupSubjectIds.length === 0) return res.json([]);
 
-    const fromDate = month && year ? `${year}-${String(month).padStart(2, '0')}-01` : undefined;
-    const toDate = month && year ? `${year}-${String(month).padStart(2, '0')}-31` : undefined;
+    let fromDate: string | undefined;
+    /** Primer instante del mes siguiente (límite exclusivo en SQL). */
+    let dueBeforeExclusive: string | undefined;
+    if (month != null && month !== '' && year != null && year !== '') {
+      const y = Number(year);
+      const m = Number(month);
+      if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+        fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+        const nextY = m === 12 ? y + 1 : y;
+        const nextM = m === 12 ? 1 : m + 1;
+        dueBeforeExclusive = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+      }
+    }
 
     for (const gsId of groupSubjectIds) {
-      const list = fromDate || toDate
-        ? await findAssignmentsByGroupSubjectAndDue(gsId, fromDate, toDate, trimestreFilter)
+      const list = fromDate || dueBeforeExclusive
+        ? await findAssignmentsByGroupSubjectAndDue(gsId, fromDate, dueBeforeExclusive, trimestreFilter)
         : await findAssignmentsByGroupSubject(gsId, trimestreFilter);
       if (user.role === 'profesor' && !professorGroupWideCalendar) {
         assignments = assignments.concat(list.filter((a) => a.created_by === userId));
@@ -326,6 +338,19 @@ router.post('/', protect, requirePermission('assignments', 'create'), async (req
       assignment_id: created.id,
       created_by_id: userId,
     }).catch((err) => console.error('Error al crear notificación académica:', (err as Error).message));
+
+    const adjuntosRaw = (req.body as { adjuntos?: unknown }).adjuntos;
+    void runAfterAssignmentCreatedPg({
+      assignmentId: created.id,
+      groupSubjectId: courseIdStr,
+      groupId: gs.group_id,
+      institutionId: gs.institution_id,
+      teacherId: userId,
+      title: tituloStr,
+      description: descripcionStr,
+      dueDateIso: created.due_date,
+      adjuntosFromBody: adjuntosRaw,
+    });
 
     // Notificar a estudiantes del grupo (best-effort)
     try {
@@ -626,9 +651,62 @@ router.get('/profesor/:profesorId/mis-asignaciones', protect, async (req: AuthRe
   }
 });
 
-// GET /api/assignments/profesor/:profesorId/:mes/:year - Stub
-router.get('/profesor/:profesorId/:mes/:year', protect, async (_req, res) => {
-  return res.json([]);
+// GET /api/assignments/profesor/:profesorId/:mes/:year — compatibilidad; mismo criterio de fechas que GET /?month&year
+router.get('/profesor/:profesorId/:mes/:year', protect, async (req: AuthRequest, res) => {
+  try {
+    const userId = getUserId(req);
+    const { profesorId, mes, year } = req.params;
+    if (userId !== profesorId) {
+      return res.status(403).json({ message: 'Solo puedes ver tus propias asignaciones.' });
+    }
+    const user = await findUserById(userId);
+    if (!user || user.role !== 'profesor') {
+      return res.status(403).json({ message: 'Solo profesores pueden usar este recurso.' });
+    }
+    const m = Number(mes);
+    const y = Number(year);
+    if (!Number.isFinite(m) || !Number.isFinite(y) || m < 1 || m > 12) {
+      return res.json([]);
+    }
+
+    const gsList = await findGroupSubjectsByTeacher(userId);
+    const groupSubjectIds = gsList.map((gs) => gs.id);
+    if (groupSubjectIds.length === 0) return res.json([]);
+
+    const fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    const nextY = m === 12 ? y + 1 : y;
+    const nextM = m === 12 ? 1 : m + 1;
+    const dueBeforeExclusive = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+
+    let rows: AssignmentRow[] = [];
+    for (const gsId of groupSubjectIds) {
+      const list = await findAssignmentsByGroupSubjectAndDue(gsId, fromDate, dueBeforeExclusive, undefined);
+      rows = rows.concat(list.filter((a) => a.created_by === userId));
+    }
+    const byId = new Map(rows.map((a) => [a.id, a]));
+    const unique = [...byId.values()];
+
+    const list = await Promise.all(
+      unique.map(async (a) => {
+        const gs = await findGroupSubjectById(a.group_subject_id);
+        const group = gs ? await findGroupById(gs.group_id) : null;
+        const subject = gs ? await findSubjectById(gs.subject_id) : null;
+        const displayName = (gs?.display_name?.trim() || subject?.name) ?? undefined;
+        return assignmentToApi(a, {
+          estado: 'pendiente',
+          curso: group?.name,
+          materiaNombre: displayName,
+          groupId: gs?.group_id,
+          subjectId: gs?.subject_id,
+          logroCalificacionId: a.assignment_category_id ?? undefined,
+        });
+      })
+    );
+    return res.json(list);
+  } catch (err: unknown) {
+    console.error('Error en profesor/mes/año:', (err as Error).message);
+    return res.status(500).json({ message: 'Error interno del servidor.' });
+  }
 });
 
 // PUT /api/assignments/:id - Editar tarea

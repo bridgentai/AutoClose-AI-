@@ -60,10 +60,11 @@ export async function findAssignmentsByGroupSubject(
 export async function findAssignmentsByGroupSubjectAndDue(
   groupSubjectId: string,
   fromDate?: string,
-  toDate?: string,
+  /** Límite superior exclusivo (primer día del mes siguiente). Evita perder tareas del último día con `<= YYYY-MM-31`. */
+  dueBeforeExclusive?: string,
   academicTerm?: number | null
 ): Promise<AssignmentRow[]> {
-  if (!fromDate && !toDate) {
+  if (!fromDate && !dueBeforeExclusive) {
     return findAssignmentsByGroupSubject(groupSubjectId, academicTerm);
   }
   await ensureAssignmentsAcademicTermColumn();
@@ -80,9 +81,9 @@ export async function findAssignmentsByGroupSubjectAndDue(
     params.push(fromDate);
     q += ` AND due_date >= $${params.length}`;
   }
-  if (toDate) {
-    params.push(toDate);
-    q += ` AND due_date <= $${params.length}`;
+  if (dueBeforeExclusive) {
+    params.push(dueBeforeExclusive);
+    q += ` AND due_date < $${params.length}`;
   }
   q += ' ORDER BY due_date';
   const r = await queryPg<AssignmentRow>(q, params);

@@ -69,14 +69,83 @@ export async function getEvoFiles(
   return [];
 }
 
-export async function getRecentFiles(institutionId: string) {
-  const r = await queryPg<Record<string, unknown>>(
-    `SELECT * FROM evo_files
-     WHERE institution_id = $1 AND es_publico = true${STAFF_ONLY_FALSE}
-     ORDER BY updated_at DESC LIMIT 8`,
-    [institutionId]
-  );
-  return r.rows;
+const RECENT_FILES_LIMIT = 10;
+
+/**
+ * Últimos archivos de curso agregados (created_at) visibles para el usuario.
+ * No incluye Mi carpeta personal — el route puede fusionar evo_personal_files aparte.
+ */
+export async function getRecentCourseFilesForUser(
+  institutionId: string,
+  userId: string,
+  rol: string,
+  limit: number = RECENT_FILES_LIMIT
+): Promise<Record<string, unknown>[]> {
+  if (rol === 'estudiante') {
+    const r = await queryPg<Record<string, unknown>>(
+      `SELECT ef.* FROM evo_files ef
+       INNER JOIN enrollments e ON e.group_id = ef.group_id AND e.student_id = $2
+       WHERE ef.institution_id = $1
+         AND (ef.es_publico = true OR (ef.es_publico = false AND ef.propietario_id = $2))
+         ${STAFF_ONLY_FALSE}
+       ORDER BY ef.created_at DESC NULLS LAST, ef.updated_at DESC NULLS LAST
+       LIMIT $3`,
+      [institutionId, userId, limit]
+    );
+    return r.rows;
+  }
+
+  if (rol === 'padre') {
+    const r = await queryPg<Record<string, unknown>>(
+      `SELECT ef.* FROM evo_files ef
+       WHERE ef.institution_id = $1
+         AND ef.es_publico = true
+         ${STAFF_ONLY_FALSE}
+         AND ef.group_id IN (
+           SELECT DISTINCT e.group_id FROM enrollments e
+           INNER JOIN guardian_students gs ON gs.student_id = e.student_id AND gs.institution_id = $1
+           WHERE gs.guardian_id = $2
+         )
+       ORDER BY ef.created_at DESC NULLS LAST, ef.updated_at DESC NULLS LAST
+       LIMIT $3`,
+      [institutionId, userId, limit]
+    );
+    return r.rows;
+  }
+
+  if (rol === 'profesor') {
+    const r = await queryPg<Record<string, unknown>>(
+      `SELECT ef.* FROM evo_files ef
+       WHERE ef.institution_id = $1
+         AND ef.group_id IN (
+           SELECT DISTINCT gs.group_id FROM group_subjects gs
+           WHERE gs.teacher_id = $2 AND gs.institution_id = $1
+         )
+         AND (
+           COALESCE(ef.staff_only, false) = false
+           OR (COALESCE(ef.staff_only, false) = true AND ef.group_subject_id IS NULL)
+         )
+       ORDER BY ef.created_at DESC NULLS LAST, ef.updated_at DESC NULLS LAST
+       LIMIT $3`,
+      [institutionId, userId, limit]
+    );
+    return r.rows;
+  }
+
+  if (ROLES_PROFESOR.includes(rol)) {
+    const r = await queryPg<Record<string, unknown>>(
+      `SELECT ef.* FROM evo_files ef
+       INNER JOIN groups g ON g.id = ef.group_id AND g.institution_id = $1
+       WHERE ef.institution_id = $1
+         ${STAFF_ONLY_FALSE}
+       ORDER BY ef.created_at DESC NULLS LAST, ef.updated_at DESC NULLS LAST
+       LIMIT $2`,
+      [institutionId, limit]
+    );
+    return r.rows;
+  }
+
+  return [];
 }
 
 export async function createEvoFile(data: {
