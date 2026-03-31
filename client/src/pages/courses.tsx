@@ -487,7 +487,6 @@ const renderParentView = () => {
                       <BookOpen className="w-7 h-7" style={{ color: displayColor }} />
                     )}
                   </div>
-                  <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300 flex-shrink-0" />
                 </div>
                 <CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">
                   {course.nombre}
@@ -496,19 +495,6 @@ const renderParentView = () => {
                   <span className="text-white/60">Profesor:</span> {primaryProfessor}
                 </p>
               </CardHeader>
-              <CardContent className="relative p-6 pt-2 flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full rounded-xl border-white/15 text-[#E2E8F0] hover:bg-white/10 hover:border-white/25"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCourseClick(course._id);
-                  }}
-                >
-                  Ver Progreso
-                </Button>
-              </CardContent>
             </Card>
           );
         })}

@@ -87,6 +87,9 @@ interface ComunicadoPadresItem {
   subject_name: string | null;
   group_name: string | null;
   author_name: string | null;
+  author_role?: string | null;
+  staff_last_read_at?: string | null;
+  is_read?: boolean;
   parent_replies: ParentReply[];
 }
 
@@ -107,6 +110,11 @@ function formatRelative(iso: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `hace ${h} h`;
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+}
+
+function formatTimeOnly(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 }
 
 type ComunicadoDraftSlice = {
@@ -178,6 +186,7 @@ const ComunicacionAcademico: React.FC = () => {
   const [corrAttachments, setCorrAttachments] = useState<ComunicadoAttachment[]>([]);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [openedRead, setOpenedRead] = useState<Set<string>>(() => new Set());
+  const [selectedInboxId, setSelectedInboxId] = useState<string>('');
   const [nuevoDestDialogOpen, setNuevoDestDialogOpen] = useState(false);
   const [destDraftMode, setDestDraftMode] = useState<'all' | 'selected'>('all');
   const [destDraftIds, setDestDraftIds] = useState<Set<string>>(() => new Set());
@@ -360,6 +369,14 @@ const ComunicacionAcademico: React.FC = () => {
     [isPadre, openedRead, markReadMutation]
   );
 
+  // Para rol padre: seleccionar primer comunicado automáticamente al cargar
+  useEffect(() => {
+    if (!isPadre) return;
+    if (loadingCom || errCom) return;
+    if (!comunicados.length) return;
+    setSelectedInboxId((cur) => cur || comunicados[0].id);
+  }, [isPadre, comunicados, loadingCom, errCom]);
+
   const cancelMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/courses/comunicado/${id}/cancel`, {
@@ -483,7 +500,9 @@ const ComunicacionAcademico: React.FC = () => {
       : 'Curso');
 
   const comunicacionBackTo =
-    user?.rol === 'directivo'
+    user?.rol === 'padre'
+      ? '/dashboard'
+      : user?.rol === 'directivo'
       ? '/directivo/comunicacion'
       : user?.rol === 'profesor'
         ? '/profesor/comunicacion'
@@ -511,10 +530,24 @@ const ComunicacionAcademico: React.FC = () => {
   };
 
   const staffTwoColumn = !isPadre && canPublish;
+  const parentTwoColumn = isPadre;
+
+  const selectedComunicado = useMemo(() => {
+    if (!isPadre) return null;
+    const id = selectedInboxId || comunicados[0]?.id;
+    return comunicados.find((c) => c.id === id) ?? null;
+  }, [isPadre, selectedInboxId, comunicados]);
+
+  const myParentReplies = useMemo(() => {
+    if (!isPadre || !selectedComunicado || !user?.id) return [];
+    return (selectedComunicado.parent_replies ?? []).filter((r) => String(r.sender_id) === String(user.id));
+  }, [isPadre, selectedComunicado, user?.id]);
+
+  const staffReadAtForThread = selectedComunicado?.staff_last_read_at ?? null;
 
   return (
     <div className="space-y-6 min-h-[70vh]">
-      <NavBackButton to={comunicacionBackTo} label="Comunicación" />
+      <NavBackButton to={comunicacionBackTo} label={user?.rol === 'padre' ? 'Dashboard' : 'Comunicación'} />
 
       <div className="flex items-center gap-3">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] shadow-lg shadow-blue-500/25">
@@ -618,6 +651,206 @@ const ComunicacionAcademico: React.FC = () => {
 
           {(isPadre || selectedGs) && (
             <>
+              {parentTwoColumn && (
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,360px)_1fr] gap-0 min-h-0 flex-1">
+                  {/* Bandeja de entrada */}
+                  <aside className="min-h-0 border-b border-white/10 lg:border-b-0 lg:border-r lg:border-white/10 bg-black/20 p-4 lg:p-5">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div>
+                        <h2 className="text-[#E2E8F0] font-semibold text-sm tracking-wide">Bandeja de entrada</h2>
+                        <p className="text-white/45 text-xs mt-0.5">
+                          {comunicados.length} comunicado{comunicados.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="min-h-0 max-h-[44vh] lg:max-h-none lg:h-full overflow-y-auto space-y-2 pr-1 -mr-1">
+                      {loadingCom ? (
+                        <div className="flex items-center justify-center py-10 text-white/60">
+                          <Loader2 className="w-6 h-6 animate-spin" />
+                        </div>
+                      ) : errCom ? (
+                        <p className="text-red-400 text-sm p-2">No se pudieron cargar los comunicados</p>
+                      ) : comunicados.length === 0 ? (
+                        <p className="text-white/50 text-sm p-2">No hay comunicados aún.</p>
+                      ) : (
+                        comunicados.map((c) => {
+                          const active = (selectedComunicado?.id ?? '') === c.id;
+                          const unread = !(c.is_read || openedRead.has(c.id));
+                          const from = c.author_name?.trim() || 'Docente';
+                          const meta = [c.subject_name, c.group_name].filter(Boolean).join(' · ');
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedInboxId(c.id);
+                                markOpenedIfPadre(c.id);
+                              }}
+                              className={cn(
+                                'w-full text-left rounded-xl px-3 py-3 transition-all border',
+                                active
+                                  ? 'border-[#3B82F6]/40 bg-[rgba(37,99,235,0.14)] shadow-[inset_0_0_0_1px_rgba(59,130,246,0.18)]'
+                                  : 'border-white/10 hover:bg-white/[0.06]',
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-white/85 text-xs font-medium truncate">
+                                      {from}
+                                    </span>
+                                    {unread && (
+                                      <span
+                                        className="shrink-0 w-2 h-2 rounded-full bg-[#00c8ff] shadow-[0_0_12px_rgba(0,200,255,0.35)]"
+                                        aria-label="No leído"
+                                      />
+                                    )}
+                                  </div>
+                                  <div className="text-white font-semibold text-sm mt-1 line-clamp-2">
+                                    {c.title}
+                                  </div>
+                                  {meta && (
+                                    <div className="text-white/45 text-xs mt-1 truncate">{meta}</div>
+                                  )}
+                                </div>
+                                <div className="shrink-0 text-[11px] text-white/35 tabular-nums">
+                                  {formatRelative(c.created_at)}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </aside>
+
+                  {/* Panel de lectura + redacción */}
+                  <section className="min-h-0 flex flex-col">
+                    <div className="border-b border-white/10 px-5 py-4 sm:px-6 shrink-0 bg-gradient-to-r from-[#1e3a8a]/20 via-transparent to-transparent">
+                      <h3 className="text-[#E2E8F0] font-semibold text-lg sm:text-xl tracking-tight">
+                        {selectedComunicado ? selectedComunicado.title : 'Selecciona un comunicado'}
+                      </h3>
+                      <p className="text-white/55 text-sm mt-1">
+                        {selectedComunicado?.author_name?.trim()
+                          ? `Enviado por ${selectedComunicado.author_name}`
+                          : 'Enviado por un docente'}
+                        {selectedComunicado?.subject_name || selectedComunicado?.group_name
+                          ? ` · ${[selectedComunicado.subject_name, selectedComunicado.group_name].filter(Boolean).join(' · ')}`
+                          : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 scroll-smooth">
+                      {selectedComunicado ? (
+                        <Card className="bg-white/[0.03] border-white/10 backdrop-blur-md shadow-lg shadow-black/15">
+                          <CardContent className="p-4 sm:p-5 space-y-3">
+                            {selectedComunicado.body ? (
+                              <p className="text-sm whitespace-pre-wrap text-white/85">
+                                {selectedComunicado.body}
+                              </p>
+                            ) : (
+                              <p className="text-sm text-white/50">Sin contenido.</p>
+                            )}
+                            <ComunicadoAttachmentLinks
+                              items={parseComunicadoAttachments(selectedComunicado.attachments_json)}
+                            />
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-white/45">
+                              <span>{formatRelative(selectedComunicado.created_at)}</span>
+                            </div>
+
+                            {myParentReplies.length > 0 && (
+                              <div className="pt-3 border-t border-white/10">
+                                <p className="text-white/55 text-xs font-semibold uppercase tracking-wider mb-2">
+                                  Tus mensajes
+                                </p>
+                                <div className="space-y-2">
+                                  {myParentReplies.slice(-5).map((r) => {
+                                    const sentAt = r.created_at;
+                                    const staffReadAt = staffReadAtForThread;
+                                    const seen = !!staffReadAt && new Date(staffReadAt).getTime() >= new Date(sentAt).getTime();
+                                    return (
+                                      <div
+                                        key={r.id}
+                                        className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-[11px] text-white/45 tabular-nums">
+                                            {formatTimeOnly(sentAt)}
+                                          </span>
+                                          <span className={`text-[11px] tabular-nums ${seen ? 'text-emerald-300/80' : 'text-white/35'}`}>
+                                            {seen ? `Visto ${formatTimeOnly(staffReadAt!)}` : 'Enviado'}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm text-white/85 whitespace-pre-wrap mt-1">
+                                          {r.content}
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <div className="flex items-center justify-center py-14 text-white/50">
+                          Selecciona un comunicado de la bandeja para responder.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="border-t border-white/10 p-5 sm:p-6 shrink-0 bg-black/30 backdrop-blur-sm">
+                      <p className="text-[#93C5FD] text-xs font-semibold uppercase tracking-wider mb-2">
+                        Redactar mensaje
+                      </p>
+                      <p className="text-white/45 text-xs mb-3">
+                        Responde al comunicado seleccionado. Tu mensaje le llegará al docente/coordinación correspondiente.
+                      </p>
+                      <Textarea
+                        value={selectedComunicado ? (replyText[selectedComunicado.id] ?? '') : ''}
+                        onChange={(e) => {
+                          const id = selectedComunicado?.id;
+                          if (!id) return;
+                          setReplyText((prev) => ({ ...prev, [id]: e.target.value }));
+                        }}
+                        placeholder={selectedComunicado ? 'Escribe tu mensaje…' : 'Selecciona un comunicado para redactar…'}
+                        className="bg-white/5 border-white/15 text-white min-h-[90px] mb-3 rounded-xl"
+                        disabled={!selectedComunicado}
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs text-white/40">
+                          {selectedComunicado?.id ? 'Enter no envía: usa el botón.' : '—'}
+                        </div>
+                        <Button
+                          size="sm"
+                          className="bg-[#3B82F6] hover:bg-[#2563EB]"
+                          disabled={
+                            !selectedComunicado ||
+                            replyMutation.isPending ||
+                            !((replyText[selectedComunicado.id] ?? '').trim())
+                          }
+                          onClick={() => {
+                            if (!selectedComunicado) return;
+                            const t = (replyText[selectedComunicado.id] || '').trim();
+                            if (!t) return;
+                            replyMutation.mutate(
+                              { id: selectedComunicado.id, content: t },
+                              {
+                                onSuccess: () =>
+                                  setReplyText((prev) => ({ ...prev, [selectedComunicado.id]: '' })),
+                              }
+                            );
+                          }}
+                        >
+                          {replyMutation.isPending ? 'Enviando…' : 'Enviar'}
+                        </Button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              )}
+
               {!isPadre && activeCourse && (
                 <div className="border-b border-white/10 px-5 py-4 sm:px-6 shrink-0 bg-gradient-to-r from-[#1e3a8a]/20 via-transparent to-transparent">
                   <h3 className="text-[#E2E8F0] font-semibold text-lg sm:text-xl tracking-tight">
@@ -699,6 +932,7 @@ const ComunicacionAcademico: React.FC = () => {
                 </div>
               )}
 
+              {!parentTwoColumn && (
               <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 scroll-smooth">
                 {loadingCom && (
                   <div className="flex justify-center py-12 text-white/60">
@@ -867,6 +1101,7 @@ const ComunicacionAcademico: React.FC = () => {
                   <p className="text-white/50 text-center py-12">No hay comunicados en este curso</p>
                 )}
               </div>
+              )}
             </>
           )}
         </main>

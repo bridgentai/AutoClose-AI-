@@ -175,7 +175,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 
   return (
     <Card
-      className={`${CARD_STYLE} cursor-pointer flex flex-col h-full gradient-overlay-blue hover-glow ${
+      className={`${CARD_STYLE} cursor-pointer flex flex-col gradient-overlay-blue hover-glow ${
         rol === 'padre'
           ? 'bg-gradient-to-br from-[rgba(37,99,235,0.08)] to-[rgba(255,215,0,0.04)] backdrop-blur-lg border border-[rgba(255,215,0,0.12)]'
           : ''
@@ -1855,9 +1855,6 @@ function PadreDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="bg-white/[0.04] backdrop-blur-md border border-white/[0.09] rounded-2xl">
           <CardHeader>
-            <p className="text-[10px] font-semibold uppercase tracking-[1.5px] text-white/40 mb-1">
-              Seguimiento académico
-            </p>
             <CardTitle className="text-white text-base font-semibold">
               <span className="block text-[10px] font-medium text-white/35 uppercase tracking-[1.5px] mb-1">
                 Rendimiento académico
@@ -1904,10 +1901,21 @@ function PadreDashboard() {
                           borderLeft: `3px solid ${accentColor}`,
                           paddingLeft: '12px',
                         }}
-                        onClick={() => setLocation('/parent/notas')}
+                        onClick={() => {
+                          const materiaId =
+                            materia._id ||
+                            cursosHijo.find((c) => String(c.nombre).toLowerCase().trim() === String(materia.nombre).toLowerCase().trim())?._id;
+                          setLocation(materiaId ? `/parent/notas?subjectId=${encodeURIComponent(String(materiaId))}` : '/parent/notas');
+                        }}
                         role="button"
                         tabIndex={0}
-                        onKeyDown={(e) => { if (e.key === 'Enter') setLocation('/parent/notas'); }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          const materiaId =
+                            materia._id ||
+                            cursosHijo.find((c) => String(c.nombre).toLowerCase().trim() === String(materia.nombre).toLowerCase().trim())?._id;
+                          setLocation(materiaId ? `/parent/notas?subjectId=${encodeURIComponent(String(materiaId))}` : '/parent/notas');
+                        }}
                       >
                         <div className="flex items-center justify-between mb-2 gap-2">
                           <span className="text-sm font-medium text-white/90 min-w-0 truncate">
@@ -1929,7 +1937,7 @@ function PadreDashboard() {
                             Sin calificaciones este período
                           </p>
                         ) : (
-                          <div className="w-full bg-white/10 rounded-sm h-2 overflow-hidden progress-bar">
+                          <div className="w-full bg-white/10 rounded-sm h-2 overflow-hidden progress-bar relative">
                             <div
                               className="h-2 rounded-sm transition-all duration-1000 ease-out"
                               style={{
@@ -1937,6 +1945,22 @@ function PadreDashboard() {
                                 background: getBarGradient(scoreNum),
                               }}
                             />
+                            <div
+                              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border border-white/30 bg-white/15 backdrop-blur-sm shadow-[0_0_18px_rgba(255,255,255,0.12)] transition-transform duration-700 ease-out"
+                              style={{
+                                left: `calc(${Math.min(100, Math.max(0, widthPercent))}% - 6px)`,
+                              }}
+                              aria-hidden="true"
+                            />
+                            <div
+                              className="pointer-events-none absolute -top-7 text-[10px] px-2 py-1 rounded-md bg-black/60 border border-white/10 text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
+                              style={{
+                                left: `calc(${Math.min(100, Math.max(0, widthPercent))}% - 20px)`,
+                              }}
+                              aria-hidden="true"
+                            >
+                              {Math.round(scoreNum)}/100
+                            </div>
                           </div>
                         )}
                       </div>

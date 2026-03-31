@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import {
@@ -237,13 +237,23 @@ function computeWeightedPromedioAndUltima(
 
 export default function StudentNotesPage() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
   const role = user?.rol;
   const isPadre = role === 'padre';
   const isEstudiante = role === 'estudiante';
   const canAccessNotes = isEstudiante || isPadre;
+
+  // Permite deep-link a una materia específica (desde dashboard padre): /parent/notas?subjectId=<groupSubjectId>
+  useEffect(() => {
+    if (selectedSubject) return;
+    const qs = location.split('?')[1] ?? '';
+    if (!qs) return;
+    const sp = new URLSearchParams(qs);
+    const subjectId = sp.get('subjectId') || sp.get('materiaId') || sp.get('subject');
+    if (subjectId) setSelectedSubject(subjectId);
+  }, [location, selectedSubject]);
 
   const { data: hijosRaw, isLoading: loadingHijos } = useQuery<{ _id: string; nombre: string }[]>({
     queryKey: ['/api/users/me/hijos'],

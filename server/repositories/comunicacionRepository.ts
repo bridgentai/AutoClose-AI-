@@ -11,6 +11,8 @@ export interface ComunicadoPadresListItem extends AnnouncementRow {
   group_name: string | null;
   author_name: string | null;
   author_role: string | null;
+  staff_last_read_at: string | null;
+  is_read: boolean;
   parent_replies: ParentReplyEnriched[];
 }
 
@@ -472,6 +474,8 @@ export async function listComunicadosPadresForPadre(
       (SELECT COUNT(*)::int FROM announcement_reads ar WHERE ar.announcement_id = a.id) AS reads_count,
       (SELECT COUNT(*)::int FROM announcement_recipients ar2 WHERE ar2.announcement_id = a.id) AS total_recipients,
       EXISTS (SELECT 1 FROM announcements ch WHERE ch.correction_of = a.id) AS has_correction,
+      (SELECT r.last_read_at FROM evo_thread_reads r WHERE r.user_id = a.created_by_id AND r.announcement_id = a.id) AS staff_last_read_at,
+      EXISTS (SELECT 1 FROM announcement_reads ar0 WHERE ar0.announcement_id = a.id AND ar0.user_id = $2) AS is_read,
       (SELECT COUNT(*)::int FROM announcement_messages am
         WHERE am.announcement_id = a.id AND am.sender_role = 'padre') AS replies_count
      FROM announcements a

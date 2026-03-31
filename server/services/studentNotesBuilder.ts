@@ -4,8 +4,6 @@ import { findAssignmentsByGroupSubject } from '../repositories/assignmentReposit
 import { findGradesByUserAndGroup } from '../repositories/gradeRepository.js';
 import { findGradingSchemaByGroupSubject } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
-import { findSubjectById } from '../repositories/subjectRepository.js';
-import { findGroupById } from '../repositories/groupRepository.js';
 import type { AssignmentRow } from '../repositories/assignmentRepository.js';
 import {
   weightedGradeWithinLogro,
@@ -76,11 +74,11 @@ export async function buildMateriasNotasForStudent(
       const rawAsg = await findAssignmentsByGroupSubject(gs.id);
       const gradable = rawAsg.filter((a) => a.is_gradable && a.type !== 'reminder');
 
-      const group = await findGroupById(gs.group_id);
-      const subject = await findSubjectById(gs.subject_id);
-      const subjectDisplayName = (gs.display_name?.trim() || subject?.name) ?? 'Sin materia';
-      const nombre = ([subjectDisplayName, group?.name].filter(Boolean).join(' ').trim() ||
-        subjectDisplayName) as string;
+      // PERF: `findGroupSubjectsByGroupWithDetails` ya trae `group_name` y `subject_name`.
+      // Evitar N+1 queries a groups/subjects por cada group_subject.
+      const subjectDisplayName = (gs.display_name?.trim() || (gs as any).subject_name || '').trim() || 'Sin materia';
+      const groupName = ((gs as any).group_name || '').trim();
+      const nombre = ([subjectDisplayName, groupName].filter(Boolean).join(' ').trim() || subjectDisplayName) as string;
 
       if (gradable.length === 0) {
         materias.push({
