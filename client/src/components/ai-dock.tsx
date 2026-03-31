@@ -820,7 +820,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                         <DockCard
                           icon={GraduationCap}
                           title="Academia"
-                          description="Docentes, tareas y avisos del aula"
+                          description="Comunicados de tus docentes y avisos del aula"
                           accentHex="#1e3cff"
                           isActive={dockPathActive(location, '/comunicacion/academico')}
                           onClick={() => setLocation('/comunicacion/academico')}

@@ -648,6 +648,25 @@ router.post('/comunicado/:id/read', protect, async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/courses/comunicado/:id/mark-read — padre: alias UX-friendly (best-effort)
+router.post('/comunicado/:id/mark-read', protect, requireRole('padre'), async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+    const { id } = req.params;
+    if (!userId || !colegioId || !id) return res.status(400).json({ message: 'Faltan parámetros.' });
+    const row = await findComunicadoById(id, colegioId);
+    if (!row || row.type !== 'comunicado_padres') return res.status(404).json({ message: 'No encontrado' });
+    const ok = await isUserRecipientOfAnnouncement(id, userId);
+    if (!ok) return res.status(403).json({ message: 'No eres destinatario.' });
+    await markComunicadoRead(id, userId);
+    return res.json({ ok: true });
+  } catch {
+    // Best-effort: no romper UX del padre
+    return res.json({ ok: true });
+  }
+});
+
 // POST /api/courses/comunicado/:id/reply — solo padres
 router.post('/comunicado/:id/reply', protect, requireRole('padre'), async (req: AuthRequest, res) => {
   try {
