@@ -7,6 +7,19 @@ import {
   buildSanitizerContextFromRoleContext,
 } from './roleContextBuilder';
 import { sanitizeMessages, sanitizeText, stripInternalStudentTokensForDisplay } from './llmSanitizer';
+import {
+  buildSystemPrompt as buildKiwiSystemPrompt,
+  buildRoleTools,
+  shouldCompressMemory,
+  buildMemoryCompressionPrompt,
+  extractKeyFacts,
+} from './kiwiContext.js';
+import type { KiwiUserContext } from './kiwiContext.js';
+import {
+  getRecentMessages,
+  upsertUserMemory,
+} from '../repositories/kiwiRepository.js';
+import type { KiwiMessageRow } from '../repositories/kiwiRepository.js';
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
 // La API key ahora se lee dinámicamente en cada llamada para asegurar que siempre use la más reciente del .env
@@ -728,6 +741,213 @@ export async function generateBoletinResumen(prompt: string): Promise<string | n
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[OpenAI] generateBoletinResumen error:', msg);
     return null;
+  }
+}
+
+// ─── Kiwi ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Comprime el historial de mensajes en un resumen y lo persiste en ai_memory.
+ * Fire-and-forget — nunca interrumpe el flujo principal.
+ */
+async function compressAndSaveMemory(
+  messages: KiwiMessageRow[],
+  userId: string,
+  institutionId: string,
+  userRole: string
+): Promise<void> {
+  const openaiClient = getOpenAIClient();
+  if (!openaiClient) return;
+
+  const compressionPrompt = buildMemoryCompressionPrompt(messages);
+  const response = await openaiClient.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: compressionPrompt }],
+    max_tokens: 200,
+  });
+
+  const summary = response.choices[0]?.message?.content?.trim() ?? '';
+  if (!summary) return;
+
+  const facts = extractKeyFacts(messages);
+  const keyFacts = Object.values(facts).filter((v) => v.length > 0);
+
+  await upsertUserMemory(userId, institutionId, userRole, summary, keyFacts);
+}
+
+/**
+ * Genera una respuesta de Kiwi con streaming y function calling.
+ * Carga historial, construye el prompt por rol, llama gpt-4o-mini en streaming
+ * y notifica al caller via callbacks. Nunca lanza excepciones al caller.
+ */
+export async function generateKiwiResponse(
+  userMessage: string,
+  kiwiContext: KiwiUserContext,
+  onChunk: (chunk: string) => void,
+  onComplete: (fullResponse: string, tokensUsed: number) => void,
+  onError: (error: Error) => void
+): Promise<void> {
+  const openaiClient = getOpenAIClient();
+  if (!openaiClient) {
+    onError(new Error('OPENAI_API_KEY no está configurada. Configura una clave válida en el archivo .env'));
+    return;
+  }
+
+  try {
+    // 1. Historial reciente
+    const recentMessages = await getRecentMessages(kiwiContext.sessionId, 12);
+
+    // 2. Construir mensajes para OpenAI
+    const history = recentMessages
+      .filter((m) => m.role !== 'system')
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: buildKiwiSystemPrompt(kiwiContext, kiwiContext.memory) },
+      ...history,
+      { role: 'user', content: sanitizeText(userMessage).sanitized },
+    ];
+
+    // 3. Tools del rol en formato OpenAI
+    const roleTools = buildRoleTools(kiwiContext.rol);
+    const openAITools = roleTools.map((t) => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters ?? { type: 'object', properties: {} },
+      },
+    }));
+
+    // 4. Primera llamada — streaming
+    const stream = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      tools: openAITools.length > 0 ? openAITools : undefined,
+      tool_choice: openAITools.length > 0 ? 'auto' : undefined,
+      max_tokens: 400,
+      temperature: 0.7,
+      stream: true,
+      stream_options: { include_usage: true },
+    });
+
+    // 5. Procesar stream
+    let fullResponse = '';
+    let tokensUsed = 0;
+    const accumulatedToolCalls: Record<number, {
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }> = {};
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
+
+      if (delta?.content) {
+        fullResponse += delta.content;
+        onChunk(delta.content);
+      }
+
+      if (delta?.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0;
+          if (!accumulatedToolCalls[idx]) {
+            accumulatedToolCalls[idx] = { id: tc.id ?? '', type: 'function', function: { name: '', arguments: '' } };
+          }
+          if (tc.id) accumulatedToolCalls[idx].id = tc.id;
+          if (tc.function?.name) accumulatedToolCalls[idx].function.name += tc.function.name;
+          if (tc.function?.arguments) accumulatedToolCalls[idx].function.arguments += tc.function.arguments;
+        }
+      }
+
+      if (chunk.usage?.total_tokens) {
+        tokensUsed = chunk.usage.total_tokens;
+      }
+    }
+
+    // 6. Ejecutar tool calls si los hay
+    const toolCallsList = Object.values(accumulatedToolCalls);
+    if (toolCallsList.length > 0) {
+      const toolResults = await Promise.all(
+        toolCallsList.map(async (tc) => {
+          let params: Record<string, unknown> = {};
+          try { params = JSON.parse(tc.function.arguments || '{}'); } catch { /* ignore */ }
+
+          try {
+            const result = await executeAction(
+              tc.function.name,
+              params,
+              kiwiContext.userId,
+              kiwiContext.rol,
+              kiwiContext.institutionId
+            );
+            return {
+              tool_call_id: tc.id,
+              role: 'tool' as const,
+              content: JSON.stringify({ success: result.success, data: result.data, message: result.message }),
+            };
+          } catch (err) {
+            return {
+              tool_call_id: tc.id,
+              role: 'tool' as const,
+              content: JSON.stringify({ success: false, error: err instanceof Error ? err.message : 'Error desconocido' }),
+            };
+          }
+        })
+      );
+
+      // Follow-up streaming con resultados de tools
+      const followUpMessages = [
+        ...messages,
+        {
+          role: 'assistant' as const,
+          content: fullResponse || null,
+          tool_calls: toolCallsList,
+        } as any,
+        ...toolResults,
+      ];
+
+      const followUpStream = await openaiClient.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: followUpMessages,
+        max_tokens: 400,
+        temperature: 0.7,
+        stream: true,
+        stream_options: { include_usage: true },
+      });
+
+      fullResponse = '';
+      for await (const chunk of followUpStream) {
+        const delta = chunk.choices[0]?.delta;
+        if (delta?.content) {
+          fullResponse += delta.content;
+          onChunk(delta.content);
+        }
+        if (chunk.usage?.total_tokens) {
+          tokensUsed += chunk.usage.total_tokens;
+        }
+      }
+    }
+
+    // 7. Completar
+    onComplete(fullResponse, tokensUsed);
+
+    // 8. Comprimir memoria si corresponde (fire-and-forget)
+    if (shouldCompressMemory(recentMessages)) {
+      compressAndSaveMemory(
+        recentMessages,
+        kiwiContext.userId,
+        kiwiContext.institutionId,
+        kiwiContext.rol
+      ).catch((err) => {
+        console.warn('[Kiwi] compressAndSaveMemory falló (no crítico):', err?.message ?? err);
+      });
+    }
+  } catch (err) {
+    onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
 

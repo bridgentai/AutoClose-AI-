@@ -364,3 +364,84 @@ export async function ensureComunicacionModule(): Promise<void> {
   comunicacionModuleEnsured = true;
   console.log('[schema] comunicación (announcements extendido + announcement_reads) OK');
 }
+
+let kiwiSchemaEnsured = false;
+
+/**
+ * Asegura el schema completo de Kiwi:
+ * - tokens_used en chat_messages
+ * - Columnas user_role, memory_summary, key_facts, updated_at en ai_memory
+ * - Relaja conversation_id NOT NULL en ai_memory
+ * - Crea tablas anon_tokens y kiwi_tool_calls
+ */
+export async function ensureKiwiSchema(): Promise<void> {
+  if (kiwiSchemaEnsured) return;
+
+  // chat_messages: tokens_used
+  await queryPg(
+    `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS tokens_used INTEGER`
+  );
+
+  // ai_memory: columnas Kiwi + relajar FK conversation_id
+  await queryPg(
+    `ALTER TABLE ai_memory ADD COLUMN IF NOT EXISTS user_role VARCHAR(50)`
+  );
+  await queryPg(
+    `ALTER TABLE ai_memory ADD COLUMN IF NOT EXISTS memory_summary TEXT`
+  );
+  await queryPg(
+    `ALTER TABLE ai_memory ADD COLUMN IF NOT EXISTS key_facts JSONB DEFAULT '[]'`
+  );
+  await queryPg(
+    `ALTER TABLE ai_memory ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()`
+  );
+  await queryPg(
+    `ALTER TABLE ai_memory ALTER COLUMN conversation_id DROP NOT NULL`
+  );
+  await queryPg(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_memory_user_role
+     ON ai_memory(user_id, user_role) WHERE user_role IS NOT NULL`
+  );
+
+  // anon_tokens
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS anon_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      real_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      anon_token VARCHAR(64) NOT NULL,
+      chat_session_id UUID REFERENCES chat_sessions(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(institution_id, anon_token)
+    )
+  `);
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_anon_tokens_token ON anon_tokens(institution_id, anon_token)`
+  );
+
+  // kiwi_tool_calls
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS kiwi_tool_calls (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      chat_session_id UUID REFERENCES chat_sessions(id) ON DELETE SET NULL,
+      user_role VARCHAR(50),
+      tool_name VARCHAR(100) NOT NULL,
+      tool_input JSONB DEFAULT '{}',
+      tool_output JSONB DEFAULT '{}',
+      success BOOLEAN NOT NULL DEFAULT true,
+      execution_ms INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_kiwi_tool_calls_session ON kiwi_tool_calls(chat_session_id)`
+  );
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_kiwi_tool_calls_institution ON kiwi_tool_calls(institution_id, created_at DESC)`
+  );
+
+  kiwiSchemaEnsured = true;
+  console.log('[schema] kiwi_schema OK');
+}

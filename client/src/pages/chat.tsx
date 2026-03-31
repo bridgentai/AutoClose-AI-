@@ -30,6 +30,8 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarRefresh, setSidebarRefresh] = useState(0);
@@ -92,6 +94,7 @@ export default function Chat() {
   const handleNewChat = () => {
     setLocation('/chat');
     setMessages([]);
+    setCurrentSessionId(null);
   };
 
   const handleSelectSession = (selectedChatId: string) => {
@@ -100,7 +103,7 @@ export default function Chat() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || isStreaming) return;
 
     const userMessage: Message = {
       emisor: 'user',
@@ -113,105 +116,136 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      const response = await apiRequest<{
-        success: boolean;
-        response: string;
-        sessionId?: string;
-        chatId?: string;
-        error?: string;
-        executedActions?: string[];
-        actionData?: Record<string, any>;
-        structuredResponse?: { type: string; data: Record<string, unknown> };
-      }>('POST', '/api/ai/chat', {
-        message: currentInput,
-        sessionId: chatIdFromUrl ?? undefined,
-        chatId: chatIdFromUrl ?? undefined,
+      const token = localStorage.getItem('autoclose_token');
+      const response = await fetch('/api/kiwi/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          sessionId: currentSessionId ?? undefined,
+        }),
       });
 
-      if (!response.success) {
-        throw new Error(response.error || 'Error al procesar el mensaje');
+      if (!response.ok) {
+        let errorMsg = 'Error al conectar con Kiwi';
+        try {
+          const errBody = await response.json();
+          errorMsg = errBody.error || errorMsg;
+        } catch { /* ignore */ }
+        throw new Error(errorMsg);
       }
 
-      const returnedChatId = response.chatId ?? response.sessionId;
-      if (returnedChatId && !chatIdFromUrl) {
-        setLocation(`/chat/${returnedChatId}`);
-      }
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let firstChunk = true;
 
-      const structured = response.structuredResponse;
-      const aiMessage: Message = {
-        emisor: 'ai',
-        contenido: response.response,
-        timestamp: new Date(),
-        ...(structured?.type && { type: structured.type }),
-        ...(structured?.data != null && { structuredData: structured.data }),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      if (response.executedActions && response.executedActions.length > 0) {
-        if (
-          response.executedActions.includes('crear_permiso') &&
-          response.actionData?.crear_permiso
-        ) {
-          const permisoBackend = response.actionData.crear_permiso;
-          const permiso = {
-            tipoPermiso: permisoBackend.tipoPermiso,
-            nombreEstudiante: permisoBackend.nombreEstudiante,
-            fecha: permisoBackend.fecha,
-            numeroRutaActual: permisoBackend.numeroRutaActual || '',
-            numeroRutaCambio: permisoBackend.numeroRutaCambio || '',
-            placaCarroActual: permisoBackend.placaCarroActual || '',
-            placaCarroSalida: permisoBackend.placaCarroSalida || '',
-            nombreConductor: permisoBackend.nombreConductor || '',
-            cedulaConductor: permisoBackend.cedulaConductor || '',
-            id: permisoBackend.id || Date.now().toString(),
-            fechaCreacion: permisoBackend.fechaCreacion || new Date().toISOString(),
-          };
-          const permisosGuardados = localStorage.getItem(`permisos_${user?.id}`);
-          let permisos: any[] = [];
-          if (permisosGuardados) {
-            try {
-              permisos = JSON.parse(permisosGuardados);
-            } catch (e) {
-              console.error('Error al parsear permisos:', e);
-            }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+
+          let event: { type: string; text?: string; sessionId?: string; message?: string };
+          try {
+            event = JSON.parse(jsonStr);
+          } catch {
+            continue;
           }
-          const permisoExiste = permisos.some((p: any) => p.id === permiso.id);
-          if (!permisoExiste) {
-            permisos.push(permiso);
-            localStorage.setItem(`permisos_${user?.id}`, JSON.stringify(permisos));
-            window.dispatchEvent(new CustomEvent('permisos-updated', { detail: { permiso, totalPermisos: permisos.length } }));
-            setTimeout(() => window.dispatchEvent(new CustomEvent('permisos-updated')), 200);
+
+          if (event.type === 'chunk' && event.text) {
+            if (firstChunk) {
+              setLoading(false);
+              setIsStreaming(true);
+              setMessages((prev) => [
+                ...prev,
+                { emisor: 'ai', contenido: event.text!, timestamp: new Date() },
+              ]);
+              firstChunk = false;
+            } else {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                updated[updated.length - 1] = {
+                  ...last,
+                  contenido: last.contenido + event.text,
+                };
+                return updated;
+              });
+            }
+            scrollToBottom();
+          } else if (event.type === 'done') {
+            if (event.sessionId) setCurrentSessionId(event.sessionId);
+            setIsStreaming(false);
+            setSidebarRefresh((prev) => prev + 1);
+            setTimeout(() => scrollToBottom(), 100);
+          } else if (event.type === 'error') {
+            const errMsg = event.message || 'Lo siento, ocurrió un error. Intenta de nuevo.';
+            setLoading(false);
+            setIsStreaming(false);
+            if (firstChunk) {
+              setMessages((prev) => [
+                ...prev,
+                { emisor: 'ai', contenido: errMsg, timestamp: new Date() },
+              ]);
+            } else {
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  contenido: errMsg,
+                };
+                return updated;
+              });
+            }
+            setTimeout(() => scrollToBottom(), 100);
           }
         }
-        if (response.executedActions.includes('asignar_tarea')) {
+      }
+
+      // executedActions — mantenido para compatibilidad futura con acciones Kiwi
+      const executedActions: string[] = [];
+      if (executedActions && executedActions.length > 0) {
+        if (
+          executedActions.includes('crear_permiso')
+        ) {
+          // handler reservado
+        }
+        if (executedActions.includes('asignar_tarea')) {
           queryClient.invalidateQueries({ queryKey: ['teacherAssignments'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['studentAssignments'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['assignments'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['/api/assignments'], exact: false });
         }
-        if (response.executedActions.includes('calificar_tarea')) {
+        if (executedActions.includes('calificar_tarea')) {
           queryClient.invalidateQueries({ queryKey: ['assignments'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['studentNotes'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['notas'], exact: false });
         }
-        if (response.executedActions.includes('subir_nota')) {
+        if (executedActions.includes('subir_nota')) {
           queryClient.invalidateQueries({ queryKey: ['studentNotes'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['notas'], exact: false });
           queryClient.invalidateQueries({ queryKey: ['notas_curso'], exact: false });
         }
-        if (response.executedActions.includes('crear_logros_calificacion')) {
+        if (executedActions.includes('crear_logros_calificacion')) {
           queryClient.invalidateQueries({ queryKey: ['/api/logros-calificacion'], exact: false });
           setTimeout(() => window.location.reload(), 1500);
         }
       }
-
-      setSidebarRefresh((prev) => prev + 1);
-      setTimeout(() => scrollToBottom(), 100);
     } catch (error: any) {
       console.error('Error en chat:', error);
       const errorText =
         error.message ||
-        (error.response?.message || error.response?.error) ||
         'Lo siento, ocurrió un error. Intenta de nuevo.';
       setMessages((prev) => [
         ...prev,
@@ -220,6 +254,7 @@ export default function Chat() {
       setTimeout(() => scrollToBottom(), 100);
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -471,17 +506,17 @@ export default function Chat() {
             }}
             placeholder="Escríbele a Kiwi..."
             className="h-12 rounded-[12px] px-5 text-white placeholder:text-white/40 bg-white/5 border-white/10"
-            disabled={loading}
+            disabled={loading || isStreaming}
             data-testid="input-chat"
           />
           <Button
             onClick={handleSend}
-            disabled={loading || !input.trim()}
+            disabled={loading || isStreaming || !input.trim()}
             className="w-12 h-12 rounded-[12px] hover:opacity-90 flex-shrink-0"
             style={{ background: `linear-gradient(to right, ${accentColorDark}, ${accentColor})` }}
             data-testid="button-send"
           >
-            {loading ? (
+            {(loading || isStreaming) ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <Send className="w-5 h-5" />

@@ -77,6 +77,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
   const [input, setInput] = useState('');
   const { colorPrimario, colorSecundario } = useInstitutionColors();
   const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -106,7 +107,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
   }, [messages]);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || isStreaming) return;
 
     const userMessage: Message = { emisor: 'user', contenido: input, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
@@ -115,63 +116,88 @@ function AIChatBox({ rol }: AIChatBoxProps) {
     setLoading(true);
 
     try {
-      // Construir historial de conversación para el contexto
-      const conversationHistory = messages.map(msg => ({
-        role: msg.emisor === 'user' ? 'user' as const : 'assistant' as const,
-        content: msg.contenido
-      }));
-
-      // Llamar al nuevo endpoint del Chat AI Global
-      const response = await apiRequest<{ success: boolean; response: string; error?: string; executedActions?: string[]; actionData?: Record<string, any> }>('POST', '/api/ai/chat', {
-        message: currentInput,
-        contexto_extra: {
-          rol,
-          contextoTipo: `${rol}_dashboard`,
+      const token = localStorage.getItem('autoclose_token');
+      const response = await fetch('/api/kiwi/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        conversationHistory,
+        body: JSON.stringify({ message: currentInput, sessionId: sessionId ?? undefined }),
       });
 
-      if (!response.success) {
-        throw new Error(response.error || 'Error al procesar el mensaje');
+      if (!response.ok) {
+        let errMsg = 'Error al conectar con Kiwi';
+        try { const b = await response.json(); errMsg = b.error || errMsg; } catch { /* ignore */ }
+        throw new Error(errMsg);
       }
 
-      const aiMessage: Message = { emisor: 'ai', contenido: response.response, timestamp: new Date() };
-      setMessages(prev => [...prev, aiMessage]);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let firstChunk = true;
 
-      // Si se ejecutaron acciones, refrescar la página o mostrar notificación
-      if (response.executedActions && response.executedActions.length > 0) {
-        // Si se crearon logros de calificación, refrescar la página después de un breve delay
-        if (response.executedActions.includes('crear_logros_calificacion')) {
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) continue;
+          let event: { type: string; text?: string; sessionId?: string; message?: string };
+          try { event = JSON.parse(jsonStr); } catch { continue; }
+
+          if (event.type === 'chunk' && event.text) {
+            if (firstChunk) {
+              setLoading(false);
+              setIsStreaming(true);
+              setMessages(prev => [...prev, { emisor: 'ai', contenido: event.text!, timestamp: new Date() }]);
+              firstChunk = false;
+            } else {
+              setMessages(prev => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                updated[updated.length - 1] = { ...last, contenido: last.contenido + event.text };
+                return updated;
+              });
+            }
+            scrollToBottom();
+          } else if (event.type === 'done') {
+            if (event.sessionId) setSessionId(event.sessionId);
+            setIsStreaming(false);
+            setTimeout(() => scrollToBottom(), 100);
+          } else if (event.type === 'error') {
+            const errMsg = event.message || 'Lo siento, ocurrió un error. Intenta de nuevo.';
+            setLoading(false);
+            setIsStreaming(false);
+            if (firstChunk) {
+              setMessages(prev => [...prev, { emisor: 'ai', contenido: errMsg, timestamp: new Date() }]);
+            } else {
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { ...updated[updated.length - 1], contenido: errMsg };
+                return updated;
+              });
+            }
+            setTimeout(() => scrollToBottom(), 100);
+          }
         }
       }
-
-      // Scroll después de agregar el mensaje de AI
-      setTimeout(() => scrollToBottom(), 100);
     } catch (error: any) {
       console.error('Error en chat:', error);
-      let errorText = 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
-
-      if (error.message) {
-        errorText = error.message;
-      } else if (error.response) {
-        errorText = error.response.message || error.response.error || errorText;
-      }
-
-      const errorMessage: Message = {
-        emisor: 'ai',
-        contenido: errorText,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-      // Scroll después de agregar el mensaje de error
+      const errorText = error.message || 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
+      setMessages(prev => [...prev, { emisor: 'ai', contenido: errorText, timestamp: new Date() }]);
       setTimeout(() => scrollToBottom(), 100);
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
-  }, [input, loading, messages, rol]);
+  }, [input, loading, isStreaming, sessionId]);
 
   return (
     <Card
@@ -329,7 +355,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                   )}
                 </div>
               ))}
-              {loading && (
+              {(loading || isStreaming) && (
                 <div className="w-full flex items-start gap-2">
                   <img
                     src={kiwiImg}
@@ -373,7 +399,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
               }}
               placeholder="Escríbele a Kiwi..."
               className="flex-1 border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm py-1"
-              disabled={loading}
+              disabled={loading || isStreaming}
               data-testid="input-dashboard-chat"
             />
             <Button
@@ -381,12 +407,12 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                 e.stopPropagation();
                 handleSend();
               }}
-              disabled={loading || !input.trim()}
+              disabled={loading || isStreaming || !input.trim()}
               size="icon"
               className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               data-testid="button-dashboard-send"
             >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              {(loading || isStreaming) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             </Button>
           </div>
         </div>

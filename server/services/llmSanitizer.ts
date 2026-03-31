@@ -2,6 +2,8 @@
  * Reemplaza PII (nombres, emails, documentos) con tokens anónimos
  * antes de enviar cualquier dato a OpenAI.
  */
+import { randomInt } from 'crypto';
+import { saveAnonToken } from '../repositories/kiwiRepository.js';
 
 export interface SanitizationResult {
   sanitized: string;
@@ -88,6 +90,111 @@ export function sanitizeMessages(
 
   return { messages: sanitizedMessages, dictionary: globalDictionary };
 }
+
+// ─── Tipos para sanitización persistente ────────────────────────────────────
+
+export interface NameEntry {
+  /** Nombre real de la persona (se tokeniza antes de enviar a OpenAI). */
+  name: string;
+  /** UUID del usuario en la tabla users (FK requerida por anon_tokens). */
+  userId: string;
+}
+
+export interface PersistentSanitizerContext {
+  students?: NameEntry[];
+  teachers?: NameEntry[];
+}
+
+export interface PersistentSanitizationResult {
+  sanitizedText: string;
+  /** Mapa token → nombre real. Solo para desanitizar al mostrar al usuario. */
+  tokenMap: Map<string, string>;
+}
+
+// ─── Sanitización persistente (Kiwi / Ley 1581) ─────────────────────────────
+
+/**
+ * Reemplaza nombres de personas con tokens anónimos persistentes (EST-XXXX / PROF-XXXX).
+ * Para cada nombre en el contexto, persiste el mapeo en anon_tokens (best-effort).
+ * Devuelve el texto sanitizado y el tokenMap necesario para desanitizar la respuesta.
+ *
+ * El parámetro `context` es opcional: si no se pasa, el texto se devuelve sin cambios
+ * y el tokenMap estará vacío.
+ */
+export async function sanitizeForOpenAI(
+  text: string,
+  institutionId: string,
+  sessionId: string | null,
+  context: PersistentSanitizerContext = {}
+): Promise<PersistentSanitizationResult> {
+  const tokenMap = new Map<string, string>();
+  let sanitizedText = text;
+
+  const replaceAndPersist = async (
+    entries: NameEntry[],
+    prefix: 'EST' | 'PROF'
+  ): Promise<void> => {
+    for (const entry of entries) {
+      if (!entry.name || entry.name.trim() === '') continue;
+
+      const digits = String(randomInt(1000, 9999));
+      const token = `[${prefix}-${digits}]`;
+
+      const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      sanitizedText = sanitizedText.replace(new RegExp(escaped, 'gi'), token);
+      tokenMap.set(token, entry.name);
+
+      // Persistencia best-effort — no bloquea el flujo si la DB falla
+      saveAnonToken(institutionId, entry.userId, token, sessionId).catch((err) => {
+        console.warn('[llmSanitizer] saveAnonToken falló (no crítico):', err?.message ?? err);
+      });
+    }
+  };
+
+  await replaceAndPersist(context.students ?? [], 'EST');
+  await replaceAndPersist(context.teachers ?? [], 'PROF');
+
+  return { sanitizedText, tokenMap };
+}
+
+/**
+ * Reemplaza tokens [EST-XXXX] y [PROF-XXXX] de vuelta por los nombres reales.
+ * Solo para mostrar al usuario final — nunca persistir el resultado.
+ */
+export function desanitizeResponse(
+  text: string,
+  tokenMap: Map<string, string>
+): string {
+  if (!text || tokenMap.size === 0) return text;
+  let result = text;
+  Array.from(tokenMap.entries()).forEach(([token, realName]) => {
+    const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(escaped, 'gi'), realName);
+  });
+  return result;
+}
+
+/**
+ * Retorna el bloque de reglas de protección de menores que se inyecta en el system prompt.
+ * Basado en Ley 1581 de 2012 (Habeas Data) y Ley 1098 de 2006 (Código de Infancia).
+ */
+export function buildMinorProtectionRules(): string {
+  return `
+REGLAS DE PROTECCIÓN DE MENORES DE EDAD (Cumplimiento normativo Colombia):
+
+1. [Ley 1581/2012 - Habeas Data] No menciones ni reveles nombres reales, documentos de identidad, direcciones ni datos de contacto de estudiantes menores de edad en tus respuestas. Usa únicamente los tokens anónimos proporcionados en el contexto.
+
+2. [Código de Infancia y Adolescencia - Ley 1098/2006, Art. 33-34] No infieras, estimes ni reveles información que permita identificar la ubicación física, rutina diaria o patrones de movilidad de menores de edad.
+
+3. [Ley 1581/2012, Art. 5 - Datos Sensibles] No proceses ni incluyas en tus respuestas datos biométricos, de salud, origen étnico, orientación sexual, creencias religiosas ni información política de menores de edad.
+
+4. [Principio de finalidad - Ley 1581/2012, Art. 4b] Toda información sobre menores debe usarse exclusivamente para los fines académicos de esta consulta. No cruces datos entre estudiantes ni construyas perfiles más allá de lo estrictamente solicitado.
+
+5. [Principio de minimización] Ante la duda, omite el dato. Si la respuesta es igualmente útil sin mencionar información personal de un menor, no la incluyas.
+`.trim();
+}
+
+// ─── PII fields (sanitizeContextObject) ─────────────────────────────────────
 
 const PII_FIELDS = ['email', 'telefono', 'phone', 'documento', 'cedula', 'dni', 'passport'] as const;
 

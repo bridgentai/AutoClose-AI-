@@ -53,8 +53,10 @@ import {
   ensureStudentActivityTable,
   ensureGradingOutcomesTable,
   ensureComunicacionModule,
+  ensureKiwiSchema,
 } from "./db/pgSchemaPatches.js";
 import institucionalComunicadosRoutes from "./routes/institucionalComunicados.js";
+import kiwiRoutes from "./routes/kiwi.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   if (ENV.DATABASE_URL) {
@@ -118,6 +120,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e) {
       console.warn("[schema] Parche comunicación:", (e as Error).message);
     }
+    try {
+      await ensureKiwiSchema();
+    } catch (e) {
+      console.warn("[schema] Parche kiwi_schema:", (e as Error).message);
+    }
   }
 
   // CORS - Configuración explícita para permitir todas las solicitudes
@@ -166,6 +173,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/admin', adminSqlRoutes);
   app.use('/api/uploads', uploadsRoutes);
   app.use('/api/activity', activityRoutes);
+  app.use('/api/kiwi', kiwiRoutes);
   // Ruta explícita para que la consola SQL (Neon) siempre esté disponible con la misma DB de la plataforma
   app.post('/api/admin/sql', protect, requireRole('admin-general-colegio', 'school_admin', 'super_admin'), adminSqlHandler);
 
