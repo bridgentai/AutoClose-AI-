@@ -15,7 +15,7 @@ export const theme = {
     white: '#ffffff',
   },
   gradients: {
-    background: 'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)',
+    background: 'radial-gradient(circle at 50% 0%, #1E3A8A 0%, #0F172A 40%, #020617 100%)',
     panelGrades: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))',
     buttonPrimary: 'linear-gradient(180deg, #3B82F6, #1D4ED8)',
   },

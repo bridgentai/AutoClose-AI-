@@ -36,7 +36,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div
         className="fixed inset-0 -z-10"
         style={{
-          background: "radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)",
+          background: "radial-gradient(circle at 50% 0%, #1E3A8A 0%, #0F172A 40%, #020617 100%)",
         }}
       />
       {/* Orbes sutiles misma paleta */}

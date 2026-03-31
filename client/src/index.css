@@ -7,6 +7,11 @@
   --primary-blue: #3B82F6;
   --primary-blue-hover: #2563EB;
   --primary-blue-dark: #1D4ED8;
+  --evo-blue: #2563EB;
+  --evo-gold: #FFD700;
+  --evo-success: #22C55E;
+  --evo-warning: #F59E0B;
+  --evo-danger: #EF4444;
   --avatar-blue: #1E40AF;
   --text-primary: #E2E8F0;
   --panel-gray: #cfd8dc;
@@ -179,7 +184,7 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   color: hsl(var(--foreground));
-  background: radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%);
+  background: radial-gradient(circle at 50% 0%, #1E3A8A 0%, #0F172A 40%, #020617 100%);
   min-height: 100vh;
   background-attachment: fixed;
 }

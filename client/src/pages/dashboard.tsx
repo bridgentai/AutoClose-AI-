@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, FolderOpen, Mail, FileText, ArrowUp, ArrowDown, Bell, FileCheck } from 'lucide-react';
+import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, FolderOpen, Mail, FileText, ArrowUp, ArrowDown, Bell, FileCheck, ChevronRight } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -175,12 +175,19 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 
   return (
     <Card
-      className={`${CARD_STYLE} cursor-pointer flex flex-col h-full gradient-overlay-blue hover-glow`}
+      className={`${CARD_STYLE} cursor-pointer flex flex-col h-full gradient-overlay-blue hover-glow ${
+        rol === 'padre'
+          ? 'bg-gradient-to-br from-[rgba(37,99,235,0.08)] to-[rgba(255,215,0,0.04)] backdrop-blur-lg border border-[rgba(255,215,0,0.12)]'
+          : ''
+      }`}
       onClick={() => setLocation('/chat')}
     >
       <CardHeader className="pb-3 flex-shrink-0">
+        {rol === 'padre' && (
+          <div className="w-8 h-0.5 rounded-full bg-gradient-to-r from-[var(--evo-blue)] to-[var(--evo-gold)] mb-3" />
+        )}
         <CardTitle className="text-white flex items-center gap-2 text-lg text-expressive">
-          <Bot className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
+          <Bot className="w-5 h-5 text-[var(--evo-gold)] animate-pulse-glow" />
           Kiwi Assist
         </CardTitle>
         <CardDescription className="text-white/60 text-sm text-expressive-subtitle">
@@ -1578,7 +1585,6 @@ function SuperAdminDashboard() {
 function PadreDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const { colorPrimario, colorSecundario } = useInstitutionColors();
   const [permisosActualesCount, setPermisosActualesCount] = useState(0);
 
   const { data: hijos = [] } = useQuery({
@@ -1663,6 +1669,12 @@ function PadreDashboard() {
   const promedioDisplay = promedioGeneral.toFixed(1);
   const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
 
+  const getBarGradient = (score: number): string => {
+    if (score >= 80) return 'linear-gradient(90deg, var(--color-primario), var(--evo-success))';
+    if (score >= 60) return 'linear-gradient(90deg, var(--color-primario), var(--evo-warning))';
+    return 'linear-gradient(90deg, var(--color-primario), var(--evo-danger))';
+  };
+
   /** Tareas con entrega hoy o después; las vencidas no entran en el resumen ni en el total grande. */
   const submissionsHijo = (assignment: Assignment) =>
     (assignment as { submissions?: unknown[]; entregas?: unknown[] }).submissions ||
@@ -1712,22 +1724,54 @@ function PadreDashboard() {
       <p className="text-sm text-white/60 leading-relaxed max-w-3xl">
         Aquí podrás visualizar la información de tu hijo en tiempo real
       </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[1.5px] text-white/40 mb-1">
+            Panel familiar
+          </p>
+          <h2 className="text-lg font-bold text-white font-['Poppins']">
+            {nombreHijo ? `Seguimiento de ${nombreHijo.split(' ')[0]}` : 'Mi panel'}
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setLocation('/evo-send?open=family')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.07] border border-white/[0.12] text-white/80 text-sm font-medium hover:bg-white/[0.12] hover:text-white transition-all"
+          >
+            <Mail className="w-4 h-4 text-[var(--color-primario)]" />
+            Evo Send
+          </button>
+          <button
+            type="button"
+            onClick={() => setLocation('/parent/aprendizaje')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.07] border border-white/[0.12] text-white/80 text-sm font-medium hover:bg-white/[0.12] hover:text-white transition-all"
+          >
+            <GraduationCap className="w-4 h-4 text-[var(--color-primario)]" />
+            Aprendizaje
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-start mb-6">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
+          className={`${CARD_STYLE} col-span-2 lg:col-span-1 cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/parent/notas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Promedio</CardTitle>
-            <TrendingUp className="w-5 h-5 text-[#ffd700] animate-float" />
+            <TrendingUp className="w-5 h-5 text-[var(--evo-gold)] animate-float" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">
-              {primerHijoId ? promedioDisplay : '—'}<span className="text-base font-normal text-white/40">/100</span>
+          <CardContent className="p-5">
+            <div className="flex items-end gap-1">
+              <span className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">
+                {primerHijoId ? promedioDisplay : '—'}
+              </span>
+              <span className="text-sm text-white/40 mb-1 font-normal">/100</span>
             </div>
-            <p className="text-xs text-white/50 mt-2 leading-snug">
-              Media entre {materias.filter(m => (m.promedio ?? 0) > 0).length} materias calificadas.
+            <p className="text-[10px] text-white/40 mt-1 uppercase tracking-wider">
+              {materias.filter(m => (m.promedio ?? 0) > 0).length} materias calificadas
             </p>
           </CardContent>
         </Card>
@@ -1739,9 +1783,9 @@ function PadreDashboard() {
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Asignaciones</CardTitle>
-            <GraduationCap className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
+            <GraduationCap className="w-5 h-5 text-[var(--evo-gold)] animate-pulse-glow" />
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-5">
             {!primerHijoId ? (
               <p className="text-sm text-white/50">Vincula un estudiante para ver tareas.</p>
             ) : (
@@ -1776,9 +1820,9 @@ function PadreDashboard() {
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias</CardTitle>
-            <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
+            <BookOpen className="w-5 h-5 text-[var(--evo-gold)] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-5">
             <div className="text-3xl font-bold text-white font-['Poppins']">{cursosHijo.length || materias.length}</div>
             <p className="text-xs text-white/50 mt-2 leading-snug">Cursos matriculados este año.</p>
           </CardContent>
@@ -1799,45 +1843,27 @@ function PadreDashboard() {
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Permisos actuales</CardTitle>
-            <FileCheck className="w-5 h-5 text-[#ffd700] animate-float" />
+            <FileCheck className="w-5 h-5 text-[var(--evo-gold)] animate-float" />
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-5">
             <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">{permisosActualesCount}</div>
             <p className="text-xs text-white/50 mt-2 leading-snug">Autorizaciones de salida vigentes.</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.6s' }}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => setLocation('/evo-send?open=family')}
-              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-            >
-              <Mail className="w-8 h-8 text-[#3B82F6] mb-2" />
-              <span className="text-sm text-white">Evo Send</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocation('/parent/aprendizaje')}
-              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-            >
-              <GraduationCap className="w-8 h-8 text-[#3B82F6] mb-2" />
-              <span className="text-sm text-white text-center leading-tight">Aprendizaje</span>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className={CARD_STYLE}>
+        <Card className="bg-white/[0.04] backdrop-blur-md border border-white/[0.09] rounded-2xl">
           <CardHeader>
-            <CardTitle className="text-white">Seguimiento de {nombreHijo}</CardTitle>
+            <p className="text-[10px] font-semibold uppercase tracking-[1.5px] text-white/40 mb-1">
+              Seguimiento académico
+            </p>
+            <CardTitle className="text-white text-base font-semibold">
+              <span className="block text-[10px] font-medium text-white/35 uppercase tracking-[1.5px] mb-1">
+                Rendimiento académico
+              </span>
+              {nombreHijo}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -1845,6 +1871,8 @@ function PadreDashboard() {
                 <p className="text-white/60 py-4">No hay notas cargadas aún. {!primerHijoId && 'Vincula un estudiante en tu perfil.'}</p>
               ) : (
                 materiasConEstado.map((materia, index) => {
+                  const esPrimeraSinNota = !materia.tieneNota &&
+                    (index === 0 || materiasConEstado[index - 1]?.tieneNota);
                   const nombreLimpio = materia.nombre
                     ? materia.nombre.replace(/(\b\w+\b)\s+\1$/i, '$1').trim()
                     : materia.nombre;
@@ -1853,44 +1881,66 @@ function PadreDashboard() {
                     typeof raw === 'number' && !Number.isNaN(raw);
                   const scoreNum = hasRecorded ? raw : 0;
                   const widthPercent = Math.min(100, Math.max(0, scoreNum));
+                  const accentColor =
+                    materia.tieneNota && (materia.promedio ?? 0) >= 80 ? 'var(--evo-success)' :
+                    materia.tieneNota && (materia.promedio ?? 0) >= 60 ? 'var(--evo-warning)' :
+                    materia.tieneNota ? 'var(--evo-danger)' :
+                    'rgba(255,255,255,0.1)';
                   return (
-                    <div
-                      key={materia._id || materia.nombre}
-                      className={`p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue cursor-pointer ${!materia.tieneNota ? 'opacity-50' : ''}`}
-                      style={{ animationDelay: `${0.7 + index * 0.1}s` }}
-                      onClick={() => setLocation('/parent/notas')}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') setLocation('/parent/notas'); }}
-                    >
-                      <div className="flex items-center justify-between mb-3 gap-2">
-                        <span className="text-white font-medium text-expressive-subtitle min-w-0">
-                          {nombreLimpio}
-                        </span>
-                        <span
-                          className={`font-bold font-['Poppins'] shrink-0 tabular-nums ${
-                            materia.tieneNota && hasRecorded ? 'text-[#ffd700]' : 'text-white/45'
-                          }`}
-                        >
-                          {materia.tieneNota && hasRecorded ? `${Math.round(scoreNum)}/100` : '—'}
-                        </span>
-                      </div>
-                      {!materia.tieneNota ? (
-                        <p className="text-xs text-white/35 italic mt-1">
-                          Sin calificaciones este período
-                        </p>
-                      ) : (
-                        <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
-                          <div
-                            className="h-3 rounded-full transition-all duration-1000 ease-out"
-                            style={{
-                              width: `${widthPercent}%`,
-                              background: `linear-gradient(90deg, var(--color-primario, #2563eb), #ffd700)`,
-                            }}
-                          />
+                    <React.Fragment key={materia._id || materia.nombre}>
+                      {esPrimeraSinNota && materiasConEstado.some(m => m.tieneNota) && (
+                        <div className="flex items-center gap-2 my-1">
+                          <div className="flex-1 h-px bg-white/[0.06]" />
+                          <span className="text-[10px] text-white/30 uppercase tracking-wider">
+                            Sin calificaciones
+                          </span>
+                          <div className="flex-1 h-px bg-white/[0.06]" />
                         </div>
                       )}
-                    </div>
+                      <div
+                        className={`group p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue cursor-pointer ${!materia.tieneNota ? 'opacity-50' : ''}`}
+                        style={{
+                          animationDelay: `${0.7 + index * 0.1}s`,
+                          borderLeft: `3px solid ${accentColor}`,
+                          paddingLeft: '12px',
+                        }}
+                        onClick={() => setLocation('/parent/notas')}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter') setLocation('/parent/notas'); }}
+                      >
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <span className="text-sm font-medium text-white/90 min-w-0 truncate">
+                            {nombreLimpio}
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`text-sm font-bold font-['Poppins'] tabular-nums ${
+                                hasRecorded ? 'text-[var(--evo-gold)]' : 'text-white/30'
+                              }`}
+                            >
+                              {hasRecorded ? `${Math.round(scoreNum)}/100` : '—'}
+                            </span>
+                            <ChevronRight className="w-3.5 h-3.5 text-white/25 group-hover:text-white/60 transition-colors" />
+                          </div>
+                        </div>
+                        {!materia.tieneNota ? (
+                          <p className="text-xs text-white/35 italic mt-1">
+                            Sin calificaciones este período
+                          </p>
+                        ) : (
+                          <div className="w-full bg-white/10 rounded-sm h-2 overflow-hidden progress-bar">
+                            <div
+                              className="h-2 rounded-sm transition-all duration-1000 ease-out"
+                              style={{
+                                width: `${widthPercent}%`,
+                                background: getBarGradient(scoreNum),
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </React.Fragment>
                   );
                 })
               )}
@@ -1903,7 +1953,12 @@ function PadreDashboard() {
           onClick={() => setLocation('/calendar')}
         >
           <CardHeader>
-            <CardTitle className="text-white">Tareas de {nombreHijo}</CardTitle>
+            <CardTitle className="text-white">
+              <span className="block text-[10px] font-medium text-white/35 uppercase tracking-[1.5px] mb-1">
+                Calendario de tareas
+              </span>
+              Tareas de {nombreHijo}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div onClick={(e) => e.stopPropagation()}>
