@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3, FolderOpen, Cloud, Link2, Presentation, FileSpreadsheet, ExternalLink, ArrowRight } from 'lucide-react';
+import { Calendar as CalendarIcon, ClipboardList, AlertCircle, BookOpen, Clock, User, FileText, Bell, TrendingUp, Award, ChevronRight, Home, Users, Eye, Settings, Plus, X, Maximize2, Gauge, FileUp, CheckCircle, MessageSquare, Send, BarChart3, FolderOpen, Cloud, Link2, Presentation, FileSpreadsheet, ExternalLink, ArrowRight, Lock } from 'lucide-react';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -235,6 +235,7 @@ interface CourseSubject {
     colorAcento?: string;
     icono?: string;
     groupSubjectId?: string | null; // desde GET details (estudiante/padre)
+    cursos?: string[]; // nombres de grupo desde el API (p. ej. padre/estudiante con group_subject)
     // Campo para el profesor
     profesor?: {
         nombre: string;
@@ -386,11 +387,11 @@ export default function CourseDetailPage() {
     // Lógica para determinar si se maneja un grupo (siempre TRUE para el Profesor)
     const isHandlingGroup = isProfessor;
 
-    // Query 1: Detalles de la Materia (Solo para Estudiante desde esta ruta)
+    // Query 1: Detalles de la Materia (Estudiante/Padre/Directivo desde esta ruta)
     const { data: courseDetails, isLoading: isLoadingDetails, error: courseDetailsError } = useQuery<CourseSubject>({
         queryKey: ['courseDetails', cursoId],
         queryFn: () => fetchCourseDetails(cursoId),
-        enabled: isStudent && !!cursoId, // Solo para estudiantes y si hay cursoId
+        enabled: (isStudentOrParent || userRole === 'directivo') && !!cursoId, // Estudiante/Padre/Directivo
         retry: false, // No reintentar si falla (probablemente es un error de acceso)
         staleTime: 5 * 60 * 1000, // 5 minutos - los detalles de materia no cambian frecuentemente
         gcTime: 10 * 60 * 1000, // 10 minutos de caché
@@ -454,8 +455,22 @@ export default function CourseDetailPage() {
         refetchOnWindowFocus: false,
     });
 
-    // groupSubjectId para Evo Send: profesor = materia activa; estudiante = cursoId (materia actual)
-    const evoSendGroupSubjectId = isProfessor ? professorGroupSubjectId : (isStudent ? cursoId : null);
+    // Lista de hijos (padre): misma fuente que otras vistas parent
+    const { data: hijosPadre = [] } = useQuery<{ _id: string; nombre: string }[]>({
+        queryKey: ['/api/users/me/hijos'],
+        queryFn: () => apiRequest('GET', '/api/users/me/hijos'),
+        enabled: !!user?.id && isPadre,
+    });
+    const primerHijoIdPadre = hijosPadre[0]?._id;
+
+    // groupSubjectId para Evo Send: profesor = materia activa; estudiante/padre = group_subject resuelto
+    const evoSendGroupSubjectId = useMemo(() => {
+        if (isProfessor) return professorGroupSubjectId || null;
+        if (!isStudentOrParent) return null;
+        const gs = (courseDetails as CourseSubject | undefined)?.groupSubjectId;
+        const resolved = (gs && String(gs).trim()) || cursoId;
+        return resolved || null;
+    }, [isProfessor, isStudentOrParent, professorGroupSubjectId, courseDetails, cursoId]);
 
     // Botón de opciones de materia: solo profesor asignado o admin (display_name e icon)
     const groupSubjectIdForOptions = isProfessor
@@ -520,30 +535,45 @@ export default function CourseDetailPage() {
     });
     const evoSendThreadId = evoThreadIdData?.threadId;
 
-    // Query 5: Notas del estudiante (para tarjetas Promedio / Última Nota / Estado y pestaña Notas)
-    const { data: notesData } = useQuery<{ materias: MateriaConNotasStudent[]; total: number }>({
+    // Query 5: Notas del estudiante o del hijo (padre) — misma forma que buildMateriasNotasForStudent
+    const { data: notesDataEstudiante, isLoading: isLoadingNotesEstudiante } = useQuery<{ materias: MateriaConNotasStudent[]; total: number }>({
         queryKey: ['studentNotes', user?.id],
         queryFn: () => apiRequest('GET', '/api/student/notes'),
         enabled: isStudent && !!user?.id,
         staleTime: 0,
     });
 
-    // Materia actual para vista estudiante (match por subject id o por groupSubjectId si la URL es gs id)
-    const materiaNotasForStudent = useMemo(() => {
-        if (!notesData?.materias?.length || !courseDetails) return null;
-        const details = courseDetails as { _id: string };
-        return notesData.materias.find(
-            (m) => String(m._id) === String(details._id) || String(m.groupSubjectId) === String(cursoId)
-        ) ?? null;
-    }, [notesData?.materias, courseDetails, cursoId]);
+    const { data: notesDataHijo, isLoading: isLoadingNotesHijo } = useQuery<{ materias: MateriaConNotasStudent[]; total: number }>({
+        queryKey: ['/api/student/hijo', primerHijoIdPadre, 'notes', 'course-detail'],
+        queryFn: () => apiRequest('GET', `/api/student/hijo/${primerHijoIdPadre}/notes`),
+        enabled: isPadre && !!primerHijoIdPadre,
+        staleTime: 0,
+    });
 
-    // Logros para promedio ponderado y pestaña Notas (estudiante); courseId = group_subject id
+    const notesDataForSubject = isStudent ? notesDataEstudiante : isPadre ? notesDataHijo : undefined;
+    const isLoadingNotesForSubject = isStudent ? isLoadingNotesEstudiante : isPadre ? isLoadingNotesHijo : false;
+
+    // Materia actual: match por subject id, group_subject en URL, o groupSubjectId del API details
+    const materiaNotasForStudent = useMemo(() => {
+        if (!notesDataForSubject?.materias?.length || !courseDetails) return null;
+        const details = courseDetails as { _id: string; groupSubjectId?: string | null };
+        const gsFromDetails = details.groupSubjectId;
+        return notesDataForSubject.materias.find(
+            (m) =>
+                String(m._id) === String(details._id) ||
+                String(m.groupSubjectId) === String(cursoId) ||
+                (gsFromDetails != null &&
+                    (String(m._id) === String(gsFromDetails) || String(m.groupSubjectId) === String(gsFromDetails)))
+        ) ?? null;
+    }, [notesDataForSubject?.materias, courseDetails, cursoId]);
+
+    // Logros para promedio ponderado y pestaña Notas (estudiante y padre); courseId = group_subject id
     const courseIdForStudentLogros = materiaNotasForStudent?.groupSubjectId ?? null;
     const { data: logrosStudentData } = useQuery<LogrosResponse>({
         queryKey: ['/api/logros-calificacion', courseIdForStudentLogros],
         queryFn: () =>
             apiRequest<LogrosResponse>('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(courseIdForStudentLogros || '')}`),
-        enabled: isStudent && !!courseIdForStudentLogros,
+        enabled: (isStudent || isPadre) && !!courseIdForStudentLogros,
         staleTime: 5 * 60 * 1000,
     });
     const logrosStudentNested = logrosStudentData?.logros ?? [];
@@ -1751,7 +1781,10 @@ export default function CourseDetailPage() {
 
     // 🎯 Vista para Estudiante/Padre/Directivo (Contenido de la Materia)
     const renderStudentView = () => {
-        const loading = isLoadingDetails || isLoadingAssignments;
+        const loading =
+            isLoadingDetails ||
+            isLoadingAssignments ||
+            ((isStudent || isPadre) && isLoadingNotesForSubject);
         const details = courseDetails;
 
         if (loading) {
@@ -1783,7 +1816,7 @@ export default function CourseDetailPage() {
                     <Breadcrumb
                         items={[
                             { label: 'Dashboard', href: '/dashboard' },
-                            { label: 'Materias', href: '/courses' },
+                            { label: coursesHomeLabel, href: coursesHomeHref },
                             { label: 'Error' },
                         ]}
                     />
@@ -1804,7 +1837,7 @@ export default function CourseDetailPage() {
                     <Breadcrumb
                         items={[
                             { label: 'Dashboard', href: '/dashboard' },
-                            { label: 'Materias', href: '/courses' },
+                            { label: coursesHomeLabel, href: coursesHomeHref },
                             { label: 'No encontrada' },
                         ]}
                     />
@@ -1813,7 +1846,11 @@ export default function CourseDetailPage() {
         }
 
         const titleColor = details.colorAcento || '#1e3cff';
-        const cursoAsignado = details.cursoAsignado || user?.curso || 'N/A';
+        const cursoAsignado =
+            details.cursoAsignado ||
+            (details.cursos?.[0]?.trim() ? details.cursos[0] : undefined) ||
+            user?.curso ||
+            'N/A';
 
         // Calcular estadísticas de la materia
         const now = new Date();
@@ -1841,6 +1878,16 @@ export default function CourseDetailPage() {
                     ? 'aprobado'
                     : 'reprobado'
                 : null;
+        const estadoEtiqueta =
+            estadoReal != null
+                ? estadoReal.charAt(0).toUpperCase() + estadoReal.slice(1)
+                : materiaNotas?.estado === 'sin_notas'
+                  ? 'Sin notas'
+                  : materiaNotas?.estado === 'aprobado'
+                    ? 'Aprobado'
+                    : materiaNotas?.estado === 'reprobado'
+                      ? 'Reprobado'
+                      : 'Sin datos';
 
         const getEstadoColor = (estado: string) => {
             switch (estado) {
@@ -1931,7 +1978,7 @@ export default function CourseDetailPage() {
                     className="mb-6"
                     items={[
                         { label: 'Dashboard', href: '/dashboard' },
-                        { label: 'Materias', href: '/courses' },
+                        { label: coursesHomeLabel, href: coursesHomeHref },
                         { label: details.nombre },
                     ]}
                 />
@@ -2036,7 +2083,7 @@ export default function CourseDetailPage() {
                             </div>
                             <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Estado</CardTitle>
                             <CardDescription className="text-white/70 text-lg">
-                                {estadoReal ? (estadoReal.charAt(0).toUpperCase() + estadoReal.slice(1)) : 'Sin datos'}
+                                {estadoEtiqueta}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="text-center pt-0" />
@@ -2047,7 +2094,7 @@ export default function CourseDetailPage() {
                         onClick={() => {
                             const q = new URLSearchParams();
                             q.set('materia', details.nombre);
-                            setLocation(`/mi-aprendizaje/tareas?${q.toString()}`);
+                            setLocation(isPadre ? `/parent/tareas?${q.toString()}` : `/mi-aprendizaje/tareas?${q.toString()}`);
                         }}
                     >
                         <CardHeader className="text-center pb-4">
@@ -2062,46 +2109,78 @@ export default function CourseDetailPage() {
                         <CardContent className="text-center pt-0" />
                     </Card>
                     {/* 5. Evo Send */}
-                    <Card
-                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-red-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-red-500/20"
-                        onClick={() => {
-                            try {
-                                sessionStorage.setItem('evo-send-return-path', `/course/${cursoId}`);
-                            } catch {
-                                /* ignore */
-                            }
-                            const params = new URLSearchParams();
-                            if (evoSendThreadId) params.set('thread', evoSendThreadId);
-                            setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
-                        }}
-                    >
-                        <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-red-500 via-red-600 to-rose-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-red-500/30">
-                                <Send className="w-10 h-10 text-white" />
-                            </div>
-                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Send</CardTitle>
-                            <CardDescription className="text-white/70 text-lg">
-                                Chat del curso, tipo WhatsApp
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="text-center pt-0" />
-                    </Card>
+                    {isPadre ? (
+                        <Card className="glass-enhanced bg-white/[0.04] border border-[#1e3cff]/25 backdrop-blur-xl cursor-default opacity-90 shadow-lg relative overflow-hidden">
+                            <div className="absolute inset-0 bg-[#0a0a2a]/20 pointer-events-none" aria-hidden />
+                            <CardHeader className="text-center pb-4 relative z-10">
+                                <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-slate-600/80 to-slate-800/90 flex items-center justify-center shadow-inner border border-white/10">
+                                    <Lock className="w-10 h-10 text-white/90" />
+                                </div>
+                                <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Bloqueado</CardTitle>
+                                <CardDescription className="text-[#E2E8F0]/80 text-base max-w-sm mx-auto">
+                                    Por privacidad del estudiante no tienes acceso al chat del curso (Evo Send).
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="text-center pt-0 relative z-10" />
+                        </Card>
+                    ) : (
+                        <Card
+                            className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-red-500/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-red-500/20"
+                            onClick={() => {
+                                try {
+                                    sessionStorage.setItem('evo-send-return-path', `/course/${cursoId}`);
+                                } catch {
+                                    /* ignore */
+                                }
+                                const params = new URLSearchParams();
+                                if (evoSendThreadId) params.set('thread', evoSendThreadId);
+                                setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
+                            }}
+                        >
+                            <CardHeader className="text-center pb-4">
+                                <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-red-500 via-red-600 to-rose-500 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-red-500/30">
+                                    <Send className="w-10 h-10 text-white" />
+                                </div>
+                                <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Send</CardTitle>
+                                <CardDescription className="text-white/70 text-lg">
+                                    Chat del curso, tipo WhatsApp
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="text-center pt-0" />
+                        </Card>
+                    )}
                     {/* 6. Evo Drive — carpeta de la materia (misma lógica: /evo-drive, el estudiante ve sus carpetas por materia) */}
-                    <Card
-                        className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-sky-400/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-sky-400/20"
-                        onClick={() => setLocation('/evo-drive')}
-                    >
-                        <CardHeader className="text-center pb-4">
-                            <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-sky-400 via-[#00c8ff] to-cyan-300 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-sky-400/30">
-                                <Cloud className="w-10 h-10 text-white" />
-                            </div>
-                            <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Drive</CardTitle>
-                            <CardDescription className="text-white/70 text-lg">
-                                Acceder al drive de la plataforma
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="text-center pt-0" />
-                    </Card>
+                    {isPadre ? (
+                        <Card className="glass-enhanced bg-white/[0.04] border border-[#1e3cff]/25 backdrop-blur-xl cursor-default opacity-90 shadow-lg relative overflow-hidden">
+                            <div className="absolute inset-0 bg-[#0a0a2a]/20 pointer-events-none" aria-hidden />
+                            <CardHeader className="text-center pb-4 relative z-10">
+                                <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-slate-600/80 to-slate-800/90 flex items-center justify-center shadow-inner border border-white/10">
+                                    <Lock className="w-10 h-10 text-white/90" />
+                                </div>
+                                <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Bloqueado</CardTitle>
+                                <CardDescription className="text-[#E2E8F0]/80 text-base max-w-sm mx-auto">
+                                    Por privacidad del estudiante no tienes acceso al drive de esta materia (Evo Drive).
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="text-center pt-0 relative z-10" />
+                        </Card>
+                    ) : (
+                        <Card
+                            className="bg-gradient-to-br from-white/10 to-white/5 border-white/20 border-sky-400/30 backdrop-blur-xl hover:from-white/15 hover:to-white/10 transition-all cursor-pointer group shadow-lg hover:shadow-xl hover:shadow-sky-400/20"
+                            onClick={() => setLocation('/evo-drive')}
+                        >
+                            <CardHeader className="text-center pb-4">
+                                <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-sky-400 via-[#00c8ff] to-cyan-300 flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-sky-400/30">
+                                    <Cloud className="w-10 h-10 text-white" />
+                                </div>
+                                <CardTitle className="text-white text-3xl font-bold font-['Poppins'] mb-2">Evo Drive</CardTitle>
+                                <CardDescription className="text-white/70 text-lg">
+                                    Acceder al drive de la plataforma
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="text-center pt-0" />
+                        </Card>
+                    )}
                 </div>
 
                 {/* Sección Tareas (solo calendario) y Notas */}
@@ -2165,15 +2244,31 @@ export default function CourseDetailPage() {
                                         Notas de {details.nombre}
                                     </CardTitle>
                                     <CardDescription className="text-white/60">
-                                        Revisa tu rendimiento académico en esta materia
+                                        {isPadre
+                                            ? 'Rendimiento académico de tu hijo o hija en esta materia'
+                                            : 'Revisa tu rendimiento académico en esta materia'}
                                     </CardDescription>
                                 </div>
-                                {isStudent && (
+                                {(isStudent || isPadre) && (
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         className="border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10 hover:border-[#3B82F6] backdrop-blur-sm transition-all duration-200 shrink-0"
-                                        onClick={() => setLocation(`/course/${cursoId}/analytics`)}
+                                        onClick={() => {
+                                            const cid =
+                                                (details as CourseSubject).groupSubjectId?.trim() || cursoId;
+                                            if (isPadre && primerHijoIdPadre) {
+                                                setLocation(`/parent/analytics/${primerHijoIdPadre}/${cid}`);
+                                            } else {
+                                                if (isStudent) setLocation(`/student/course/${cursoId}/analytics`);
+                                                else if (isPadre && primerHijoIdPadre) {
+                                                    const cid = (details as CourseSubject).groupSubjectId?.trim() || cursoId;
+                                                    setLocation(`/parent/analytics/${primerHijoIdPadre}/${cid}`);
+                                                } else {
+                                                    setLocation(`/course/${cursoId}/analytics`);
+                                                }
+                                            }
+                                        }}
                                     >
                                         <BarChart3 className="w-4 h-4 mr-2" />
                                         Vista analítica
@@ -2251,10 +2346,10 @@ export default function CourseDetailPage() {
                                         <Button
                                             variant="outline"
                                             className="border-white/20 text-[#E2E8F0] hover:bg-white/5 hover:border-white/30 transition-all duration-200"
-                                            onClick={() => setLocation('/mi-aprendizaje/notas')}
+                                            onClick={() => setLocation(isPadre ? '/parent/notas' : '/mi-aprendizaje/notas')}
                                         >
                                             <Award className="w-4 h-4 mr-2" />
-                                            Ver todas mis notas
+                                            {isPadre ? 'Ver todas las notas del estudiante' : 'Ver todas mis notas'}
                                         </Button>
                                     </div>
                                 )}

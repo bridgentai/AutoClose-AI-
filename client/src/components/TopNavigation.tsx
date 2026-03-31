@@ -1,8 +1,20 @@
 "use client";
 
-import { 
-  Home, MessageSquare, BookOpen, GraduationCap, Settings, 
-  LogOut, User, Calendar, Users, Globe, Menu, X, FolderOpen
+import {
+  Home,
+  MessageSquare,
+  BookOpen,
+  GraduationCap,
+  Settings,
+  LogOut,
+  User,
+  Calendar,
+  Users,
+  Globe,
+  Menu,
+  X,
+  Cloud,
+  Building2,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -25,7 +37,9 @@ export function TopNavigation() {
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
-    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["estudiante", "profesor", "directivo", "padre"] },
+    { icon: Building2, label: "GLC", path: "/comunidad/noticias", roles: ["estudiante"] },
+    { icon: GraduationCap, label: "Aprendizaje (hijo/a)", path: "/parent/aprendizaje", roles: ["padre"] },
+    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["profesor", "directivo", "padre"] },
 
     { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
     { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
@@ -35,7 +49,7 @@ export function TopNavigation() {
 
     { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["profesor", "directivo", "padre"] },
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },
-    { icon: FolderOpen, label: "Evo Drive", path: "/evo-drive", roles: ["profesor", "directivo"] },
+    { icon: Cloud, label: "Evo Drive", path: "/evo-drive", roles: ["profesor", "directivo"] },
 
     { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
     { icon: Settings, label: "Configuracion", path: "/settings", roles: ["directivo"] },

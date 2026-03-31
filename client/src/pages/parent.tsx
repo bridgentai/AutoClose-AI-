@@ -111,13 +111,21 @@ export default function ParentPage() {
               Abrir Chat AI
             </Button>
             <Button
-              onClick={() => setLocation('/materials')}
+              onClick={() => setLocation('/parent/materiales')}
               variant="outline"
               className="w-full justify-start border-white/10 text-white hover:bg-white/10"
               data-testid="button-materials"
             >
               <BookOpen className="w-4 h-4 mr-2" />
-              Ver Materiales
+              Materiales del hijo/a (solo lectura)
+            </Button>
+            <Button
+              onClick={() => setLocation('/parent/aprendizaje')}
+              variant="outline"
+              className="w-full justify-start border-white/10 text-white hover:bg-white/10"
+            >
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Todo el aprendizaje (como el estudiante)
             </Button>
           </CardContent>
         </Card>

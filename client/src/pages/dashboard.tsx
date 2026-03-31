@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, FolderOpen, Mail, FileText, ArrowUp, ArrowDown, Bell } from 'lucide-react';
+import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, FolderOpen, Mail, FileText, ArrowUp, ArrowDown, Bell, FileCheck } from 'lucide-react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +54,18 @@ interface Message {
 
 const CARD_STYLE = `panel-grades border border-white/10 rounded-2xl hover-elevate`;
 const GRADIENT_STYLE = 'from-[#3B82F6] to-[#1D4ED8]';
+
+function readPermisosSalidaCount(userId: string | undefined): number {
+  if (!userId || typeof window === 'undefined') return 0;
+  try {
+    const raw = window.localStorage.getItem(`permisos_${userId}`);
+    if (!raw) return 0;
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
 
 interface AIChatBoxProps {
   rol: string;
@@ -1547,6 +1559,7 @@ function PadreDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const { colorPrimario, colorSecundario } = useInstitutionColors();
+  const [permisosActualesCount, setPermisosActualesCount] = useState(0);
 
   const { data: hijos = [] } = useQuery({
     queryKey: ['/api/users/me/hijos'],
@@ -1554,11 +1567,26 @@ function PadreDashboard() {
   });
   const primerHijoId = hijos[0]?._id;
 
-  const { data: attendanceResumen } = useQuery({
-    queryKey: ['/api/attendance/resumen/estudiante', primerHijoId],
-    queryFn: () => apiRequest<{ porcentaje: number; total: number; presentes: number }>('GET', `/api/attendance/resumen/estudiante/${primerHijoId}`),
-    enabled: !!primerHijoId,
-  });
+  useEffect(() => {
+    if (!user?.id) return;
+    const sync = () => setPermisosActualesCount(readPermisosSalidaCount(user.id));
+    sync();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === `permisos_${user.id}`) sync();
+    };
+    const onCustom = () => sync();
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('permisos-updated', onCustom as EventListener);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') sync();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('permisos-updated', onCustom as EventListener);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [user?.id]);
 
   const { data: notasData } = useQuery({
     queryKey: ['/api/student/hijo', primerHijoId, 'notes'],
@@ -1580,35 +1608,68 @@ function PadreDashboard() {
   const promedioDisplay = promedioGeneral.toFixed(1);
   const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
 
-  const now = new Date();
-  const assignmentsThisMonth = useMemo(() => {
-    const m = now.getMonth();
-    const y = now.getFullYear();
-    return assignments.filter((a) => {
-      const d = new Date(a.fechaEntrega);
-      return d.getMonth() === m && d.getFullYear() === y;
-    });
+  /** Tareas con entrega hoy o después; las vencidas no entran en el resumen ni en el total grande. */
+  const submissionsHijo = (assignment: Assignment) =>
+    (assignment as { submissions?: unknown[]; entregas?: unknown[] }).submissions ||
+    (assignment as { submissions?: unknown[]; entregas?: unknown[] }).entregas ||
+    [];
+  const submissionHijo = (assignment: Assignment) =>
+    submissionsHijo(assignment).find(
+      (e: { estudianteId?: string }) => e.estudianteId === primerHijoId
+    ) as { calificacion?: unknown } | undefined;
+
+  const estadoAsignacionHijo = (assignment: Assignment): 'pendiente' | 'entregada' | 'calificada' => {
+    const s = submissionHijo(assignment);
+    const estado =
+      (assignment as { estado?: string }).estado ||
+      (s ? (s.calificacion !== undefined ? 'calificada' : 'entregada') : 'pendiente');
+    if (estado === 'pendiente' || estado === 'entregada' || estado === 'calificada') return estado;
+    return 'pendiente';
+  };
+
+  const assignmentsActivasHijo = useMemo(() => {
+    const d = new Date();
+    const startOfToday = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    return assignments.filter((a) => new Date(a.fechaEntrega) >= startOfToday);
   }, [assignments]);
 
+  const asignacionesHijoEntregadas = useMemo(
+    () =>
+      assignmentsActivasHijo.filter((a) => {
+        const e = estadoAsignacionHijo(a);
+        return e === 'entregada' || e === 'calificada';
+      }).length,
+    [assignmentsActivasHijo, primerHijoId]
+  );
+
+  const asignacionesHijoPendientes = useMemo(
+    () =>
+      assignmentsActivasHijo.filter((a) => estadoAsignacionHijo(a) === 'pendiente').length,
+    [assignmentsActivasHijo, primerHijoId]
+  );
+
   const handleDayClick = (assignment: Assignment) => {
-    setLocation(`/assignment/${assignment._id}`);
+    setLocation(`/assignment/${assignment._id}?from=parent`);
   };
 
   return (
     <div className="space-y-6">
+      <p className="text-sm text-white/60 leading-relaxed max-w-3xl">
+        Aquí podrás visualizar la información de tu hijo en tiempo real
+      </p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
-          onClick={() => setLocation('/mi-aprendizaje/notas')}
+          onClick={() => setLocation('/parent/notas')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Progreso Académico</CardTitle>
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Promedio</CardTitle>
             <TrendingUp className="w-5 h-5 text-[#ffd700] animate-float" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{promedioDisplay}</div>
-            <p className="text-xs text-white/60 mt-1">Promedio general ({nombreHijo})</p>
+            <p className="text-xs text-white/50 mt-2 leading-snug">Media entre todas las materias.</p>
           </CardContent>
         </Card>
 
@@ -1618,12 +1679,34 @@ function PadreDashboard() {
           onClick={() => setLocation('/calendar')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Tareas de {nombreHijo}</CardTitle>
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Asignaciones</CardTitle>
             <GraduationCap className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{assignmentsThisMonth.length}</div>
-            <p className="text-xs text-white/60 mt-1">Tareas este mes (solo visualización)</p>
+            {!primerHijoId ? (
+              <p className="text-sm text-white/50">Vincula un estudiante para ver tareas.</p>
+            ) : (
+              <>
+                <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">
+                  {assignmentsActivasHijo.length}
+                </div>
+                <p className="text-xs text-white/50 mt-1 mb-2">Solo con entrega hoy o futura</p>
+                <div className="space-y-2 pt-1 border-t border-white/10">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-white/60">Entregadas</span>
+                    <span className="text-lg font-bold text-green-400 font-['Poppins'] tabular-nums">
+                      {asignacionesHijoEntregadas}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-white/60">Pendientes</span>
+                    <span className="text-lg font-bold text-yellow-400 font-['Poppins'] tabular-nums">
+                      {asignacionesHijoPendientes}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -1633,27 +1716,35 @@ function PadreDashboard() {
           onClick={() => setLocation('/parent/materias')}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias de {nombreHijo}</CardTitle>
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias</CardTitle>
             <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{materias.length}</div>
-            <p className="text-xs text-white/60 mt-1">Materias activas (solo visualización)</p>
+            <p className="text-xs text-white/50 mt-2 leading-snug">Cursos con seguimiento académico.</p>
           </CardContent>
         </Card>
 
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue badge-glow`}
           style={{ animationDelay: '0.4s' }}
-          onClick={() => setLocation('/parent')}
+          onClick={() => setLocation('/permisos')}
+          role="link"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setLocation('/permisos');
+            }
+          }}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Asistencia de {nombreHijo}</CardTitle>
-            <Trophy className="w-5 h-5 text-[#facc15] animate-float" />
+            <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Permisos actuales</CardTitle>
+            <FileCheck className="w-5 h-5 text-[#ffd700] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{attendanceResumen?.porcentaje ?? '—'}%</div>
-            <p className="text-xs text-white/60 mt-1">Este mes</p>
+            <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">{permisosActualesCount}</div>
+            <p className="text-xs text-white/50 mt-2 leading-snug">Autorizaciones de salida vigentes.</p>
           </CardContent>
         </Card>
       </div>
@@ -1662,7 +1753,6 @@ function PadreDashboard() {
         <Card className={CARD_STYLE}>
           <CardHeader>
             <CardTitle className="text-white">Seguimiento de {nombreHijo}</CardTitle>
-            <CardDescription className="text-white/60">Progreso académico (solo visualización)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -1670,24 +1760,37 @@ function PadreDashboard() {
                 <p className="text-white/60 py-4">No hay notas cargadas aún. {!primerHijoId && 'Vincula un estudiante en tu perfil.'}</p>
               ) : (
                 materias.map((materia, index) => {
-                  const score = materia.ultimaNota ?? materia.promedio;
-                  const widthPercent = Math.min(100, score);
+                  const raw = materia.ultimaNota ?? materia.promedio;
+                  const hasRecorded =
+                    typeof raw === 'number' && !Number.isNaN(raw);
+                  const scoreNum = hasRecorded ? raw : 0;
+                  const widthPercent = Math.min(100, Math.max(0, scoreNum));
                   return (
                     <div
                       key={materia._id || materia.nombre}
                       className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue"
                       style={{ animationDelay: `${0.7 + index * 0.1}s` }}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-white font-medium text-expressive-subtitle">{materia.nombre}</span>
-                        <span className="text-[#ffd700] font-bold font-['Poppins']">{Math.round(score || 0)}/100</span>
+                      <div className="flex items-center justify-between mb-3 gap-2">
+                        <span className="text-white font-medium text-expressive-subtitle min-w-0">
+                          {materia.nombre}
+                        </span>
+                        <span
+                          className={`font-bold font-['Poppins'] shrink-0 tabular-nums ${
+                            hasRecorded ? 'text-[#ffd700]' : 'text-white/45'
+                          }`}
+                        >
+                          {hasRecorded ? `${Math.round(scoreNum)}/100` : 'Sin nota'}
+                        </span>
                       </div>
                       <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
                         <div
-                          className="h-3 rounded-full transition-all duration-1000 ease-out hover-glow"
+                          className={`h-3 rounded-full transition-all duration-1000 ease-out hover-glow ${
+                            !hasRecorded ? 'opacity-40' : ''
+                          }`}
                           style={{
                             background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`,
-                            width: `${widthPercent}%`
+                            width: `${widthPercent}%`,
                           }}
                         />
                       </div>
@@ -1705,9 +1808,6 @@ function PadreDashboard() {
         >
           <CardHeader>
             <CardTitle className="text-white">Tareas de {nombreHijo}</CardTitle>
-            <CardDescription className="text-white/60">
-              Calendario (igual que el de tu hijo, solo visualización)
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div onClick={(e) => e.stopPropagation()}>
@@ -1725,7 +1825,7 @@ function PadreDashboard() {
           <div className="grid grid-cols-2 gap-4">
             <button
               type="button"
-              onClick={() => setLocation('/evo-send')}
+              onClick={() => setLocation('/evo-send?open=family')}
               className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
             >
               <Mail className="w-8 h-8 text-[#3B82F6] mb-2" />
@@ -1733,11 +1833,11 @@ function PadreDashboard() {
             </button>
             <button
               type="button"
-              onClick={() => setLocation('/evo-drive')}
+              onClick={() => setLocation('/parent/aprendizaje')}
               className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
             >
-              <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" />
-              <span className="text-sm text-white">Evo Drive</span>
+              <GraduationCap className="w-8 h-8 text-[#3B82F6] mb-2" />
+              <span className="text-sm text-white text-center leading-tight">Aprendizaje</span>
             </button>
           </div>
         </CardContent>

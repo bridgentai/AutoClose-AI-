@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX, ExternalLink, Presentation, FileSpreadsheet, Cloud, Plus, Camera } from 'lucide-react';
+import { Calendar, Clock, FileText, Link2, Paperclip, X, Edit, Check, Users, Send, Maximize2, UserX, ExternalLink, Presentation, FileSpreadsheet, Cloud, Plus, Camera, Lock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,8 @@ interface Submission {
   estudianteId: string;
   estudianteNombre: string;
   archivos: Attachment[];
+  /** Solo rol padre: cantidad de adjuntos cuando la API oculta URLs */
+  archivosCount?: number;
   comentario?: string;
   fechaEntrega: string;
   calificacion?: number;
@@ -175,7 +177,7 @@ export default function AssignmentDetailPage() {
   const { data: assignmentMaterials = [] } = useQuery<AssignmentMaterialRow[]>({
     queryKey: ['assignment-materials', params.id],
     queryFn: () => apiRequest('GET', `/api/assignment-materials?assignmentId=${encodeURIComponent(params.id!)}`),
-    enabled: !!params.id && !!assignment?._id,
+    enabled: !!params.id && !!assignment?._id && !isPadre,
   });
 
   // Google Drive para entrega del estudiante (Añadir o crear)
@@ -1139,83 +1141,97 @@ export default function AssignmentDetailPage() {
                     </Card>
                   )}
 
-                  {/* Recursos adjuntos (legacy + Evo Drive materials) */}
-                  {((assignment.adjuntos && Array.isArray(assignment.adjuntos) && assignment.adjuntos.length > 0) || assignmentMaterials.length > 0) && (
-                    <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                  {/* Recursos adjuntos (legacy + Evo Drive materials) — acudientes: solo aviso de privacidad, sin URLs */}
+                  {isPadre ? (
+                    <Card className="glass-enhanced bg-white/[0.04] border border-[#1e3cff]/25 backdrop-blur-md">
                       <CardHeader>
-                        <CardTitle className="text-white text-lg">Archivos de la tarea</CardTitle>
-                        <CardDescription className="text-white/60">Materiales y enlaces adjuntos a esta asignación</CardDescription>
+                        <CardTitle className="text-white text-lg flex items-center gap-2 font-['Poppins']">
+                          <Lock className="w-5 h-5 text-[#E2E8F0]" />
+                          Archivos de la tarea no disponibles
+                        </CardTitle>
+                        <CardDescription className="text-[#E2E8F0]/70">
+                          Por privacidad del estudiante no puedes abrir los materiales que adjunta el docente ni los archivos de la entrega. Puedes revisar título, descripción, fechas y calificación.
+                        </CardDescription>
                       </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          {assignment.adjuntos?.map((adj, index) => {
-                            const adjunto = typeof adj === 'string'
-                              ? { tipo: 'link' as const, nombre: adj, url: adj }
-                              : adj;
-                            return (
-                              <a
-                                key={`legacy-${index}`}
-                                href={adjunto.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={() => {
-                                  if (isEstudiante) trackDownload(adjunto.nombre || 'archivo');
-                                }}
-                                className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
-                                data-testid={`adjunto-${index}`}
-                              >
-                                <div className="flex items-center gap-4 min-w-0 flex-1">
-                                  <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 bg-white/10">
-                                    {adjunto.tipo === 'link' ? <Link2 className="w-5 h-5 text-white/70" /> : <FileText className="w-5 h-5 text-[#1a73e8]" />}
-                                  </div>
-                                  <span className="text-sm font-medium text-white truncate">{adjunto.nombre}</span>
-                                </div>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                  <ExternalLink className="w-3.5 h-3.5" /> Abrir enlace
-                                </span>
-                              </a>
-                            );
-                          })}
-                          {assignmentMaterials.map((m) => {
-                            const isGoogle = m.type === 'gdoc';
-                            const displayName = m.fileName || m.url;
-                            const u = (m.url || '').toLowerCase();
-                            const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
-                            const iconBg = isGoogle ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
-                            const Icon = isGoogle ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
-                            const iconColor = isGoogle ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
-                            return (
-                              <a
-                                key={m._id}
-                                href={m.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={() => {
-                                  if (isEstudiante) trackDownload(displayName || 'archivo');
-                                }}
-                                className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
-                                data-testid={`material-${m._id}`}
-                              >
-                                <div className="flex items-center gap-4 min-w-0 flex-1">
-                                  <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
-                                    <Icon className={`w-5 h-5 ${iconColor}`} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-white truncate">{displayName}</p>
-                                    {isGoogle && (
-                                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400 mt-1">Google</span>
-                                    )}
-                                  </div>
-                                </div>
-                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                  <ExternalLink className="w-3.5 h-3.5" /> {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
-                                </span>
-                              </a>
-                            );
-                          })}
-                        </div>
-                      </CardContent>
                     </Card>
+                  ) : (
+                    ((assignment.adjuntos && Array.isArray(assignment.adjuntos) && assignment.adjuntos.length > 0) || assignmentMaterials.length > 0) && (
+                      <Card className="bg-white/5 border-white/10 backdrop-blur-md">
+                        <CardHeader>
+                          <CardTitle className="text-white text-lg">Archivos de la tarea</CardTitle>
+                          <CardDescription className="text-white/60">Materiales y enlaces adjuntos a esta asignación</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {assignment.adjuntos?.map((adj, index) => {
+                              const adjunto = typeof adj === 'string'
+                                ? { tipo: 'link' as const, nombre: adj, url: adj }
+                                : adj;
+                              return (
+                                <a
+                                  key={`legacy-${index}`}
+                                  href={adjunto.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => {
+                                    if (isEstudiante) trackDownload(adjunto.nombre || 'archivo');
+                                  }}
+                                  className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
+                                  data-testid={`adjunto-${index}`}
+                                >
+                                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                                    <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 bg-white/10">
+                                      {adjunto.tipo === 'link' ? <Link2 className="w-5 h-5 text-white/70" /> : <FileText className="w-5 h-5 text-[#1a73e8]" />}
+                                    </div>
+                                    <span className="text-sm font-medium text-white truncate">{adjunto.nombre}</span>
+                                  </div>
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                    <ExternalLink className="w-3.5 h-3.5" /> Abrir enlace
+                                  </span>
+                                </a>
+                              );
+                            })}
+                            {assignmentMaterials.map((m) => {
+                              const isGoogle = m.type === 'gdoc';
+                              const displayName = m.fileName || m.url;
+                              const u = (m.url || '').toLowerCase();
+                              const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
+                              const iconBg = isGoogle ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
+                              const Icon = isGoogle ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
+                              const iconColor = isGoogle ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
+                              return (
+                                <a
+                                  key={m._id}
+                                  href={m.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={() => {
+                                    if (isEstudiante) trackDownload(displayName || 'archivo');
+                                  }}
+                                  className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out"
+                                  data-testid={`material-${m._id}`}
+                                >
+                                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                                    <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
+                                      <Icon className={`w-5 h-5 ${iconColor}`} />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                                      {isGoogle && (
+                                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400 mt-1">Google</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                                    <ExternalLink className="w-3.5 h-3.5" /> {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
+                                  </span>
+                                </a>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
                   )}
 
                   {submissionNotRequired ? (
@@ -1223,7 +1239,10 @@ export default function AssignmentDetailPage() {
                       <CardHeader>
                         <CardTitle className="text-white">Sin entrega en la plataforma</CardTitle>
                         <CardDescription className="text-white/60">
-                          Esta actividad no requiere que {isPadre ? `${nombreHijo} entregue` : 'entregues'} archivos aquí. Revisa instrucciones y materiales arriba.
+                          Esta actividad no requiere que {isPadre ? `${nombreHijo} entregue` : 'entregues'} archivos aquí.{' '}
+                          {isPadre
+                            ? 'Revisa la descripción e instrucciones en esta página. Los archivos adjuntos no están disponibles para acudientes.'
+                            : 'Revisa instrucciones y materiales arriba.'}
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
@@ -1260,23 +1279,23 @@ export default function AssignmentDetailPage() {
                                 <p className="text-white">{hijoSubmission.comentario}</p>
                               </div>
                             )}
-                            {hijoSubmission.archivos && hijoSubmission.archivos.length > 0 && (
+                            {((hijoSubmission.archivosCount ?? 0) > 0 ||
+                              (hijoSubmission.archivos && hijoSubmission.archivos.length > 0)) && (
                               <div>
-                                <Label className="text-white/60 mb-2 block">Archivos entregados:</Label>
-                                <div className="space-y-2">
-                                  {hijoSubmission.archivos.map((archivo, idx) => (
-                                    <a
-                                      key={idx}
-                                      href={archivo.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-2 p-2 bg-white/5 rounded hover:bg-white/10 transition-colors"
-                                    >
-                                      <FileText className="w-4 h-4 text-[#1e3cff]" />
-                                      <span className="text-sm text-white">{archivo.nombre}</span>
-                                    </a>
-                                  ))}
-                                </div>
+                                <Label className="text-white/60 mb-2 block">Archivos entregados</Label>
+                                <p className="text-sm text-white/70 flex items-start gap-2 p-3 rounded-lg border border-white/10 bg-white/5">
+                                  <Lock className="w-4 h-4 shrink-0 mt-0.5 text-[#E2E8F0]/80" />
+                                  <span>
+                                    {nombreHijo} adjuntó{' '}
+                                    {hijoSubmission.archivosCount ??
+                                      hijoSubmission.archivos?.length ??
+                                      0}{' '}
+                                    {(hijoSubmission.archivosCount ?? hijoSubmission.archivos?.length ?? 0) === 1
+                                      ? 'archivo'
+                                      : 'archivos'}
+                                    . Por privacidad, los enlaces no están disponibles para acudientes.
+                                  </span>
+                                </p>
                               </div>
                             )}
                             {hijoSubmission.calificacion !== undefined && (

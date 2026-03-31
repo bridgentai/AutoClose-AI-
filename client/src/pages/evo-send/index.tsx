@@ -58,10 +58,21 @@ function threadAccent(t: EvoThreadItem): string {
   if (t.is_support || t.tipo === 'evo_chat_support') return '#059669';
   if (t.tipo === 'evo_chat_staff') return '#7c3aed';
   if (t.tipo === 'evo_chat_direct') return '#0891b2';
+  if (t.tipo === 'evo_chat_family') return '#f43f5e';
   return EVO_BLUE;
 }
 
-type ThreadType = 'comunicado_general' | 'curso' | 'asignacion' | 'asistencia' | 'general' | 'evo_chat' | 'evo_chat_staff' | 'evo_chat_direct' | 'evo_chat_support';
+type ThreadType =
+  | 'comunicado_general'
+  | 'curso'
+  | 'asignacion'
+  | 'asistencia'
+  | 'general'
+  | 'evo_chat'
+  | 'evo_chat_staff'
+  | 'evo_chat_direct'
+  | 'evo_chat_family'
+  | 'evo_chat_support';
 
 interface EvoThreadItem {
   _id: string;
@@ -117,6 +128,7 @@ const tipoLabels: Record<string, string> = {
   evo_chat: 'Chat',
   evo_chat_staff: 'Grupos',
   evo_chat_direct: 'Chat directo',
+  evo_chat_family: 'Chat familia',
   evo_chat_support: 'Soporte GLC',
 };
 
@@ -132,6 +144,7 @@ const tipoIcons: Record<string, React.ReactNode> = {
   evo_chat: <MessageSquare className="w-4 h-4" />,
   evo_chat_staff: <Users className="w-4 h-4" />,
   evo_chat_direct: <MessageSquare className="w-4 h-4" />,
+  evo_chat_family: <Users className="w-4 h-4" />,
   evo_chat_support: <Shield className="w-4 h-4" />,
 };
 
@@ -166,6 +179,16 @@ export default function EvoSendPage() {
       /* ignore */
     }
   }, []);
+
+  useEffect(() => {
+    if (!user?.rol) return;
+    setBack((prev) => {
+      if (prev.label === 'Volver al curso') return prev;
+      if (user.rol === 'padre') return { to: '/dashboard', label: 'Dashboard' };
+      if (user.rol === 'estudiante') return { to: '/mi-aprendizaje', label: 'Mi Aprendizaje' };
+      return prev;
+    });
+  }, [user?.rol]);
 
   const isProfesorOrEstudiante = ['profesor', 'estudiante'].includes(user?.rol || '');
   const canCreateThread = !isProfesorOrEstudiante && ['directivo', 'admin-general-colegio'].includes(user?.rol || '');
@@ -403,6 +426,20 @@ export default function EvoSendPage() {
     }
   }, [loadingThreads, threadsFlat]);
 
+  // Atajo dock: ?open=family → selecciona el chat familiar (acudientes + estudiante)
+  useEffect(() => {
+    if (loadingThreads || threadsFlat.length === 0) return;
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    if (params.get('open') !== 'family') return;
+    const fam = threadsFlat.find((t) => t.tipo === 'evo_chat_family');
+    if (fam) {
+      setSelectedId(fam._id);
+      if (typeof window !== 'undefined' && window.history.replaceState) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }, [loadingThreads, threadsFlat]);
+
   useEffect(() => {
     if (!lastMessage) return;
     const m = lastMessage as {
@@ -473,6 +510,13 @@ export default function EvoSendPage() {
     writeWindow.allowed === false &&
     !!selectedThread &&
     STUDENT_TIMED_EVO_THREAD_TYPES.has(selectedThread.tipo);
+
+  const threadsEmptyHint =
+    user?.rol === 'padre'
+      ? 'Sin chats: vincula a tu hijo o hija en Mi perfil. Si ya está vinculado, confirma que figuras como acudiente en el colegio.'
+      : user?.rol === 'estudiante'
+        ? 'Sin chats todavía. Con acudientes vinculados aparece el chat «Familia»; los de curso salen cuando el profesor usa Evo Send en tu grupo.'
+        : undefined;
 
   const handleSendReply = () => {
     if (!replyText.trim() || !selectedId || studentComposerBlocked) return;
@@ -558,6 +602,7 @@ export default function EvoSendPage() {
           sections={sections}
           studentComposerBlocked={studentComposerBlocked}
           writeWindowTimezone={writeWindow?.timezone}
+          threadsEmptyHint={threadsEmptyHint}
         />
           </TabsContent>
         </Tabs>
@@ -589,6 +634,7 @@ export default function EvoSendPage() {
           onToggleChatsGlc={isAdminColegio ? () => setAdminChatsGlcCollapsed((c) => !c) : undefined}
           studentComposerBlocked={studentComposerBlocked}
           writeWindowTimezone={writeWindow?.timezone}
+          threadsEmptyHint={threadsEmptyHint}
         />
       )}
       </div>
@@ -765,6 +811,7 @@ interface EvoLayoutProps {
   /** Solo estudiantes: fuera de 7:00–19:00 en chats de grupo */
   studentComposerBlocked?: boolean;
   writeWindowTimezone?: string;
+  threadsEmptyHint?: string;
 }
 
 interface EvoDriveFile {
@@ -945,6 +992,7 @@ function EvoLayout({
   onToggleChatsGlc,
   studentComposerBlocked = false,
   writeWindowTimezone,
+  threadsEmptyHint,
 }: EvoLayoutProps) {
   const [showDrivePicker, setShowDrivePicker] = useState(false);
   const [showReminderPicker, setShowReminderPicker] = useState(false);
@@ -1030,7 +1078,8 @@ function EvoLayout({
                 searchQ,
                 sections,
                 sections && sections.length > 0 ? getSectionCollapsed : undefined,
-                sections && sections.length > 0 ? handleToggleSection : undefined
+                sections && sections.length > 0 ? handleToggleSection : undefined,
+                threadsEmptyHint
               )
             )}
           </div>
@@ -1055,9 +1104,14 @@ function EvoLayout({
                   )}
                 </div>
                 <h3 className="text-xl font-semibold text-[#E2E8F0]">{selectedThread.displayTitle ?? selectedThread.asunto}</h3>
-                <p className="text-white/60 text-sm">
-                  De: {(selectedThread.creadoPor as any)?.nombre} ({(selectedThread.creadoPor as any)?.rol})
-                </p>
+                {selectedThread.tipo === 'evo_chat_family' ? (
+                  <p className="text-white/60 text-sm">Acudientes vinculados y estudiante en el mismo chat.</p>
+                ) : (
+                  <p className="text-white/60 text-sm">
+                    De: {(selectedThread.creadoPor as { nombre?: string; rol?: string })?.nombre} (
+                    {(selectedThread.creadoPor as { nombre?: string; rol?: string })?.rol})
+                  </p>
+                )}
                 {typing?.threadId === selectedId && typing?.userId !== user?.id && (
                   <p className="text-white/50 text-sm italic animate-pulse">{typing.userName || 'Alguien'} está escribiendo...</p>
                 )}
@@ -1439,7 +1493,8 @@ function filteredThreadsList(
   searchQ?: string,
   sections?: { label: string; threads: EvoThreadItem[] }[] | null,
   getSectionCollapsed?: (label: string) => boolean,
-  onToggleSection?: (label: string) => void
+  onToggleSection?: (label: string) => void,
+  threadsEmptyHint?: string
 ) {
   const title = (t: EvoThreadItem) => t.displayTitle ?? t.asunto;
   const preview = (t: EvoThreadItem) => {
@@ -1579,7 +1634,11 @@ function filteredThreadsList(
     <>
       {threads.map((t) => renderThread(t))}
       {threads.length === 0 && (
-        <p className="p-4 text-white/50 text-center text-sm">No hay chats. Tus grupos son tus cursos (profesor) o materias (estudiante).</p>
+        <p className="p-4 text-white/50 text-center text-sm">
+          {threadsEmptyHint?.trim()
+            ? threadsEmptyHint
+            : 'No hay chats. Tus grupos son tus cursos (profesor) o materias (estudiante).'}
+        </p>
       )}
     </>
   );

@@ -88,6 +88,9 @@ import StudentProfilePage from "@/pages/student-profile";
 import BoletinInteligentePage from "@/pages/boletin-inteligente";
 import StudentCourseAnalyticsPage from "@/pages/student-course-analytics";
 import ParentCourseAnalyticsPage from "@/pages/parent-course-analytics";
+import ParentAprendizajePage from "@/pages/parent-aprendizaje";
+import ParentHorarioPage from "@/pages/parent-horario";
+import ParentPage from "@/pages/parent";
 
 // Módulos del profesor
 import ProfesorAcademiaLayout from "@/pages/profesor-academia";
@@ -194,9 +197,7 @@ function AppRouter() {
               </AuthGuard>
             </Route>
             <Route path="/parent">
-              <AuthGuard>
-                <Redirect to="/dashboard" />
-              </AuthGuard>
+              <AuthGuard><ParentPage /></AuthGuard>
             </Route>
             <Route path="/parent/materias">
               <AuthGuard><ParentMateriasPage /></AuthGuard>
@@ -204,8 +205,29 @@ function AppRouter() {
             <Route path="/parent/notas/historial">
               <AuthGuard><ParentNotesHistorialPage /></AuthGuard>
             </Route>
+            <Route path="/parent/notas">
+              <AuthGuard><StudentNotesPage /></AuthGuard>
+            </Route>
             <Route path="/parent/analytics/:studentId/:cursoId">
               <AuthGuard><ParentCourseAnalyticsPage /></AuthGuard>
+            </Route>
+            <Route path="/parent/aprendizaje">
+              <AuthGuard><ParentAprendizajePage /></AuthGuard>
+            </Route>
+            <Route path="/parent/cursos">
+              <AuthGuard><Courses /></AuthGuard>
+            </Route>
+            <Route path="/parent/materiales">
+              <AuthGuard><Materials /></AuthGuard>
+            </Route>
+            <Route path="/parent/horario">
+              <AuthGuard><ParentHorarioPage /></AuthGuard>
+            </Route>
+            <Route path="/parent/calendario">
+              <AuthGuard><CalendarPage /></AuthGuard>
+            </Route>
+            <Route path="/parent/tareas">
+              <AuthGuard><StudentTasksPage /></AuthGuard>
             </Route>
             <Route path="/directivo">
               <AuthGuard><Redirect to="/directivo/academia" /></AuthGuard>

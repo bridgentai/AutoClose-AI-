@@ -179,6 +179,66 @@ export async function findDirectThreadBetweenUsers(
   return r.rows[0] ?? null;
 }
 
+/** Hilo Evo Send familia: estudiante + todos los acudientes vinculados (un hilo por estudiante). */
+export async function findFamilyEvoThreadForStudent(
+  studentId: string,
+  institutionId: string
+): Promise<AnnouncementRow | null> {
+  const r = await queryPg<AnnouncementRow>(
+    `SELECT a.* FROM announcements a
+     INNER JOIN announcement_recipients ar ON ar.announcement_id = a.id AND ar.user_id = $1
+     WHERE a.institution_id = $2 AND a.type = 'evo_chat_family'
+     ORDER BY a.created_at ASC
+     LIMIT 1`,
+    [studentId, institutionId]
+  );
+  return r.rows[0] ?? null;
+}
+
+/**
+ * Crea o devuelve el chat familia del estudiante y sincroniza acudientes en `announcement_recipients`.
+ * Usa `users.institution_id` del estudiante y todas las filas de `guardian_students` para ese alumno
+ * (sin exigir coincidencia en `guardian_students.institution_id`), alineado con GET /api/users/me/hijos.
+ */
+export async function findOrCreateFamilyEvoThread(studentId: string): Promise<AnnouncementRow | null> {
+  const su = await queryPg<{ institution_id: string; role: string; full_name: string }>(
+    'SELECT institution_id, role, full_name FROM users WHERE id = $1 LIMIT 1',
+    [studentId]
+  );
+  const studentRow = su.rows[0];
+  if (!studentRow || studentRow.role !== 'estudiante') return null;
+
+  const institutionId = studentRow.institution_id;
+
+  const guardians = await queryPg<{ guardian_id: string }>(
+    `SELECT guardian_id FROM guardian_students WHERE student_id = $1`,
+    [studentId]
+  );
+  if (guardians.rows.length === 0) return null;
+
+  const studentName = studentRow.full_name?.trim() || 'Estudiante';
+  const title = `Familia · ${studentName}`;
+
+  let ann = await findFamilyEvoThreadForStudent(studentId, institutionId);
+  if (!ann) {
+    const createdBy = guardians.rows[0]!.guardian_id;
+    ann = await createAnnouncement({
+      institution_id: institutionId,
+      title,
+      body: 'Mensajes entre acudientes y estudiante.',
+      type: 'evo_chat_family',
+      group_id: null,
+      created_by_id: createdBy,
+    });
+    const allIds = [studentId, ...guardians.rows.map((g) => g.guardian_id)];
+    await addAnnouncementRecipients(ann.id, [...new Set(allIds)]);
+  } else {
+    const allIds = [studentId, ...guardians.rows.map((g) => g.guardian_id)];
+    await addAnnouncementRecipients(ann.id, [...new Set(allIds)]);
+  }
+  return ann;
+}
+
 /** Check if user is a recipient of the announcement (for staff/direct/support access). */
 export async function isUserRecipientOfAnnouncement(announcementId: string, userId: string): Promise<boolean> {
   const r = await queryPg<{ n: number }>(

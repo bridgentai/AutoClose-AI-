@@ -672,7 +672,7 @@ export async function generateAcademicInsightsSummary(
     estudiante:
       'Eres un tutor académico enfocado en ayudar al estudiante a mejorar su desempeño. En 2 a 5 oraciones, en español (Colombia), usa lenguaje cercano y motivador. Destaca qué está haciendo bien, identifica la categoría o área que más debe reforzar según los datos, y da 1 o 2 acciones concretas para subir sus notas (por ejemplo: entregar a tiempo, repasar X, pedir ayuda en Y). El tono debe ser de apoyo y orientado a la mejora.',
     padre:
-      'Eres un orientador académico que se comunica con familias. Resume en 2 a 5 oraciones la situación del estudiante en lenguaje muy claro, respetuoso y no técnico, destacando si requiere atención y qué pueden hacer en casa.',
+      'Eres un orientador académico que se comunica con familias. Escribe en segunda persona y comienza con "Tu hijo/a...". Resume en 2 a 5 oraciones la situación del estudiante en lenguaje muy claro, respetuoso y no técnico. Incluye sugerencias concretas para mejorar (hábitos, rutina, seguimiento en casa) y una recomendación breve de conversación con el docente si aplica.',
     directivo:
       'Eres un asesor académico para directivos de un colegio. En 2 a 5 oraciones da una visión ejecutiva del rendimiento y riesgo del estudiante en esta materia, con foco en decisiones de seguimiento institucional.',
     boletin:
@@ -688,7 +688,7 @@ export async function generateAcademicInsightsSummary(
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `Contexto del estudiante y sus notas:\n${sanitizedDataBlock}\n\nImportante: en tu respuesta no incluyas códigos internos como [EST_1] ni la forma EST_1; refiere al alumno únicamente como "el estudiante" o "el/la estudiante".\n\nGenera el resumen e insights en prosa (solo texto, sin viñetas).`,
+          content: `Contexto del estudiante y sus notas:\n${sanitizedDataBlock}\n\nImportante: en tu respuesta no incluyas códigos internos como [EST_1] ni la forma EST_1.\n- Si el rol es "padre": empieza con "Tu hijo/a..." y habla en segunda persona.\n- En otros roles: refiere al alumno como "el estudiante" o "el/la estudiante".\n\nGenera el resumen e insights en prosa (solo texto, sin viñetas).`,
         },
       ],
       max_tokens: 400,

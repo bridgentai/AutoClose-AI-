@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FileCheck, User, Calendar, Bus, Car, UserCheck, Hash, MapPin, Plus, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { NavBackButton } from '@/components/nav-back-button';
 
 type TipoPermiso = 
   | 'ruta-a-carro' 
@@ -280,6 +281,9 @@ export default function PermisosPage() {
     return (
       <div className="flex-1 overflow-auto p-6 md:p-8">
         <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <NavBackButton to="/dashboard" label="Dashboard" />
+          </div>
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
               <FileCheck className="w-10 h-10 text-[#00c8ff]" />
@@ -517,6 +521,9 @@ export default function PermisosPage() {
   return (
     <div className="flex-1 overflow-auto p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
+        <div className="mb-6">
+          <NavBackButton to="/dashboard" label="Dashboard" />
+        </div>
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
             <FileCheck className="w-10 h-10 text-[#00c8ff]" />

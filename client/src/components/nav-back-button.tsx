@@ -38,8 +38,12 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
 
     const pathParts = currentPath.split("/").filter(Boolean);
 
-    // Caso especial: /assignment/:id -> volver a /mi-aprendizaje/tareas
+    // Caso especial: /assignment/:id -> tareas del estudiante o del padre
     if (pathParts.length === 2 && pathParts[0] === "assignment") {
+      if (typeof window !== "undefined") {
+        const sp = new URLSearchParams(window.location.search);
+        if (sp.get("from") === "parent") return "/parent/tareas";
+      }
       return "/mi-aprendizaje/tareas";
     }
 

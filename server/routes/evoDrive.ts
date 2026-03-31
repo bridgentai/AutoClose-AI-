@@ -331,6 +331,9 @@ router.get('/groups', protect, async (req: AuthRequest, res) => {
   const userId = req.user?.id;
   const rol = req.user?.rol;
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+  if (rol === 'padre') {
+    return res.json([]);
+  }
   if (rol === 'estudiante') {
     const courseGroups = await getAllCourseGroupsForStudent(userId, colegioId);
     return res.json(courseGroups.map((g) => ({ id: g.id, name: g.name })));
@@ -406,6 +409,11 @@ router.get('/files', protect, async (req: AuthRequest, res) => {
   const resolved = await resolveGroupId(cursoIdParam.trim(), colegioId);
   if (!resolved) return res.status(404).json({ message: 'Curso no encontrado.' });
   const groupId = resolved.id;
+  if (rol === 'padre') {
+    return res.status(403).json({
+      message: 'Evo Drive del curso no está disponible para acudientes por privacidad del estudiante.',
+    });
+  }
   if (teacherPrivate) {
     if (rol !== 'profesor') {
       return res.status(403).json({ message: 'Solo el docente puede ver esta carpeta.' });
@@ -551,6 +559,9 @@ router.get('/recientes', protect, async (req: AuthRequest, res) => {
   const userId = req.user?.id;
   const rol = req.user?.rol ?? '';
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+  if (rol === 'padre') {
+    return res.json([]);
+  }
 
   const courseRows = await getRecentCourseFilesForUser(colegioId, userId, rol, 15);
   type Sortable = { api: ReturnType<typeof toEvoFileApi>; ts: number };

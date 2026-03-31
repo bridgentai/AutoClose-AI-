@@ -38,7 +38,8 @@ interface Student {
   nombre: string;
 }
 
-const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'padre', 'school_admin', 'super_admin', 'estudiante'];
+// Nota: Padre y Estudiante tienen vistas analíticas dedicadas (/parent/analytics y /student/course/.../analytics)
+const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'school_admin', 'super_admin'];
 
 // Paleta evoOS (azules + acento) para analíticas
 const BAR_COLORS = ['#3B82F6', '#00C8FF', '#1D4ED8', '#38BDF8', '#60A5FA', '#FFD700'];
@@ -192,7 +193,7 @@ export default function CourseAnalyticsPage() {
 
   if (user && !canAccess) {
     return (
-      <div className="min-h-screen p-4 md:p-6 text-[#E2E8F0]">
+      <div className="w-full text-[#E2E8F0]">
         <div className="max-w-5xl mx-auto">
           <Button
             variant="ghost"
@@ -204,7 +205,9 @@ export default function CourseAnalyticsPage() {
           </Button>
           <Card className="bg-white/5 border-white/10 rounded-2xl p-6">
             <CardContent>
-              <p className="text-[#E2E8F0]/90 mb-4">No tienes permiso para ver la vista analítica.</p>
+              <p className="text-[#E2E8F0]/90 mb-4">
+                Esta vista analítica es para profesor/directivo. Para estudiante y padre existe una vista dedicada.
+              </p>
               <Button
                 variant="outline"
                 className="rounded-xl border-white/30 bg-white/5 text-white hover:bg-white/10"
@@ -220,7 +223,7 @@ export default function CourseAnalyticsPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 text-[#E2E8F0]">
+    <div className="w-full text-[#E2E8F0]">
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
           <Button

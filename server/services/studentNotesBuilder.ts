@@ -75,7 +75,27 @@ export async function buildMateriasNotasForStudent(
 
       const rawAsg = await findAssignmentsByGroupSubject(gs.id);
       const gradable = rawAsg.filter((a) => a.is_gradable && a.type !== 'reminder');
-      if (gradable.length === 0) continue;
+
+      const group = await findGroupById(gs.group_id);
+      const subject = await findSubjectById(gs.subject_id);
+      const subjectDisplayName = (gs.display_name?.trim() || subject?.name) ?? 'Sin materia';
+      const nombre = ([subjectDisplayName, group?.name].filter(Boolean).join(' ').trim() ||
+        subjectDisplayName) as string;
+
+      if (gradable.length === 0) {
+        materias.push({
+          _id: gs.id,
+          nombre,
+          groupSubjectId: gs.id,
+          promedio: null,
+          ultimaNota: null,
+          estado: 'sin_notas',
+          tendencia: 'stable',
+          colorAcento: '',
+          notas: [],
+        });
+        continue;
+      }
 
       const schema = await findGradingSchemaByGroupSubject(gs.id, institutionId);
       const categories = schema ? await findGradingCategoriesBySchema(schema.id) : [];
@@ -149,11 +169,6 @@ export async function buildMateriasNotasForStudent(
           ultimaNota = Number(s);
         }
       }
-
-      const group = await findGroupById(gs.group_id);
-      const subject = await findSubjectById(gs.subject_id);
-      const subjectDisplayName = (gs.display_name?.trim() || subject?.name) ?? 'Sin materia';
-      const nombre = ([subjectDisplayName, group?.name].filter(Boolean).join(' ').trim() || subjectDisplayName) as string;
 
       const estado =
         promedio == null ? 'sin_notas' : promedio >= 65 ? 'aprobado' : 'reprobado';

@@ -29,12 +29,14 @@ import {
   UsersRound,
   Clock,
   FolderOpen,
+  Cloud,
   CheckSquare,
   Award,
   History,
   Send,
   BarChart3,
   Bell,
+  Building2,
 } from "lucide-react";
 
 interface CommandPaletteProps {
@@ -83,12 +85,19 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           keywords: ["aprendizaje", "estudio", "cursos", "materiales", "plataformas"],
           roles: ["estudiante"]
         },
-        { 
-          icon: Mail, 
-          label: "Comunicación", 
+        {
+          icon: Building2,
+          label: "GLC",
+          path: "/comunidad/noticias",
+          keywords: ["glc", "comunicados", "institucionales", "circulares", "noticias", "comunidad"],
+          roles: ["estudiante"],
+        },
+        {
+          icon: Mail,
+          label: "Comunicación",
           path: "/comunicacion",
           keywords: ["mensajes", "comunicacion", "bandeja", "correo", "comunidad", "eventos", "calendario", "noticias", "avisos"],
-          roles: ["estudiante", "profesor", "directivo", "padre"]
+          roles: ["profesor", "directivo", "padre"],
         },
         { 
           icon: BookOpen, 
@@ -179,12 +188,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           keywords: ["materiales", "archivos", "documentos", "recursos"],
           roles: ["profesor"]
         },
-        { 
-          icon: FolderOpen, 
-          label: "Evo Drive", 
+        {
+          icon: Cloud,
+          label: "Evo Drive",
           path: "/evo-drive",
           keywords: ["evo", "drive", "google", "archivos", "materiales"],
-          roles: ["profesor", "directivo"]
+          roles: ["profesor", "directivo"],
         },
         { 
           icon: Globe, 

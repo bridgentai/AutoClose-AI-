@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { forwardRef, useEffect, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/authContext";
 import { useQuery } from "@tanstack/react-query";
@@ -21,7 +21,7 @@ import {
   Mail,
   FileCheck,
   Bell,
-  FolderOpen,
+  Cloud,
   Building2,
   ChevronRight,
   Inbox,
@@ -63,6 +63,66 @@ function rgbaFromHex(hex: string, alpha: number): string {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 }
 
+/** Ruta activa en el dock: igual o subruta (p. ej. /mi-aprendizaje/cursos). */
+function dockPathActive(currentLocation: string, itemPath: string): boolean {
+  const path = (currentLocation.split('?')[0] ?? '/').replace(/\/$/, '') || '/';
+  const target = (itemPath.split('?')[0] ?? '/').replace(/\/$/, '') || '/';
+  if (path === target) return true;
+  if (target === '/dashboard' && (path === '/' || path === '')) return true;
+  if (target.length > 1 && path.startsWith(`${target}/`)) return true;
+  return false;
+}
+
+function isParentAprendizajeSection(loc: string): boolean {
+  const p = loc.split('?')[0] ?? '';
+  const roots = [
+    '/parent/aprendizaje',
+    '/parent/notas',
+    '/parent/materias',
+    '/parent/materiales',
+    '/parent/cursos',
+    '/parent/horario',
+    '/parent/calendario',
+    '/parent/tareas',
+  ];
+  for (const r of roots) {
+    if (p === r || p.startsWith(`${r}/`)) return true;
+  }
+  return p.startsWith('/parent/analytics/');
+}
+
+/** Texto contextual bajo «AI Dock» */
+function getDockLocationLabel(location: string): string {
+  const p = (location.split('?')[0] ?? '/').replace(/\/$/, '') || '/';
+  const rules: Array<{ match: (s: string) => boolean; label: string }> = [
+    { match: (s) => s === '/dashboard' || s === '' || s === '/', label: 'Dashboard' },
+    { match: (s) => s.startsWith('/chat'), label: 'Chat AI' },
+    { match: (s) => s.startsWith('/permisos'), label: 'Permisos de salida' },
+    { match: (s) => s.startsWith('/evo-drive'), label: 'Evo Drive' },
+    { match: (s) => s.startsWith('/evo-send'), label: 'Evo Send' },
+    { match: (s) => s.startsWith('/notificaciones'), label: 'Notificaciones' },
+    { match: (s) => s.startsWith('/comunicacion/academico'), label: 'Academia (comunicación)' },
+    { match: (s) => s.startsWith('/comunidad/noticias') || s.startsWith('/comunidad'), label: 'GLC' },
+    { match: (s) => isParentAprendizajeSection(s), label: 'Aprendizaje del hijo/a' },
+    { match: (s) => s.startsWith('/mi-aprendizaje'), label: 'Mi Aprendizaje' },
+    { match: (s) => s.startsWith('/profesor/academia'), label: 'Academia' },
+    { match: (s) => s.startsWith('/profesor/comunicacion'), label: 'Comunicación' },
+    { match: (s) => s.startsWith('/directivo/academia'), label: 'Academia' },
+    { match: (s) => s.startsWith('/directivo/comunicacion'), label: 'Comunicación' },
+    { match: (s) => s.startsWith('/comunicacion'), label: 'Comunicación' },
+    { match: (s) => s.startsWith('/calendar') || s.startsWith('/teacher-calendar'), label: 'Calendario' },
+    { match: (s) => s.startsWith('/plataformas'), label: 'Plataformas' },
+    { match: (s) => s.startsWith('/mi-perfil'), label: 'Mi perfil' },
+    { match: (s) => s.startsWith('/materials'), label: 'Materiales' },
+    { match: (s) => s.startsWith('/courses'), label: 'Cursos' },
+  ];
+  for (const r of rules) {
+    if (r.match(p)) return r.label;
+  }
+  if (p.startsWith('/course') || p.startsWith('/assignment')) return 'Curso o tarea';
+  return 'Navegando';
+}
+
 type DockCardProps = {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
@@ -71,50 +131,90 @@ type DockCardProps = {
   onClick: () => void;
   rightSlot?: React.ReactNode;
   isActive?: boolean;
+  /** Atajo (paleta compacta, no módulo principal) */
+  compact?: boolean;
+  /** Halo animado en borde — Chat AI */
+  chatAiGlow?: boolean;
+  /** Sustituye el fondo del icono (p. ej. gradiente marca Evo Send). */
+  iconShellClassName?: string;
 };
 
-function DockCard({
-  icon: Icon,
-  title,
-  description,
-  accentHex,
-  onClick,
-  rightSlot,
-  isActive,
-}: DockCardProps) {
-  const bg = rgbaFromHex(accentHex, 0.08);
-  const border = rgbaFromHex(accentHex, 0.15);
-  const borderActive = rgbaFromHex(accentHex, 0.28);
+const DockCard = forwardRef<HTMLButtonElement, DockCardProps>(function DockCard(
+  {
+    icon: Icon,
+    title,
+    description,
+    accentHex,
+    onClick,
+    rightSlot,
+    isActive,
+    compact,
+    chatAiGlow,
+    iconShellClassName,
+  }: DockCardProps,
+  ref
+) {
+  const bg = rgbaFromHex(accentHex, compact ? 0.06 : 0.08);
+  const border = rgbaFromHex(accentHex, compact ? 0.12 : 0.15);
+  const activeRing = rgbaFromHex('#ffd700', compact ? 0.55 : 0.62);
+  const fillActive = rgbaFromHex(accentHex, compact ? 0.11 : 0.15);
+  const useGradientShell = Boolean(iconShellClassName);
 
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
+      aria-current={isActive ? 'page' : undefined}
       className={cn(
-        "w-full rounded-xl p-3 text-left",
+        "w-full text-left",
         "transition-all duration-300 transition-bounce",
-        "flex items-center justify-between gap-3",
+        "flex items-center justify-between",
         "shadow-sm shadow-black/20 hover:shadow-md",
         "group hover-lift",
-        "min-h-[74px]",
+        compact
+          ? "rounded-lg px-2.5 py-2 gap-2 min-h-0"
+          : "rounded-xl p-3 gap-3 min-h-[74px]",
+        chatAiGlow && !isActive && "ai-dock-chat-card",
+        isActive && "ai-dock-card-current",
       )}
       style={{
-        background: bg,
-        border: `1px solid ${isActive ? borderActive : border}`,
+        background: isActive ? fillActive : bg,
+        border: isActive ? `2px solid ${activeRing}` : `1px solid ${border}`,
+        boxSizing: 'border-box',
       }}
     >
-      <div className="flex items-center gap-3 min-w-0">
+      <div className={cn("flex items-center min-w-0", compact ? "gap-2" : "gap-3")}>
         <div
-          className="h-9 w-9 rounded-lg flex items-center justify-center shadow-inner border border-white/10"
-          style={{ background: rgbaFromHex(accentHex, 0.22) }}
+          className={cn(
+            "rounded-lg flex items-center justify-center shrink-0",
+            !useGradientShell && "shadow-inner border border-white/10",
+            compact ? "h-7 w-7" : "h-9 w-9",
+            iconShellClassName,
+          )}
+          style={
+            useGradientShell
+              ? undefined
+              : { background: rgbaFromHex(accentHex, compact ? 0.14 : 0.22) }
+          }
         >
-          <Icon className="w-4 h-4 text-white" />
+          <Icon className={cn("text-white", compact ? "w-3.5 h-3.5" : "w-4 h-4")} />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white font-['Poppins'] truncate">
+          <p
+            className={cn(
+              "font-semibold text-white font-['Poppins'] truncate",
+              compact ? "text-xs" : "text-sm",
+            )}
+          >
             {title}
           </p>
-          <p className="text-[11px] text-white/60 leading-snug truncate">
+          <p
+            className={cn(
+              "leading-snug truncate",
+              compact ? "text-[10px] text-white/45" : "text-[11px] text-white/60",
+            )}
+          >
             {description}
           </p>
         </div>
@@ -122,11 +222,16 @@ function DockCard({
       {rightSlot ? (
         <div className="flex-shrink-0">{rightSlot}</div>
       ) : (
-        <ChevronRight className="w-4 h-4 text-white/40 group-hover:text-[#ffd700] transition-colors flex-shrink-0" />
+        <ChevronRight
+          className={cn(
+            "text-white/40 group-hover:text-[#ffd700] transition-colors flex-shrink-0",
+            compact ? "w-3 h-3" : "w-4 h-4",
+          )}
+        />
       )}
     </button>
   );
-}
+});
 
 export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps) {
   const [location, setLocation] = useLocation();
@@ -169,11 +274,11 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     // Vista directivo: Dashboard, Comunicación, Academia, Evo Drive
     if (user?.rol === "directivo") {
       return [
-        { icon: Home, label: "Dashboard", description: "Resumen y métricas del colegio", path: "/dashboard", roles: ["directivo"], accentHex: "#3B82F6" },
+        { icon: Home, label: "Dashboard", description: "Resumen y métricas del colegio", path: "/dashboard", roles: ["directivo"], accentHex: "#1e3cff" },
         { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["directivo"], action: "chat" },
-        { icon: Mail, label: "Comunicación", description: "Mensajes, anuncios y novedades", path: "/directivo/comunicacion", roles: ["directivo"], accentHex: "#00c8ff" },
+        { icon: Mail, label: "Comunicación", description: "Mensajes, anuncios y novedades", path: "/directivo/comunicacion", roles: ["directivo"], accentHex: "#1e3cff" },
         { icon: BookOpen, label: "Academia", description: "Cursos, planes y gestión académica", path: "/directivo/academia", roles: ["directivo"], accentHex: "#1e3cff" },
-        { icon: FolderOpen, label: "Evo Drive", description: "Archivos y documentos del colegio", path: "/evo-drive", roles: ["directivo"], accentHex: "#10B981" },
+        { icon: Cloud, label: "Evo Drive", description: "Acceder al drive de la plataforma", path: "/evo-drive", roles: ["directivo"], accentHex: "#00c8ff" },
       ];
     }
 
@@ -193,36 +298,71 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           "school_admin",
           "super_admin",
         ],
-        accentHex: "#3B82F6",
+        accentHex: "#1e3cff",
       },
       { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"], action: "chat" },
       { icon: GraduationCap, label: "Mi Aprendizaje", description: "Cursos, tareas, notas y materiales", path: "/mi-aprendizaje", roles: ["estudiante"], accentHex: "#1e3cff" },
-      { icon: Mail, label: "Comunicación", description: "Mensajes y avisos de clase", path: "/comunicacion", roles: ["estudiante"], accentHex: "#00c8ff" },
-      { 
-        icon: FolderOpen, 
-        label: "Evo Drive", 
-        description: "Tus archivos y recursos",
-        path: "/evo-drive", 
+      {
+        icon: Send,
+        label: "Evo Send",
+        description: "Chat con tus acudientes y con tus cursos",
+        path: "/evo-send?open=family",
+        roles: ["estudiante"],
+        accentHex: "#f43f5e",
+        iconShellClassName:
+          "bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30 border-0",
+      },
+      {
+        icon: Cloud,
+        label: "Evo Drive",
+        description: "Acceder al drive de la plataforma",
+        path: "/evo-drive",
         roles: [
           "estudiante",
           "profesor",
-          "padre",
           "administrador-general",
           "admin-general-colegio",
           "school_admin",
-          "super_admin"
+          "super_admin",
         ],
-        accentHex: "#10B981"
+        accentHex: "#00c8ff",
       },
       { icon: BookOpen, label: "Academia", description: "Planeación, cursos y recursos", path: "/profesor/academia", roles: ["profesor"], accentHex: "#1e3cff" },
-      { icon: Mail, label: "Comunicación", description: "Mensajes y comunicados", path: "/comunicacion", roles: ["profesor"], accentHex: "#00c8ff" },
-      { icon: FileCheck, label: "Permisos", description: "Solicitudes y autorizaciones", path: "/permisos", roles: ["padre"], accentHex: "#F59E0B" },
+      { icon: Mail, label: "Comunicación", description: "Mensajes y comunicados", path: "/comunicacion", roles: ["profesor"], accentHex: "#1e3cff" },
+      { icon: FileCheck, label: "Permisos", description: "Solicitudes y autorizaciones", path: "/permisos", roles: ["padre"], accentHex: "#1e3cff" },
+      {
+        icon: Send,
+        label: "Evo Send",
+        description: "Chat familiar con tu hijo o hija vinculado",
+        path: "/evo-send?open=family",
+        roles: ["padre"],
+        accentHex: "#f43f5e",
+        iconShellClassName:
+          "bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30 border-0",
+      },
     ];
 
     return baseItems.filter(item => item.roles.includes(user?.rol || ""));
   };
 
   const navigationItems = getNavigationItems();
+
+  /** Padre: Dashboard y Permisos arriba (mismo orden siempre). */
+  const padreDockPrimary = useMemo(() => {
+    if (user?.rol !== 'padre') return [];
+    const paths = ['/dashboard', '/permisos'] as const;
+    return paths
+      .map((path) => navigationItems.find((i) => i.path === path))
+      .filter((i): i is (typeof navigationItems)[number] => i != null);
+  }, [user?.rol, navigationItems]);
+
+  /** Padre: lista «Navegación» sin duplicar Dashboard/Permisos. */
+  const dockNavigationItems = useMemo(() => {
+    const noChat = navigationItems.filter((item) => item.action !== 'chat');
+    if (user?.rol !== 'padre') return noChat;
+    const skip = new Set(['/dashboard', '/permisos']);
+    return noChat.filter((i) => !skip.has(i.path));
+  }, [user?.rol, navigationItems]);
 
   const { data: notifData } = useQuery<{ unreadCount: number }>({
     queryKey: ['notifications-unread'],
@@ -234,17 +374,17 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   });
   const unreadNotifCount = notifData?.unreadCount ?? 0;
 
-  const { data: padreComSummary } = useQuery<{
+  const { data: dockComSummary } = useQuery<{
     academico?: { mensajesSinLeer?: number };
     institucional?: { mensajesSinLeer?: number; ultimoPublicado?: string | null };
   }>({
     queryKey: ["communication-summary"],
     queryFn: async () => apiRequest("GET", "/api/courses/communication-summary"),
-    enabled: !!user && user.rol === "padre",
+    enabled: !!user && (user.rol === "padre" || user.rol === "estudiante"),
     staleTime: 60 * 1000,
   });
-  const academiaUnread = padreComSummary?.academico?.mensajesSinLeer ?? 0;
-  const glcUnread = padreComSummary?.institucional?.mensajesSinLeer ?? 0;
+  const academiaUnread = dockComSummary?.academico?.mensajesSinLeer ?? 0;
+  const glcUnread = dockComSummary?.institucional?.mensajesSinLeer ?? 0;
 
   const handleNavClick = (path: string, action?: string) => {
     if (action === "chat") {
@@ -412,13 +552,24 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center justify-between p-4 border-b border-white/10 gap-2">
             {isExpanded && (
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] flex items-center justify-center">
+              <div className="flex items-start gap-2 min-w-0 flex-1">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 shadow-inner border border-white/10"
+                  style={{ background: rgbaFromHex('#1e3cff', 0.22) }}
+                >
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-sm font-medium text-white font-['Poppins']">AI Dock</span>
+                <div className="flex flex-col min-w-0 gap-0.5">
+                  <span className="text-sm font-medium text-white font-['Poppins'] leading-tight">AI Dock</span>
+                  <span
+                    className="text-[10px] font-medium text-white/85 font-['Poppins'] truncate pl-2 border-l-2 border-[#ffd700] ai-dock-header-loc"
+                    title={getDockLocationLabel(location)}
+                  >
+                    {getDockLocationLabel(location)}
+                  </span>
+                </div>
               </div>
             )}
             {isExpanded && (
@@ -454,7 +605,10 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                 <div className="flex-1 flex flex-col overflow-hidden">
                   <div className="p-4 border-b border-white/10 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] flex items-center justify-center">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center shadow-inner border border-white/10"
+                        style={{ background: rgbaFromHex('#1e3cff', 0.22) }}
+                      >
                         <MessageSquare className="w-4 h-4 text-white" />
                       </div>
                       <span className="text-sm font-medium text-white">Chat AI</span>
@@ -476,7 +630,10 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     {messages.length === 0 ? (
                       <div className="flex items-center justify-center h-full min-h-[200px]">
                         <div className="text-center">
-                          <div className="w-16 h-16 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8]">
+                          <div
+                            className="w-16 h-16 rounded-xl mx-auto mb-4 flex items-center justify-center shadow-inner border border-white/10"
+                            style={{ background: rgbaFromHex('#1e3cff', 0.22) }}
+                          >
                             <MessageSquare className="w-8 h-8 text-white" />
                           </div>
                           <h3 className="text-lg font-semibold text-white mb-2 font-['Poppins']">
@@ -501,7 +658,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                               className={cn(
                                 "max-w-[85%] px-4 py-2 rounded-xl text-sm",
                                 msg.emisor === 'user'
-                                  ? 'bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] text-white rounded-br-sm'
+                                  ? 'text-white rounded-br-sm border border-white/10 shadow-sm bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8]'
                                   : 'bg-white/10 text-white rounded-bl-sm border border-white/20'
                               )}
                             >
@@ -540,7 +697,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     <Button
                       onClick={handleSend}
                       disabled={loading || !input.trim()}
-                      className="h-10 w-10 rounded-lg flex-shrink-0 bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] hover:from-[#2563EB] hover:to-[#3B82F6]"
+                      className="h-10 w-10 rounded-lg flex-shrink-0 bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8] hover:from-[#2563EB] hover:to-[#1e3cff] border border-white/10"
                     >
                       {loading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
@@ -559,22 +716,102 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       icon={MessageSquare}
                       title="Chat AI"
                       description="Preguntas, tareas y automatizaciones"
-                      accentHex="#3B82F6"
+                      accentHex="#1e3cff"
+                      chatAiGlow
                       onClick={() => setIsChatOpen(true)}
                     />
                   )}
 
-                  {/* Acceso Rápido Button */}
+                  {/* Atajo: más compacto y tono neutro (no módulo) */}
                   <DockCard
+                    compact
                     icon={Command}
                     title="Acceso Rápido"
-                    description="Acciones y navegación por teclado"
-                    accentHex="#ffd700"
+                    description="Atajos de teclado"
+                    accentHex="#64748b"
                     onClick={handleOpenCommandPalette}
-                    rightSlot={<span className="text-xs text-white/50">⌘K</span>}
+                    rightSlot={<span className="text-[10px] text-white/45 tabular-nums">⌘K</span>}
                   />
 
-                  {user?.rol === "padre" && (
+                  {user?.rol === 'padre' &&
+                    padreDockPrimary.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = dockPathActive(location, item.path);
+                      return (
+                        <Tooltip key={item.path}>
+                          <TooltipTrigger asChild>
+                            <DockCard
+                              icon={Icon}
+                              title={item.label}
+                              description={
+                                'description' in item && typeof item.description === 'string'
+                                  ? item.description
+                                  : 'Acceso directo'
+                              }
+                              accentHex={
+                                'accentHex' in item && typeof item.accentHex === 'string'
+                                  ? item.accentHex
+                                  : '#1e3cff'
+                              }
+                              isActive={isActive}
+                              onClick={() => handleNavClick(item.path, item.action)}
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <p>{item.label}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+
+                  {user?.rol === 'estudiante' && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
+                        Institución
+                      </p>
+                      <DockCard
+                        icon={Building2}
+                        title="GLC"
+                        description="Circulares y comunicados institucionales"
+                        accentHex="#1e3cff"
+                        isActive={dockPathActive(location, '/comunidad/noticias')}
+                        onClick={() => setLocation('/comunidad/noticias')}
+                        rightSlot={
+                          glcUnread > 0 ? (
+                            <span
+                              className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#fde047]"
+                              style={{
+                                background: rgbaFromHex('#ffd700', 0.16),
+                                border: `1px solid ${rgbaFromHex('#ffd700', 0.35)}`,
+                              }}
+                            >
+                              {glcUnread > 99 ? '99+' : glcUnread}
+                            </span>
+                          ) : (
+                            <Megaphone className="w-4 h-4 text-white/35 group-hover:text-[#ffd700] transition-colors" />
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {user?.rol === 'padre' && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
+                        Aprendizaje
+                      </p>
+                      <DockCard
+                        icon={BookOpen}
+                        title="Aprendizaje"
+                        description="Cursos, notas, tareas, materiales, horario y calendario"
+                        accentHex="#1e3cff"
+                        isActive={isParentAprendizajeSection(location)}
+                        onClick={() => setLocation('/parent/aprendizaje')}
+                      />
+                    </div>
+                  )}
+
+                  {user?.rol === 'padre' && (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
                         Comunicación
@@ -585,17 +822,18 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                           title="Academia"
                           description="Docentes, tareas y avisos del aula"
                           accentHex="#1e3cff"
-                          onClick={() => setLocation("/comunicacion/academico")}
+                          isActive={dockPathActive(location, '/comunicacion/academico')}
+                          onClick={() => setLocation('/comunicacion/academico')}
                           rightSlot={
                             academiaUnread > 0 ? (
                               <span
                                 className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#7dd3fc]"
                                 style={{
-                                  background: rgbaFromHex("#00c8ff", 0.18),
-                                  border: `1px solid ${rgbaFromHex("#00c8ff", 0.35)}`,
+                                  background: rgbaFromHex('#00c8ff', 0.18),
+                                  border: `1px solid ${rgbaFromHex('#00c8ff', 0.35)}`,
                                 }}
                               >
-                                {academiaUnread > 99 ? "99+" : academiaUnread}
+                                {academiaUnread > 99 ? '99+' : academiaUnread}
                               </span>
                             ) : (
                               <Inbox className="w-4 h-4 text-white/35 group-hover:text-[#00c8ff] transition-colors" />
@@ -607,18 +845,19 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                           icon={Building2}
                           title="GLC"
                           description="Circulares y comunicados institucionales"
-                          accentHex="#ffd700"
-                          onClick={() => setLocation("/comunidad/noticias")}
+                          accentHex="#1e3cff"
+                          isActive={dockPathActive(location, '/comunidad/noticias')}
+                          onClick={() => setLocation('/comunidad/noticias')}
                           rightSlot={
                             glcUnread > 0 ? (
                               <span
                                 className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#fde047]"
                                 style={{
-                                  background: rgbaFromHex("#ffd700", 0.16),
-                                  border: `1px solid ${rgbaFromHex("#ffd700", 0.35)}`,
+                                  background: rgbaFromHex('#ffd700', 0.16),
+                                  border: `1px solid ${rgbaFromHex('#ffd700', 0.35)}`,
                                 }}
                               >
-                                {glcUnread > 99 ? "99+" : glcUnread}
+                                {glcUnread > 99 ? '99+' : glcUnread}
                               </span>
                             ) : (
                               <Megaphone className="w-4 h-4 text-white/35 group-hover:text-[#ffd700] transition-colors" />
@@ -629,49 +868,47 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     </div>
                   )}
 
-                  {user?.rol === "padre" && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
-                        Aprendizaje
-                      </p>
-                      <DockCard
-                        icon={BookOpen}
-                        title="Aprendizaje"
-                        description="Cursos, notas, tareas, materiales, horario y calendario"
-                        accentHex="#1e3cff"
-                        onClick={() => setLocation("/parent/aprendizaje")}
-                      />
-                    </div>
-                  )}
-
                   {/* Navigation Items */}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
                       Navegación
                     </p>
-                    {navigationItems
-                      .filter(item => item.action !== "chat")
-                      .map((item) => {
-                        const Icon = item.icon;
-                        const isActive = location === item.path;
-                        return (
-                          <Tooltip key={item.path}>
-                            <TooltipTrigger asChild>
-                              <DockCard
-                                icon={Icon}
-                                title={item.label}
-                                description={("description" in item && typeof item.description === "string") ? item.description : "Acceso directo"}
-                                accentHex={("accentHex" in item && typeof item.accentHex === "string") ? item.accentHex : "#3B82F6"}
-                                isActive={isActive}
-                                onClick={() => handleNavClick(item.path, item.action)}
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent side="left">
-                              <p>{item.label}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
+                    {dockNavigationItems.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = dockPathActive(location, item.path);
+                      return (
+                        <Tooltip key={item.path}>
+                          <TooltipTrigger asChild>
+                            <DockCard
+                              icon={Icon}
+                              title={item.label}
+                              description={
+                                'description' in item && typeof item.description === 'string'
+                                  ? item.description
+                                  : 'Acceso directo'
+                              }
+                              accentHex={
+                                'accentHex' in item && typeof item.accentHex === 'string'
+                                  ? item.accentHex
+                                  : '#1e3cff'
+                              }
+                              isActive={isActive}
+                              onClick={() => handleNavClick(item.path, item.action)}
+                              iconShellClassName={
+                                'iconShellClassName' in item &&
+                                typeof (item as { iconShellClassName?: string }).iconShellClassName ===
+                                  'string'
+                                  ? (item as { iconShellClassName: string }).iconShellClassName
+                                  : undefined
+                              }
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent side="left">
+                            <p>{item.label}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
                   </div>
 
                   {/* User Info & Logout */}
@@ -714,7 +951,10 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     )}
                     aria-label="Expandir AI Dock"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#3B82F6] to-[#1D4ED8] flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner border border-white/10"
+                      style={{ background: rgbaFromHex('#1e3cff', 0.22) }}
+                    >
                       <Sparkles className="w-5 h-5 text-white" />
                     </div>
                   </button>
@@ -788,7 +1028,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                   >
                     <Bell className="w-5 h-5 group-hover:text-[#ffd700] transition-colors" />
                     {unreadNotifCount > 0 && (
-                      <span className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#3B82F6] px-1 text-[10px] font-medium text-white">
+                      <span className="absolute top-1 right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#1e3cff] px-1 text-[10px] font-medium text-white">
                         {unreadNotifCount > 99 ? "99+" : unreadNotifCount}
                       </span>
                     )}

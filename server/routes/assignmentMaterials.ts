@@ -20,6 +20,12 @@ function toMaterialApi(row: { id: string; assignment_id: string; type: string; u
 
 router.get('/', protect, async (req: AuthRequest, res) => {
   try {
+    if (req.user?.rol === 'padre') {
+      return res.status(403).json({
+        message: 'Los materiales adjuntos de la tarea no están disponibles para acudientes por privacidad del estudiante.',
+      });
+    }
+
     const assignmentId = req.query.assignmentId as string;
     if (!assignmentId) return res.status(400).json({ message: 'assignmentId es requerido.' });
 
@@ -47,6 +53,10 @@ router.get('/', protect, async (req: AuthRequest, res) => {
 
 router.post('/', protect, async (req: AuthRequest, res) => {
   try {
+    if (req.user?.rol === 'padre') {
+      return res.status(403).json({ message: 'No autorizado.' });
+    }
+
     const { assignmentId, type, url, fileName, mimeType } = req.body;
     if (!assignmentId || !type || !url) {
       return res.status(400).json({ message: 'assignmentId, type y url son requeridos.' });

@@ -952,3 +952,52 @@ input[type="search"]::-webkit-search-cancel-button {
 .grades-toolbar-btn-analytics {
   animation: grades-analytics-border-glow 2.5s ease-in-out infinite;
 }
+
+/* AI Dock: Chat AI — pulso suave en borde / halo */
+@keyframes ai-dock-chat-border-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(59, 130, 246, 0.35),
+      0 0 14px rgba(0, 200, 255, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(0, 200, 255, 0.55),
+      0 0 26px rgba(30, 60, 255, 0.35);
+  }
+}
+.ai-dock-chat-card {
+  animation: ai-dock-chat-border-pulse 2.6s ease-in-out infinite;
+}
+
+/* AI Dock: ítem de navegación que coincide con la ruta actual */
+@keyframes ai-dock-current-indicator {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 215, 0, 0.45),
+      0 0 16px rgba(255, 215, 0, 0.14);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(0, 200, 255, 0.5),
+      0 0 22px rgba(0, 200, 255, 0.22);
+  }
+}
+.ai-dock-card-current {
+  animation: ai-dock-current-indicator 2.3s ease-in-out infinite;
+}
+
+@keyframes ai-dock-header-loc-border {
+  0%,
+  100% {
+    border-left-color: rgba(255, 215, 0, 0.9);
+  }
+  50% {
+    border-left-color: rgba(0, 200, 255, 0.9);
+  }
+}
+.ai-dock-header-loc {
+  animation: ai-dock-header-loc-border 2.8s ease-in-out infinite;
+}

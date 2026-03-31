@@ -125,20 +125,41 @@ export async function ensureAssignmentsCategoryWeightPctColumn(): Promise<void> 
 }
 
 let assignmentsAcademicTermEnsured = false;
+let assignmentsAcademicTermEnsurePromise: Promise<void> | null = null;
 
 /** Trimestre académico (1–3) para filtrar notas por período. */
 export async function ensureAssignmentsAcademicTermColumn(): Promise<void> {
   if (assignmentsAcademicTermEnsured) return;
-  await queryPg(
-    `ALTER TABLE assignments ADD COLUMN IF NOT EXISTS academic_term INTEGER NOT NULL DEFAULT 1`
-  );
-  await queryPg(
-    `ALTER TABLE assignments DROP CONSTRAINT IF EXISTS assignments_academic_term_check`
-  );
-  await queryPg(
-    `ALTER TABLE assignments ADD CONSTRAINT assignments_academic_term_check CHECK (academic_term >= 1 AND academic_term <= 3)`
-  );
-  assignmentsAcademicTermEnsured = true;
+  if (assignmentsAcademicTermEnsurePromise) {
+    await assignmentsAcademicTermEnsurePromise;
+    return;
+  }
+
+  assignmentsAcademicTermEnsurePromise = (async () => {
+    await queryPg(
+      `ALTER TABLE assignments ADD COLUMN IF NOT EXISTS academic_term INTEGER NOT NULL DEFAULT 1`
+    );
+    await queryPg(
+      `ALTER TABLE assignments DROP CONSTRAINT IF EXISTS assignments_academic_term_check`
+    );
+    await queryPg(`
+      DO $$
+      BEGIN
+        ALTER TABLE assignments
+          ADD CONSTRAINT assignments_academic_term_check
+          CHECK (academic_term >= 1 AND academic_term <= 3);
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `);
+    assignmentsAcademicTermEnsured = true;
+  })();
+
+  try {
+    await assignmentsAcademicTermEnsurePromise;
+  } finally {
+    assignmentsAcademicTermEnsurePromise = null;
+  }
 }
 
 let auditLogIpColumnsEnsured = false;

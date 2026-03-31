@@ -1,18 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
-import { useQueries } from '@tanstack/react-query';
-import { 
-  ArrowLeft,
-  BookOpen, 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
-  CheckCircle2,
+import {
+  BookOpen,
+  TrendingUp,
+  TrendingDown,
+  Minus,
   AlertCircle,
-  XCircle,
   MessageSquare,
-  BarChart3
+  BarChart3,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -200,6 +196,13 @@ function computeEvolucion(
   return out;
 }
 
+function formatNotaFecha(fecha: string): string {
+  if (!fecha?.trim()) return '—';
+  const d = new Date(fecha);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
 function computeWeightedPromedioAndUltima(
   materia: MateriaConNotas,
   nestedLogros: LogroBloqueApi[] | undefined
@@ -237,17 +240,25 @@ export default function StudentNotesPage() {
   const [, setLocation] = useLocation();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
 
-  const isPadre = user?.rol === 'padre';
-  const isEstudiante = user?.rol === 'estudiante';
+  const role = user?.rol;
+  const isPadre = role === 'padre';
+  const isEstudiante = role === 'estudiante';
   const canAccessNotes = isEstudiante || isPadre;
 
-  const { data: hijos = [] } = useQuery<{ _id: string; nombre: string }[]>({
+  const { data: hijosRaw, isLoading: loadingHijos } = useQuery<{ _id: string; nombre: string }[]>({
     queryKey: ['/api/users/me/hijos'],
     queryFn: () => apiRequest('GET', '/api/users/me/hijos'),
     enabled: !!user?.id && isPadre,
   });
+  const hijos = Array.isArray(hijosRaw) ? hijosRaw : [];
   const primerHijoId = hijos[0]?._id;
   const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
+  const notasListPath = isPadre ? '/parent/notas' : '/mi-aprendizaje/notas';
+  const analyticsHref = (groupSubjectId: string | null | undefined, subjectIdFallback: string) => {
+    const cid = groupSubjectId || subjectIdFallback;
+    if (isPadre && primerHijoId) return `/parent/analytics/${primerHijoId}/${cid}`;
+    return `/student/course/${cid}/analytics`;
+  };
 
   const { data: notesDataEstudiante, isLoading: loadingEstudiante, isError: errorEstudiante, refetch: refetchEstudiante } = useQuery<{ materias: MateriaConNotas[]; total: number }>({
     queryKey: ['studentNotes', user?.id],
@@ -273,30 +284,6 @@ export default function StudentNotesPage() {
   const isError = isEstudiante ? errorEstudiante : errorHijo;
   const refetch = isEstudiante ? refetchEstudiante : refetchHijo;
 
-  // Si no hay usuario o el rol no puede ver notas, mostrar carga o mensaje (evita pantalla en blanco)
-  if (!user) {
-    return (
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
-        <div className="max-w-7xl mx-auto w-full">
-          <div className="mt-4 text-white/80">Cargando...</div>
-        </div>
-      </div>
-    );
-  }
-  if (!canAccessNotes) {
-    return (
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
-        <div className="max-w-7xl mx-auto w-full">
-          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
-          <div className="mt-4">
-            <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
-            <p className="text-white/60">Solo estudiantes y padres pueden ver esta página.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   type CourseItem = { _id: string; nombre: string };
   const { data: coursesEstudiante, isLoading: loadingCoursesEstudiante } = useQuery<CourseItem[]>({
     queryKey: ['/api/users/me/courses'],
@@ -313,34 +300,11 @@ export default function StudentNotesPage() {
   const coursesRaw = isEstudiante ? coursesEstudiante : coursesHijo;
   const allCourses = Array.isArray(coursesRaw) ? coursesRaw : [];
   const loadingCourses = isEstudiante ? loadingCoursesEstudiante : (!!primerHijoId && loadingCoursesHijo);
-  // Para estudiante no bloquear en courses: mostrar contenido en cuanto carguen las notas (evita pantalla azul infinita)
-  const isLoading = isEstudiante ? isLoadingNotes : (isLoadingNotes || loadingCourses);
-
-  const groupSubjectIds = useMemo(
-    () => [...new Set((notesData?.materias ?? []).map((m) => m.groupSubjectId).filter(Boolean))] as string[],
-    [notesData?.materias]
-  );
-
-  const logrosQueries = useQueries({
-    queries: groupSubjectIds.map((gsId) => ({
-      queryKey: ['/api/logros-calificacion', gsId] as const,
-      queryFn: () =>
-        apiRequest('GET', `/api/logros-calificacion?courseId=${encodeURIComponent(gsId)}`) as Promise<LogrosApiResponse>,
-      enabled: !!gsId,
-    })),
-  });
-
-  const logrosByGsId = useMemo(() => {
-    const map: Record<string, GradingPack> = {};
-    groupSubjectIds.forEach((id, i) => {
-      const d = logrosQueries[i]?.data;
-      if (!d) return;
-      const plano = d.indicadoresPlano ?? [];
-      const nested = d.logros ?? [];
-      if (plano.length || nested.length) map[id] = { nested, plano };
-    });
-    return map;
-  }, [groupSubjectIds, logrosQueries]);
+  /* Estudiante: no bloquear en courses (solo notas). Padre: incluir loadingHijos para no mostrar
+     "vincula estudiante" mientras el listado de hijos aún carga. */
+  const isLoading = isEstudiante
+    ? isLoadingNotes
+    : loadingHijos || isLoadingNotes || loadingCourses;
 
   // Todas las materias del estudiante: de allCourses, con notas cuando existan (si no, N/A). Si courses aún no cargó, usar solo materias con notas.
   const subjects: SubjectGrade[] = useMemo(() => {
@@ -352,8 +316,11 @@ export default function StudentNotesPage() {
       const color = SUBJECT_COLORS[index % SUBJECT_COLORS.length];
       const m = byId.get(course._id);
       if (m) {
-        const pack = m.groupSubjectId ? logrosByGsId[m.groupSubjectId] : undefined;
-        const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, pack?.nested);
+        // Importante: NO precargar logros para todas las materias aquí.
+        // Eso dispara N requests (/api/logros-calificacion) y hace que la página sea lenta e inestable.
+        // Para la lista general y el gráfico, calculamos con las notas disponibles; los pesos (logros)
+        // se consultan on-demand al abrir el detalle de una materia.
+        const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, undefined);
         const estado: SubjectGrade['estado'] =
           promedioFinal == null ? 'sin_notas' : promedioFinal >= 65 ? 'bueno' : 'bajo';
         return {
@@ -378,7 +345,7 @@ export default function StudentNotesPage() {
         colorAcento: color,
       };
     });
-  }, [allCourses, notesData?.materias, logrosByGsId]);
+  }, [allCourses, notesData?.materias]);
 
   const selectedSubjectData = selectedSubject
     ? notesData?.materias.find(m => m._id === selectedSubject)
@@ -393,9 +360,8 @@ export default function StudentNotesPage() {
   });
 
   const subjectDetail: SubjectDetail | null = selectedSubjectData ? (() => {
-    const pack: GradingPack | undefined = selectedSubjectData.groupSubjectId
-      ? logrosByGsId[selectedSubjectData.groupSubjectId]
-      : logrosData
+    const pack: GradingPack | undefined =
+      selectedSubjectData.groupSubjectId && logrosData
         ? { nested: logrosData.logros ?? [], plano: logrosData.indicadoresPlano ?? [] }
         : undefined;
     const { promedioFinal: computedFinal, ultimaNota: computedUltima } = computeWeightedPromedioAndUltima(
@@ -502,78 +468,7 @@ export default function StudentNotesPage() {
     ? subjectsWithGrades.reduce((acc, s) => acc + (s.promedio ?? 0), 0) / subjectsWithGrades.length
     : 0;
 
-  if (isPadre && !primerHijoId && !isLoading) {
-    return (
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
-        <div className="max-w-7xl mx-auto w-full">
-          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
-          <div className="mt-4">
-            <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
-            <p className="text-white/60">Vincula un estudiante en tu perfil para ver sus notas.</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
-        <div className="max-w-7xl mx-auto w-full">
-          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
-          <div className="mt-4 text-white/80">Cargando notas...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
-        <div className="max-w-7xl mx-auto w-full">
-          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-4">
-            <CardContent className="p-8 text-center">
-              <p className="text-red-300 mb-4">Error al cargar las notas. Revisa tu conexión.</p>
-              <Button onClick={() => refetch()} className="bg-[#00c8ff] hover:bg-[#1e3cff]">Reintentar</Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // Función para obtener el color del estado
-  const getEstadoColor = (estado: string) => {
-    switch (estado) {
-      case 'excelente':
-        return 'bg-green-500/20 text-green-400 border-green-500/40';
-      case 'bueno':
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/40';
-      case 'regular':
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40';
-      case 'bajo':
-        return 'bg-red-500/20 text-red-400 border-red-500/40';
-      case 'sin_notas':
-        return 'bg-white/10 text-white/50 border-white/20';
-      default:
-        return 'bg-white/10 text-white/70 border-white/20';
-    }
-  };
-
-  // Función para obtener el icono de tendencia
-  const getTendenciaIcon = (tendencia: string) => {
-    switch (tendencia) {
-      case 'up':
-        return <TrendingUp className="w-4 h-4 text-green-400" />;
-      case 'down':
-        return <TrendingDown className="w-4 h-4 text-red-400" />;
-      default:
-        return <Minus className="w-4 h-4 text-yellow-400" />;
-    }
-  };
-
-  // Evolución por materia y datos para gráfico de varias líneas (una por materia con notas)
+  // Evolución por materia y datos para gráfico (hook antes de cualquier return)
   const { chartData, chartConfig, subjectsWithEvolucion } = useMemo(() => {
     const withGrades = subjects.filter((s) => s.promedio !== null);
     const materiasConNotas = notesData?.materias ?? [];
@@ -584,12 +479,10 @@ export default function StudentNotesPage() {
     for (const s of withGrades) {
       const m = byId.get(s._id);
       if (!m) continue;
-      const pack = s.groupSubjectId ? logrosByGsId[s.groupSubjectId] : undefined;
-      const ev = computeEvolucion(m, pack?.nested);
+      const ev = computeEvolucion(m, undefined);
       evolucionPorMateria[s._id] = ev;
       for (const p of ev) allPoints.push({ date: p.date, dateStr: p.dateStr });
     }
-    // Ordenar fechas y quedarnos con una fila por fecha (única por dateStr para mostrar)
     allPoints.sort((a, b) => a.date.getTime() - b.date.getTime());
     const seen = new Set<string>();
     const sortedRows: { date: Date; dateStr: string }[] = [];
@@ -624,11 +517,105 @@ export default function StudentNotesPage() {
       chartConfig[s._id] = { label: s.nombre, color: s.colorAcento || '#00c8ff' };
     }
     return { chartData, chartConfig, subjectsWithEvolucion: withGrades };
-  }, [subjects, notesData?.materias, logrosByGsId]);
+  }, [subjects, notesData?.materias]);
+
+  const getEstadoColor = (estado: string) => {
+    switch (estado) {
+      case 'excelente':
+        return 'bg-green-500/20 text-green-400 border-green-500/40';
+      case 'bueno':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/40';
+      case 'regular':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40';
+      case 'bajo':
+        return 'bg-red-500/20 text-red-400 border-red-500/40';
+      case 'sin_notas':
+        return 'bg-white/10 text-white/50 border-white/20';
+      default:
+        return 'bg-white/10 text-white/70 border-white/20';
+    }
+  };
+
+  const getTendenciaIcon = (tendencia: string) => {
+    switch (tendencia) {
+      case 'up':
+        return <TrendingUp className="w-4 h-4 text-green-400" />;
+      case 'down':
+        return <TrendingDown className="w-4 h-4 text-red-400" />;
+      default:
+        return <Minus className="w-4 h-4 text-yellow-400" />;
+    }
+  };
+
+  // Salidas tempranas solo después de todos los hooks
+  if (isLoading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
+          <div className="mt-4 text-white/80">Cargando notas...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPadre && !primerHijoId) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
+          <div className="mt-4">
+            <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
+            <p className="text-white/60">Vincula un estudiante en tu perfil para ver sus notas.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-4">
+            <CardContent className="p-8 text-center">
+              <p className="text-red-300 mb-4">Error al cargar las notas. Revisa tu conexión.</p>
+              <Button onClick={() => refetch()} className="bg-[#00c8ff] hover:bg-[#1e3cff]">Reintentar</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="mt-4 text-white/80">Cargando...</div>
+        </div>
+      </div>
+    );
+  }
+  if (!canAccessNotes) {
+    return (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10">
+        <div className="max-w-7xl mx-auto w-full">
+          <Breadcrumb items={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Notas' }]} />
+          <div className="mt-4">
+            <h1 className="text-2xl font-bold text-white mb-2">Notas</h1>
+            <p className="text-white/60">Solo estudiantes y padres pueden ver esta página.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Vista principal (lista de materias)
   if (!selectedSubject) {
-    if (allCourses.length === 0 && !isLoading) {
+    // Usar `subjects` (notas + cursos unificados): si cursos API viene vacío pero hay materias en notas, igual hay filas (evita pantalla vacía errónea para padres).
+    if (subjects.length === 0 && !isLoading) {
       const pageTitle = isPadre ? `Notas de ${nombreHijo}` : 'Mis Notas';
       const pageSubtitle = isPadre
         ? `Revisa el rendimiento académico de ${nombreHijo} por materia`
@@ -834,8 +821,7 @@ export default function StudentNotesPage() {
                     className="w-full border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10 hover:border-[#3B82F6]"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const courseId = subject.groupSubjectId ?? subject._id;
-                      setLocation(`/course/${courseId}/analytics`);
+                      setLocation(analyticsHref(subject.groupSubjectId, subject._id));
                     }}
                   >
                     <BarChart3 className="w-4 h-4 mr-2" />
@@ -860,7 +846,7 @@ export default function StudentNotesPage() {
             <Breadcrumb
               items={[
                 { label: 'Dashboard', href: '/dashboard' },
-                { label: 'Notas', href: '/mi-aprendizaje/notas' },
+                { label: 'Notas', href: notasListPath },
                 { label: subjectCard?.nombre ?? 'Materia' },
               ]}
             />
@@ -884,7 +870,9 @@ export default function StudentNotesPage() {
               <Button
                 variant="outline"
                 className="border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10"
-                onClick={() => setLocation(`/course/${selectedSubject}/analytics`)}
+                onClick={() =>
+                  setLocation(analyticsHref(subjectCard?.groupSubjectId ?? null, selectedSubject))
+                }
               >
                 <BarChart3 className="w-4 h-4 mr-2" />
                 Vista analítica
@@ -912,7 +900,7 @@ export default function StudentNotesPage() {
             <Breadcrumb
               items={[
                 { label: 'Dashboard', href: '/dashboard' },
-                { label: 'Notas', href: '/mi-aprendizaje/notas' },
+                { label: 'Notas', href: notasListPath },
                 { label: subjectDetail.nombre },
               ]}
             />
@@ -1023,13 +1011,7 @@ export default function StudentNotesPage() {
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <h4 className="font-semibold text-white mb-1">{nota.actividad}</h4>
-                            <p className="text-sm text-white/60">
-                              {new Date(nota.fecha).toLocaleDateString('es-CO', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                              })}
-                            </p>
+                            <p className="text-sm text-white/60">{formatNotaFecha(nota.fecha)}</p>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-2xl font-bold text-white">

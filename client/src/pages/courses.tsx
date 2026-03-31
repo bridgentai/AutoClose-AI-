@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { ArrowRight, AlertCircle, BookOpen, Users, ClipboardList } from 'lucide-react';
+import { ArrowRight, AlertCircle, BookOpen, Users } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -106,7 +106,6 @@ let endpoint = '';
 
 switch (userRole) {
 case 'estudiante':
-case 'padre':
 endpoint = '/api/users/me/courses'; 
 break;
 case 'profesor':
@@ -148,14 +147,29 @@ const fetchStudentsByGroup = async (groupId: string): Promise<number> => {
 
 export default function CoursesPage() {
 const { user } = useAuth();
-const [, setLocation] = useLocation();
+const [location, setLocation] = useLocation();
 const userRole = user?.rol;
+const isPadreContext = userRole === 'padre' && location.startsWith('/parent');
 
-// Query para Estudiante, Padre, Directivo (devuelve Course[])
+const { data: hijosPadre = [] } = useQuery<{ _id: string }[]>({
+  queryKey: ['/api/users/me/hijos'],
+  queryFn: () => apiRequest<{ _id: string }[]>('GET', '/api/users/me/hijos'),
+  enabled: userRole === 'padre',
+});
+const primerHijoIdPadre = hijosPadre[0]?._id;
+
+const { data: coursesPadre = [], isLoading: loadingPadreCourses, error: errorPadreCourses, refetch: refetchPadreCourses } = useQuery<Course[]>({
+  queryKey: ['courses', 'padre', primerHijoIdPadre],
+  queryFn: () => apiRequest<Course[]>('GET', `/api/student/hijo/${primerHijoIdPadre}/courses`),
+  enabled: userRole === 'padre' && !!primerHijoIdPadre,
+  staleTime: 0,
+});
+
+// Query para Estudiante, Directivo (padre usa cursos del hijo arriba)
 const { data: courses = [], isLoading: isLoadingCourses, error: errorCourses, refetch: refetchCourses } = useQuery<Course[]>({
   queryKey: ['courses', userRole],
   queryFn: () => fetchCoursesByRole(userRole),
-  enabled: !!userRole && userRole !== 'profesor',
+  enabled: !!userRole && userRole !== 'profesor' && userRole !== 'padre',
   staleTime: 0,
 });
 
@@ -170,11 +184,13 @@ const { data: professorGroups = [], isLoading: isLoadingGroups, error: errorGrou
 const refetchAll = () => {
   refetchCourses();
   refetchProfessorGroups();
+  if (userRole === 'padre') void refetchPadreCourses();
 };
 
-const isLoading = isLoadingCourses || isLoadingGroups;
-const error = errorCourses || errorGroups;
-const coursesToRender = userRole === 'profesor' ? professorGroups : courses;
+const isLoading =
+  isLoadingCourses || isLoadingGroups || (userRole === 'padre' && loadingPadreCourses);
+const error = errorCourses || errorGroups || (userRole === 'padre' ? errorPadreCourses : null);
+const coursesToRender = userRole === 'profesor' ? professorGroups : userRole === 'padre' ? coursesPadre : courses;
 
 // Generar colores únicos para cada grupo (garantiza consistencia) - al nivel del componente
 const groupColorsMap = useMemo(() => {
@@ -319,7 +335,7 @@ const renderStudentCard = (course: Course) => {
   return (
     <Card
       key={course._id}
-      className="relative flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:bg-white/[0.07] overflow-hidden"
+      className="relative flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:bg-white/[0.07] overflow-hidden rounded-2xl"
       style={{
         boxShadow: '0 0 0 0px transparent',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -410,63 +426,95 @@ return (
 );
 };
 
-// VISTA PARA PADRE (SIN CAMBIOS Mayores)
+// VISTA PARA PADRE — mismas materias que el hijo; tarjetas = mismo diseño que estudiante + metadatos y “Ver Progreso”
 const renderParentView = () => {
-return (
-<>
-<NavBackButton to="/dashboard" label="Dashboard" />
-<h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Materias de tus Hijos</h2>
-<p className="text-white/60 mb-8">
-Revisa las materias y el progreso de los estudiantes a tu cargo.
-</p>
+  const parentCourses = coursesToRender as Course[];
+  const backTo = isPadreContext ? '/parent/aprendizaje' : '/dashboard';
+  const backLabel = isPadreContext ? 'Aprendizaje del hijo/a' : 'Dashboard';
+  return (
+    <>
+      <NavBackButton to={backTo} label={backLabel} />
+      <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins'] mt-4">Materias de tu hijo/a</h2>
+      <p className="text-white/60 mb-8 max-w-3xl leading-relaxed">
+        Misma lista que ve el estudiante. Solo visualización: abre el detalle para revisar tareas y materiales, sin entregar ni editar.
+      </p>
 
-<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-{courses.map((course, index) => {
-const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No Asignado';
-const displayColor = course.colorAcento || generateColorFromId(course._id);
-const showEmoji = course.icono && course.icono.trim().length > 0;
-
-return (
-<Card
-key={course._id}
-className="flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md hover-elevate cursor-pointer group transition-all duration-300 hover:bg-white/[0.07]"
-onClick={() => handleCourseClick(course._id)}
->
-<CardHeader className="flex-1 flex flex-col p-6 pb-2">
-<div className="flex items-center justify-between mb-4 min-h-[56px]">
-<div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: displayColor }}>
-{showEmoji ? (
-  <span className="text-2xl leading-none" aria-hidden>{course.icono!.trim()}</span>
-) : (
-  <ClipboardList className="w-7 h-7 text-white" />
-)}
-</div>
-<ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
-</div>
-
-<CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">{course.nombre}</CardTitle>
-<CardDescription className="text-white/60 line-clamp-2 flex-1">
-Materia en el grupo: {course.cursos?.join(', ') || 'N/A'}
-</CardDescription>
-<p className="text-sm text-white/50 mt-2 truncate">Profesor: {primaryProfessor}</p>
-</CardHeader>
-
-<CardContent className="p-6 pt-2 flex flex-col gap-2">
-<Button
-variant="outline"
-size="sm"
-className="w-full rounded-[10px] border-white/10 text-[#E2E8F0] hover:bg-white/5"
-onClick={e => { e.stopPropagation(); handleCourseClick(course._id); }}
->
-Ver Progreso
-</Button>
-</CardContent>
-</Card>
-);
-})}
-</div>
-</>
-);
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {parentCourses.map((course) => {
+          const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No asignado';
+          const displayColor = course.colorAcento || generateColorFromId(course._id);
+          const showEmoji = course.icono && course.icono.trim().length > 0;
+          return (
+            <Card
+              key={course._id}
+              className="relative flex flex-col min-h-[220px] bg-white/5 border border-white/10 backdrop-blur-md cursor-pointer group transition-all duration-300 hover:scale-[1.02] hover:bg-white/[0.07] overflow-hidden rounded-2xl"
+              style={{
+                boxShadow: '0 0 0 0px transparent',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = `0 8px 32px -4px ${displayColor}40, 0 0 0 1px ${displayColor}30`;
+                e.currentTarget.style.borderColor = `${displayColor}50`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 0 0px transparent';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+              }}
+              onClick={() => handleCourseClick(course._id)}
+            >
+              <div
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                style={{
+                  background: `radial-gradient(circle at 50% 0%, ${displayColor}08 0%, transparent 70%)`,
+                }}
+              />
+              <CardHeader className="relative flex-1 flex flex-col p-6 pb-2">
+                <div className="flex items-center justify-between mb-4 min-h-[56px]">
+                  <div
+                    className="relative w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:scale-105"
+                    style={{
+                      backgroundColor: `${displayColor}20`,
+                      borderColor: displayColor,
+                      borderWidth: '2px',
+                      boxShadow: `0 0 16px ${displayColor}30`,
+                    }}
+                  >
+                    {showEmoji ? (
+                      <span className="text-2xl leading-none" aria-hidden>
+                        {course.icono!.trim()}
+                      </span>
+                    ) : (
+                      <BookOpen className="w-7 h-7" style={{ color: displayColor }} />
+                    )}
+                  </div>
+                  <ArrowRight className="w-5 h-5 text-white/40 group-hover:text-white/90 group-hover:translate-x-1 transition-all duration-300 flex-shrink-0" />
+                </div>
+                <CardTitle className="text-white text-2xl font-bold mb-2 font-['Poppins'] truncate">
+                  {course.nombre}
+                </CardTitle>
+                <p className="text-sm text-white/50 mt-2 truncate">
+                  <span className="text-white/60">Profesor:</span> {primaryProfessor}
+                </p>
+              </CardHeader>
+              <CardContent className="relative p-6 pt-2 flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full rounded-xl border-white/15 text-[#E2E8F0] hover:bg-white/10 hover:border-white/25"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCourseClick(course._id);
+                  }}
+                >
+                  Ver Progreso
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </>
+  );
 };
 
 // =========================================================
@@ -523,7 +571,10 @@ if (coursesToRender.length === 0) {
   } else if (userRole === 'directivo') {
     emptyMessage = 'No hay materias registradas en la plataforma. Crea una nueva materia para empezar.';
   } else if (userRole === 'padre') {
-    emptyMessage = 'No se encontraron materias para tus hijos.';
+    emptyMessage = primerHijoIdPadre
+      ? 'No hay materias asignadas al curso de tu hijo/a todavía.'
+      : 'Vincula un estudiante en tu perfil para ver sus materias (misma vista que el estudiante).';
+    alertTitle = primerHijoIdPadre ? 'Sin materias' : 'Sin estudiante vinculado';
   }
 
   return (

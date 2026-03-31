@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { 
@@ -66,22 +66,49 @@ function colorForMateria(name: string): string {
 
 export default function StudentTasksPage() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const isPadre = user?.rol === 'padre';
 
-  // Query para obtener todas las tareas del estudiante
-  const { data: assignments = [], isLoading } = useQuery<Assignment[]>({
+  useEffect(() => {
+    if (isPadre && location.startsWith('/mi-aprendizaje')) {
+      setLocation('/parent/tareas');
+    }
+  }, [isPadre, location, setLocation]);
+
+  const { data: hijos = [] } = useQuery<{ _id: string; nombre: string }[]>({
+    queryKey: ['/api/users/me/hijos'],
+    queryFn: () => apiRequest('GET', '/api/users/me/hijos'),
+    enabled: !!user?.id && isPadre,
+  });
+  const primerHijoId = hijos[0]?._id;
+  const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
+  const viewingStudentId = isPadre ? primerHijoId : user?.id;
+  const assignmentFromQuery = isPadre ? '?from=parent' : '';
+
+  const { data: assignmentsStudent = [], isLoading: loadingStudent } = useQuery<Assignment[]>({
     queryKey: ['studentAssignments', user?.id],
     queryFn: () => apiRequest('GET', '/api/assignments/student'),
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isPadre,
     staleTime: 0,
   });
+
+  const { data: assignmentsHijo = [], isLoading: loadingHijo } = useQuery<Assignment[]>({
+    queryKey: ['parentAssignments', primerHijoId],
+    queryFn: () => apiRequest('GET', `/api/assignments/hijo/${primerHijoId}`),
+    enabled: !!user?.id && isPadre && !!primerHijoId,
+    staleTime: 0,
+  });
+
+  const assignments = isPadre ? assignmentsHijo : assignmentsStudent;
+  const isLoading = isPadre ? loadingHijo : loadingStudent;
 
   // Separar tareas por estado
   const now = new Date();
   const submissions = (assignment: Assignment) => assignment.submissions || assignment.entregas || [];
-  const mySubmission = (assignment: Assignment) => submissions(assignment).find(
-    (e: any) => e.estudianteId === user?.id
-  );
+  const mySubmission = (assignment: Assignment) =>
+    viewingStudentId
+      ? submissions(assignment).find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+      : undefined;
   
   const tareasPorEntregar = assignments.filter(assignment => {
     const estado = assignment.estado || (mySubmission(assignment) 
@@ -136,7 +163,9 @@ export default function StudentTasksPage() {
   // Función para determinar el estado de una tarea
   const getEstadoTarea = (assignment: Assignment) => {
     const submissions = assignment.submissions || assignment.entregas || [];
-    const mySub = submissions.find((e: any) => e.estudianteId === user?.id);
+    const mySub = viewingStudentId
+      ? submissions.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+      : undefined;
     const estado = assignment.estado || (mySub 
       ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada')
       : 'pendiente');
@@ -184,7 +213,7 @@ export default function StudentTasksPage() {
         key={assignment._id}
         className="p-6 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer group relative overflow-hidden"
         style={{ borderLeftWidth: '4px', borderLeftColor: materiaColor }}
-        onClick={() => setLocation(`/assignment/${assignment._id}`)}
+        onClick={() => setLocation(`/assignment/${assignment._id}${assignmentFromQuery}`)}
       >
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
@@ -232,7 +261,9 @@ export default function StudentTasksPage() {
               </div>
               {(() => {
                 const submissions = assignment.submissions || assignment.entregas || [];
-                const mySub = submissions.find((e: any) => e.estudianteId === user?.id);
+                const mySub = viewingStudentId
+                  ? submissions.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+                  : undefined;
                 const estado = assignment.estado || (mySub 
                   ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada')
                   : 'pendiente');
@@ -260,6 +291,18 @@ export default function StudentTasksPage() {
     );
   };
 
+  if (isPadre && !primerHijoId && !isLoading) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="max-w-7xl mx-auto">
+          <NavBackButton to="/parent/aprendizaje" label="Aprendizaje del hijo/a" />
+          <h1 className="text-2xl font-bold text-white mt-4 mb-2 font-['Poppins']">Tareas</h1>
+          <p className="text-white/60">Vincula un estudiante en tu perfil para ver sus tareas.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex-1 overflow-y-auto p-6 md:p-10">
@@ -270,18 +313,23 @@ export default function StudentTasksPage() {
     );
   }
 
+  const backTo = isPadre && location.startsWith('/parent') ? '/parent/aprendizaje' : undefined;
+  const backLabel = isPadre ? 'Aprendizaje del hijo/a' : undefined;
+
   return (
     <div className="flex-1 overflow-y-auto p-6 md:p-10">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <NavBackButton />
+          <NavBackButton to={backTo} label={backLabel} />
           <div>
             <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
-              Mis Tareas
+              {isPadre ? `Tareas de ${nombreHijo}` : 'Mis Tareas'}
             </h1>
             <p className="text-white/60">
-              Gestiona todas tus tareas asignadas
+              {isPadre
+                ? 'Puedes revisar tareas, fechas, estado y calificaciones. Los archivos adjuntos (materiales y entregas) no están disponibles por privacidad. No puedes entregar en nombre del estudiante.'
+                : 'Gestiona todas tus tareas asignadas'}
             </p>
           </div>
         </div>
@@ -442,8 +490,12 @@ export default function StudentTasksPage() {
                       .sort((a, b) => {
                         const subsA = a.submissions || a.entregas || [];
                         const subsB = b.submissions || b.entregas || [];
-                        const entregaA = subsA.find((e: any) => e.estudianteId === user?.id);
-                        const entregaB = subsB.find((e: any) => e.estudianteId === user?.id);
+                        const entregaA = viewingStudentId
+                          ? subsA.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+                          : undefined;
+                        const entregaB = viewingStudentId
+                          ? subsB.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+                          : undefined;
                         if (!entregaA || !entregaB) return 0;
                         return new Date(entregaB.fechaEntrega).getTime() - new Date(entregaA.fechaEntrega).getTime();
                       })

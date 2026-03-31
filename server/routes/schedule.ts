@@ -9,8 +9,58 @@ import {
   upsertProfessorSchedule,
 } from '../repositories/scheduleRepository.js';
 import { findGroupSubjectsByGroupAndTeacher } from '../repositories/groupSubjectRepository.js';
+import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
+import { findUserById } from '../repositories/userRepository.js';
 
 const router = express.Router();
+
+/** Horario del grupo del estudiante: el propio alumno, su padre vinculado o personal autorizado. */
+router.get('/student/:studentId', protect, async (req: AuthRequest, res) => {
+  try {
+    const studentId = req.params.studentId ?? '';
+    const rol = req.user?.rol;
+    const requesterId = req.user?.id;
+    const institutionId = req.user?.institutionId ?? req.user?.colegioId;
+    if (!studentId || !requesterId || !institutionId) {
+      return res.status(401).json({ message: 'No autorizado.' });
+    }
+
+    if (rol === 'estudiante' && requesterId !== studentId) {
+      return res.status(403).json({ message: 'No autorizado.' });
+    }
+    if (rol === 'padre') {
+      const ok = await findGuardianStudent(requesterId, studentId);
+      if (!ok) return res.status(403).json({ message: 'No autorizado a ver el horario de este estudiante.' });
+    } else if (
+      rol !== 'estudiante' &&
+      !['directivo', 'admin-general-colegio', 'school_admin', 'super_admin', 'asistente'].includes(rol ?? '')
+    ) {
+      return res.status(403).json({ message: 'No autorizado.' });
+    }
+
+    const estudiante = await findUserById(studentId);
+    if (!estudiante || estudiante.role !== 'estudiante') {
+      return res.status(404).json({ message: 'Estudiante no encontrado.' });
+    }
+    if (estudiante.institution_id && estudiante.institution_id !== institutionId) {
+      return res.status(403).json({ message: 'Institución no coincide.' });
+    }
+
+    const cfg = estudiante.config as { curso?: string } | null | undefined;
+    const grupoNombre = cfg?.curso ?? (await getFirstGroupNameForStudent(studentId)) ?? '';
+    if (!grupoNombre) return res.json({ grupoNombre: '', slots: {} });
+
+    const resolved = await resolveGroupId(grupoNombre, institutionId);
+    if (!resolved) return res.json({ grupoNombre, slots: {} });
+
+    const schedule = await findGroupScheduleByGroup(institutionId, resolved.id);
+    const slots = schedule?.slots ?? {};
+    return res.json({ grupoNombre: resolved.name, slots });
+  } catch (e: unknown) {
+    console.error('Error GET schedule/student:', e);
+    return res.status(500).json({ message: (e as Error).message || 'Error al cargar horario.' });
+  }
+});
 
 router.get('/my-group', protect, async (req: AuthRequest, res) => {
   try {

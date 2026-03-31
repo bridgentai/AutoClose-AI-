@@ -55,7 +55,10 @@ export default function CalendarioEventos() {
 
   return (
     <div className="p-4 sm:p-6">
-      <NavBackButton to="/comunicacion" label="Comunicación" />
+      <NavBackButton
+        to={user?.rol === 'estudiante' ? '/comunidad/noticias' : '/comunicacion'}
+        label={user?.rol === 'estudiante' ? 'GLC' : 'Comunicación'}
+      />
       <div className="mb-6">
         <h1 className="text-2xl sm:text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-2">
           <Calendar className="w-8 h-8 sm:w-10 sm:h-10 text-[#00c8ff] shrink-0" />

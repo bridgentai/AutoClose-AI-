@@ -2,6 +2,7 @@ import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useMemo, useEffect } from 'react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,10 +19,32 @@ interface MaterialItem {
 
 export default function Materials() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const urlParams =
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-  const cursoIdFilter = urlParams.get('cursoId') || undefined;
+  const cursoIdFromUrl = urlParams.get('cursoId') || undefined;
+  const isParentMaterials = location.startsWith('/parent/materiales');
+
+  useEffect(() => {
+    if (isParentMaterials && user && user.rol !== 'padre') {
+      setLocation('/dashboard');
+    }
+  }, [isParentMaterials, user, setLocation]);
+
+  const { data: hijosMat = [] } = useQuery<{ _id: string; nombre: string; curso?: string }[]>({
+    queryKey: ['/api/users/me/hijos'],
+    queryFn: () => apiRequest('GET', '/api/users/me/hijos'),
+    enabled: !!user?.id && user?.rol === 'padre' && isParentMaterials,
+  });
+  const nombreHijoMat = hijosMat[0]?.nombre;
+
+  const cursoIdFilter = useMemo(() => {
+    if (isParentMaterials && user?.rol === 'padre') {
+      const c = hijosMat[0]?.curso?.trim();
+      return c || undefined;
+    }
+    return cursoIdFromUrl;
+  }, [isParentMaterials, user?.rol, hijosMat, cursoIdFromUrl]);
 
   const { data: materials = [], isLoading } = useQuery<MaterialItem[]>({
     queryKey: ['materials', cursoIdFilter],
@@ -51,14 +74,28 @@ export default function Materials() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <NavBackButton
-            to={user?.rol === 'profesor' ? '/profesor/academia' : '/dashboard'}
-            label={user?.rol === 'profesor' ? 'Academia' : 'Dashboard'}
+            to={
+              user?.rol === 'profesor'
+                ? '/profesor/academia'
+                : isParentMaterials
+                  ? '/parent/aprendizaje'
+                  : '/dashboard'
+            }
+            label={
+              user?.rol === 'profesor'
+                ? 'Academia'
+                : isParentMaterials
+                  ? 'Aprendizaje del hijo/a'
+                  : 'Dashboard'
+            }
           />
           <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] mt-4">Materiales Educativos</h1>
           <p className="text-white/60">
             {user?.rol === 'profesor'
               ? 'Gestiona y comparte recursos con tus estudiantes'
-              : 'Accede a todos tus materiales de estudio'}
+              : isParentMaterials && user?.rol === 'padre'
+                ? `Recursos del curso de ${nombreHijoMat ?? 'tu hijo/a'} (solo visualización; mismo criterio que materiales por curso del colegio).`
+                : 'Accede a todos tus materiales de estudio'}
           </p>
         </div>
 
@@ -76,6 +113,16 @@ export default function Materials() {
             >
               <GraduationCap className="w-4 h-4 mr-2" />
               Ver mis Notas
+            </Button>
+          )}
+          {isParentMaterials && user?.rol === 'padre' && (
+            <Button
+              variant="outline"
+              className="border-[#1e3cff]/40 text-[#1e3cff] hover:bg-[#1e3cff]/10"
+              onClick={() => setLocation('/parent/notas')}
+            >
+              <GraduationCap className="w-4 h-4 mr-2" />
+              Ver notas del hijo/a
             </Button>
           )}
         </div>

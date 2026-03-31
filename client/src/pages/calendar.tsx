@@ -21,12 +21,16 @@ interface Assignment {
   materiaNombre?: string;
   subjectId?: string;
   groupId?: string;
+  estado?: 'pendiente' | 'entregada' | 'calificada';
+  requiresSubmission?: boolean;
+  type?: string;
 }
 
 export default function CalendarPage() {
   const { user } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const isPadre = user?.rol === 'padre';
+  const fromParentCal = isPadre && location.startsWith('/parent/calendario');
 
   const { data: hijos = [] } = useQuery<{ _id: string; nombre: string; curso: string }[]>({
     queryKey: ['/api/users/me/hijos'],
@@ -78,7 +82,8 @@ export default function CalendarPage() {
   }, [assignmentsByMateria, filterMateria]);
 
   const handleDayClick = (assignment: Assignment) => {
-    setLocation(`/assignment/${assignment._id}`);
+    const q = isPadre ? '?from=parent' : '';
+    setLocation(`/assignment/${assignment._id}${q}`);
   };
 
   const pageTitle = isPadre
@@ -89,37 +94,35 @@ export default function CalendarPage() {
     : 'Visualiza todas las tareas asignadas a tu curso';
 
   return (
-    <div className="flex-1 overflow-auto p-8">
-            <div className="max-w-5xl mx-auto">
-              <NavBackButton />
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
-                  {pageTitle}
-                </h2>
-                <p className="text-white/60">
-                  {pageSubtitle}
-                </p>
-              </div>
+    <div className="w-full">
+      <div className="max-w-5xl mx-auto">
+        <NavBackButton
+          to={fromParentCal ? '/parent/aprendizaje' : undefined}
+          label={fromParentCal ? 'Aprendizaje del hijo/a' : undefined}
+        />
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">{pageTitle}</h2>
+          <p className="text-white/60">{pageSubtitle}</p>
+        </div>
 
-              {/* Calendario */}
-              <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-white">
-                    <CalendarIcon className="w-5 h-5 text-[#00c8ff]" />
-                    Calendario del Mes
-                  </CardTitle>
-                  <CardDescription className="text-white/60">
-                    {assignments.length} {assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
-                </CardContent>
-              </Card>
+        <Card className="bg-white/[0.04] border-white/10 backdrop-blur-md rounded-2xl shadow-none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-white">
+              <CalendarIcon className="w-5 h-5 text-[#00c8ff]" />
+              Calendario del Mes
+            </CardTitle>
+            <CardDescription className="text-white/60">
+              Colores por materia; verdes, rojos y ámbar según el estado de entrega real del estudiante.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2 pb-6">
+            <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
+          </CardContent>
+        </Card>
 
               {/* Lista de tareas del mes agrupadas por materia con filtro */}
-              {assignments.length > 0 && (
-                <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
+        {assignments.length > 0 && (
+          <Card className="bg-white/[0.04] border-white/10 backdrop-blur-md rounded-2xl mt-8 shadow-none">
                   <CardHeader>
                     <CardTitle className="text-white">Tareas Próximas</CardTitle>
                     <CardDescription className="text-white/60">
@@ -156,7 +159,7 @@ export default function CalendarPage() {
                               <div
                                 key={assignment._id}
                                 className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                                onClick={() => setLocation(`/assignment/${assignment._id}`)}
+                                onClick={() => handleDayClick(assignment)}
                                 data-testid={`assignment-item-${assignment._id}`}
                               >
                                 <div className="flex items-start justify-between">
@@ -192,8 +195,8 @@ export default function CalendarPage() {
                 </Card>
               )}
 
-              {assignments.length === 0 && (
-                <Card className="bg-white/5 border-white/10 backdrop-blur-md mt-8">
+        {assignments.length === 0 && (
+          <Card className="bg-white/[0.04] border-white/10 backdrop-blur-md rounded-2xl mt-8 shadow-none">
                   <CardContent className="py-12 text-center">
                     <CalendarIcon className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-white mb-2">
@@ -207,7 +210,7 @@ export default function CalendarPage() {
                   </CardContent>
                 </Card>
               )}
-            </div>
-          </div>
+      </div>
+    </div>
   );
 }

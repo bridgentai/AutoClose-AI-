@@ -1,8 +1,21 @@
 "use client";
 
-import { 
-  Home, MessageSquare, Send, BookOpen, GraduationCap, Settings, 
-  LogOut, User, Calendar, Users, Globe, Mail, FileCheck, FolderOpen
+import {
+  Home,
+  MessageSquare,
+  Send,
+  BookOpen,
+  GraduationCap,
+  Settings,
+  LogOut,
+  User,
+  Calendar,
+  Users,
+  Globe,
+  Mail,
+  FileCheck,
+  Cloud,
+  Building2,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -24,7 +37,8 @@ export function AppSidebar() {
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
-    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["estudiante", "profesor", "directivo", "padre"] },
+    { icon: Building2, label: "GLC", path: "/comunidad/noticias", roles: ["estudiante"] },
+    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["profesor", "directivo", "padre"] },
     { 
       icon: Send, 
       label: "Evo Send", 
@@ -57,20 +71,19 @@ export function AppSidebar() {
 
     { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["profesor", "directivo", "padre"] },
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },
-    { 
-      icon: FolderOpen, 
-      label: "Evo Drive", 
-      path: "/evo-drive", 
+    {
+      icon: Cloud,
+      label: "Evo Drive",
+      path: "/evo-drive",
       roles: [
         "estudiante",
         "profesor",
         "directivo",
-        "padre",
         "administrador-general",
         "admin-general-colegio",
         "school_admin",
-        "super_admin"
-      ] 
+        "super_admin",
+      ],
     },
 
     { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },

@@ -15,6 +15,7 @@ import {
   isUserRecipientOfAnnouncement,
   findOrCreateSupportThreadOneToOne,
   findDirectThreadBetweenUsers,
+  findOrCreateFamilyEvoThread,
   addAnnouncementRecipients,
   countUnreadByThreadIds,
   markEvoThreadRead,
@@ -31,6 +32,7 @@ import {
 } from '../repositories/groupSubjectRepository.js';
 import { findGroupsByInstitution } from '../repositories/groupRepository.js';
 import { findEnrollmentsByStudent } from '../repositories/enrollmentRepository.js';
+import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
 import { emitEvoMessageBroadcast } from '../socket.js';
 import {
   getEvoSendStudentChatTimezone,
@@ -101,7 +103,12 @@ async function resolveRecipientsForThread(args: {
   const a = args.announcement;
 
   // Staff / Direct / Support: recipients table is the source of truth.
-  if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct' || a.type === 'evo_chat_support') {
+  if (
+    a.type === 'evo_chat_staff' ||
+    a.type === 'evo_chat_direct' ||
+    a.type === 'evo_chat_family' ||
+    a.type === 'evo_chat_support'
+  ) {
     const r = await queryPg<{ user_id: string }>(
       'SELECT user_id FROM announcement_recipients WHERE announcement_id = $1',
       [a.id]
@@ -365,7 +372,33 @@ router.get('/threads', protect, requireRole(...EVO_SEND_ROLES), async (req: Auth
           return { ...t, displayTitle };
         })
       );
-      const threads = userId ? await mergeUnreadIntoThreads(threadsRaw, userId) : threadsRaw;
+      let mergedCourse = userId ? await mergeUnreadIntoThreads(threadsRaw, userId) : threadsRaw;
+      const famAnn = await findOrCreateFamilyEvoThread(userId);
+      if (famAnn) {
+        const famT = await buildThreadFromAnnouncement(famAnn);
+        const famWithUnread = await mergeUnreadIntoThreads(
+          [{ ...famT, displayTitle: 'Familia (acudientes)' }],
+          userId
+        );
+        mergedCourse = [...famWithUnread, ...mergedCourse];
+      }
+      return res.json(mergedCourse);
+    }
+
+    // Padre: chats familia con cada hijo vinculado (estudiante + acudientes en el mismo hilo)
+    if (rol === 'padre' && userId) {
+      const guardianLinks = await findGuardianStudentsByGuardian(userId);
+      const studentIds = [...new Set(guardianLinks.map((l) => l.student_id).filter(Boolean))];
+      const childUsers = studentIds.length ? await findUsersByIds(studentIds) : [];
+      const allowedStudentIds = childUsers
+        .filter((u) => u.role === 'estudiante' && u.institution_id === colegioId)
+        .map((u) => u.id);
+      for (const sid of allowedStudentIds) {
+        await findOrCreateFamilyEvoThread(sid);
+      }
+      const familyAnns = await findAnnouncementsByRecipient(userId, ['evo_chat_family'], colegioId);
+      const threadsRaw = await Promise.all(familyAnns.map((a) => buildThreadFromAnnouncement(a)));
+      const threads = await mergeUnreadIntoThreads(threadsRaw, userId);
       return res.json(threads);
     }
 
@@ -442,6 +475,12 @@ router.get('/thread-id-by-group-subject/:groupSubjectId', protect, requireRole(.
       return res.status(404).json({ message: 'Curso no encontrado.' });
     }
 
+    if (rol === 'padre') {
+      return res.status(403).json({
+        message: 'El chat del curso no está disponible para acudientes por privacidad del estudiante.',
+      });
+    }
+
     if (rol === 'profesor' && gs.teacher_id !== userId) {
       return res.status(403).json({ message: 'Solo el profesor del curso puede acceder.' });
     }
@@ -487,7 +526,10 @@ router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: 
       });
       if (!allowedIds.includes(userId)) return res.json({ thread: null, messages: [] });
     }
-    if ((a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') && !directorReadAll) {
+    if (
+      (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct' || a.type === 'evo_chat_family') &&
+      !directorReadAll
+    ) {
       const allowed = await isUserRecipientOfAnnouncement(id, userId);
       if (!allowed) return res.json({ thread: null, messages: [] });
     } else if (a.type === 'evo_chat_support') {
@@ -657,7 +699,7 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
       });
       if (!allowedIds.includes(userId)) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
     }
-    if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct') {
+    if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct' || a.type === 'evo_chat_family') {
       const allowed = await isUserRecipientOfAnnouncement(id, userId);
       if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
     } else if (a.type === 'evo_chat_support') {

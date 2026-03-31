@@ -30,7 +30,7 @@ import {
 import { findGradingSchemaByGroup } from '../repositories/gradingSchemaRepository.js';
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
 import { findEnrollmentsByStudent, findEnrollmentsByGroup, getFirstGroupNameForStudent, getFirstGroupForStudent, getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
-import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
+import { findGuardianStudent, findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
 import { createAnnouncement } from '../repositories/announcementRepository.js';
 import { queryPg } from '../config/db-pg.js';
@@ -941,25 +941,55 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
     const groupId = gsForInst.group_id;
 
     let subs = await findSubmissionsByAssignment(assignment.id);
+    let padreViewChildId: string | undefined;
+
     if (user.role === 'estudiante') {
       subs = subs.filter((s) => s.student_id === userId);
+    } else if (user.role === 'padre') {
+      const links = await findGuardianStudentsByGuardian(userId);
+      const orderedStudentIds = links.map((l) => l.student_id).filter(Boolean);
+      let matched: string | undefined;
+      const instId = user.institution_id ?? '';
+      for (const sid of orderedStudentIds) {
+        const childUser = await findUserById(sid);
+        if (!childUser || childUser.role !== 'estudiante' || childUser.institution_id !== instId) continue;
+        const enrollments = await findEnrollmentsByStudent(sid);
+        if (enrollments.some((e) => e.group_id === gsForInst.group_id)) {
+          matched = sid;
+          break;
+        }
+      }
+      if (!matched) {
+        return res.status(403).json({ message: 'No tienes acceso a esta tarea.' });
+      }
+      padreViewChildId = matched;
+      subs = subs.filter((s) => s.student_id === matched);
     }
+
+    const stripArchivosForPadre = user.role === 'padre';
     const submissions = subs.map((s) => {
       const attachments = s.attachments != null && Array.isArray(s.attachments) ? s.attachments : [];
-      return {
+      const base = {
         estudianteId: s.student_id,
         estudianteNombre: '',
         calificacion: s.score,
         retroalimentacion: s.feedback,
         fechaEntrega: s.submitted_at,
         comentario: s.comment ?? undefined,
-        archivos: attachments as { tipo?: string; nombre?: string; url?: string }[],
+        archivos: (stripArchivosForPadre ? [] : attachments) as { tipo?: string; nombre?: string; url?: string }[],
       };
+      if (stripArchivosForPadre && attachments.length > 0) {
+        return { ...base, archivosCount: attachments.length };
+      }
+      return base;
     });
 
     let estado: string | undefined;
     if (user.role === 'estudiante') {
       const sub = await findSubmissionByAssignmentAndStudent(assignment.id, userId);
+      estado = submissionState(sub);
+    } else if (user.role === 'padre' && padreViewChildId) {
+      const sub = await findSubmissionByAssignmentAndStudent(assignment.id, padreViewChildId);
       estado = submissionState(sub);
     }
 

@@ -6,9 +6,17 @@ interface InsightsBlockProps {
   insights: InsightsResponse;
   aiSummary?: string;
   isLoadingAi?: boolean;
+  title?: string;
+  emptyText?: string;
 }
 
-export function InsightsBlock({ insights, aiSummary, isLoadingAi }: InsightsBlockProps) {
+export function InsightsBlock({
+  insights,
+  aiSummary,
+  isLoadingAi,
+  title = 'Resumen e insights',
+  emptyText = 'No hay insights disponibles aún. Las notas del estudiante se analizarán con IA al cargar.',
+}: InsightsBlockProps) {
   const list = insights.insights ?? [];
   const hasAi = Boolean(aiSummary?.trim());
   const hasBullets = list.length > 0;
@@ -18,7 +26,7 @@ export function InsightsBlock({ insights, aiSummary, isLoadingAi }: InsightsBloc
       <CardHeader>
         <CardTitle className="text-white text-base font-['Poppins'] flex items-center gap-2">
           <Lightbulb className="w-5 h-5 text-[#ffd700]" />
-          Resumen e insights
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -42,7 +50,7 @@ export function InsightsBlock({ insights, aiSummary, isLoadingAi }: InsightsBloc
           </ul>
         )}
         {!isLoadingAi && !hasAi && !hasBullets && (
-          <p className="text-white/50 text-sm">No hay insights disponibles aún. Las notas del estudiante se analizarán con IA al cargar.</p>
+          <p className="text-white/50 text-sm">{emptyText}</p>
         )}
       </CardContent>
     </Card>

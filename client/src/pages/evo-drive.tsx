@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/authContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -60,6 +60,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'wouter';
+import { NavBackButton } from '@/components/nav-back-button';
 
 /** Carpeta por materia para profesor (cada ítem = group_subject). */
 interface TeacherFolder {
@@ -584,6 +585,7 @@ export default function EvoDrivePage() {
   const [trashDropActive, setTrashDropActive] = useState(false);
   const isTeacher = user?.rol && ROLES_WRITE.includes(user.rol);
   const isProfesor = user?.rol === 'profesor';
+  const isPadre = user?.rol === 'padre';
   const isAdminOrDirectivo = ['admin-general-colegio', 'directivo', 'school_admin', 'super_admin'].includes(user?.rol || '');
 
   // Mi carpeta (estudiante): modales y estado
@@ -1377,6 +1379,36 @@ export default function EvoDrivePage() {
       ) : null}
     </div>
   );
+
+  if (isPadre) {
+    return (
+      <div className="flex-1 min-h-0 overflow-auto p-6 md:p-10">
+        <div className="max-w-xl mx-auto">
+          <NavBackButton to="/dashboard" label="Dashboard" />
+          <Card className="glass-enhanced mt-8 border border-[#1e3cff]/25 bg-white/[0.04] backdrop-blur-xl">
+            <CardHeader className="text-center pb-2">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-slate-600/80 to-slate-800/90 flex items-center justify-center border border-white/10">
+                <Lock className="w-8 h-8 text-white/90" />
+              </div>
+              <CardTitle className="text-white text-2xl font-['Poppins']">Evo Drive no disponible</CardTitle>
+              <CardDescription className="text-[#E2E8F0]/75 text-base pt-2">
+                Por privacidad del estudiante, el acceso a Evo Drive de la institución no está habilitado para acudientes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex justify-center pb-8">
+              <Button
+                type="button"
+                className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
+                onClick={() => setLocation('/dashboard')}
+              >
+                Volver al inicio
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

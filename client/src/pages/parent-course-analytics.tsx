@@ -6,6 +6,7 @@ import { NavBackButton } from '@/components/nav-back-button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InsightsBlock } from '@/components/grading/InsightsBlock';
+import { AnalyticsCategoryChart } from '@/components/grading/AnalyticsCategoryChart';
 import type { AnalyticsSummaryResponse, CourseIntelligenceResponse } from '@/hooks/useCourseGrading';
 
 export default function ParentCourseAnalyticsPage() {
@@ -64,26 +65,20 @@ export default function ParentCourseAnalyticsPage() {
     v != null ? `${Math.round(v * 100)}%` : 'Sin datos';
 
   return (
-    <div
-      className="min-h-screen p-4 md:p-6 text-[#E2E8F0]"
-      style={{
-        background:
-          'radial-gradient(circle at 20% 20%, #1E3A8A 0%, #0F172A 40%, #020617 100%)',
-      }}
-    >
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <NavBackButton to="/parent/materias" label="Volver a materias" />
-        </div>
+    <div className="w-full max-w-4xl mx-auto text-[#E2E8F0]">
+      <div className="mb-6">
+        <NavBackButton to="/parent/aprendizaje" label="Aprendizaje del hijo/a" />
+      </div>
 
-        {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-40 bg-white/10 rounded-2xl" />
-            <Skeleton className="h-40 bg-white/10 rounded-2xl" />
-          </div>
-        ) : (
-          <>
-            <Card className="panel-grades border-white/10 rounded-2xl mb-6">
+      {isLoading ? (
+        <div className="space-y-4">
+          <Skeleton className="h-40 bg-white/10 rounded-2xl" />
+          <Skeleton className="h-40 bg-white/10 rounded-2xl" />
+          <Skeleton className="h-64 bg-white/10 rounded-2xl" />
+        </div>
+      ) : (
+        <>
+          <Card className="panel-grades border-white/10 rounded-2xl mb-6">
               <CardHeader>
                 <CardTitle className="text-white font-['Poppins']">
                   Estado académico general
@@ -119,16 +114,22 @@ export default function ParentCourseAnalyticsPage() {
               </CardContent>
             </Card>
 
-            <div className="mt-6">
+            <AnalyticsCategoryChart
+              byCategory={summary?.byCategory}
+              title="Análisis por logro (categorías de calificación)"
+            />
+
+            <div className="mt-2">
               <InsightsBlock
                 insights={{ insights: summary?.insights ?? [] }}
                 aiSummary={summary?.aiSummary}
                 isLoadingAi={false}
+                title="Sugerencias para mejorar"
+                emptyText="Aún no hay sugerencias disponibles. Se generarán cuando el sistema tenga notas suficientes de tu hijo/a."
               />
             </div>
           </>
         )}
-      </div>
     </div>
   );
 }

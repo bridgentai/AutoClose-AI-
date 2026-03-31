@@ -10,7 +10,6 @@ import { Loader2, Clock } from "lucide-react";
 
 const DIAS = [1, 2, 3, 4, 5, 6] as const;
 
-/** 6 horas de clase, 1 break, 1 almuerzo. Alineado con Horarios Profesor/Curso. */
 const PERIODOS = [
   { num: 1, inicio: "7:30", fin: "8:25", especial: null },
   { num: 2, inicio: "8:30", fin: "9:25", especial: null },
@@ -22,9 +21,7 @@ const PERIODOS = [
   { num: 8, inicio: "13:35", fin: "14:25", especial: null },
 ];
 
-type SlotKey = string;
-
-function slotKey(dia: number, periodo: number): SlotKey {
+function slotKey(dia: number, periodo: number): string {
   return `${dia}-${periodo}`;
 }
 
@@ -32,8 +29,8 @@ function toId(val: string | { _id?: string; $oid?: string } | null | undefined):
   if (val == null) return "";
   if (typeof val === "string") return val;
   if (typeof val === "object" && val !== null) {
-    if (typeof (val as any).$oid === "string") return (val as any).$oid;
-    if (typeof (val as any)._id === "string") return (val as any)._id;
+    if (typeof (val as { $oid?: string }).$oid === "string") return (val as { $oid: string }).$oid;
+    if (typeof (val as { _id?: string })._id === "string") return (val as { _id: string })._id;
   }
   return String(val);
 }
@@ -44,56 +41,85 @@ interface Materia {
   profesorIds?: { nombre?: string }[];
 }
 
-export default function MiAprendizajeHorarioPage() {
+function CeldaLectura({
+  materias,
+  courseId,
+}: {
+  materias: Materia[];
+  courseId: string | undefined;
+}) {
+  const idStr = toId(courseId);
+  const materia = materias.find((m) => toId(m._id) === idStr);
+  const nombre = materia?.nombre ?? "—";
+  const profesor = materia?.profesorIds?.[0]?.nombre ?? "";
+
+  return (
+    <div className="min-h-[52px] rounded-lg border border-white/10 bg-white/[0.03] text-[#E2E8F0] text-xs p-2">
+      <span className="block font-medium truncate">{nombre}</span>
+      {profesor ? <span className="block text-white/50 truncate">{profesor}</span> : null}
+    </div>
+  );
+}
+
+export default function ParentHorarioPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (user && user.rol !== "estudiante") {
+    if (user && user.rol !== "padre") {
       setLocation("/dashboard");
     }
   }, [user, setLocation]);
+
+  const { data: hijos = [] } = useQuery<{ _id: string; nombre: string }[]>({
+    queryKey: ["/api/users/me/hijos"],
+    queryFn: () => apiRequest("GET", "/api/users/me/hijos"),
+    enabled: !!user?.id && user?.rol === "padre",
+  });
+  const primerHijoId = hijos[0]?._id;
+  const nombreHijo = hijos[0]?.nombre || "tu hijo/a";
 
   const { data: scheduleData, isLoading: loadingSchedule } = useQuery<{
     grupoNombre?: string;
     slots: Record<string, string>;
   }>({
-    queryKey: ["/api/schedule/my-group", user?.id],
-    queryFn: () => apiRequest("GET", "/api/schedule/my-group"),
-    enabled: !!user?.id && user?.rol === "estudiante",
+    queryKey: ["/api/schedule/student", primerHijoId],
+    queryFn: () => apiRequest("GET", `/api/schedule/student/${primerHijoId}`),
+    enabled: !!primerHijoId && user?.rol === "padre",
     staleTime: 0,
     refetchOnMount: "always",
   });
 
   const { data: materias = [] } = useQuery<Materia[]>({
-    queryKey: ["/api/courses/all"],
-    queryFn: () => apiRequest("GET", "/api/courses"),
-    enabled: !!user?.id && user?.rol === "estudiante",
+    queryKey: ["/api/student/hijo", primerHijoId, "courses"],
+    queryFn: () => apiRequest("GET", `/api/student/hijo/${primerHijoId}/courses`),
+    enabled: !!primerHijoId && user?.rol === "padre",
   });
 
-  if (!user || user.rol !== "estudiante") {
+  if (!user || user.rol !== "padre") {
     return null;
   }
 
-  // Normalizar slots: valores pueden venir como string o { $oid } desde la API
   const rawSlots = scheduleData?.slots && typeof scheduleData.slots === "object" ? scheduleData.slots : {};
   const slots: Record<string, string> = {};
   for (const [k, v] of Object.entries(rawSlots)) {
     if (k && v != null) slots[k] = toId(v as string | { $oid?: string });
   }
-  const grupoNombre = scheduleData?.grupoNombre ?? user?.curso ?? "Mi curso";
+  const grupoNombre = scheduleData?.grupoNombre ?? "Curso";
 
   return (
-    <div className="w-full text-[#E2E8F0]">
-      <NavBackButton to="/mi-aprendizaje" label="Mi Aprendizaje" />
-      <div className="max-w-6xl mx-auto mt-4">
+    <div className="w-full">
+      <NavBackButton to="/parent/aprendizaje" label="Aprendizaje del hijo/a" />
+      <div className="mt-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 rounded-xl bg-[#1e3cff]/20 flex items-center justify-center">
             <Clock className="w-6 h-6 text-[#3B82F6]" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white font-['Poppins']">Horario</h1>
-            <p className="text-[#E2E8F0]/80 text-sm">Curso {grupoNombre} · Solo lectura</p>
+            <h1 className="text-2xl font-bold text-white font-['Poppins']">Horario de {nombreHijo}</h1>
+            <p className="text-[#E2E8F0]/80 text-sm">
+              Curso {grupoNombre} · Solo lectura (mismo horario que ve el estudiante)
+            </p>
           </div>
         </div>
 
@@ -110,16 +136,18 @@ export default function MiAprendizajeHorarioPage() {
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
-                <h2 className="text-lg font-bold text-white font-['Poppins']">Tu horario semanal</h2>
+                <h2 className="text-lg font-bold text-white font-['Poppins']">Horario semanal</h2>
                 <p className="text-[#E2E8F0]/80 text-sm">
-                  Cuando el directivo confirme el horario de tu curso, se actualizará aquí.
+                  Actualizado cuando el colegio publica el horario del curso.
                 </p>
               </div>
               <p className="text-xs text-white/50">Día 1 a 6 · Última clase 14:25</p>
             </div>
           </div>
 
-          {loadingSchedule ? (
+          {!primerHijoId ? (
+            <p className="p-8 text-white/60 text-center">Vincula un estudiante en tu perfil para ver su horario.</p>
+          ) : loadingSchedule ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="w-8 h-8 animate-spin text-[#3B82F6]" />
             </div>
@@ -168,10 +196,7 @@ export default function MiAprendizajeHorarioPage() {
                               {per.especial}
                             </div>
                           ) : (
-                            <CeldaLectura
-                              materias={materias}
-                              courseId={slots[slotKey(dia, per.num)]}
-                            />
+                            <CeldaLectura materias={materias} courseId={slots[slotKey(dia, per.num)]} />
                           )}
                         </td>
                       ))}
@@ -186,32 +211,10 @@ export default function MiAprendizajeHorarioPage() {
             className="px-6 py-4 border-t border-white/10"
             style={{ background: "rgba(0,0,0,0.15)" }}
           >
-            <p className="text-xs text-white/40">Mi Aprendizaje · Horario · EvoOS</p>
+            <p className="text-xs text-white/40">Aprendizaje del hijo/a · Horario · EvoOS</p>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function CeldaLectura({
-  materias,
-  courseId,
-}: {
-  materias: Materia[];
-  courseId: string | undefined;
-}) {
-  const idStr = toId(courseId);
-  const materia = materias.find((m) => toId(m._id) === idStr);
-  const nombre = materia?.nombre ?? "—";
-  const profesor = materia?.profesorIds?.[0]?.nombre ?? "";
-
-  return (
-    <div
-      className="min-h-[52px] rounded-lg border border-white/10 bg-white/[0.03] text-[#E2E8F0] text-xs p-2"
-    >
-      <span className="block font-medium truncate">{nombre}</span>
-      {profesor ? <span className="block text-white/50 truncate">{profesor}</span> : null}
     </div>
   );
 }

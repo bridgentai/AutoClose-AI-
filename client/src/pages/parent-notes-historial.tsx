@@ -65,7 +65,7 @@ export default function ParentNotesHistorialPage() {
             className="mb-4"
             items={[
               { label: 'Dashboard', href: '/dashboard' },
-              { label: 'Notas', href: '/mi-aprendizaje/notas' },
+              { label: 'Notas', href: '/parent/notas' },
               { label: `Historial de ${nombreHijo}` },
             ]}
           />
