@@ -85,7 +85,9 @@ function AIChatBox({ rol }: AIChatBoxProps) {
       ? 'Pregúntame sobre tus tareas, notas o materias'
       : rol === 'profesor'
         ? 'Crea tareas, revisa entregas o genera materiales'
-        : 'Consulta reportes, estadísticas o gestiona el colegio';
+        : rol === 'padre'
+          ? '¿Qué tareas tiene pendientes? ¿Cómo va en Matemáticas?'
+          : 'Consulta reportes, estadísticas o gestiona el colegio';
 
   const scrollToBottom = () => {
     // Usar requestAnimationFrame para asegurar que el DOM se haya actualizado
@@ -256,6 +258,24 @@ function AIChatBox({ rol }: AIChatBoxProps) {
                 <p className="text-white/60 text-sm mt-2 text-expressive-subtitle">
                   {emptySubtitle}
                 </p>
+                {rol === 'padre' && (
+                  <div className="flex flex-wrap gap-2 mt-3 justify-center">
+                    {[
+                      '¿Qué tareas tiene pendientes?',
+                      '¿Cómo va en sus notas?',
+                      'Crear un permiso de salida',
+                    ].map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setInput(prompt); }}
+                        className="text-xs px-3 py-1.5 rounded-full border border-white/15 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/90 transition-colors"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1590,7 +1610,13 @@ function PadreDashboard() {
 
   const { data: notasData } = useQuery({
     queryKey: ['/api/student/hijo', primerHijoId, 'notes'],
-    queryFn: () => apiRequest<{ materias: { nombre: string; promedio: number; ultimaNota: number }[]; total: number }>('GET', `/api/student/hijo/${primerHijoId}/notes`),
+    queryFn: () => apiRequest<{ materias: { _id?: string; nombre: string; promedio: number | null; ultimaNota: number | null }[]; total: number }>('GET', `/api/student/hijo/${primerHijoId}/notes`),
+    enabled: !!primerHijoId,
+  });
+
+  const { data: cursosHijo = [] } = useQuery<{ _id: string; nombre: string; groupSubjectId?: string }[]>({
+    queryKey: ['/api/student/hijo', primerHijoId, 'courses'],
+    queryFn: () => apiRequest('GET', `/api/student/hijo/${primerHijoId}/courses`),
     enabled: !!primerHijoId,
   });
 
@@ -1602,6 +1628,35 @@ function PadreDashboard() {
   });
 
   const materias = notasData?.materias ?? [];
+  const materiasConEstado = useMemo(() => {
+    const conNota = materias.map(m => ({ ...m, tieneNota: true }));
+    const idsConNota = new Set(
+      materias.flatMap((m) => [
+        m._id ? String(m._id) : null,
+        m.nombre ? String(m.nombre).toLowerCase().trim() : null,
+      ]).filter(Boolean) as string[]
+    );
+
+    const sinNota = cursosHijo
+      .filter((c) => {
+        const id = c._id ? String(c._id) : '';
+        const name = c.nombre ? String(c.nombre).toLowerCase().trim() : '';
+        return !(idsConNota.has(id) || idsConNota.has(name));
+      })
+      .map((c) => ({
+        nombre: c.nombre,
+        promedio: null,
+        ultimaNota: null,
+        tieneNota: false,
+        _id: c._id,
+      }));
+
+    return [
+      ...conNota.sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0)),
+      ...sinNota.sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    ];
+  }, [materias, cursosHijo]);
+
   const promedioGeneral = materias.length
     ? materias.reduce((s, m) => s + (m.promedio ?? 0), 0) / materias.length
     : 0;
@@ -1668,8 +1723,12 @@ function PadreDashboard() {
             <TrendingUp className="w-5 h-5 text-[#ffd700] animate-float" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{promedioDisplay}</div>
-            <p className="text-xs text-white/50 mt-2 leading-snug">Media entre todas las materias.</p>
+            <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">
+              {primerHijoId ? promedioDisplay : '—'}<span className="text-base font-normal text-white/40">/100</span>
+            </div>
+            <p className="text-xs text-white/50 mt-2 leading-snug">
+              Media entre {materias.filter(m => (m.promedio ?? 0) > 0).length} materias calificadas.
+            </p>
           </CardContent>
         </Card>
 
@@ -1720,13 +1779,13 @@ function PadreDashboard() {
             <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{materias.length}</div>
-            <p className="text-xs text-white/50 mt-2 leading-snug">Cursos con seguimiento académico.</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{cursosHijo.length || materias.length}</div>
+            <p className="text-xs text-white/50 mt-2 leading-snug">Cursos matriculados este año.</p>
           </CardContent>
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue badge-glow`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue ${permisosActualesCount > 0 ? 'badge-glow' : ''}`}
           style={{ animationDelay: '0.4s' }}
           onClick={() => setLocation('/permisos')}
           role="link"
@@ -1745,74 +1804,6 @@ function PadreDashboard() {
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">{permisosActualesCount}</div>
             <p className="text-xs text-white/50 mt-2 leading-snug">Autorizaciones de salida vigentes.</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className={CARD_STYLE}>
-          <CardHeader>
-            <CardTitle className="text-white">Seguimiento de {nombreHijo}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {materias.length === 0 ? (
-                <p className="text-white/60 py-4">No hay notas cargadas aún. {!primerHijoId && 'Vincula un estudiante en tu perfil.'}</p>
-              ) : (
-                materias.map((materia, index) => {
-                  const raw = materia.ultimaNota ?? materia.promedio;
-                  const hasRecorded =
-                    typeof raw === 'number' && !Number.isNaN(raw);
-                  const scoreNum = hasRecorded ? raw : 0;
-                  const widthPercent = Math.min(100, Math.max(0, scoreNum));
-                  return (
-                    <div
-                      key={materia._id || materia.nombre}
-                      className="p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue"
-                      style={{ animationDelay: `${0.7 + index * 0.1}s` }}
-                    >
-                      <div className="flex items-center justify-between mb-3 gap-2">
-                        <span className="text-white font-medium text-expressive-subtitle min-w-0">
-                          {materia.nombre}
-                        </span>
-                        <span
-                          className={`font-bold font-['Poppins'] shrink-0 tabular-nums ${
-                            hasRecorded ? 'text-[#ffd700]' : 'text-white/45'
-                          }`}
-                        >
-                          {hasRecorded ? `${Math.round(scoreNum)}/100` : 'Sin nota'}
-                        </span>
-                      </div>
-                      <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
-                        <div
-                          className={`h-3 rounded-full transition-all duration-1000 ease-out hover-glow ${
-                            !hasRecorded ? 'opacity-40' : ''
-                          }`}
-                          style={{
-                            background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`,
-                            width: `${widthPercent}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={`${CARD_STYLE} cursor-pointer`}
-          onClick={() => setLocation('/calendar')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white">Tareas de {nombreHijo}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div onClick={(e) => e.stopPropagation()}>
-              <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -1842,6 +1833,85 @@ function PadreDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className={CARD_STYLE}>
+          <CardHeader>
+            <CardTitle className="text-white">Seguimiento de {nombreHijo}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {materiasConEstado.length === 0 ? (
+                <p className="text-white/60 py-4">No hay notas cargadas aún. {!primerHijoId && 'Vincula un estudiante en tu perfil.'}</p>
+              ) : (
+                materiasConEstado.map((materia, index) => {
+                  const nombreLimpio = materia.nombre
+                    ? materia.nombre.replace(/(\b\w+\b)\s+\1$/i, '$1').trim()
+                    : materia.nombre;
+                  const raw = materia.ultimaNota ?? materia.promedio;
+                  const hasRecorded =
+                    typeof raw === 'number' && !Number.isNaN(raw);
+                  const scoreNum = hasRecorded ? raw : 0;
+                  const widthPercent = Math.min(100, Math.max(0, scoreNum));
+                  return (
+                    <div
+                      key={materia._id || materia.nombre}
+                      className={`p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue cursor-pointer ${!materia.tieneNota ? 'opacity-50' : ''}`}
+                      style={{ animationDelay: `${0.7 + index * 0.1}s` }}
+                      onClick={() => setLocation('/parent/notas')}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => { if (e.key === 'Enter') setLocation('/parent/notas'); }}
+                    >
+                      <div className="flex items-center justify-between mb-3 gap-2">
+                        <span className="text-white font-medium text-expressive-subtitle min-w-0">
+                          {nombreLimpio}
+                        </span>
+                        <span
+                          className={`font-bold font-['Poppins'] shrink-0 tabular-nums ${
+                            materia.tieneNota && hasRecorded ? 'text-[#ffd700]' : 'text-white/45'
+                          }`}
+                        >
+                          {materia.tieneNota && hasRecorded ? `${Math.round(scoreNum)}/100` : '—'}
+                        </span>
+                      </div>
+                      {!materia.tieneNota ? (
+                        <p className="text-xs text-white/35 italic mt-1">
+                          Sin calificaciones este período
+                        </p>
+                      ) : (
+                        <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden progress-bar">
+                          <div
+                            className="h-3 rounded-full transition-all duration-1000 ease-out"
+                            style={{
+                              width: `${widthPercent}%`,
+                              background: `linear-gradient(90deg, var(--color-primario, #2563eb), #ffd700)`,
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className={`${CARD_STYLE} cursor-pointer`}
+          onClick={() => setLocation('/calendar')}
+        >
+          <CardHeader>
+            <CardTitle className="text-white">Tareas de {nombreHijo}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <AIChatBox rol="padre" />
     </div>
