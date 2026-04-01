@@ -13,7 +13,6 @@ import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/authContext";
-import KiwiFloat from "@/components/KiwiFloat";
 import { AuthGuard, GuestGuard } from "@/components/auth-guard";
 import { useInstitutionColors } from "@/hooks/useInstitutionColors";
 
@@ -150,6 +149,10 @@ import CafeteriaComunicacionLayout from "@/pages/cafeteria-comunicacion";
 import AsistentePage from "@/pages/asistente";
 import AsistenteComunicacionLayout from "@/pages/asistente-comunicacion";
 
+// Asistente Académica
+import AsistenteAcademicaDashboard from "@/pages/asistente-academica";
+import AsistenteAcademicaAccesosPage from "@/pages/asistente-academica-accesos";
+
 // Super Admin
 import SuperAdminPage from "@/pages/super-admin";
 
@@ -260,6 +263,18 @@ function AppRouter() {
             <Route path="/asistente/comunicacion/redactar">
               <AuthGuard><ProfesorRedactarMensaje /></AuthGuard>
             </Route>
+
+            {/* Módulos de Asistente Académica */}
+            <Route path="/asistente-academica/accesos">
+              <AuthGuard><AsistenteAcademicaAccesosPage /></AuthGuard>
+            </Route>
+            <Route path="/asistente-academica/comunicados">
+              <AuthGuard><ComunicadosInstitucionales /></AuthGuard>
+            </Route>
+            <Route path="/asistente-academica">
+              <AuthGuard><AsistenteAcademicaDashboard /></AuthGuard>
+            </Route>
+
             <Route path="/super-admin">
               <AuthGuard><SuperAdminPage /></AuthGuard>
             </Route>
@@ -660,7 +675,6 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <AppRouter />
-          <KiwiFloat />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

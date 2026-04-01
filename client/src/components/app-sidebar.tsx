@@ -16,6 +16,9 @@ import {
   FileCheck,
   Cloud,
   Building2,
+  Megaphone,
+  Shield,
+  Bot,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -34,6 +37,12 @@ export function AppSidebar() {
   const menuItems = [
     { icon: Home, label: "Dashboard", path: "/dashboard", roles: ["estudiante", "profesor", "directivo", "padre"] },
     { icon: Home, label: "Inicio", path: "/asistente", roles: ["asistente"] },
+    { icon: Home, label: "Dashboard", path: "/asistente-academica", roles: ["asistente-academica"] },
+    { icon: Megaphone, label: "Comunicados", path: "/asistente-academica/comunicados", roles: ["asistente-academica"] },
+    { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["asistente-academica"] },
+    { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["asistente-academica"] },
+    { icon: Shield, label: "Control de accesos", path: "/asistente-academica/accesos", roles: ["asistente-academica"] },
+    { icon: Bot, label: "Kiwi Assist", path: "/chat", roles: ["asistente-academica"] },
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
@@ -55,9 +64,10 @@ export function AppSidebar() {
         "nutricion",
         "cafeteria",
         "asistente",
+        "asistente-academica",
         "school_admin",
         "super_admin"
-      ] 
+      ]
     },
 
     { icon: Mail, label: "Comunicación padres", path: "/asistente/comunicacion", roles: ["asistente"] },
