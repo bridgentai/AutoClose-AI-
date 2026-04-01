@@ -15,6 +15,7 @@ import {
   extractKeyFacts,
 } from './kiwiContext.js';
 import type { KiwiUserContext } from './kiwiContext.js';
+import { executeKiwiAction } from './kiwiActions.js';
 import {
   getRecentMessages,
   upsertUserMemory,
@@ -871,33 +872,40 @@ export async function generateKiwiResponse(
     // 6. Ejecutar tool calls si los hay
     const toolCallsList = Object.values(accumulatedToolCalls);
     if (toolCallsList.length > 0) {
-      const toolResults = await Promise.all(
+      // Ejecutar todas las tool calls con executeKiwiAction
+      const kiwiResults = await Promise.all(
         toolCallsList.map(async (tc) => {
           let params: Record<string, unknown> = {};
           try { params = JSON.parse(tc.function.arguments || '{}'); } catch { /* ignore */ }
 
-          try {
-            const result = await executeAction(
-              tc.function.name,
-              params,
-              kiwiContext.userId,
-              kiwiContext.rol,
-              kiwiContext.institutionId
-            );
-            return {
-              tool_call_id: tc.id,
-              role: 'tool' as const,
-              content: JSON.stringify({ success: result.success, data: result.data, message: result.message }),
-            };
-          } catch (err) {
-            return {
-              tool_call_id: tc.id,
-              role: 'tool' as const,
-              content: JSON.stringify({ success: false, error: err instanceof Error ? err.message : 'Error desconocido' }),
-            };
-          }
+          const result = await executeKiwiAction(
+            tc.function.name,
+            params,
+            kiwiContext.institutionId,
+            kiwiContext.userId,
+            kiwiContext.rol
+          );
+          return { tc, result };
         })
       );
+
+      // Si alguna tool requiere confirmación del usuario: emitir señal al frontend y salir
+      const pendingConfirmation = kiwiResults.find((r) => 'requiresConfirmation' in r.result && r.result.requiresConfirmation === true);
+      if (pendingConfirmation) {
+        const confirmMsg = '__CONFIRM__:' + JSON.stringify((pendingConfirmation.result as { requiresConfirmation: true; preview: unknown }).preview);
+        onChunk(confirmMsg);
+        onComplete(confirmMsg, tokensUsed);
+        return;
+      }
+
+      // Construir tool results para el follow-up a OpenAI
+      const toolResults = kiwiResults.map(({ tc, result }) => ({
+        tool_call_id: tc.id,
+        role: 'tool' as const,
+        content: result.success
+          ? JSON.stringify({ success: true, data: (result as { success: true; data: unknown }).data })
+          : JSON.stringify({ success: false, error: (result as { success: false; error: string }).error ?? 'Error al ejecutar la acción' }),
+      }));
 
       // Follow-up streaming con resultados de tools
       const followUpMessages = [

@@ -13,6 +13,7 @@ import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/lib/authContext";
+import KiwiFloat from "@/components/KiwiFloat";
 import { AuthGuard, GuestGuard } from "@/components/auth-guard";
 import { useInstitutionColors } from "@/hooks/useInstitutionColors";
 
@@ -659,6 +660,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <AppRouter />
+          <KiwiFloat />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

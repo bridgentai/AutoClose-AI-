@@ -190,6 +190,8 @@ const TOOLS_BY_ROLE: Record<string, ToolDefinition[]> = {
     { name: 'get_attendance_report', description: 'Reporte de asistencia por grupo y período' },
     { name: 'create_institutional_comunicado', description: 'Crear comunicado institucional masivo' },
     { name: 'get_academic_risk_report', description: 'Reporte de estudiantes en riesgo académico' },
+    { name: 'send_evosend_message', description: 'Envía un mensaje por EvoSend en un canal donde el directivo ya es miembro' },
+    { name: 'generate_boletin', description: 'Genera boletines académicos con IA para un grupo específico o todos los estudiantes del colegio' },
   ],
   rector: [
     { name: 'get_institution_analytics', description: 'Ver métricas generales de la institución' },

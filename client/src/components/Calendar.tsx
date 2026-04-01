@@ -400,33 +400,57 @@ export function Calendar({
     };
 
     if (!isStudent) {
-      const firstKey = Array.from(assignmentsByKey.keys())[0];
-      const isMultiple = keyCount > 1;
-      const singleColor = keyCount === 1 ? colorMap.get(firstKey) || '#1e3cff' : null;
-      const backgroundColor = isMultiple ? '#6b7280' : singleColor || '#1e3cff';
-      const dayLabel =
-        keyCount === 1 ? keyToLabel.get(firstKey) || firstKey : `+${keyCount} cursos`;
+      const courseDots = Array.from(assignmentsByKey.keys()).map((key) => colorMap.get(key) || '#9ca3af');
 
+      // Caso 1: un solo curso (mostrar etiqueta, color del curso como “acento”)
+      if (keyCount === 1) {
+        const onlyKey = Array.from(assignmentsByKey.keys())[0];
+        const courseColor = colorMap.get(onlyKey) || '#1e3cff';
+        const label = keyToLabel.get(onlyKey) || onlyKey;
+        const totalLabel = total === 1 ? label : `+${total} tareas`;
+
+        pushDay(
+          <>
+            <div className="flex justify-between items-start z-10">
+              <span className="text-lg font-bold text-white leading-none">{day}</span>
+              <span className="w-2 h-2 rounded-full shrink-0 mt-0.5 bg-white/90" />
+            </div>
+            <span className="text-[10px] sm:text-[11px] font-semibold text-white leading-tight line-clamp-2 z-10">
+              {totalLabel}
+            </span>
+            <div className="absolute inset-0 z-0" style={{ background: courseColor }} />
+          </>,
+          `calendar-day-${day}`,
+          'border-white/20',
+          { borderColor: `${courseColor}88` }
+        );
+        continue;
+      }
+
+      // Caso 2: varios cursos (neutral + puntitos por curso, misma lógica visual que “materias”)
+      const neutralBg = 'rgba(15, 23, 42, 0.55)';
       pushDay(
         <>
           <div className="flex justify-between items-start z-10">
-            <span className="text-lg font-bold text-white leading-none">{day}</span>
-            <span
-              className="w-2 h-2 rounded-full shrink-0 mt-0.5 bg-white/90"
-              style={{ opacity: isMultiple ? 0.7 : 1 }}
-            />
+            <span className="text-lg font-bold text-white/95 leading-none">{day}</span>
           </div>
-          <span className="text-[10px] sm:text-[11px] font-medium text-white/95 leading-tight line-clamp-2 z-10">
-            {dayLabel}
+          <span className="text-[10px] sm:text-[11px] font-semibold text-white/80 leading-tight z-10">
+            +{keyCount} cursos
           </span>
-          <div className="absolute inset-0 z-0 opacity-95" style={{ background: backgroundColor }} />
+          <div className="flex flex-wrap gap-1 z-10 mt-auto pt-1 justify-center">
+            {courseDots.map((c, i) => (
+              <span
+                key={i}
+                className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/20"
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+          <div className="absolute inset-0 z-0" style={{ background: neutralBg }} />
         </>,
         `calendar-day-${day}`,
-        'border-2',
-        {
-          background: backgroundColor,
-          borderColor: isMultiple ? 'rgba(107,114,128,0.6)' : `${backgroundColor}99`,
-        }
+        undefined,
+        { borderColor: 'rgba(255,255,255,0.12)' }
       );
       continue;
     }

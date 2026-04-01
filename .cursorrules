@@ -72,6 +72,14 @@
 - **SIEMPRE** considera los roles: estudiante, profesor, directivo, padre
 - **SIEMPRE** respeta la arquitectura: React + TypeScript (frontend), Express + MongoDB (backend)
 
+## Navegación / Breadcrumbs
+- Todas las páginas internas deben mostrar breadcrumbs en la parte superior izquierda
+- Formato: Dashboard > Cursos > Grupo 11H > [Página actual]
+- El último ítem (página actual) va resaltado en color primario (azul/cian)
+- Los ítems anteriores van en texto gris claro, separados por " > "
+- Si la página tiene acciones de configuración, mostrar botón "Opciones de [materia]" con ícono ⚙️ al lado derecho del breadcrumb
+- Usar el componente <Breadcrumb> ya existente en Sociales 11H como referencia
+
 ## Recordatorio Final
 
 Estos dos archivos (`PROJECT_GOLAS.md` y `design_guidelines.md`) son la fuente de verdad del proyecto. Deben estar presentes en el contexto de cada petición y deben ser consultados antes de cualquier acción.
