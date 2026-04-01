@@ -261,6 +261,8 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   const isChatPage = location === "/chat";
   const isDashboardPage = location === "/dashboard";
@@ -421,7 +423,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   };
 
   const handleSend = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || isStreaming) return;
 
     const userMessage: Message = {
       emisor: 'user',
@@ -434,67 +436,94 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     setInput('');
     setLoading(true);
 
-    try {
-      // Construir historial de conversación para el contexto
-      const conversationHistory = messages.map(msg => ({
-        role: msg.emisor === 'user' ? 'user' as const : 'assistant' as const,
-        content: msg.contenido
-      }));
+    // Placeholder vacío para el streaming
+    setMessages(prev => [...prev, { emisor: 'ai', contenido: '', timestamp: new Date() }]);
 
-      // Llamar al nuevo endpoint del Chat AI Global
-      const response = await apiRequest<{ success: boolean; response: string; error?: string; executedActions?: string[]; actionData?: Record<string, any> }>('POST', '/api/ai/chat', {
-        message: currentInput,
-        contexto_extra: {
-          rol: user?.rol,
-          curso: user?.curso,
+    try {
+      const token = localStorage.getItem('autoclose_token');
+      const res = await fetch('/api/kiwi/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        conversationHistory,
+        body: JSON.stringify({
+          message: currentInput,
+          ...(currentSessionId ? { sessionId: currentSessionId } : {}),
+        }),
       });
 
-      if (!response.success) {
-        throw new Error(response.error || 'Error al procesar el mensaje');
+      if (!res.ok || !res.body) {
+        let errMsg = 'Error al conectar con Kiwi';
+        try { const b = await res.json(); errMsg = b.error || errMsg; } catch { /* ignore */ }
+        setMessages(prev => {
+          const next = [...prev];
+          next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
+          return next;
+        });
+        setLoading(false);
+        return;
       }
 
-      const aiMessage: Message = {
-        emisor: 'ai',
-        contenido: response.response,
-        timestamp: new Date(),
-      };
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      setMessages(prev => [...prev, aiMessage]);
-      
-      // Si se ejecutaron acciones, refrescar la página o mostrar notificación
-      if (response.executedActions && response.executedActions.length > 0) {
-        // Si se crearon logros de calificación, refrescar la página después de un breve delay
-        if (response.executedActions.includes('crear_logros_calificacion')) {
-          setTimeout(() => {
-            window.location.reload();
-          }, 1500);
+      setLoading(false);
+      setIsStreaming(true);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+
+          let parsed: { type: string; text?: string; sessionId?: string; message?: string };
+          try { parsed = JSON.parse(raw); } catch { continue; }
+
+          if (parsed.type === 'chunk' && parsed.text) {
+            const chunk = parsed.text;
+            setMessages(prev => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.emisor === 'ai') {
+                next[next.length - 1] = { ...last, contenido: last.contenido + chunk };
+              }
+              return next;
+            });
+            setTimeout(() => scrollToBottom(), 50);
+          } else if (parsed.type === 'done') {
+            if (parsed.sessionId) setCurrentSessionId(parsed.sessionId);
+            setIsStreaming(false);
+            setTimeout(() => scrollToBottom(), 150);
+          } else if (parsed.type === 'error') {
+            setMessages(prev => {
+              const next = [...prev];
+              next[next.length - 1] = { emisor: 'ai', contenido: parsed.message ?? 'Ocurrió un error.', timestamp: new Date() };
+              return next;
+            });
+            setIsStreaming(false);
+          }
         }
       }
-      
-      // Scroll después de agregar el mensaje de AI
-      setTimeout(() => scrollToBottom(), 150);
-    } catch (error: any) {
-      console.error('Error en chat:', error);
-      let errorText = 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
-      
-      if (error.message) {
-        errorText = error.message;
-      } else if (error.response) {
-        errorText = error.response.message || error.response.error || errorText;
-      }
-      
-      const errorMessage: Message = {
-        emisor: 'ai',
-        contenido: errorText,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-      // Scroll después de agregar el mensaje de error
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : 'Lo siento, ocurrió un error al procesar tu mensaje.';
+      setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
+        return next;
+      });
       setTimeout(() => scrollToBottom(), 150);
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -692,14 +721,14 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       }}
                       placeholder="Escribe tu pregunta..."
                       className="h-10 rounded-lg px-3 text-white placeholder:text-white/40 bg-white/5 border-white/10 text-sm"
-                      disabled={loading}
+                      disabled={loading || isStreaming}
                     />
                     <Button
                       onClick={handleSend}
-                      disabled={loading || !input.trim()}
+                      disabled={loading || isStreaming || !input.trim()}
                       className="h-10 w-10 rounded-lg flex-shrink-0 bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8] hover:from-[#2563EB] hover:to-[#1e3cff] border border-white/10"
                     >
-                      {loading ? (
+                      {(loading || isStreaming) ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <Send className="w-4 h-4" />

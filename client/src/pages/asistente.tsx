@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocation } from 'wouter';
-import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
 
 const SECTION_LABELS: Record<string, string> = {
@@ -33,6 +32,8 @@ function AIChatBox() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -50,7 +51,7 @@ function AIChatBox() {
   }, [messages]);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || isStreaming) return;
 
     const userMessage: Message = { emisor: 'user', contenido: input, timestamp: new Date() };
     setMessages(prev => [...prev, userMessage]);
@@ -58,41 +59,96 @@ function AIChatBox() {
     setInput('');
     setLoading(true);
 
-    try {
-      const conversationHistory = messages.map(msg => ({
-        role: msg.emisor === 'user' ? 'user' as const : 'assistant' as const,
-        content: msg.contenido
-      }));
+    // Placeholder vacío para el streaming
+    setMessages(prev => [...prev, { emisor: 'ai', contenido: '', timestamp: new Date() }]);
 
-      const response = await apiRequest<{ success: boolean; response: string; error?: string }>('POST', '/api/ai/chat', {
-        message: currentInput,
-        contexto_extra: {
-          rol: 'asistente',
-          contextoTipo: 'asistente_dashboard',
+    try {
+      const token = localStorage.getItem('autoclose_token');
+      const res = await fetch('/api/kiwi/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        conversationHistory,
+        body: JSON.stringify({
+          message: currentInput,
+          ...(currentSessionId ? { sessionId: currentSessionId } : {}),
+        }),
       });
 
-      if (!response.success) {
-        throw new Error(response.error || 'Error al procesar el mensaje');
+      if (!res.ok || !res.body) {
+        let errMsg = 'Error al conectar con Kiwi';
+        try { const b = await res.json(); errMsg = b.error || errMsg; } catch { /* ignore */ }
+        setMessages(prev => {
+          const next = [...prev];
+          next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
+          return next;
+        });
+        setLoading(false);
+        return;
       }
 
-      const aiMessage: Message = { emisor: 'ai', contenido: response.response, timestamp: new Date() };
-      setMessages(prev => [...prev, aiMessage]);
-      setTimeout(() => scrollToBottom(), 100);
-    } catch (error: any) {
-      console.error('Error en chat:', error);
-      const errorMessage: Message = { 
-        emisor: 'ai', 
-        contenido: error.message || 'Lo siento, ocurrió un error. Intenta de nuevo.', 
-        timestamp: new Date() 
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      setLoading(false);
+      setIsStreaming(true);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+
+          let parsed: { type: string; text?: string; sessionId?: string; message?: string };
+          try { parsed = JSON.parse(raw); } catch { continue; }
+
+          if (parsed.type === 'chunk' && parsed.text) {
+            const chunk = parsed.text;
+            setMessages(prev => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.emisor === 'ai') {
+                next[next.length - 1] = { ...last, contenido: last.contenido + chunk };
+              }
+              return next;
+            });
+            setTimeout(() => scrollToBottom(), 50);
+          } else if (parsed.type === 'done') {
+            if (parsed.sessionId) setCurrentSessionId(parsed.sessionId);
+            setIsStreaming(false);
+            setTimeout(() => scrollToBottom(), 150);
+          } else if (parsed.type === 'error') {
+            setMessages(prev => {
+              const next = [...prev];
+              next[next.length - 1] = { emisor: 'ai', contenido: parsed.message ?? 'Ocurrió un error.', timestamp: new Date() };
+              return next;
+            });
+            setIsStreaming(false);
+          }
+        }
+      }
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : 'Lo siento, ocurrió un error. Intenta de nuevo.';
+      setMessages(prev => {
+        const next = [...prev];
+        next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
+        return next;
+      });
       setTimeout(() => scrollToBottom(), 100);
     } finally {
       setLoading(false);
+      setIsStreaming(false);
     }
-  }, [input, loading, messages]);
+  }, [input, loading, isStreaming, currentSessionId, messages]);
 
   return (
     <Card className={`${CARD_STYLE} cursor-pointer flex flex-col h-full`} onClick={() => setLocation('/chat')}>
@@ -156,11 +212,11 @@ function AIChatBox() {
               }}
               placeholder="Escribe tu mensaje..."
               className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-white/40"
-              disabled={loading}
+              disabled={loading || isStreaming}
             />
             <Button
               onClick={(e) => { e.stopPropagation(); handleSend(); }}
-              disabled={loading || !input.trim()}
+              disabled={loading || isStreaming || !input.trim()}
               size="icon"
               className="w-10 h-10 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
             >

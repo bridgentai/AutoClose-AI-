@@ -221,7 +221,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
         </CardDescription>
       </CardHeader>
 
-      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-0 min-h-0">
+      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-0 min-h-0 h-[500px]">
         <div className="flex-1 space-y-3 overflow-y-auto pr-2">
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">

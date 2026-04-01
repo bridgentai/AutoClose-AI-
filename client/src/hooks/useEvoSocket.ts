@@ -4,7 +4,8 @@ import { io, Socket } from 'socket.io-client';
 const getSocketUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     const u = new URL(import.meta.env.VITE_API_URL);
-    return `${u.protocol === 'https:' ? 'wss' : 'ws'}://${u.host}`;
+    // socket.io-client espera un origen http(s); él mismo negocia websocket/polling.
+    return `${u.protocol}//${u.host}`;
   }
   return window.location.origin;
 };

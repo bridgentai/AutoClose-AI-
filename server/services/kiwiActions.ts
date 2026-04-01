@@ -297,6 +297,8 @@ async function sendEvoSendMessage(
 ): Promise<{ requiresConfirmation: true; preview: unknown } | EvoSendResult> {
   const channelId = params.channelId as string;
   const message = params.message as string;
+  const userRole = (params.userRole as string | undefined) ?? undefined;
+  const isDirectorLike = userRole === 'directivo' || userRole === 'school_admin';
 
   // Step 1: verificar que el thread pertenece a la institución
   const threadRes = await queryPg<{ type: string }>(
@@ -310,12 +312,41 @@ async function sendEvoSendMessage(
 
   // Step 2: para tipos no-grupales, verificar membresía explícita en recipients
   if (threadType !== 'evo_chat') {
+    // Directivo/school_admin: puede escribir en hilos staff/direct de su institución
+    if (isDirectorLike && (threadType === 'evo_chat_staff' || threadType === 'evo_chat_direct')) {
+      // ok
+    } else {
     const memberRes = await queryPg<{ n: number }>(
       `SELECT 1 AS n FROM announcement_recipients WHERE announcement_id = $1 AND user_id = $2 LIMIT 1`,
       [channelId, userId]
     );
     if (!memberRes.rows[0]) {
       throw new Error('No tienes acceso a ese canal');
+    }
+    }
+  } else {
+    // evo_chat: permitir a directivo/school_admin escribir; otros roles deben ser participantes implícitos (grupo/profe/estudiante)
+    if (!isDirectorLike) {
+      const annRes = await queryPg<{ group_id: string | null; group_subject_id: string | null; created_by_id: string }>(
+        `SELECT group_id, group_subject_id, created_by_id FROM announcements WHERE id = $1 AND institution_id = $2 LIMIT 1`,
+        [channelId, institutionId]
+      );
+      const ann = annRes.rows[0];
+      if (!ann?.group_id) {
+        throw new Error('No tienes acceso a ese canal');
+      }
+
+      // estudiantes del grupo o creador (profe) pueden escribir
+      const [enr, creator] = await Promise.all([
+        queryPg<{ n: number }>(`SELECT 1 AS n FROM enrollments WHERE group_id = $1 AND student_id = $2 LIMIT 1`, [
+          ann.group_id,
+          userId,
+        ]),
+        queryPg<{ n: number }>(`SELECT 1 AS n WHERE $1::uuid = $2::uuid`, [userId, ann.created_by_id]),
+      ]);
+      if (enr.rows.length === 0 && creator.rows.length === 0) {
+        throw new Error('No tienes acceso a ese canal');
+      }
     }
   }
 
@@ -556,7 +587,7 @@ export async function executeKiwiAction(
       }
 
       case 'send_evosend_message': {
-        const result = await sendEvoSendMessage(institutionId, userId, toolParams);
+        const result = await sendEvoSendMessage(institutionId, userId, { ...toolParams, userRole });
         if ('requiresConfirmation' in result) {
           return { success: false, requiresConfirmation: true, preview: result.preview };
         }

@@ -103,7 +103,9 @@ HERRAMIENTAS DISPONIBLES:
 - get_institution_analytics: Métricas generales de la institución
 - get_attendance_report: Reporte de asistencia por grupo y período
 - create_institutional_comunicado: Comunicado institucional masivo
-- get_academic_risk_report: Reporte de estudiantes en riesgo académico`,
+- get_academic_risk_report: Reporte de estudiantes en riesgo académico
+
+IMPORTANTE: Antes de llamar send_evosend_message necesitas el channelId. Si el usuario no lo provee, pregúntale a qué grupo o persona quiere enviar el mensaje, luego busca el channelId apropiado o pídele que lo seleccione desde EvoSend.`,
 
   // directora-academica no está en UserRole aún — se incluye aquí para soporte futuro
   'directora-academica': `
@@ -186,12 +188,69 @@ const TOOLS_BY_ROLE: Record<string, ToolDefinition[]> = {
     { name: 'contact_teacher', description: 'Enviar mensaje a un docente de un hijo/a' },
   ],
   directivo: [
-    { name: 'get_institution_analytics', description: 'Ver métricas generales de la institución' },
-    { name: 'get_attendance_report', description: 'Reporte de asistencia por grupo y período' },
-    { name: 'create_institutional_comunicado', description: 'Crear comunicado institucional masivo' },
-    { name: 'get_academic_risk_report', description: 'Reporte de estudiantes en riesgo académico' },
-    { name: 'send_evosend_message', description: 'Envía un mensaje por EvoSend en un canal donde el directivo ya es miembro' },
-    { name: 'generate_boletin', description: 'Genera boletines académicos con IA para un grupo específico o todos los estudiantes del colegio' },
+    {
+      name: 'get_institution_analytics',
+      description: 'Ver métricas generales de la institución',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: { type: 'string', description: 'Período académico opcional, usa el activo si no se especifica' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'get_attendance_report',
+      description: 'Reporte de asistencia por grupo y período',
+      parameters: {
+        type: 'object',
+        properties: {
+          groupId: { type: 'string', description: 'ID del grupo, opcional' },
+          startDate: { type: 'string', description: 'Fecha inicio YYYY-MM-DD, opcional' },
+          endDate: { type: 'string', description: 'Fecha fin YYYY-MM-DD, opcional' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'create_institutional_comunicado',
+      description: 'Crear comunicado institucional masivo',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Título del comunicado' },
+          content: { type: 'string', description: 'Contenido del comunicado' },
+          targetAudience: { type: 'string', enum: ['all', 'parents', 'teachers'], description: 'Audiencia: all=todos, parents=padres, teachers=profesores' },
+          confirmed: { type: 'boolean', description: 'true solo si el usuario ya confirmó el envío' },
+        },
+        required: ['title', 'content', 'targetAudience'],
+      },
+    },
+    {
+      name: 'get_academic_risk_report',
+      description: 'Reporte de estudiantes en riesgo académico',
+      parameters: {
+        type: 'object',
+        properties: {
+          threshold: { type: 'number', description: 'Nota mínima aprobatoria, default 60' },
+        },
+        required: [],
+      },
+    },
+    // TODO: activar post-demo
+    // { name: 'send_evosend_message', description: 'Envía un mensaje por EvoSend en un canal donde el directivo ya es miembro',
+    //   parameters: { type: 'object', properties: {
+    //     channelId: { type: 'string', description: 'ID del canal o hilo de EvoSend donde enviar' },
+    //     channelType: { type: 'string', enum: ['group', 'direct'], description: 'Tipo de canal: group para grupos, direct para mensajes directos' },
+    //     message: { type: 'string', description: 'Contenido del mensaje a enviar' },
+    //     confirmed: { type: 'boolean', description: 'true solo si el usuario ya confirmó el envío' },
+    //   }, required: ['channelId', 'channelType', 'message'] } },
+    // { name: 'generate_boletin', description: 'Genera boletines académicos con IA para un grupo específico o todos los estudiantes del colegio',
+    //   parameters: { type: 'object', properties: {
+    //     scope: { type: 'string', enum: ['group', 'all'], description: 'group=un grupo específico, all=todo el colegio' },
+    //     groupId: { type: 'string', description: 'ID del grupo, requerido si scope=group' },
+    //     confirmed: { type: 'boolean', description: 'true solo si el usuario ya confirmó la generación' },
+    //   }, required: ['scope'] } },
   ],
   rector: [
     { name: 'get_institution_analytics', description: 'Ver métricas generales de la institución' },
