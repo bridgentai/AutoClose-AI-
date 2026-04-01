@@ -115,7 +115,7 @@ async function assertAssignmentActivityAccess(
   }
 
   const r = user.role;
-  if (r === 'directivo' || r === 'admin-general-colegio' || r === 'school_admin') {
+  if (r === 'directivo' || r === 'admin-general-colegio' || r === 'asistente-academica' || r === 'school_admin') {
     return { ok: true, institutionId: instId };
   }
   /** Alinear con GET /api/assignments/:id (creador) y con la titularidad de la materia. */
@@ -131,7 +131,7 @@ async function assertAssignmentActivityAccess(
 router.get(
   '/assignment/:assignmentId',
   protect,
-  requireRole('profesor', 'directivo', 'admin-general-colegio', 'school_admin'),
+  requireRole('profesor', 'directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin'),
   async (req: AuthRequest, res) => {
     try {
       const { assignmentId } = req.params;
@@ -181,7 +181,7 @@ router.get(
 router.get(
   '/student/:studentId',
   protect,
-  requireRole('directivo', 'admin-general-colegio', 'school_admin'),
+  requireRole('directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin'),
   async (req: AuthRequest, res) => {
     try {
       const { studentId } = req.params;
@@ -232,7 +232,7 @@ async function assertThreadReadsAccess(
   }
 
   const r = user.role;
-  if (r === 'directivo' || r === 'admin-general-colegio' || r === 'school_admin') {
+  if (r === 'directivo' || r === 'admin-general-colegio' || r === 'asistente-academica' || r === 'school_admin') {
     return { ok: true, institutionId: instId, groupId: ann.group_id };
   }
   if (r === 'profesor' && ann.group_id) {
@@ -247,7 +247,7 @@ async function assertThreadReadsAccess(
 router.get(
   '/thread/:threadId/reads',
   protect,
-  requireRole('profesor', 'directivo', 'admin-general-colegio', 'school_admin'),
+  requireRole('profesor', 'directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin'),
   async (req: AuthRequest, res) => {
     try {
       const { threadId } = req.params;

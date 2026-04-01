@@ -59,7 +59,7 @@ router.get('/profesores', protect, async (req: AuthRequest, res) => {
     if (!userId) return res.status(404).json({ message: 'Usuario no encontrado' });
     const user = await findUserById(userId);
     if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
-    if (user.role !== 'directivo') {
+    if (user.role !== 'directivo' && user.role !== 'asistente-academica') {
       return res.status(403).json({ message: 'Solo directivos pueden acceder a esta ruta' });
     }
     const all = await findUsersByInstitution(user.institution_id);
@@ -137,7 +137,7 @@ router.post('/asignar-codigos', protect, async (req: AuthRequest, res) => {
     if (!userId) return res.status(404).json({ message: 'Usuario no encontrado' });
     const user = await findUserById(userId);
     if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
-    if (user.role !== 'directivo') {
+    if (user.role !== 'directivo' && user.role !== 'asistente-academica') {
       return res.status(403).json({ message: 'Solo directivos pueden acceder a esta ruta' });
     }
     const all = await findUsersByInstitution(user.institution_id);
@@ -216,7 +216,7 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
     const colegioId = req.user?.colegioId;
     const rolUser = req.user?.rol;
     if (!colegioId || !rolUser) return res.status(404).json({ message: 'Usuario no encontrado' });
-    if (rolUser !== 'admin-general-colegio' && rolUser !== 'school_admin' && rolUser !== 'directivo') {
+    if (rolUser !== 'admin-general-colegio' && rolUser !== 'school_admin' && rolUser !== 'directivo' && rolUser !== 'asistente-academica') {
       return res.status(403).json({ message: 'Solo administradores del colegio o directivos pueden acceder a esta ruta' });
     }
     let { rol } = req.query;
@@ -260,7 +260,7 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
 
 function assertAdminOrDirectivo(req: AuthRequest): boolean {
   const r = req.user?.rol;
-  return r === 'admin-general-colegio' || r === 'school_admin' || r === 'directivo';
+  return r === 'admin-general-colegio' || r === 'school_admin' || r === 'directivo' || r === 'asistente-academica';
 }
 
 // GET /api/users/:userId/teaching-assignments — cursos y materias donde imparte (nombres legibles)
@@ -345,7 +345,7 @@ router.get('/stats', protect, async (req: AuthRequest, res) => {
     if (!userId || !colegioId) return res.status(404).json({ message: 'Usuario no encontrado' });
     const user = await findUserById(userId);
     if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
-    if (user.role !== 'admin-general-colegio' && user.role !== 'school_admin' && user.role !== 'directivo') {
+    if (user.role !== 'admin-general-colegio' && user.role !== 'school_admin' && user.role !== 'directivo' && user.role !== 'asistente-academica') {
       return res.status(403).json({ message: 'Solo administradores del colegio o directivos pueden acceder a esta ruta' });
     }
     const onlyActive = req.query.estado === 'active';

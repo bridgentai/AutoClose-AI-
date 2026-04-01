@@ -73,6 +73,7 @@ const ROLES_WRITE = [
   'super_admin',
   'admin-general-colegio',
   'asistente',
+  'asistente-academica',
 ];
 
 function toEvoFileApi(row: Record<string, unknown>) {

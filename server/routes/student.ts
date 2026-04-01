@@ -34,6 +34,7 @@ const DISCIPLINE_VIEW_ROLES = [
   'estudiante',
   'padre',
   'admin-general-colegio',
+  'asistente-academica',
   'school_admin',
   'administrador-general',
   'super_admin',
@@ -376,7 +377,7 @@ router.get('/:estudianteId/personal-info', protect, async (req: AuthRequest, res
     const colegioId = req.user?.colegioId;
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
     const currentUser = await findUserById(userId);
-    if (!currentUser || (currentUser.role !== 'profesor' && currentUser.role !== 'directivo')) {
+    if (!currentUser || (currentUser.role !== 'profesor' && currentUser.role !== 'directivo' && currentUser.role !== 'asistente-academica')) {
       return res.status(403).json({ message: 'Solo profesores y directivos pueden acceder a esta información.' });
     }
     const estudiante = await findUserById(estudianteId);
@@ -412,7 +413,7 @@ router.get('/hijo/:estudianteId/profile', protect, async (req: AuthRequest, res)
     const rol = req.user?.rol;
     const estudiante = await findUserById(paramId);
     if (!estudiante || estudiante.role !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
-    let allowed = rol === 'directivo' || rol === 'admin-general-colegio';
+    let allowed = rol === 'directivo' || rol === 'admin-general-colegio' || rol === 'asistente-academica';
     if (!allowed && rol === 'padre') allowed = !!(await findGuardianStudent(userId!, paramId));
     if (!allowed) return res.status(403).json({ message: 'No autorizado a ver el perfil de este estudiante.' });
     const grupoIdFromEnrollment = await getFirstGroupNameForStudent(paramId);
@@ -447,7 +448,7 @@ router.get('/hijo/:estudianteId/courses', protect, async (req: AuthRequest, res)
     const rol = req.user?.rol;
     const estudiante = await findUserById(paramId);
     if (!estudiante || estudiante.role !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
-    let allowed = rol === 'directivo' || rol === 'admin-general-colegio';
+    let allowed = rol === 'directivo' || rol === 'admin-general-colegio' || rol === 'asistente-academica';
     if (!allowed && rol === 'padre') allowed = !!(await findGuardianStudent(userId!, paramId));
     if (!allowed) return res.status(403).json({ message: 'No autorizado a ver los cursos de este estudiante.' });
     const courseGroups = await getAllCourseGroupsForStudent(paramId, estudiante.institution_id);
@@ -482,7 +483,7 @@ router.get('/hijo/:estudianteId/notes', protect, async (req: AuthRequest, res) =
     const rol = req.user?.rol;
     const estudiante = await findUserById(paramId);
     if (!estudiante || estudiante.role !== 'estudiante') return res.status(404).json({ message: 'Estudiante no encontrado.' });
-    let allowed = rol === 'directivo' || rol === 'admin-general-colegio';
+    let allowed = rol === 'directivo' || rol === 'admin-general-colegio' || rol === 'asistente-academica';
     if (!allowed && rol === 'padre') allowed = !!(await findGuardianStudent(userId!, paramId));
     if (!allowed) return res.status(403).json({ message: 'No autorizado a ver las notas de este estudiante.' });
     const { materias, total } = await buildMateriasNotasForStudent(paramId, estudiante.institution_id);

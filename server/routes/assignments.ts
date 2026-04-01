@@ -437,7 +437,7 @@ router.get('/hijo/:estudianteId', protect, async (req: AuthRequest, res) => {
     const user = await findUserById(userId);
     if (!user) return res.status(404).json({ message: 'Usuario no encontrado.' });
 
-    const allowed = user.role === 'directivo' || user.role === 'admin-general-colegio';
+    const allowed = user.role === 'directivo' || user.role === 'admin-general-colegio' || user.role === 'asistente-academica';
     if (!allowed && user.role === 'padre') {
       const link = await findGuardianStudent(userId, estudianteId);
       if (!link) return res.status(403).json({ message: 'No autorizado a ver las tareas de este estudiante.' });

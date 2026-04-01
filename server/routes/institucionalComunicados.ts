@@ -19,7 +19,7 @@ import { queryPg } from '../config/db-pg.js';
 
 const router = express.Router();
 
-const PUBLISH_ROLES = ['directivo', 'admin-general-colegio', 'asistente', 'rector'] as const;
+const PUBLISH_ROLES = ['directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'rector'] as const;
 
 function institutionId(req: AuthRequest): string | undefined {
   return req.user?.colegioId ?? req.user?.institution_id;

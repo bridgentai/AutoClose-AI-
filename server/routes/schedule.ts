@@ -33,7 +33,7 @@ router.get('/student/:studentId', protect, async (req: AuthRequest, res) => {
       if (!ok) return res.status(403).json({ message: 'No autorizado a ver el horario de este estudiante.' });
     } else if (
       rol !== 'estudiante' &&
-      !['directivo', 'admin-general-colegio', 'school_admin', 'super_admin', 'asistente'].includes(rol ?? '')
+      !['directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin', 'super_admin', 'asistente'].includes(rol ?? '')
     ) {
       return res.status(403).json({ message: 'No autorizado.' });
     }

@@ -120,7 +120,7 @@ router.post('/conversations', protect, async (req: AuthRequest, res) => {
       return res.status(400).json({ message: 'Faltan destinatarioId, asunto o texto.' });
     }
 
-    const allowed = ['profesor', 'directivo', 'admin-general-colegio', 'asistente'];
+    const allowed = ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'];
     if (!allowed.includes(rol)) return res.status(403).json({ message: 'Solo profesor, directivo o asistente pueden iniciar conversación con padres.' });
 
     const dest = await findUserById(destinatarioId);

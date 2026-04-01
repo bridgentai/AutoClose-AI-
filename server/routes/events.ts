@@ -82,7 +82,7 @@ router.get('/:id', protect, async (req: AuthRequest, res) => {
   }
 });
 
-router.post('/', protect, restrictTo('directivo', 'admin-general-colegio', 'profesor'), async (req: AuthRequest, res) => {
+router.post('/', protect, restrictTo('directivo', 'admin-general-colegio', 'asistente-academica', 'profesor'), async (req: AuthRequest, res) => {
   try {
     const { titulo, descripcion, fecha, tipo, cursoId } = req.body;
     const colegioId = req.user?.colegioId;
@@ -113,7 +113,7 @@ router.post('/', protect, restrictTo('directivo', 'admin-general-colegio', 'prof
   }
 });
 
-router.put('/:id', protect, restrictTo('directivo', 'admin-general-colegio', 'profesor'), async (req: AuthRequest, res) => {
+router.put('/:id', protect, restrictTo('directivo', 'admin-general-colegio', 'asistente-academica', 'profesor'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { titulo, descripcion, fecha, tipo, cursoId } = req.body;
@@ -136,7 +136,7 @@ router.put('/:id', protect, restrictTo('directivo', 'admin-general-colegio', 'pr
   }
 });
 
-router.delete('/:id', protect, restrictTo('directivo', 'admin-general-colegio', 'profesor'), async (req: AuthRequest, res) => {
+router.delete('/:id', protect, restrictTo('directivo', 'admin-general-colegio', 'asistente-academica', 'profesor'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const colegioId = req.user?.colegioId;

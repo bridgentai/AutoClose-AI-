@@ -57,7 +57,7 @@ async function canParentViewStudent(parentId: string, studentId: string): Promis
 }
 
 // GET /api/attendance/curso/:cursoId/estudiantes
-router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
+router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const { cursoId } = req.params;
     const colegioId = req.user?.colegioId;
@@ -81,7 +81,7 @@ router.get('/curso/:cursoId/estudiantes', protect, restrictTo('profesor', 'direc
 });
 
 // GET /api/attendance/curso/:cursoId/fecha/:fecha/status
-router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
+router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, fecha } = req.params;
     const colegioId = req.user?.colegioId;
@@ -98,7 +98,7 @@ router.get('/curso/:cursoId/fecha/:fecha/status', protect, restrictTo('profesor'
 });
 
 // GET /api/attendance/curso/:cursoId/fecha/:fecha
-router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
+router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, fecha } = req.params;
     const colegioId = req.user?.colegioId;
@@ -125,7 +125,7 @@ router.get('/curso/:cursoId/fecha/:fecha', protect, restrictTo('profesor', 'dire
 });
 
 // GET /api/attendance/grupo/:grupoId/fecha/:fecha — vista directivo: todos los registros del grupo ese día, con materia, hora y recorded_by
-router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
+router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const grupoParam = decodeURIComponent((req.params.grupoId || '').trim());
     const fechaParam = req.params.fecha || '';
@@ -192,7 +192,7 @@ router.get('/grupo/:grupoId/fecha/:fecha', protect, restrictTo('profesor', 'dire
 });
 
 // GET /api/attendance/grupo/:grupoId/historial — historial del grupo con filtros mes, materia, estudiante
-router.get('/grupo/:grupoId/historial', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente'), async (req: AuthRequest, res) => {
+router.get('/grupo/:grupoId/historial', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const grupoParam = decodeURIComponent((req.params.grupoId || '').trim());
     const institutionId = req.user?.institutionId ?? req.user?.colegioId;
@@ -233,7 +233,7 @@ router.get('/grupo/:grupoId/historial', protect, restrictTo('profesor', 'directi
 });
 
 // GET /api/attendance/grupo/:grupoId/analisis-ia — resumen + análisis OpenAI del mes
-router.get('/grupo/:grupoId/analisis-ia', protect, restrictTo('directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+router.get('/grupo/:grupoId/analisis-ia', protect, restrictTo('directivo', 'admin-general-colegio', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const { generateAttendanceAnalysis } = await import('../services/openai.js');
     const grupoParam = decodeURIComponent((req.params.grupoId || '').trim());
@@ -328,7 +328,7 @@ router.get('/grupo/:grupoId/analisis-ia', protect, restrictTo('directivo', 'admi
 });
 
 // PATCH /api/attendance/:id — actualizar status y/o punctuality (solo directivo, admin-general-colegio)
-router.patch('/:id', protect, restrictTo('directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+router.patch('/:id', protect, restrictTo('directivo', 'admin-general-colegio', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const institutionId = req.user?.institutionId ?? req.user?.colegioId;
@@ -359,7 +359,7 @@ router.patch('/:id', protect, restrictTo('directivo', 'admin-general-colegio'), 
 });
 
 // POST /api/attendance
-router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, estudianteId, fecha, estado } = req.body;
     const colegioId = req.user?.colegioId;
@@ -430,7 +430,7 @@ router.post('/', protect, restrictTo('profesor', 'directivo', 'admin-general-col
 });
 
 // POST /api/attendance/bulk
-router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+router.post('/bulk', protect, restrictTo('profesor', 'directivo', 'admin-general-colegio', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const { cursoId, fecha, horaBloque, registros } = req.body as {
       cursoId: string;
@@ -535,6 +535,7 @@ router.get(
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
+      rol === 'asistente-academica' ||
       rol === 'school_admin' ||
       rol === 'administrador-general' ||
       rol === 'super_admin' ||
@@ -581,6 +582,7 @@ router.get(
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
+      rol === 'asistente-academica' ||
       rol === 'school_admin' ||
       rol === 'administrador-general' ||
       rol === 'super_admin' ||

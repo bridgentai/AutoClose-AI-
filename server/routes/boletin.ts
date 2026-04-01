@@ -12,7 +12,7 @@ router.get('/', protect, async (req: AuthRequest, res) => {
   try {
     const rol = req.user?.rol;
     if (
-      !['directivo', 'admin-general-colegio', 'school_admin'].includes(rol ?? '')
+      !['directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin'].includes(rol ?? '')
     ) {
       return res.status(403).json({ message: 'No autorizado.' });
     }
@@ -42,6 +42,7 @@ router.get(
         'profesor',
         'directivo',
         'admin-general-colegio',
+        'asistente-academica',
         'school_admin',
       ];
       if (!allowedRoles.includes(rol ?? '')) {
@@ -109,7 +110,7 @@ router.post('/generar-por-curso', protect, async (req: AuthRequest, res) => {
       req.user?.institutionId ?? req.user?.colegioId ?? '';
 
     if (
-      !['directivo', 'admin-general-colegio', 'school_admin'].includes(rol ?? '')
+      !['directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin'].includes(rol ?? '')
     ) {
       return res.status(403).json({ message: 'No autorizado.' });
     }

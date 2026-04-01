@@ -20,6 +20,7 @@ export const ROLES = {
   NUTRICION: 'nutricion',
   CAFETERIA: 'cafeteria',
   ASISTENTE: 'asistente',
+  ASISTENTE_ACADEMICA: 'asistente-academica',
   SUPER_ADMIN: 'super_admin',
 } as const;
 
@@ -161,6 +162,20 @@ const PERMISSIONS: Record<Role, PermissionMatrix> = {
     audit_logs: { read: true },
   },
 
+  'asistente-academica': {
+    own_profile: { read_own: true, update_own: true },
+    users: { read: true },
+    groups: { read: true },
+    assignments: { read: true },
+    grades: { read: true },
+    submissions: { read: true },
+    comunicados: { create: true, read: true, update: true },
+    evo_send: { read: true, create: true },
+    materials: { read: true },
+    reports: { read: true, create: true },
+    audit_logs: { read: true },
+  },
+
   super_admin: {
     users: { create: true, read: true, update: true, delete: true },
     groups: { create: true, read: true, update: true, delete: true },
@@ -204,6 +219,7 @@ export function canViewInstitution(role: string): boolean {
     ROLES.ADMIN_GENERAL,
     ROLES.SUPER_ADMIN,
     ROLES.ASISTENTE,
+    ROLES.ASISTENTE_ACADEMICA,
   ]);
 }
 
@@ -214,6 +230,7 @@ export function canViewAllGrades(role: string): boolean {
     ROLES.SCHOOL_ADMIN,
     ROLES.ADMIN_GENERAL,
     ROLES.SUPER_ADMIN,
+    ROLES.ASISTENTE_ACADEMICA,
   ]);
 }
 
@@ -224,5 +241,6 @@ export function canCreateChatGroup(role: string): boolean {
     ROLES.ADMIN_COLEGIO,
     ROLES.SCHOOL_ADMIN,
     ROLES.SUPER_ADMIN,
+    ROLES.ASISTENTE_ACADEMICA,
   ]);
 }

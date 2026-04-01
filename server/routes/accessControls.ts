@@ -17,7 +17,7 @@ async function ensureAdmin(req: AuthRequest): Promise<{ ok: true; colegioId: str
   const uid = req.user?.id;
   if (!uid) return { ok: false, status: 403, message: 'No autorizado' };
   const u = await findUserById(uid);
-  if (!u || (u.role !== 'admin-general-colegio' && u.role !== 'school_admin')) {
+  if (!u || (u.role !== 'admin-general-colegio' && u.role !== 'school_admin' && u.role !== 'asistente-academica')) {
     return { ok: false, status: 403, message: 'Solo administradores del colegio pueden gestionar accesos.' };
   }
   if (!u.institution_id) return { ok: false, status: 400, message: 'Institución no definida.' };

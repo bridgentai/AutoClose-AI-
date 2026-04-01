@@ -169,7 +169,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Faltan campos obligatorios.' });
     }
 
-    const rolesPermitidosPublico = ['estudiante', 'profesor', 'directivo', 'padre', 'administrador-general', 'admin-general-colegio', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente', 'super_admin'];
+    const rolesPermitidosPublico = ['estudiante', 'profesor', 'directivo', 'padre', 'administrador-general', 'admin-general-colegio', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente', 'asistente-academica', 'super_admin'];
     if (rol === 'school_admin') {
       return res.status(403).json({
         message: 'Este rol no puede ser creado mediante registro público. Contacta al administrador del sistema.',
@@ -181,7 +181,7 @@ router.post('/register', async (req, res) => {
 
     let colegioId = 'COLEGIO_DEMO_2025';
     let rolFinal = rol;
-    const rolesQueRequierenCodigo = ['profesor', 'directivo', 'administrador-general', 'admin-general-colegio', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente'];
+    const rolesQueRequierenCodigo = ['profesor', 'directivo', 'administrador-general', 'admin-general-colegio', 'transporte', 'tesoreria', 'nutricion', 'cafeteria', 'asistente', 'asistente-academica'];
 
     if (rol === 'super_admin') {
       colegioId = 'GLOBAL_ADMIN';

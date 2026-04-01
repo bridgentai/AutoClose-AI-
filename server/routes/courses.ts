@@ -103,7 +103,7 @@ const checkIsDirectivo = (req: AuthRequest, res: Response, next: NextFunction) =
 };
 
 const checkIsDirectivoOrAdminColegio = (req: AuthRequest, res: Response, next: NextFunction) => {
-  if (req.user && (req.user.rol === 'directivo' || req.user.rol === 'admin-general-colegio' || req.user.rol === 'school_admin')) next();
+  if (req.user && (req.user.rol === 'directivo' || req.user.rol === 'admin-general-colegio' || req.user.rol === 'asistente-academica' || req.user.rol === 'school_admin')) next();
   else res.status(403).json({ message: 'Acceso denegado. Solo Directivos o Administradores del Colegio pueden realizar esta acción.' });
 };
 
@@ -134,7 +134,7 @@ router.get('/for-group/:grupo', protect, async (req: AuthRequest, res) => {
 
     if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado' });
 
-    const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'school_admin', 'super_admin', 'padre'];
+    const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin', 'super_admin', 'padre'];
     if (!allowedRoles.includes(userRole ?? '')) {
       return res.status(403).json({ message: 'Sin acceso' });
     }
@@ -256,7 +256,7 @@ router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
       urgente = await findLastSentComunicadoPadresHighlightForPadre(colegioId, userId);
     } else if (
       groupSubjectIds?.length &&
-      ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'school_admin'].includes(user.role)
+      ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'school_admin'].includes(user.role)
     ) {
       urgente = await findLastParentReplyHighlightForStaff(colegioId, userId, user.role, groupSubjectIds);
     }
@@ -275,7 +275,7 @@ router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
     let respuestasPendientes = 0;
     if (
       groupSubjectIds?.length &&
-      ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'school_admin'].includes(user.role)
+      ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'school_admin'].includes(user.role)
     ) {
       const st = await statsComunicadosPadresByGroupSubject(colegioId, groupSubjectIds);
       for (const v of Object.values(st)) {
@@ -330,7 +330,7 @@ router.get('/communication-summary', protect, async (req: AuthRequest, res) => {
 });
 
 // --- Comunicados a padres (curso/materia) ---
-const COMUNICADO_PADRES_PUBLISH = ['profesor', 'directivo', 'admin-general-colegio', 'asistente'] as const;
+const COMUNICADO_PADRES_PUBLISH = ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'] as const;
 
 // POST /api/courses/comunicado-padres
 router.post('/comunicado-padres', protect, requireRole(...COMUNICADO_PADRES_PUBLISH), async (req: AuthRequest, res) => {
@@ -406,7 +406,7 @@ router.post('/comunicado-padres', protect, requireRole(...COMUNICADO_PADRES_PUBL
 });
 
 // GET /api/courses/comunicados-padres-stats
-router.get('/comunicados-padres-stats', protect, requireRole('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'school_admin'), async (req: AuthRequest, res) => {
+router.get('/comunicados-padres-stats', protect, requireRole('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'school_admin'), async (req: AuthRequest, res) => {
   try {
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
@@ -525,7 +525,7 @@ router.get('/comunicados-padres/:groupSubjectId', protect, async (req: AuthReque
     if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado' });
     if (user.role === 'profesor') {
       if (gs.teacher_id !== userId) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
-    } else if (!['directivo', 'admin-general-colegio', 'asistente', 'school_admin', 'super_admin'].includes(user.role)) {
+    } else if (!['directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'school_admin', 'super_admin'].includes(user.role)) {
       return res.status(403).json({ message: 'Sin acceso' });
     }
     const list = await listComunicadosPadresForStaff(colegioId, groupSubjectId);
@@ -552,7 +552,7 @@ router.post(
       if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado' });
       if (user.role === 'profesor') {
         if (gs.teacher_id !== userId) return res.status(403).json({ message: 'No tienes acceso a este curso.' });
-      } else if (!['directivo', 'admin-general-colegio', 'asistente', 'school_admin', 'super_admin'].includes(user.role)) {
+      } else if (!['directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'school_admin', 'super_admin'].includes(user.role)) {
         return res.status(403).json({ message: 'Sin acceso' });
       }
       await markComunicadosPadresThreadsReadForGroupSubject(colegioId, userId, groupSubjectId);
@@ -695,7 +695,7 @@ router.post('/comunicado/:id/reply', protect, requireRole('padre'), async (req: 
 });
 
 // GET /api/courses/group-subjects-options — opciones para "Enviar a" (profesor/directivo/asistente)
-router.get('/group-subjects-options', protect, requireRole('profesor', 'directivo', 'asistente', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
+router.get('/group-subjects-options', protect, requireRole('profesor', 'directivo', 'asistente', 'asistente-academica', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
   try {
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
@@ -728,7 +728,7 @@ router.patch('/group-subject/:groupSubjectId', protect, async (req: AuthRequest,
     const gs = await findGroupSubjectById(groupSubjectId);
     if (!gs || gs.institution_id !== colegioId) return res.status(404).json({ message: 'Curso no encontrado.' });
     const isTeacher = gs.teacher_id === userId;
-    const isAdmin = ['admin-general-colegio', 'administrador-general', 'directivo', 'school_admin', 'super_admin'].includes(role ?? '');
+    const isAdmin = ['admin-general-colegio', 'asistente-academica', 'administrador-general', 'directivo', 'school_admin', 'super_admin'].includes(role ?? '');
     if (!isTeacher && !isAdmin) return res.status(403).json({ message: 'Solo el profesor asignado o un administrador pueden editar esta materia.' });
     const body = req.body as { display_name?: string; icon?: string };
     const display_name = body.display_name !== undefined ? (typeof body.display_name === 'string' ? body.display_name.trim() || null : null) : undefined;
@@ -749,7 +749,7 @@ router.patch('/group-subject/:groupSubjectId', protect, async (req: AuthRequest,
 });
 
 // POST /api/courses/academic-message — enviar mensaje académico a un curso (profesor/directivo/asistente)
-router.post('/academic-message', protect, requireRole('profesor', 'directivo', 'asistente', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
+router.post('/academic-message', protect, requireRole('profesor', 'directivo', 'asistente', 'asistente-academica', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
   try {
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId ?? req.user?.institution_id;

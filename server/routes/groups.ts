@@ -218,7 +218,7 @@ router.get('/all', protect, async (req: AuthRequest, res) => {
     const colegioId = req.user?.colegioId;
     const rolUser = req.user?.rol;
     if (!colegioId) return res.status(401).json({ message: 'No autorizado' });
-    const allowedRoles = ['admin-general-colegio', 'school_admin', 'directivo', 'profesor'];
+    const allowedRoles = ['admin-general-colegio', 'asistente-academica', 'school_admin', 'directivo', 'profesor'];
     if (!rolUser || !allowedRoles.includes(rolUser)) {
       return res.status(403).json({ message: 'Acceso denegado.' });
     }

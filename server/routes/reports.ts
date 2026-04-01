@@ -33,6 +33,7 @@ router.get(
     const canView =
       rol === 'directivo' ||
       rol === 'admin-general-colegio' ||
+      rol === 'asistente-academica' ||
       rol === 'school_admin' ||
       rol === 'administrador-general' ||
       rol === 'super_admin' ||
@@ -58,7 +59,7 @@ router.get('/cursos/resumen', protect, async (req: AuthRequest, res) => {
   try {
     const rol = req.user?.rol;
     const colegioId = req.user?.colegioId;
-    if (rol !== 'directivo' && rol !== 'admin-general-colegio' && rol !== 'school_admin') {
+    if (rol !== 'directivo' && rol !== 'admin-general-colegio' && rol !== 'asistente-academica' && rol !== 'school_admin') {
       return res.status(403).json({ message: 'Solo directivos y administradores pueden ver el resumen de cursos.' });
     }
     if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });

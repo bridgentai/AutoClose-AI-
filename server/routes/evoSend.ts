@@ -54,11 +54,12 @@ const EVO_SEND_ROLES = [
   'nutricion',
   'cafeteria',
   'asistente',
+  'asistente-academica',
   'school_admin',
   'super_admin',
 ];
 
-const DIRECTIVO_FULL_INBOX_ROLES = ['directivo', 'school_admin'] as const;
+const DIRECTIVO_FULL_INBOX_ROLES = ['directivo', 'asistente-academica', 'school_admin'] as const;
 
 /**
  * Verifica si un adulto puede tener hilo directo con un estudiante.
@@ -585,7 +586,7 @@ router.get('/threads/:id', protect, requireRole(...EVO_SEND_ROLES), async (req: 
   }
 });
 
-router.post('/threads', protect, requireRole('directivo', 'profesor', 'admin-general-colegio', 'school_admin'), async (req: AuthRequest, res) => {
+router.post('/threads', protect, requireRole('directivo', 'profesor', 'admin-general-colegio', 'asistente-academica', 'school_admin'), async (req: AuthRequest, res) => {
   try {
     const { asunto, contenido, tipo, cursoId, prioridad, targetUserId: bodyTargetId, recipientId } = req.body as {
       asunto?: string;
@@ -692,16 +693,26 @@ router.post('/threads/:id/messages', protect, requireRole(...EVO_SEND_ROLES), as
 
     const a = await findAnnouncementById(id);
     if (!a || a.institution_id !== colegioId) return res.status(404).json({ message: 'Hilo no encontrado.' });
+    const rol = req.user?.rol;
+    const directorWriteAll =
+      !!rol &&
+      DIRECTIVO_FULL_INBOX_ROLES.includes(rol as (typeof DIRECTIVO_FULL_INBOX_ROLES)[number]) &&
+      (a.type === 'evo_chat' || a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct');
+
     if (a.type === 'evo_chat') {
       const allowedIds = await resolveRecipientsForThread({
         announcement: { id: a.id, type: a.type, group_id: a.group_id, group_subject_id: a.group_subject_id, created_by_id: a.created_by_id },
         institutionId: colegioId,
       });
-      if (!allowedIds.includes(userId)) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+      if (!directorWriteAll && !allowedIds.includes(userId)) {
+        return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+      }
     }
     if (a.type === 'evo_chat_staff' || a.type === 'evo_chat_direct' || a.type === 'evo_chat_family') {
-      const allowed = await isUserRecipientOfAnnouncement(id, userId);
-      if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+      if (!directorWriteAll) {
+        const allowed = await isUserRecipientOfAnnouncement(id, userId);
+        if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
+      }
     } else if (a.type === 'evo_chat_support') {
       const allowed = await isUserRecipientOfAnnouncement(id, userId);
       if (!allowed) return res.status(403).json({ message: 'No tienes acceso a este hilo.' });
@@ -797,7 +808,7 @@ router.get('/attendance-inbox', protect, requireRole('asistente'), async (_req: 
   return res.json([]);
 });
 
-router.get('/courses', protect, requireRole('profesor', 'directivo', 'admin-general-colegio'), async (req: AuthRequest, res) => {
+router.get('/courses', protect, requireRole('profesor', 'directivo', 'admin-general-colegio', 'asistente-academica'), async (req: AuthRequest, res) => {
   try {
     const userId = req.user?.id;
     const colegioId = req.user?.colegioId;
