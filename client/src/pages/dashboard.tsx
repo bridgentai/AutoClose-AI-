@@ -43,6 +43,7 @@ interface Assignment {
 
 interface ProfessorGroupAssignment {
   groupId: string;
+  groupName?: string;
   subjects?: unknown[];
   totalStudents?: number;
 }
@@ -765,6 +766,42 @@ function ProfesorDashboard() {
     staleTime: 0,
   });
 
+  const { data: misAsignaciones = [] } = useQuery<{
+    _id: string;
+    titulo: string;
+    fechaEntrega: string;
+    curso: string;
+    courseId: string;
+    pendientesCalificar?: number;
+  }[]>({
+    queryKey: ['teacherMisAsignaciones', user?.id],
+    queryFn: () => apiRequest('GET', `/api/assignments/profesor/${user?.id}/mis-asignaciones`),
+    enabled: !!user?.id && user?.rol === 'profesor',
+    staleTime: 60 * 1000,
+  });
+
+  const siguientesPorGrupo = useMemo(() => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const futuras = misAsignaciones.filter(a => new Date(a.fechaEntrega) >= hoy);
+    const porGrupo = new Map<string, typeof futuras[0]>();
+    futuras
+      .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
+      .forEach(a => {
+        const grupo = (a.curso ?? '').trim();
+        if (grupo && !porGrupo.has(grupo)) porGrupo.set(grupo, a);
+      });
+    return Array.from(porGrupo.entries()).map(([grupo, asignacion]) => ({ grupo, asignacion }));
+  }, [misAsignaciones]);
+
+  // TODO: reemplazar con lógica real de horario cuando esté disponible
+  const clasesHoyMock = professorGroups.map((g, i) => ({
+    groupId: g.groupId,
+    groupName: g.groupName ?? `Grupo ${i + 1}`,
+    hora: i === 0 ? '7:00 AM' : i === 1 ? '10:00 AM' : '2:00 PM',
+    esSiguiente: i === 1,
+  }));
+
   const handleDayClick = (assignment: Assignment, event?: React.MouseEvent) => {
     if (event) {
       event.stopPropagation(); // Prevenir que se active el onClick de la Card
@@ -774,17 +811,15 @@ function ProfesorDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* SECCIÓN 1 — 4 KPIs en grid uniforme */}
+
+      {/* SECCIÓN 1 — 4 KPIs uniformes */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+
         {/* KPI 1 — Mis Cursos */}
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
-          style={{ animationDelay: '0.1s' }}
-          onClick={() => setLocation('/courses')}
-        >
+        <Card className={`${CARD_STYLE} cursor-pointer reveal-scale`} style={{ animationDelay: '0.1s' }} onClick={() => setLocation('/courses')}>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
-              <BookOpen className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              <BookOpen className="w-4 h-4 text-[#3B82F6]" />
               Mis Cursos
             </CardTitle>
           </CardHeader>
@@ -792,22 +827,20 @@ function ProfesorDashboard() {
             <div className="text-3xl font-bold text-white font-['Poppins']">
               {isLoadingCourses ? '—' : professorGroups.length}
             </div>
-            <Badge className="mt-1 bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
-              {professorGroups.reduce((s, g) => s + (g.totalStudents ?? 0), 0)} estudiantes
-            </Badge>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
+                {professorGroups.reduce((s, g) => s + (g.totalStudents ?? 0), 0)} estudiantes
+              </Badge>
+            </div>
             <p className="text-xs text-white/50 mt-1">Cursos a cargo</p>
           </CardContent>
         </Card>
 
         {/* KPI 2 — Tareas este mes */}
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
-          style={{ animationDelay: '0.2s' }}
-          onClick={() => setLocation('/profesor/academia/tareas')}
-        >
+        <Card className={`${CARD_STYLE} cursor-pointer reveal-scale`} style={{ animationDelay: '0.15s' }} onClick={() => setLocation('/profesor/academia/tareas')}>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
-              <ClipboardList className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              <ClipboardList className="w-4 h-4 text-[#3B82F6]" />
               Tareas este mes
             </CardTitle>
           </CardHeader>
@@ -815,22 +848,20 @@ function ProfesorDashboard() {
             <div className="text-3xl font-bold text-white font-['Poppins']">
               {isLoadingAssignments ? '—' : assignmentsThisMonth.length}
             </div>
-            <Badge className="mt-1 bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
-              {assignments.length} total
-            </Badge>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge className="bg-white/10 text-white/60 border-0 text-xs">
+                {assignments.length} total
+              </Badge>
+            </div>
             <p className="text-xs text-white/50 mt-1">Tareas asignadas</p>
           </CardContent>
         </Card>
 
         {/* KPI 3 — Por revisar */}
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
-          style={{ animationDelay: '0.3s' }}
-          onClick={() => setLocation('/profesor/academia/tareas/revision')}
-        >
+        <Card className={`${CARD_STYLE} cursor-pointer reveal-scale`} style={{ animationDelay: '0.2s' }} onClick={() => setLocation('/profesor/academia/tareas/revision')}>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
-              <FileCheck className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              <FileCheck className="w-4 h-4 text-[#3B82F6]" />
               Por revisar
             </CardTitle>
           </CardHeader>
@@ -838,47 +869,59 @@ function ProfesorDashboard() {
             <div className="text-3xl font-bold text-white font-['Poppins']">
               {isLoadingPending ? '—' : pendingReview.length}
             </div>
-            <Badge className={`mt-1 border-0 text-xs ${pendingReview.length > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
-              {pendingReview.length > 0 ? 'Requiere atención' : 'Al día'}
-            </Badge>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge className={pendingReview.length > 0
+                ? 'bg-amber-500/20 text-amber-300 border-0 text-xs'
+                : 'bg-emerald-500/20 text-emerald-300 border-0 text-xs'}>
+                {pendingReview.length > 0 ? 'Requiere atención' : 'Al día'}
+              </Badge>
+            </div>
             <p className="text-xs text-white/50 mt-1">Entregas pendientes</p>
           </CardContent>
         </Card>
 
-        {/* KPI 4 — Estudiantes */}
-        <Card
-          className={`${CARD_STYLE} reveal-scale gradient-overlay-blue`}
-          style={{ animationDelay: '0.4s' }}
-        >
+        {/* KPI 4 — Hoy (mock) */}
+        <Card className={`${CARD_STYLE} reveal-scale`} style={{ animationDelay: '0.25s' }}>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
-              <Users className="w-3.5 h-3.5 text-[#3B82F6]" />
-              Estudiantes
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              <Users className="w-4 h-4 text-[#3B82F6]" />
+              Hoy
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">
-              {isLoadingCourses ? '—' : professorGroups.reduce((s, g) => s + (g.totalStudents ?? 0), 0)}
+            <div className="space-y-1.5">
+              {clasesHoyMock.length === 0 ? (
+                <p className="text-xs text-white/40">Sin clases registradas</p>
+              ) : clasesHoyMock.map((clase) => (
+                <button
+                  key={clase.groupId}
+                  type="button"
+                  onClick={() => setLocation(`/course-detail/${clase.groupId}`)}
+                  className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+                >
+                  <span className="text-xs text-white/80 font-medium">{clase.groupName}</span>
+                  <Badge className={clase.esSiguiente
+                    ? 'bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-[10px]'
+                    : 'bg-white/5 text-white/50 border-0 text-[10px]'}>
+                    {clase.esSiguiente ? 'Siguiente' : clase.hora}
+                  </Badge>
+                </button>
+              ))}
             </div>
-            <Badge className="mt-1 bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
-              {professorGroups.length} grupos
-            </Badge>
-            <p className="text-xs text-white/50 mt-1">Total a cargo</p>
+            {/* TODO: reemplazar mock con lógica real de horario */}
           </CardContent>
         </Card>
+
       </div>
 
-      {/* SECCIÓN 2 — Grid principal bento */}
+      {/* SECCIÓN 2 — Grid principal */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Columna izquierda: Calendario de Tareas */}
-        <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue lg:col-span-3`}
-          style={{ animationDelay: '0.5s' }}
-          onClick={() => setLocation('/teacher-calendar')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white text-expressive">Calendario de Tareas</CardTitle>
-            <CardDescription className="text-white/60 text-expressive-subtitle">
+
+        {/* Columna izquierda — Calendario */}
+        <Card className={`${CARD_STYLE} lg:col-span-3 reveal-slide`} style={{ animationDelay: '0.3s' }}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-white text-base">Calendario de Tareas</CardTitle>
+            <CardDescription className="text-white/50 text-sm">
               {isLoadingAssignments
                 ? 'Cargando tareas...'
                 : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes (${assignments.length} en total)`}
@@ -897,103 +940,89 @@ function ProfesorDashboard() {
           </CardContent>
         </Card>
 
-        {/* Columna derecha: stack de 3 cards */}
-        <div className="lg:col-span-2 flex flex-col gap-4 h-full">
-          {/* Card A — Clase de hoy (mock UI) */}
-          <Card className={`${CARD_STYLE} flex-1 reveal-slide`} style={{ animationDelay: '0.6s' }}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm font-medium">Hoy</CardTitle>
-                <Badge className="bg-white/10 text-white/60 border-0 text-xs">
-                  {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][now.getDay()]}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* TODO: reemplazar mock con lógica real de horario cuando esté disponible */}
-              <div className="flex justify-between items-center py-2 border-b border-white/5">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#3B82F6]" />
-                  <span className="text-sm text-white/80">11H · Matemáticas</span>
-                </div>
-                <Badge className="bg-white/5 text-white/60 border-0 text-xs">7:00 AM</Badge>
-              </div>
-              <div className="flex justify-between items-center py-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#3B82F6]/60" />
-                  <span className="text-sm text-white/80">11H · Biología</span>
-                </div>
-                <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">Siguiente</Badge>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Columna derecha — Stack de cards */}
+        <div className="lg:col-span-2 flex flex-col gap-4">
 
-          {/* Card B — Asignaciones resumen */}
-          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.7s' }}>
+          {/* Card — Siguiente asignación por curso */}
+          <Card className={`${CARD_STYLE} flex-1 reveal-slide`} style={{ animationDelay: '0.35s' }}>
             <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm font-medium">Asignaciones</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-white text-sm">
                 <GraduationCap className="w-4 h-4 text-[#ffd700]" />
-              </div>
+                Asignaciones por curso
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-white font-['Poppins']">
-                {isLoadingAssignments ? '—' : assignments.length}
-              </div>
-              <p className="text-xs text-white/50 mt-0.5">Solo con entrega hoy o futura</p>
-              <Separator className="my-3 bg-white/10" />
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-white/60">Entregadas</span>
-                  <span className="text-sm font-bold text-emerald-400">
-                    {isLoadingAssignments || isLoadingPending ? '—' : Math.max(0, assignments.length - pendingReview.length)}
-                  </span>
+              {siguientesPorGrupo.length === 0 ? (
+                <p className="text-xs text-white/40 py-2">Sin asignaciones futuras</p>
+              ) : (
+                <div className="space-y-3">
+                  {siguientesPorGrupo.map(({ grupo, asignacion }) => {
+                    const pendientes = asignacion.pendientesCalificar ?? 0;
+                    const totalEstudiantes = professorGroups.find(g => (g.groupName ?? '') === grupo)?.totalStudents ?? 0;
+                    const entregadasCount = Math.max(0, totalEstudiantes - pendientes);
+                    return (
+                      <button
+                        key={asignacion._id}
+                        type="button"
+                        onClick={() => setLocation(`/assignment/${asignacion._id}`)}
+                        className="w-full text-left"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-semibold text-white/80">{grupo}</span>
+                          <Badge className="bg-white/5 text-white/50 border-0 text-[10px]">
+                            {new Date(asignacion.fechaEntrega).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-white/60 truncate mb-1">{asignacion.titulo}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-emerald-400">{entregadasCount}/{totalEstudiantes}</span>
+                          <span className="text-[10px] text-white/30">entregas</span>
+                          {pendientes > 0 && (
+                            <Badge className="bg-amber-500/20 text-amber-300 border-0 text-[10px] ml-auto">
+                              {pendientes} por calificar
+                            </Badge>
+                          )}
+                        </div>
+                        <Separator className="mt-2 bg-white/5" />
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-white/60">Pendientes</span>
-                  <span className="text-sm font-bold text-amber-400">
-                    {isLoadingPending ? '—' : pendingReview.length}
-                  </span>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Card C — Acceso rápido */}
-          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.8s' }}>
+          {/* Card — Acceso rápido */}
+          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.4s' }}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-white text-sm font-medium">Acceso rápido</CardTitle>
+              <CardTitle className="text-white text-sm">Acceso rápido</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setLocation('/evo-send')}
-                  className="flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-colors"
-                >
-                  <Mail className="w-6 h-6 text-[#3B82F6] mb-1.5" />
+                <button type="button" onClick={() => setLocation('/evo-send')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                  <Mail className="w-6 h-6 text-[#3B82F6] mb-2" />
                   <span className="text-xs text-white">Evo Send</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setLocation('/evo-drive')}
-                  className="flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-colors"
-                >
-                  <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-1.5" />
+                <button type="button" onClick={() => setLocation('/evo-drive')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                  <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" />
                   <span className="text-xs text-white">Evo Drive</span>
                 </button>
               </div>
             </CardContent>
           </Card>
+
         </div>
       </div>
 
-      {/* SECCIÓN 3 — AIChatBox ancho completo contenido en card */}
-      <Card className={`${CARD_STYLE}`}>
+      {/* SECCIÓN 3 — Kiwi Assist ancho completo */}
+      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.45s' }}>
         <CardContent className="p-0">
           <AIChatBox rol="profesor" />
         </CardContent>
       </Card>
+
     </div>
   );
 }
