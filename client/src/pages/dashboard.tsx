@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import kiwiImg from '@/assets/kiwi sentado.png';
 import {
   Dialog,
@@ -201,11 +202,10 @@ function AIChatBox({ rol }: AIChatBoxProps) {
 
   return (
     <Card
-      className={`${CARD_STYLE} cursor-pointer flex flex-col gradient-overlay-blue hover-glow ${
-        rol === 'padre'
-          ? 'bg-gradient-to-br from-[rgba(37,99,235,0.08)] to-[rgba(255,215,0,0.04)] backdrop-blur-lg border border-[rgba(255,215,0,0.12)]'
-          : ''
-      }`}
+      className={`${CARD_STYLE} cursor-pointer flex flex-col gradient-overlay-blue hover-glow ${rol === 'padre'
+        ? 'bg-gradient-to-br from-[rgba(37,99,235,0.08)] to-[rgba(255,215,0,0.04)] backdrop-blur-lg border border-[rgba(255,215,0,0.12)]'
+        : ''
+        }`}
       onClick={() => setLocation('/chat')}
     >
       <CardHeader className="pb-3 flex-shrink-0">
@@ -774,59 +774,106 @@ function ProfesorDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* SECCIÓN 1 — 4 KPIs en grid uniforme */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* KPI 1 — Mis Cursos */}
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/courses')}
         >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white text-expressive">
-              <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
+              <BookOpen className="w-3.5 h-3.5 text-[#3B82F6]" />
               Mis Cursos
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoadingCourses ? (
-              <div className="text-3xl font-bold text-white font-['Poppins'] animate-pulse">...</div>
-            ) : (
-              <div className="text-3xl font-bold text-white font-['Poppins']">{professorGroups.length}</div>
-            )}
-            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Cursos a cargo</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingCourses ? '—' : professorGroups.length}
+            </div>
+            <Badge className="mt-1 bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
+              {professorGroups.reduce((s, g) => s + (g.totalStudents ?? 0), 0)} estudiantes
+            </Badge>
+            <p className="text-xs text-white/50 mt-1">Cursos a cargo</p>
           </CardContent>
         </Card>
 
+        {/* KPI 2 — Tareas este mes */}
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.2s' }}
-          onClick={() => setLocation('/profesor/tareas-por-revisar')}
+          onClick={() => setLocation('/profesor/academia/tareas')}
         >
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white text-expressive">
-              <ClipboardList className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
-              Asignaciones
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
+              <ClipboardList className="w-3.5 h-3.5 text-[#3B82F6]" />
+              Tareas este mes
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoadingAssignments ? (
-              <div className="text-3xl font-bold text-white font-['Poppins'] animate-pulse">...</div>
-            ) : (
-              <div className="text-3xl font-bold text-white font-['Poppins']">{assignments.length}</div>
-            )}
-            <p className="text-sm text-white/50 mt-1 text-expressive-subtitle">Asignaciones actuales</p>
-            {!isLoadingPending && pendingReview.length > 0 && (
-              <p className="text-xs text-[#93C5FD] mt-1">
-                {pendingReview.length} pendiente{pendingReview.length === 1 ? '' : 's'} de revisión
-              </p>
-            )}
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingAssignments ? '—' : assignmentsThisMonth.length}
+            </div>
+            <Badge className="mt-1 bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
+              {assignments.length} total
+            </Badge>
+            <p className="text-xs text-white/50 mt-1">Tareas asignadas</p>
+          </CardContent>
+        </Card>
+
+        {/* KPI 3 — Por revisar */}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
+          style={{ animationDelay: '0.3s' }}
+          onClick={() => setLocation('/profesor/academia/tareas/revision')}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
+              <FileCheck className="w-3.5 h-3.5 text-[#3B82F6]" />
+              Por revisar
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingPending ? '—' : pendingReview.length}
+            </div>
+            <Badge className={`mt-1 border-0 text-xs ${pendingReview.length > 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+              {pendingReview.length > 0 ? 'Requiere atención' : 'Al día'}
+            </Badge>
+            <p className="text-xs text-white/50 mt-1">Entregas pendientes</p>
+          </CardContent>
+        </Card>
+
+        {/* KPI 4 — Estudiantes */}
+        <Card
+          className={`${CARD_STYLE} reveal-scale gradient-overlay-blue`}
+          style={{ animationDelay: '0.4s' }}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-1.5 text-white/70 text-xs uppercase tracking-wider font-medium">
+              <Users className="w-3.5 h-3.5 text-[#3B82F6]" />
+              Estudiantes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingCourses ? '—' : professorGroups.reduce((s, g) => s + (g.totalStudents ?? 0), 0)}
+            </div>
+            <Badge className="mt-1 bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
+              {professorGroups.length} grupos
+            </Badge>
+            <p className="text-xs text-white/50 mt-1">Total a cargo</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* SECCIÓN 2 — Grid principal bento */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Columna izquierda: Calendario de Tareas */}
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue`}
-          style={{ animationDelay: '0.3s' }}
+          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue lg:col-span-3`}
+          style={{ animationDelay: '0.5s' }}
           onClick={() => setLocation('/teacher-calendar')}
         >
           <CardHeader>
@@ -850,36 +897,101 @@ function ProfesorDashboard() {
           </CardContent>
         </Card>
 
-        <div className="reveal-slide" style={{ animationDelay: '0.4s' }}>
-          <AIChatBox rol="profesor" />
+        {/* Columna derecha: stack de 3 cards */}
+        <div className="lg:col-span-2 flex flex-col gap-4">
+          {/* Card A — Clase de hoy (mock UI) */}
+          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.6s' }}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white text-sm font-medium">Hoy</CardTitle>
+                <Badge className="bg-white/10 text-white/60 border-0 text-xs">
+                  {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][now.getDay()]}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* TODO: reemplazar mock con lógica real de horario cuando esté disponible */}
+              <div className="flex justify-between items-center py-2 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[#3B82F6]" />
+                  <span className="text-sm text-white/80">11H · Matemáticas</span>
+                </div>
+                <Badge className="bg-white/5 text-white/60 border-0 text-xs">7:00 AM</Badge>
+              </div>
+              <div className="flex justify-between items-center py-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[#3B82F6]/60" />
+                  <span className="text-sm text-white/80">11H · Biología</span>
+                </div>
+                <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">Siguiente</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card B — Asignaciones resumen */}
+          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.7s' }}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white text-sm font-medium">Asignaciones</CardTitle>
+                <GraduationCap className="w-4 h-4 text-[#ffd700]" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-white font-['Poppins']">
+                {isLoadingAssignments ? '—' : assignments.length}
+              </div>
+              <p className="text-xs text-white/50 mt-0.5">Solo con entrega hoy o futura</p>
+              <Separator className="my-3 bg-white/10" />
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-white/60">Entregadas</span>
+                  <span className="text-sm font-bold text-emerald-400">
+                    {isLoadingAssignments || isLoadingPending ? '—' : Math.max(0, assignments.length - pendingReview.length)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-white/60">Pendientes</span>
+                  <span className="text-sm font-bold text-amber-400">
+                    {isLoadingPending ? '—' : pendingReview.length}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card C — Acceso rápido */}
+          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.8s' }}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-white text-sm font-medium">Acceso rápido</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLocation('/evo-send')}
+                  className="flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-colors"
+                >
+                  <Mail className="w-6 h-6 text-[#3B82F6] mb-1.5" />
+                  <span className="text-xs text-white">Evo Send</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation('/evo-drive')}
+                  className="flex flex-col items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-colors"
+                >
+                  <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-1.5" />
+                  <span className="text-xs text-white">Evo Drive</span>
+                </button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.5s' }}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => setLocation('/evo-send')}
-              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-            >
-              <Mail className="w-8 h-8 text-[#3B82F6] mb-2" />
-              <span className="text-sm text-white">Evo Send</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocation('/evo-drive')}
-              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-            >
-              <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" />
-              <span className="text-sm text-white">Evo Drive</span>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* SECCIÓN 3 — AIChatBox ancho completo */}
+      <div className="reveal-slide" style={{ animationDelay: '0.9s' }}>
+        <AIChatBox rol="profesor" />
+      </div>
     </div>
   );
 }
@@ -1906,9 +2018,9 @@ function PadreDashboard() {
                   const widthPercent = Math.min(100, Math.max(0, scoreNum));
                   const accentColor =
                     materia.tieneNota && (materia.promedio ?? 0) >= 80 ? 'var(--evo-success)' :
-                    materia.tieneNota && (materia.promedio ?? 0) >= 60 ? 'var(--evo-warning)' :
-                    materia.tieneNota ? 'var(--evo-danger)' :
-                    'rgba(255,255,255,0.1)';
+                      materia.tieneNota && (materia.promedio ?? 0) >= 60 ? 'var(--evo-warning)' :
+                        materia.tieneNota ? 'var(--evo-danger)' :
+                          'rgba(255,255,255,0.1)';
                   return (
                     <React.Fragment key={materia._id || materia.nombre}>
                       {esPrimeraSinNota && materiasConEstado.some(m => m.tieneNota) && (
@@ -1949,9 +2061,8 @@ function PadreDashboard() {
                           </span>
                           <div className="flex items-center gap-2 shrink-0">
                             <span
-                              className={`text-sm font-bold font-['Poppins'] tabular-nums ${
-                                hasRecorded ? 'text-[var(--evo-gold)]' : 'text-white/30'
-                              }`}
+                              className={`text-sm font-bold font-['Poppins'] tabular-nums ${hasRecorded ? 'text-[var(--evo-gold)]' : 'text-white/30'
+                                }`}
                             >
                               {hasRecorded ? `${Math.round(scoreNum)}/100` : '—'}
                             </span>
