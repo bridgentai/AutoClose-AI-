@@ -222,7 +222,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
         </CardDescription>
       </CardHeader>
 
-      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-0 min-h-0 h-[500px]">
+      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-0 min-h-0">
         <div className="flex-1 space-y-3 overflow-y-auto pr-2">
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
@@ -486,7 +486,7 @@ function EstudianteDashboard() {
       nombre: string;
       groupSubjectId?: string | null;
       promedio: number;
-      notas: { nota: number; gradingCategoryId?: string; fecha?: string }[];
+      notas: { nota: number; gradingCategoryId?: string; fecha?: string; categoryWeightPct?: number }[];
     }[];
     total: number;
   }>({
@@ -509,7 +509,7 @@ function EstudianteDashboard() {
   });
 
   const groupSubjectIds = useMemo(
-    () => [...new Set((notesData?.materias ?? []).map((m) => m.groupSubjectId).filter(Boolean))] as string[],
+    () => Array.from(new Set((notesData?.materias ?? []).map((m) => m.groupSubjectId).filter(Boolean))) as string[],
     [notesData?.materias]
   );
   const logrosQueries = useQueries({
@@ -571,108 +571,149 @@ function EstudianteDashboard() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1 — Mis Materias */}
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/mi-aprendizaje/cursos')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Mis Materias</CardTitle>
-            <BookOpen className="w-5 h-5 text-[#ffd700] animate-float" style={{ animationDelay: '0.5s' }} />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              <BookOpen className="w-4 h-4 text-[#3B82F6]" />
+              Mis Materias
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
               {isLoadingCourses ? '—' : courses.length}
             </div>
-            <p className="text-xs text-white/60 mt-1">Materias este año</p>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
+                {courses.length} activas
+              </Badge>
+            </div>
+            <p className="text-xs text-white/50 mt-1">Materias este año</p>
           </CardContent>
         </Card>
 
+        {/* KPI 2 — Tareas */}
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.2s' }}
           onClick={() => setLocation('/mi-aprendizaje/tareas')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Tareas</CardTitle>
-            <GraduationCap className="w-5 h-5 text-[#ffd700] animate-pulse-glow" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              <ClipboardList className="w-4 h-4 text-[#3B82F6]" />
+              Tareas
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-white/60">Completadas</span>
-                <span className="text-xl font-bold text-green-400 font-['Poppins']">
-                  {isLoadingAssignments ? '—' : tareasCompletadas.length}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-white/60">Pendientes</span>
-                <span className="text-xl font-bold text-yellow-400 font-['Poppins']">
-                  {isLoadingAssignments ? '—' : tareasPorEntregar.length}
-                </span>
-              </div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">
+              {isLoadingAssignments ? '—' : tareasCompletadas.length + tareasPorEntregar.length}
             </div>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge className={tareasPorEntregar.length === 0
+                ? 'bg-emerald-500/20 text-emerald-300 border-0 text-xs'
+                : 'bg-amber-500/20 text-amber-300 border-0 text-xs'}>
+                {tareasPorEntregar.length === 0 ? 'Al día' : `${tareasPorEntregar.length} pendientes`}
+              </Badge>
+            </div>
+            {!isLoadingAssignments && (tareasCompletadas.length + tareasPorEntregar.length) > 0 && (
+              <div className="mt-3 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[#3B82F6] transition-all duration-700"
+                  style={{ width: `${Math.round(tareasCompletadas.length / (tareasCompletadas.length + tareasPorEntregar.length) * 100)}%` }}
+                />
+              </div>
+            )}
+            <p className="text-xs text-white/50 mt-1">Tareas asignadas</p>
           </CardContent>
         </Card>
 
+        {/* KPI 3 — Materias Perdidas */}
         <Card
           className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Materias Perdidas</CardTitle>
-            <AlertTriangle className={`w-5 h-5 ${RED_ALERT} animate-pulse-glow`} />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              {materiasPerdidas === 0 && notesData !== undefined
+                ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                : <AlertTriangle className="w-4 h-4 text-[#3B82F6]" />}
+              Materias Perdidas
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-3xl font-bold ${RED_ALERT} font-['Poppins']`}>
+            <div className={`text-3xl font-bold font-['Poppins'] ${materiasPerdidas === 0 && notesData !== undefined ? 'text-emerald-400' : RED_ALERT}`}>
               {notesData === undefined ? '—' : materiasPerdidas}
             </div>
-            <p className="text-xs text-white/60 mt-1">Requieren atención (promedio menor a 65)</p>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge className={materiasPerdidas === 0 && notesData !== undefined
+                ? 'bg-emerald-500/20 text-emerald-300 border-0 text-xs'
+                : 'bg-red-500/20 text-red-300 border-0 text-xs'}>
+                {materiasPerdidas === 0 && notesData !== undefined ? 'Al día' : 'Requiere atención'}
+              </Badge>
+            </div>
+            <p className="text-xs text-white/50 mt-1">Promedio menor a 65</p>
           </CardContent>
         </Card>
 
+        {/* KPI 4 — Puesto en el Salón */}
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue badge-glow`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
           style={{ animationDelay: '0.4s' }}
           onClick={() => setLocation('/mi-aprendizaje/notas')}
         >
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
-            <CardTitle className="text-sm font-medium text-white">Puesto en el Salon</CardTitle>
-            <Trophy className="w-5 h-5 text-[#facc15] animate-float" />
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
+              <Trophy className="w-4 h-4 text-[#3B82F6]" />
+              Puesto en el Salón
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {rankingData === undefined ? (
               <>
                 <div className="text-3xl font-bold text-[#facc15] font-['Poppins']">—</div>
-                <p className="text-xs text-white/60 mt-1">Cargando...</p>
+                <p className="text-xs text-white/50 mt-1">Cargando...</p>
               </>
             ) : rankingData.total < 2 || rankingData.puesto === 0 ? (
               <>
-                <div className="text-lg font-semibold text-white/80 font-['Poppins']">Sin datos suficientes</div>
-                <p className="text-xs text-white/60 mt-1">
+                <div className="text-lg font-semibold text-white/80 font-['Poppins']">Sin datos</div>
+                <p className="text-xs text-white/50 mt-1">
                   {rankingData.grado ? `Grado ${rankingData.grado}` : 'Menos de 2 estudiantes con notas'}
                 </p>
               </>
             ) : (
               <>
                 <div className="text-3xl font-bold text-[#facc15] font-['Poppins']">#{rankingData.puesto}</div>
-                <p className="text-xs text-white/60 mt-1">De {rankingData.total} estudiantes</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge className={
+                    rankingData.puesto === 1
+                      ? 'bg-[#facc15]/20 text-[#facc15] border-0 text-xs'
+                      : rankingData.puesto <= 3
+                        ? 'bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs'
+                        : 'bg-white/10 text-white/60 border-0 text-xs'
+                  }>
+                    {rankingData.puesto === 1 ? 'Primer puesto' : rankingData.puesto <= 3 ? 'Top 3' : `Top ${Math.round(rankingData.puesto / rankingData.total * 100)}%`}
+                  </Badge>
+                </div>
+                <p className="text-xs text-white/50 mt-1">De {rankingData.total} estudiantes</p>
               </>
             )}
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-slide gradient-overlay-blue`}
+          className={`${CARD_STYLE} lg:col-span-3 reveal-slide`}
           style={{ animationDelay: '0.5s' }}
-          onClick={() => setLocation('/mi-aprendizaje/calendario')}
         >
-          <CardHeader>
-            <CardTitle className="text-white text-expressive">Calendario de Tareas</CardTitle>
-            <CardDescription className="text-white/60 text-expressive-subtitle">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-white text-base">Calendario de Tareas</CardTitle>
+            <CardDescription className="text-white/50 text-sm">
               {isLoadingAssignments
                 ? 'Cargando tareas...'
                 : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
@@ -685,43 +726,61 @@ function EstudianteDashboard() {
                 <p className="text-white/60">Cargando calendario...</p>
               </div>
             ) : (
-              <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
+              <div className="pulse-blue">
                 <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
               </div>
             )}
           </CardContent>
         </Card>
 
-        <div className="reveal-slide" style={{ animationDelay: '0.6s' }}>
-          <AIChatBox rol="estudiante" />
+        <div className="lg:col-span-2 flex flex-col gap-4" style={{ minHeight: '560px' }}>
+          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.6s' }}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-white text-sm">Acceso rápido</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setLocation('/evo-send')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                >
+                  <Mail className="w-6 h-6 text-[#3B82F6] mb-2" />
+                  <span className="text-xs text-white">Evo Send</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation('/evo-drive')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                >
+                  <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" />
+                  <span className="text-xs text-white">Evo Drive</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation('/mi-aprendizaje/tareas')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                >
+                  <ClipboardList className="w-6 h-6 text-[#3B82F6] mb-2" />
+                  <span className="text-xs text-white">Tareas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocation('/mi-aprendizaje/notas')}
+                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                >
+                  <GraduationCap className="w-6 h-6 text-[#3B82F6] mb-2" />
+                  <span className="text-xs text-white">Notas</span>
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex-1 flex flex-col min-h-[320px] reveal-slide" style={{ animationDelay: '0.7s' }}>
+            <AIChatBox rol="estudiante" />
+          </div>
         </div>
       </div>
-
-      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.7s' }}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => setLocation('/evo-send')}
-              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-            >
-              <Mail className="w-8 h-8 text-[#3B82F6] mb-2" />
-              <span className="text-sm text-white">Evo Send</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setLocation('/evo-drive')}
-              className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-            >
-              <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" />
-              <span className="text-sm text-white">Evo Drive</span>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -1229,9 +1288,11 @@ function DirectivoDashboard() {
 
       {/* Fila: Chat IA | Calendario */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="reveal-slide flex flex-col min-h-[420px]">
-          <AIChatBox rol="directivo" />
-        </div>
+        <Card className={`${CARD_STYLE} reveal-slide flex-1 min-h-[300px]`}>
+          <CardContent className="p-0 h-full">
+            <AIChatBox rol="directivo" />
+          </CardContent>
+        </Card>
 
         <Card className={`${CARD_STYLE} cursor-pointer reveal-slide`} onClick={() => setLocation('/comunidad/calendario')}>
           <CardHeader className="pb-2">
@@ -1275,22 +1336,22 @@ function DirectivoDashboard() {
         </Card>
 
         <Card className={`${CARD_STYLE} reveal-slide`}>
-          <CardHeader>
-            <CardTitle className="text-white text-base">Acceso rápido</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-white text-sm">Acceso rápido</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <button type="button" onClick={() => setLocation('/evo-drive')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <FolderOpen className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Evo Drive</span>
+                <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Drive</span>
               </button>
               <button type="button" onClick={() => setLocation('/evo-send')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <Mail className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Evo Send</span>
+                <Mail className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Send</span>
               </button>
               <button type="button" onClick={() => setLocation('/directivo/cursos')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <FileText className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Calificaciones</span>
+                <FileText className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Calificaciones</span>
               </button>
               <button type="button" onClick={() => setLocation('/directivo/estudiantes')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <Users className="w-8 h-8 text-[#3B82F6] mb-2" /><span className="text-sm text-white">Estudiantes</span>
+                <Users className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Estudiantes</span>
               </button>
             </div>
           </CardContent>
@@ -1319,6 +1380,7 @@ function SuperAdminDashboard() {
     nombreIA: 'EvoOS',
     colorPrimario: '#002366',
     colorSecundario: '#1e3cff',
+    logoUrl: '',
   });
   const [creatingSchool, setCreatingSchool] = useState(false);
 
@@ -1366,6 +1428,7 @@ function SuperAdminDashboard() {
         nombreIA: 'EvoOS',
         colorPrimario: '#002366',
         colorSecundario: '#1e3cff',
+        logoUrl: '',
       });
       loadSchools();
       setTimeout(() => setSuccess(''), 5000); // Mostrar por más tiempo para que se vea el código
@@ -1926,8 +1989,8 @@ function PadreDashboard() {
     (assignment as { submissions?: unknown[]; entregas?: unknown[] }).entregas ||
     [];
   const submissionHijo = (assignment: Assignment) =>
-    submissionsHijo(assignment).find(
-      (e: { estudianteId?: string }) => e.estudianteId === primerHijoId
+    (submissionsHijo(assignment) as { estudianteId?: string; calificacion?: unknown }[]).find(
+      (e) => e.estudianteId === primerHijoId
     ) as { calificacion?: unknown } | undefined;
 
   const estadoAsignacionHijo = (assignment: Assignment): 'pendiente' | 'entregada' | 'calificada' => {
@@ -2216,27 +2279,26 @@ function PadreDashboard() {
           </CardContent>
         </Card>
 
-        <Card
-          className={`${CARD_STYLE} cursor-pointer`}
-          onClick={() => setLocation('/calendar')}
-        >
-          <CardHeader>
-            <CardTitle className="text-white">
-              <span className="block text-[10px] font-medium text-white/35 uppercase tracking-[1.5px] mb-1">
-                Calendario de tareas
-              </span>
+        <Card className={`${CARD_STYLE} reveal-slide`}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-white text-base">Calendario de Tareas</CardTitle>
+            <CardDescription className="text-white/50 text-sm">
               Tareas de {nombreHijo}
-            </CardTitle>
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div onClick={(e) => e.stopPropagation()}>
+            <div className="pulse-blue">
               <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <AIChatBox rol="padre" />
+      <Card className={`${CARD_STYLE} reveal-slide min-h-[300px]`}>
+        <CardContent className="p-0 h-full">
+          <AIChatBox rol="padre" />
+        </CardContent>
+      </Card>
     </div>
   );
 }

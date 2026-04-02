@@ -645,6 +645,19 @@ export function AdminGeneralColegioDashboard() {
     },
   });
 
+  const [removeAssignmentError, setRemoveAssignmentError] = useState<string | null>(null);
+  const removeTeachingAssignmentMutation = useMutation({
+    mutationFn: ({ userId, groupSubjectId }: { userId: string; groupSubjectId: string }) =>
+      apiRequest('DELETE', `/api/users/${userId}/teaching-assignments/${groupSubjectId}`),
+    onSuccess: (_, v) => {
+      setRemoveAssignmentError(null);
+      queryClient.invalidateQueries({ queryKey: ['teacherAssignments', v.userId] });
+      queryClient.invalidateQueries({ queryKey: ['materiasList'] });
+      queryClient.invalidateQueries({ queryKey: ['groupsAll'] });
+    },
+    onError: (e) => setRemoveAssignmentError((e as Error)?.message ?? 'No se pudo eliminar la asignación.'),
+  });
+
   // Cambiar status (activar/suspender)
   const changeStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'active' | 'suspended' }) =>
@@ -2925,11 +2938,26 @@ export function AdminGeneralColegioDashboard() {
                       {teachingAssignments.map((a) => (
                         <li
                           key={a.groupSubjectId}
-                          className="text-sm border border-white/10 rounded-md px-3 py-2 bg-black/20"
+                          className="text-sm border border-white/10 rounded-md px-3 py-2 bg-black/20 flex items-center justify-between gap-2"
                         >
-                          <span className="font-medium text-emerald-300">{a.subjectName}</span>
-                          <span className="text-white/40"> · </span>
-                          <span className="text-white/90">Curso {a.groupName}</span>
+                          <span>
+                            <span className="font-medium text-emerald-300">{a.subjectName}</span>
+                            <span className="text-white/40"> · </span>
+                            <span className="text-white/90">Curso {a.groupName}</span>
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-400/70 hover:text-red-400 hover:bg-red-500/10 p-1 h-auto"
+                            disabled={removeTeachingAssignmentMutation.isPending}
+                            onClick={() => {
+                              if (window.confirm(`¿Eliminar la asignación de ${a.subjectName} en Curso ${a.groupName}?`))
+                                removeTeachingAssignmentMutation.mutate({ userId: selectedUser._id, groupSubjectId: a.groupSubjectId });
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </li>
                       ))}
                     </ul>
@@ -2970,6 +2998,9 @@ export function AdminGeneralColegioDashboard() {
                       </select>
                     </div>
                   </div>
+                  {removeAssignmentError && (
+                    <p className="text-red-400 text-sm">{removeAssignmentError}</p>
+                  )}
                   {addTeachingAssignmentMutation.isError && (
                     <p className="text-red-400 text-sm">
                       {(addTeachingAssignmentMutation.error as Error)?.message ?? 'No se pudo guardar la asignación.'}
@@ -3059,15 +3090,30 @@ export function AdminGeneralColegioDashboard() {
                   ) : (
                     <ul className="space-y-2">
                       {teachingAssignments.map((a) => (
-                        <li key={a.groupSubjectId} className="text-sm text-white/90">
-                          <span className="font-medium text-emerald-300">{a.subjectName}</span>
-                          <span className="text-white/40"> — </span>
-                          Curso <span className="text-white">{a.groupName}</span>
+                        <li key={a.groupSubjectId} className="text-sm text-white/90 flex items-center justify-between gap-2">
+                          <span>
+                            <span className="font-medium text-emerald-300">{a.subjectName}</span>
+                            <span className="text-white/40"> — </span>
+                            Curso <span className="text-white">{a.groupName}</span>
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-400/70 hover:text-red-400 hover:bg-red-500/10 p-1 h-auto"
+                            disabled={removeTeachingAssignmentMutation.isPending}
+                            onClick={() => {
+                              if (window.confirm(`¿Eliminar la asignación de ${a.subjectName} en Curso ${a.groupName}?`))
+                                removeTeachingAssignmentMutation.mutate({ userId: selectedUser._id, groupSubjectId: a.groupSubjectId });
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </li>
                       ))}
                     </ul>
                   )}
-                  <p className="text-xs text-white/40 pt-1">Para modificar, usa Editar y &quot;Añadir asignación&quot;.</p>
+                  <p className="text-xs text-white/40 pt-1">Para agregar asignaciones, usa el botón <strong className="text-white/60">Editar</strong>.</p>
                 </div>
               )}
               {selectedUser.rol !== 'profesor' &&

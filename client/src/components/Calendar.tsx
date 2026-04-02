@@ -756,40 +756,6 @@ export function Calendar({
 
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2">{calendarDays}</div>
 
-      {isStudent && (
-        <div className="mt-6 p-3 sm:p-4 rounded-2xl bg-white/[0.05] border border-white/10">
-          <p className="text-xs font-semibold text-white/55 uppercase tracking-wider mb-3">Estados de entrega</p>
-          <ul className="space-y-2 text-xs text-white/75">
-            <li className="flex items-start gap-2">
-              <span className="w-2.5 h-2.5 rounded-full mt-0.5 shrink-0 bg-emerald-500" />
-              <span>Verde: entregado a tiempo (o sin pendiente tras la fecha límite).</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-2.5 h-2.5 rounded-full mt-0.5 shrink-0 bg-red-500" />
-              <span>Rojo: no entregado o vencido.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-2.5 h-2.5 rounded-full mt-0.5 shrink-0 bg-amber-500" />
-              <span>Ámbar: vence hoy y aún está pendiente.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-2.5 h-2.5 rounded-full mt-0.5 shrink-0 bg-[#1e3cff]" />
-              <span>Color vivo (relleno): tarea futura con entrega requerida.</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-2.5 h-2.5 rounded-full mt-0.5 shrink-0 bg-gray-400" />
-              <span>Gris: sin entrega requerida (recordatorio u otro).</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="flex gap-0.5 mt-0.5 shrink-0">
-                <span className="w-2 h-2 rounded-full bg-[#1e3cff]" />
-                <span className="w-2 h-2 rounded-full bg-orange-500" />
-              </span>
-              <span>Puntitos: varias materias o varios estados el mismo día.</span>
-            </li>
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

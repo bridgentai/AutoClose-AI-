@@ -161,6 +161,14 @@ export async function createGroupSubject(row: {
   throw new Error('Failed to create group_subject');
 }
 
+/** Elimina la vinculación de un profesor a un group_subject (teacher_id = NULL). */
+export async function clearGroupSubjectTeacher(groupSubjectId: string, institutionId: string): Promise<void> {
+  await queryPg(
+    `UPDATE group_subjects SET teacher_id = NULL WHERE id = $1 AND institution_id = $2`,
+    [groupSubjectId, institutionId]
+  );
+}
+
 /** Crea o actualiza la asignación (grupo + materia) para que la imparta este profesor. */
 export async function upsertGroupSubjectTeacher(row: {
   institution_id: string;

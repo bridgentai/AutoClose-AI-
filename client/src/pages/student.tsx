@@ -29,7 +29,7 @@ interface Assignment {
 }
 
 const fetchStudentCourses = async () => {
-  return apiRequest('GET', '/api/users/me/courses'); 
+  return apiRequest('GET', '/api/users/me/courses');
 };
 
 export default function StudentPage() {
@@ -155,8 +155,8 @@ export default function StudentPage() {
           <CardHeader>
             <CardTitle className="text-white">Calendario de Tareas</CardTitle>
             <CardDescription className="text-white/60">
-              {isLoadingAssignments 
-                ? 'Cargando tareas...' 
+              {isLoadingAssignments
+                ? 'Cargando tareas...'
                 : `${assignments.length} ${assignments.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
               }
             </CardDescription>

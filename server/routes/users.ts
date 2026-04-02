@@ -15,7 +15,7 @@ import { findGuardianStudentsByGuardian, findGuardianStudentsByStudent, findGuar
 import { createNotification } from '../repositories/notificationRepository.js';
 import { findGroupById } from '../repositories/groupRepository.js';
 import { getAllCourseGroupsForStudent } from '../repositories/enrollmentRepository.js';
-import { findGroupSubjectsByGroupWithDetails, createGroupSubject, findGroupSubjectsByTeacherWithDetails, upsertGroupSubjectTeacher } from '../repositories/groupSubjectRepository.js';
+import { findGroupSubjectsByGroupWithDetails, createGroupSubject, findGroupSubjectsByTeacherWithDetails, upsertGroupSubjectTeacher, clearGroupSubjectTeacher } from '../repositories/groupSubjectRepository.js';
 import { findSubjectById } from '../repositories/subjectRepository.js';
 import { findGroupsByInstitution, countGradeGroupsByInstitution, findGroupByNameAndInstitution } from '../repositories/groupRepository.js';
 import { createEnrollment } from '../repositories/enrollmentRepository.js';
@@ -333,6 +333,34 @@ router.post('/:userId/teaching-assignments', protect, async (req: AuthRequest, r
     });
   } catch (e) {
     console.error('teaching-assignments POST:', (e as Error).message);
+    res.status(500).json({ message: 'Error del servidor.' });
+  }
+});
+
+// DELETE /api/users/:userId/teaching-assignments/:groupSubjectId — desvincula al profesor del group_subject
+router.delete('/:userId/teaching-assignments/:groupSubjectId', protect, async (req: AuthRequest, res) => {
+  try {
+    if (!assertAdminOrDirectivo(req)) return res.status(403).json({ message: 'Sin permiso.' });
+    const colegioId = req.user?.colegioId;
+    const { userId, groupSubjectId } = req.params;
+    if (!colegioId || !userId || !groupSubjectId) return res.status(400).json({ message: 'Datos incompletos.' });
+    const target = await findUserById(userId);
+    if (!target || target.role !== 'profesor' || target.institution_id !== colegioId) {
+      return res.status(404).json({ message: 'Profesor no encontrado.' });
+    }
+    await clearGroupSubjectTeacher(groupSubjectId, colegioId);
+    await logAdminAction({
+      userId: req.user!.id!,
+      role: req.user?.rol ?? 'admin',
+      action: 'remove_teaching_slot',
+      entityType: 'user',
+      entityId: userId,
+      colegioId,
+      requestData: { groupSubjectId },
+    }).catch(() => {});
+    res.json({ message: 'Vinculación eliminada.' });
+  } catch (e) {
+    console.error('teaching-assignments DELETE:', (e as Error).message);
     res.status(500).json({ message: 'Error del servidor.' });
   }
 });
