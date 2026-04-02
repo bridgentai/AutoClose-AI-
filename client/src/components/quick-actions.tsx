@@ -71,23 +71,23 @@ export function QuickActions() {
     if (location && location !== "/login" && location !== "/register") {
       const icon = routeIcons[location] || Home;
       const label = routeLabels[location] || "Página";
-      
+
       setRecentPages((prev) => {
         // Filtrar si ya existe esta ruta
         const filtered = prev.filter((p) => p.path !== location);
-        
+
         // Agregar la nueva página al inicio
         const updated = [
           { path: location, label, icon, timestamp: Date.now() },
           ...filtered,
         ];
-        
+
         // Mantener solo las últimas 3
         const limited = updated.slice(0, 3);
-        
+
         // Guardar en localStorage
         localStorage.setItem("autoclose_recent_pages", JSON.stringify(limited));
-        
+
         return limited;
       });
     }
@@ -108,7 +108,7 @@ export function QuickActions() {
           aria-hidden="true"
         />
       )}
-      
+
       <div className="fixed bottom-6 left-6 z-40">
         {/* Recent Pages Menu */}
         {isOpen && (

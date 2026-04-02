@@ -52,7 +52,6 @@ import DirectivoCursoDetailPage from "@/pages/directivo-curso-detail";
 import DirectivoEstudiantesPage from "@/pages/directivo-estudiantes";
 import DirectivoCursoEstudiantesPage from "@/pages/directivo-curso-estudiantes";
 import DirectivoEstudianteNotasPage from "@/pages/directivo-estudiante-notas";
-import PlataformasPage from "@/pages/plataformas";
 
 import MiAprendizajeLayout from "@/pages/mi-aprendizaje";
 import MiAprendizajeHorarioPage from "@/pages/mi-aprendizaje-horario";
@@ -162,7 +161,7 @@ function AppRouter() {
   const { user } = useAuth();
   const isLogged = Boolean(user);
   const [location] = useLocation();
-  
+
   // Cargar y aplicar colores de la institución (el hook maneja internamente si el usuario está autenticado)
   useInstitutionColors();
 
@@ -454,9 +453,6 @@ function AppRouter() {
               <AuthGuard><Account /></AuthGuard>
             </Route>
 
-            <Route path="/plataformas">
-              <AuthGuard><PlataformasPage /></AuthGuard>
-            </Route>
 
             <Route path="/permisos">
               <AuthGuard><PermisosPage /></AuthGuard>
@@ -517,9 +513,6 @@ function AppRouter() {
             </Route>
             <Route path="/profesor/academia/notas">
               <AuthGuard><Courses /></AuthGuard>
-            </Route>
-            <Route path="/profesor/academia/plataformas">
-              <AuthGuard><PlataformasPage /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/asistencia">
               <AuthGuard><AsistenciaProfesor /></AuthGuard>
@@ -653,7 +646,7 @@ function AppRouter() {
           <Route path="/:rest*">
             <Redirect to="/" />
           </Route>
-          
+
           {/* Rutas de standby comentadas */}
           {/* <Route path="/login">
             <LoginStandby />

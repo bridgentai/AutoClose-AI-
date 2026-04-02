@@ -7,6 +7,7 @@ import {
 } from '../repositories/kiwiRepository.js';
 import { generateKiwiResponse } from '../services/openai.js';
 import type { KiwiUserContext } from '../services/kiwiContext.js';
+import { executeKiwiAction } from '../services/kiwiActions.js';
 
 const router = express.Router();
 
@@ -62,6 +63,44 @@ router.post('/chat', protect, async (req: AuthRequest, res) => {
     req.on('close', () => {
       closed = true;
     });
+
+    // 7.5 Confirmaciones: bypass LLM y ejecuta tool directamente
+    // Formato: "KIWI_CONFIRM {\"tool\":\"create_assignment\",\"params\":{...}}"
+    if (userMessage.startsWith('KIWI_CONFIRM')) {
+      try {
+        const raw = userMessage.slice('KIWI_CONFIRM'.length).trim();
+        const payload = raw ? JSON.parse(raw) as { tool?: string; params?: Record<string, unknown> } : {};
+        const tool = String(payload.tool || '').trim();
+        const params = (payload.params && typeof payload.params === 'object') ? payload.params : {};
+        if (!tool) throw new Error('Confirmación inválida (tool faltante).');
+        const confirmedParams = { ...params, confirmed: true };
+
+        const result = await executeKiwiAction(tool, confirmedParams, institutionId, userId, rol);
+        const text =
+          result.success
+            ? tool === 'create_assignment'
+              ? `Listo. Ya creé la tarea. Puedes verla aquí: /assignment/${(result as { success: true; data: { assignmentId?: string } }).data?.assignmentId ?? ''}`
+              : 'Listo. Acción confirmada y ejecutada.'
+            : `No pude completar la acción: ${(result as { success: false; error?: string }).error ?? 'error desconocido'}`;
+
+        if (!closed) {
+          res.write(`data: ${JSON.stringify({ type: 'chunk', text })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: 'done', sessionId })}\n\n`);
+          res.end();
+          closed = true;
+        }
+        await saveMessage(sessionId, userId, institutionId, 'assistant', text);
+        return;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Error procesando confirmación';
+        if (!closed) {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: msg })}\n\n`);
+          res.end();
+          closed = true;
+        }
+        return;
+      }
+    }
 
     // 8. Llamar al agente Kiwi con streaming
     await generateKiwiResponse(

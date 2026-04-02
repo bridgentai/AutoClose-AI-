@@ -62,25 +62,25 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     {
       group: "Navegación Principal",
       items: [
-        { 
-          icon: Home, 
-          label: "Dashboard", 
-          path: "/dashboard", 
+        {
+          icon: Home,
+          label: "Dashboard",
+          path: "/dashboard",
           shortcut: "⌘D",
           keywords: ["inicio", "principal", "home"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
-        { 
-          icon: MessageSquare, 
-          label: "Chat AI", 
-          path: "/chat", 
+        {
+          icon: MessageSquare,
+          label: "Chat AI",
+          path: "/chat",
           shortcut: "⌘C",
           keywords: ["ia", "asistente", "chat", "ayuda"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
-        { 
-          icon: GraduationCap, 
-          label: "Mi Aprendizaje", 
+        {
+          icon: GraduationCap,
+          label: "Mi Aprendizaje",
           path: "/mi-aprendizaje",
           keywords: ["aprendizaje", "estudio", "cursos", "materiales", "plataformas"],
           roles: ["estudiante"]
@@ -99,37 +99,37 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           keywords: ["mensajes", "comunicacion", "bandeja", "correo", "comunidad", "eventos", "calendario", "noticias", "avisos"],
           roles: ["profesor", "directivo", "padre"],
         },
-        { 
-          icon: BookOpen, 
-          label: "Academia", 
+        {
+          icon: BookOpen,
+          label: "Academia",
           path: "/profesor/academia",
           keywords: ["academia", "profesor", "cursos", "grupos", "tareas"],
           roles: ["profesor"]
         },
-        { 
-          icon: BookOpen, 
-          label: "Cursos", 
+        {
+          icon: BookOpen,
+          label: "Cursos",
           path: "/profesor/academia/cursos",
           keywords: ["cursos", "clases", "grupos", "estudiantes"],
           roles: ["profesor"]
         },
-        { 
-          icon: Mail, 
-          label: "Comunicación Profesor", 
+        {
+          icon: Mail,
+          label: "Comunicación Profesor",
           path: "/profesor/comunicacion",
           keywords: ["comunicacion", "mensajes", "profesor", "bandeja"],
           roles: ["profesor"]
         },
-        { 
-          icon: BookOpen, 
-          label: "Academia", 
+        {
+          icon: BookOpen,
+          label: "Academia",
           path: "/directivo/academia",
           keywords: ["academia", "cursos", "directivo"],
           roles: ["directivo"]
         },
-        { 
-          icon: User, 
-          label: "Mi Perfil", 
+        {
+          icon: User,
+          label: "Mi Perfil",
           path: "/mi-perfil",
           keywords: ["perfil", "cuenta", "personal", "medica", "informacion"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
@@ -139,51 +139,51 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     {
       group: "Academia - Profesor",
       items: [
-        { 
-          icon: BookOpen, 
-          label: "Cursos", 
+        {
+          icon: BookOpen,
+          label: "Cursos",
           path: "/profesor/academia/cursos",
           keywords: ["cursos", "grupos", "clases", "estudiantes"],
           roles: ["profesor"]
         },
-        { 
-          icon: CheckSquare, 
-          label: "Asignaciones", 
+        {
+          icon: CheckSquare,
+          label: "Asignaciones",
           path: "/profesor/academia/tareas",
           keywords: ["tareas", "asignaciones", "ejercicios"],
           roles: ["profesor"]
         },
-        { 
-          icon: Sparkles, 
-          label: "Crear Asignación", 
+        {
+          icon: Sparkles,
+          label: "Crear Asignación",
           path: "/profesor/academia/tareas/asignar",
           keywords: ["crear", "asignar", "nueva", "asignación", "tarea"],
           roles: ["profesor"]
         },
-        { 
-          icon: FolderOpen, 
-          label: "Revisar Asignaciones", 
+        {
+          icon: FolderOpen,
+          label: "Revisar Asignaciones",
           path: "/profesor/academia/tareas/revision",
           keywords: ["revisar", "corregir", "evaluar", "asignaciones", "tareas"],
           roles: ["profesor"]
         },
-        { 
-          icon: Calendar, 
-          label: "Calendario General", 
+        {
+          icon: Calendar,
+          label: "Calendario General",
           path: "/teacher-calendar",
           keywords: ["calendario", "eventos", "fechas", "agenda", "tareas"],
           roles: ["profesor"]
         },
-        { 
-          icon: Clock, 
-          label: "Resumen de Asignaciones", 
+        {
+          icon: Clock,
+          label: "Resumen de Asignaciones",
           path: "/profesor/tareas/resumen",
           keywords: ["resumen", "tareas", "resumen", "listado"],
           roles: ["profesor"]
         },
-        { 
-          icon: FileText, 
-          label: "Materiales", 
+        {
+          icon: FileText,
+          label: "Materiales",
           path: "/profesor/academia/materiales",
           keywords: ["materiales", "archivos", "documentos", "recursos"],
           roles: ["profesor"]
@@ -195,9 +195,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           keywords: ["evo", "drive", "google", "archivos", "materiales"],
           roles: ["profesor", "directivo"],
         },
-        { 
-          icon: Globe, 
-          label: "Plataformas", 
+        {
+          icon: Globe,
+          label: "Plataformas",
           path: "/profesor/academia/plataformas",
           keywords: ["plataformas", "herramientas", "recursos", "externos"],
           roles: ["profesor"]
@@ -207,23 +207,23 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     {
       group: "Comunicación - Profesor",
       items: [
-        { 
-          icon: Mail, 
-          label: "Bandeja de Entrada", 
+        {
+          icon: Mail,
+          label: "Bandeja de Entrada",
           path: "/profesor/comunicacion/bandeja",
           keywords: ["bandeja", "entrada", "mensajes", "recibidos"],
           roles: ["profesor"]
         },
-        { 
-          icon: MessageSquare, 
-          label: "Redactar Mensaje", 
+        {
+          icon: MessageSquare,
+          label: "Redactar Mensaje",
           path: "/profesor/comunicacion/redactar",
           keywords: ["redactar", "enviar", "nuevo", "mensaje"],
           roles: ["profesor"]
         },
-        { 
-          icon: Send, 
-          label: "Mensajes Enviados", 
+        {
+          icon: Send,
+          label: "Mensajes Enviados",
           path: "/profesor/comunicacion/enviados",
           keywords: ["enviados", "mensajes", "historial"],
           roles: ["profesor"]
@@ -233,30 +233,30 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     {
       group: "Módulos Directivo",
       items: [
-        { 
-          icon: BookOpen, 
-          label: "Academia", 
+        {
+          icon: BookOpen,
+          label: "Academia",
           path: "/directivo/academia",
           keywords: ["academia", "cursos", "directivo"],
           roles: ["directivo"]
         },
-        { 
-          icon: UsersRound, 
-          label: "Comunidad", 
+        {
+          icon: UsersRound,
+          label: "Comunidad",
           path: "/directivo/comunidad",
           keywords: ["comunidad", "directivo", "eventos"],
           roles: ["directivo"]
         },
-        { 
-          icon: BookOpen, 
-          label: "Academia", 
+        {
+          icon: BookOpen,
+          label: "Academia",
           path: "/directivo/academia",
           keywords: ["academia", "directivo", "cursos"],
           roles: ["directivo"]
         },
-        { 
-          icon: Mail, 
-          label: "Comunicación", 
+        {
+          icon: Mail,
+          label: "Comunicación",
           path: "/directivo/comunicacion",
           keywords: ["comunicacion", "directivo", "mensajes"],
           roles: ["directivo"]
@@ -286,122 +286,122 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     {
       group: "Acciones Rápidas",
       items: [
-        { 
-          icon: Sparkles, 
-          label: "Asignación de Horarios", 
-          path: "/asignacion-horarios", 
+        {
+          icon: Sparkles,
+          label: "Asignación de Horarios",
+          path: "/asignacion-horarios",
           shortcut: "⌘T",
           keywords: ["horarios", "asignacion", "horario", "directivo", "plantilla"],
           roles: ["directivo"]
         },
-        { 
-          icon: Calendar, 
-          label: "Calendario", 
+        {
+          icon: Calendar,
+          label: "Calendario",
           path: "/calendar",
           keywords: ["calendario", "eventos", "fechas", "agenda"],
           roles: ["directivo", "padre"]
         },
-        { 
-          icon: FileText, 
-          label: "Materiales", 
+        {
+          icon: FileText,
+          label: "Materiales",
           path: "/materials",
           keywords: ["materiales", "archivos", "documentos", "recursos"],
           roles: ["profesor"]
         },
-        { 
-          icon: Globe, 
-          label: "Plataformas", 
+        {
+          icon: Globe,
+          label: "Plataformas",
           path: "/plataformas",
           keywords: ["plataformas", "herramientas", "recursos", "externos"],
           roles: ["profesor", "directivo", "padre"]
         },
-        { 
-          icon: Settings, 
-          label: "Configuración", 
+        {
+          icon: Settings,
+          label: "Configuración",
           path: "/settings",
           keywords: ["configuracion", "ajustes", "preferencias", "setup"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
-        { 
-          icon: FolderOpen, 
-          label: "Mi Aprendizaje - Cursos", 
+        {
+          icon: FolderOpen,
+          label: "Mi Aprendizaje - Cursos",
           path: "/mi-aprendizaje/cursos",
           keywords: ["cursos", "aprendizaje", "materias"],
           roles: ["estudiante"]
         },
-        { 
-          icon: FileText, 
-          label: "Mi Aprendizaje - Materiales", 
+        {
+          icon: FileText,
+          label: "Mi Aprendizaje - Materiales",
           path: "/mi-aprendizaje/materiales",
           keywords: ["materiales", "archivos", "recursos"],
           roles: ["estudiante"]
         },
-        { 
-          icon: Globe, 
+        {
+          icon: Globe,
           label: "Mi Aprendizaje - Horario",
           path: "/mi-aprendizaje/horario",
           keywords: ["horario", "schedule", "materias", "clases"],
           roles: ["estudiante"]
         },
-        { 
-          icon: Calendar, 
-          label: "Mi Aprendizaje - Calendario", 
+        {
+          icon: Calendar,
+          label: "Mi Aprendizaje - Calendario",
           path: "/mi-aprendizaje/calendario",
           keywords: ["calendario", "eventos"],
           roles: ["estudiante"]
         },
-        { 
-          icon: GraduationCap, 
-          label: "Mi Aprendizaje - Notas", 
+        {
+          icon: GraduationCap,
+          label: "Mi Aprendizaje - Notas",
           path: "/mi-aprendizaje/notas",
           keywords: ["notas", "calificaciones", "promedios", "rendimiento"],
           roles: ["estudiante"]
         },
-        { 
-          icon: History, 
-          label: "Mi Aprendizaje - Historial de Notas", 
+        {
+          icon: History,
+          label: "Mi Aprendizaje - Historial de Notas",
           path: "/mi-aprendizaje/notas/historial",
           keywords: ["historial", "trimestres", "notas", "promedio", "rendimiento"],
           roles: ["estudiante"]
         },
-        { 
-          icon: CheckSquare, 
-          label: "Mi Aprendizaje - Tareas", 
+        {
+          icon: CheckSquare,
+          label: "Mi Aprendizaje - Tareas",
           path: "/mi-aprendizaje/tareas",
           keywords: ["tareas", "asignaciones", "entregas", "pendientes", "completadas"],
           roles: ["estudiante"]
         },
-        { 
-          icon: User, 
-          label: "Mi Perfil - Información Personal", 
+        {
+          icon: User,
+          label: "Mi Perfil - Información Personal",
           path: "/mi-perfil/personal",
           keywords: ["personal", "informacion", "datos"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
-        { 
-          icon: User, 
-          label: "Mi Perfil - Ficha Médica", 
+        {
+          icon: User,
+          label: "Mi Perfil - Ficha Médica",
           path: "/mi-perfil/medica",
           keywords: ["medica", "salud", "ficha"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
-        { 
-          icon: Settings, 
-          label: "Mi Perfil - Cuenta", 
+        {
+          icon: Settings,
+          label: "Mi Perfil - Cuenta",
           path: "/mi-perfil/cuenta",
           keywords: ["cuenta", "configuracion", "ajustes"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
-        { 
-          icon: Calendar, 
-          label: "Comunicación - Calendario de Eventos", 
+        {
+          icon: Calendar,
+          label: "Comunicación - Calendario de Eventos",
           path: "/comunidad/calendario",
           keywords: ["eventos", "calendario", "comunidad", "comunicacion"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
-        { 
-          icon: Mail, 
-          label: "Comunicación - Avisos y Noticias", 
+        {
+          icon: Mail,
+          label: "Comunicación - Avisos y Noticias",
           path: "/comunidad/noticias",
           keywords: ["noticias", "avisos", "comunidad", "comunicacion"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
@@ -411,37 +411,37 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     {
       group: "Otros Roles",
       items: [
-        { 
-          icon: Users, 
-          label: "Administrador General", 
+        {
+          icon: Users,
+          label: "Administrador General",
           path: "/administrador-general",
           keywords: ["administrador", "general"],
           roles: ["directivo"]
         },
-        { 
-          icon: Users, 
-          label: "Transporte", 
+        {
+          icon: Users,
+          label: "Transporte",
           path: "/transporte",
           keywords: ["transporte"],
           roles: ["directivo"]
         },
-        { 
-          icon: Users, 
-          label: "Tesorería", 
+        {
+          icon: Users,
+          label: "Tesorería",
           path: "/tesoreria",
           keywords: ["tesoreria", "pagos"],
           roles: ["directivo"]
         },
-        { 
-          icon: Users, 
-          label: "Nutrición", 
+        {
+          icon: Users,
+          label: "Nutrición",
           path: "/nutricion",
           keywords: ["nutricion", "alimentacion"],
           roles: ["directivo"]
         },
-        { 
-          icon: Users, 
-          label: "Cafetería", 
+        {
+          icon: Users,
+          label: "Cafetería",
           path: "/cafeteria",
           keywords: ["cafeteria", "comida"],
           roles: ["directivo"]
@@ -453,7 +453,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   // Filtrar comandos según el rol del usuario
   const filteredCommands = useMemo(() => {
     if (!user?.rol) return [];
-    
+
     return allCommands.map(group => ({
       ...group,
       items: group.items.filter(item => item.roles.includes(user.rol))
@@ -467,34 +467,34 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent 
+      <DialogContent
         className="overflow-hidden p-0 shadow-2xl shadow-black/50 bg-white/5 backdrop-blur-xl border-white/10 max-w-2xl"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
-        <Command 
+        <Command
           className="bg-transparent text-white [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-2 [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-white/80 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-14 [&_[cmdk-item]]:px-3 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
           filter={(value, search) => {
             // Búsqueda mejorada: el value ya incluye label + keywords
             const searchLower = search.toLowerCase();
             const valueLower = value.toLowerCase();
-            
+
             // Buscar coincidencias exactas o parciales
             if (valueLower.includes(searchLower)) return 1;
-            
+
             // Buscar palabras individuales
             const searchWords = searchLower.split(/\s+/).filter(w => w.length > 0);
             const valueWords = valueLower.split(/\s+/);
-            
+
             // Verificar si todas las palabras de búsqueda están presentes
-            const allWordsMatch = searchWords.every(sw => 
+            const allWordsMatch = searchWords.every(sw =>
               valueWords.some(vw => vw.includes(sw) || sw.includes(vw))
             );
-            
+
             return allWordsMatch ? 1 : 0;
           }}
         >
-          <CommandInput 
-            placeholder="Busca cualquier página o acción... (ej: crear tarea, calendario, perfil)" 
+          <CommandInput
+            placeholder="Busca cualquier página o acción... (ej: crear tarea, calendario, perfil)"
             className="text-white placeholder:text-white/50 border-white/10 bg-white/5 focus:bg-white/10 transition-colors"
             autoFocus
           />
@@ -510,8 +510,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               </div>
             </CommandEmpty>
             {filteredCommands.map((group) => (
-              <CommandGroup 
-                key={group.group} 
+              <CommandGroup
+                key={group.group}
                 heading={group.group}
               >
                 {group.items.map((item) => {

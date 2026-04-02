@@ -7,6 +7,14 @@
 
 import { queryPg } from '../config/db-pg.js';
 import { getBoletinDataForStudent } from './boletinService.js';
+import { findGroupSubjectsByTeacherWithDetails } from '../repositories/groupSubjectRepository.js';
+import { findGroupSubjectById } from '../repositories/groupSubjectRepository.js';
+import { createAssignment } from '../repositories/assignmentRepository.js';
+import { createAnnouncement } from '../repositories/announcementRepository.js';
+import { findSubjectById } from '../repositories/subjectRepository.js';
+import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
+import { notify } from '../repositories/notificationRepository.js';
+import { runAfterAssignmentCreatedPg } from './assignmentSideEffectsService.js';
 
 // ─── Tipos de retorno ─────────────────────────────────────────────────────────
 
@@ -35,17 +43,22 @@ export interface RiskRow {
 
 export interface ConfirmationPending {
   requiresConfirmation: true;
-  preview: {
-    title: string;
-    content: string;
-    targetAudience: string;
-  };
+  preview: unknown;
 }
 
 export interface ComunicadoResult {
   success: true;
   announcementId: string;
   recipientCount: number;
+}
+
+export interface ListMyCoursesRow {
+  courseId: string; // group_subject_id
+  groupId: string;
+  groupName: string;
+  subjectId: string;
+  subjectName: string;
+  displayName?: string | null;
 }
 
 export type KiwiActionResult =
@@ -63,6 +76,224 @@ function toNumber(val: unknown, fallback = 0): number {
 function anonStudentId(internalCode: string | null, studentId: string): string {
   if (internalCode && internalCode.trim()) return internalCode.trim();
   return 'EST-' + studentId.slice(0, 4).toUpperCase();
+}
+
+async function getUserEmail(userId: string): Promise<string | undefined> {
+  try {
+    const r = await queryPg<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+    const email = r.rows[0]?.email;
+    return typeof email === 'string' && email.trim() ? email.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// ─── Profesor: list_my_courses ────────────────────────────────────────────────
+
+async function listMyCourses(
+  institutionId: string,
+  userId: string,
+  _params: Record<string, unknown>
+): Promise<ListMyCoursesRow[]> {
+  const gsList = await findGroupSubjectsByTeacherWithDetails(userId, institutionId);
+  return gsList.map((gs) => ({
+    courseId: gs.id,
+    groupId: gs.group_id,
+    groupName: gs.group_name,
+    subjectId: gs.subject_id,
+    subjectName: gs.subject_name,
+    displayName: gs.display_name ?? null,
+  }));
+}
+
+// ─── Profesor: create_assignment ──────────────────────────────────────────────
+
+async function resolveCourseIdForTeacher(params: Record<string, unknown>, institutionId: string, teacherId: string): Promise<string> {
+  const rawCourseId = typeof params.courseId === 'string' ? params.courseId.trim() : '';
+  if (rawCourseId) return rawCourseId;
+
+  const group = typeof params.group === 'string' ? params.group.trim() : '';
+  const subject = typeof params.subject === 'string' ? params.subject.trim() : '';
+  if (!group || !subject) {
+    throw new Error('Para asignar una tarea necesito "courseId" o (group + subject).');
+  }
+
+  const r = await queryPg<{ id: string }>(
+    `SELECT gs.id
+     FROM group_subjects gs
+     JOIN groups g ON g.id = gs.group_id
+     JOIN subjects s ON s.id = gs.subject_id
+     WHERE gs.institution_id = $1
+       AND gs.teacher_id = $2
+       AND UPPER(TRIM(g.name)) = UPPER(TRIM($3))
+       AND (
+         UPPER(TRIM(COALESCE(gs.display_name, s.name))) = UPPER(TRIM($4))
+         OR UPPER(TRIM(s.name)) = UPPER(TRIM($4))
+       )
+     LIMIT 1`,
+    [institutionId, teacherId, group, subject]
+  );
+  const id = r.rows[0]?.id;
+  if (!id) {
+    throw new Error(`No encontré un courseId para ${group} - ${subject} que esté asignado a ti.`);
+  }
+  return id;
+}
+
+async function createTeacherAssignment(
+  institutionId: string,
+  userId: string,
+  params: Record<string, unknown>
+): Promise<ConfirmationPending | { success: true; assignmentId: string }> {
+  const title = String(params.title ?? '').trim();
+  const description = String(params.description ?? '').trim() || title;
+  const dueDateRaw = String(params.dueDate ?? '').trim();
+  if (!title || !description || !dueDateRaw) {
+    throw new Error('Faltan campos obligatorios: title, description, dueDate.');
+  }
+
+  const due = new Date(dueDateRaw);
+  if (Number.isNaN(due.getTime())) {
+    throw new Error('dueDate no es una fecha válida.');
+  }
+  const dueIso = due.toISOString();
+
+  const courseId = await resolveCourseIdForTeacher(params, institutionId, userId);
+  const gs = await findGroupSubjectById(courseId);
+  if (!gs || gs.institution_id !== institutionId) {
+    throw new Error('No tienes acceso a ese courseId.');
+  }
+  if (gs.teacher_id !== userId) {
+    throw new Error('No tienes permiso para crear tareas en ese curso.');
+  }
+
+  const requiresSubmission = typeof params.requiresSubmission === 'boolean' ? params.requiresSubmission : true;
+  const trimestre = Number(params.trimestre ?? 1);
+  const academic_term = trimestre === 1 || trimestre === 2 || trimestre === 3 ? trimestre : 1;
+
+  const rawWeight = params.categoryWeightPct;
+  let category_weight_pct: number | null = null;
+  if (rawWeight != null && rawWeight !== '') {
+    const w = Number(rawWeight);
+    if (!Number.isNaN(w) && w > 0 && w <= 100) category_weight_pct = w;
+  }
+
+  const categoryId =
+    typeof params.categoryId === 'string' && params.categoryId.trim() ? params.categoryId.trim() : null;
+
+  // Guard: requiere confirmación explícita antes de escribir
+  if (!params.confirmed) {
+    return {
+      requiresConfirmation: true,
+      preview: {
+        tool: 'create_assignment',
+        params: {
+          title,
+          description,
+          dueDate: dueIso,
+          courseId,
+          requiresSubmission,
+          trimestre: academic_term,
+          categoryId,
+          categoryWeightPct: category_weight_pct,
+        },
+      },
+    };
+  }
+
+  // Crear assignment (PG)
+  let created;
+  try {
+    created = await createAssignment({
+      group_subject_id: courseId,
+      title,
+      description,
+      content_document: null,
+      due_date: dueIso,
+      created_by: userId,
+      type: 'assignment',
+      is_gradable: requiresSubmission,
+      requires_submission: requiresSubmission,
+      assignment_category_id: categoryId,
+      category_weight_pct,
+      academic_term,
+    });
+  } catch (first: unknown) {
+    const err = first as { code?: string; detail?: string; message?: string };
+    // FK de categoría puede fallar → reintentar sin categoría
+    if (err.code === '23503' && categoryId) {
+      created = await createAssignment({
+        group_subject_id: courseId,
+        title,
+        description,
+        content_document: null,
+        due_date: dueIso,
+        created_by: userId,
+        type: 'assignment',
+        is_gradable: requiresSubmission,
+        requires_submission: requiresSubmission,
+        assignment_category_id: null,
+        category_weight_pct,
+        academic_term,
+      });
+    } else {
+      throw first;
+    }
+  }
+
+  // Crear anuncio académico (best-effort)
+  createAnnouncement({
+    institution_id: gs.institution_id,
+    title: `Nueva tarea: ${title}`,
+    body: description.slice(0, 500) || null,
+    type: 'nueva_asignacion',
+    group_id: gs.group_id,
+    group_subject_id: courseId,
+    assignment_id: created.id,
+    created_by_id: userId,
+  }).catch(() => {});
+
+  // Side-effects (Drive / etc) best-effort
+  void runAfterAssignmentCreatedPg({
+    assignmentId: created.id,
+    groupSubjectId: courseId,
+    groupId: gs.group_id,
+    institutionId: gs.institution_id,
+    teacherId: userId,
+    title,
+    description,
+    dueDateIso: created.due_date,
+    adjuntosFromBody: undefined,
+  });
+
+  // Notificar estudiantes del grupo (best-effort)
+  try {
+    const enrollments = await findEnrollmentsByGroup(gs.group_id);
+    const studentIds = enrollments.map((e) => e.student_id);
+    const subject = await findSubjectById(gs.subject_id);
+    const materia = (gs.display_name?.trim() || subject?.name || 'Materia').trim();
+    const dueLabel = new Date(created.due_date).toLocaleString('es-CO');
+    await Promise.all(
+      studentIds.map(async (sid) => {
+        const email = await getUserEmail(sid);
+        await notify({
+          institution_id: gs.institution_id,
+          user_id: sid,
+          user_email: email,
+          type: 'nueva_tarea',
+          entity_type: 'assignment',
+          entity_id: created.id,
+          action_url: `/assignment/${created.id}`,
+          title: `Nueva tarea: ${created.title}`,
+          body: `Tienes una nueva tarea en ${materia} con vencimiento ${dueLabel}`,
+        });
+      })
+    );
+  } catch {
+    // ignore
+  }
+
+  return { success: true, assignmentId: created.id };
 }
 
 // ─── Función 1: getInstitutionAnalytics ──────────────────────────────────────
@@ -559,6 +790,19 @@ export async function executeKiwiAction(
 ): Promise<KiwiActionResult> {
   try {
     switch (toolName) {
+      case 'list_my_courses': {
+        const data = await listMyCourses(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      case 'create_assignment': {
+        const result = await createTeacherAssignment(institutionId, userId, toolParams);
+        if ('requiresConfirmation' in result) {
+          return { success: false, requiresConfirmation: true, preview: result.preview };
+        }
+        return { success: true, data: result };
+      }
+
       case 'get_institution_analytics': {
         const data = await getInstitutionAnalytics(institutionId, userId, toolParams);
         return { success: true, data };

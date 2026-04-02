@@ -48,10 +48,10 @@ export function AppSidebar() {
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
     { icon: Building2, label: "GLC", path: "/comunidad/noticias", roles: ["estudiante"] },
     { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["profesor", "directivo", "padre"] },
-    { 
-      icon: Send, 
-      label: "Evo Send", 
-      path: "/evo-send", 
+    {
+      icon: Send,
+      label: "Evo Send",
+      path: "/evo-send",
       roles: [
         "estudiante",
         "profesor",
@@ -132,8 +132,8 @@ export function AppSidebar() {
               onClick={() => handleNavClick(item.path)}
               className={`
                 flex items-center gap-2 text-sm px-3 py-2 rounded-lg transition-all duration-200
-                ${isActive 
-                  ? "text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]" 
+                ${isActive
+                  ? "text-white shadow-[0_0_20px_rgba(59,130,246,0.4)]"
                   : "text-[#E2E8F0]/80 hover:text-[#E2E8F0] hover:bg-white/5"
                 }
               `}

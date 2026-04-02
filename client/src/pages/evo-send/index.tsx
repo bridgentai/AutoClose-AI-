@@ -1142,9 +1142,9 @@ function EvoLayout({
                     <Loader2 className="w-8 h-8 animate-spin text-white/50" />
                   </div>
                 ) : (
-                  <div className="space-y-1 flex flex-col">
-                    <AnimatePresence mode="popLayout">
-                      {messages.map((m) => {
+                  <div className="space-y-1 space-y-reverse flex flex-col-reverse">
+                    <AnimatePresence initial={false}>
+                      {[...messages].reverse().map((m) => {
                         const isMine = (m.remitenteId as any)?._id === user?.id;
                         const driveMeta =
                           m.tipo === 'evo_drive'
@@ -1177,8 +1177,9 @@ function EvoLayout({
                         return (
                           <motion.div
                             key={m._id}
-                            initial={{ opacity: 0, y: 8 }}
+                            initial={{ opacity: 0, y: 12 }}
                             animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -12 }}
                             className={`flex flex-col gap-1 ${isMine ? 'items-end' : 'items-start'}`}
                           >
                             {m.tipo === 'evo_drive' ? (
@@ -1530,6 +1531,10 @@ function filteredThreadsList(
     const isSelected = t._id === selectedId;
     const hasUnread = (t.unreadCount ?? 0) > 0;
     const ac = threadAccent(t);
+    const rowBg = isSelected
+      ? `linear-gradient(180deg, color-mix(in srgb, ${ac} 14%, rgba(255,255,255,0.06)), rgba(255,255,255,0.03))`
+      : `linear-gradient(180deg, color-mix(in srgb, ${ac} 8%, transparent), transparent)`;
+    const rowBorder = isSelected ? ac : `color-mix(in srgb, ${ac} 55%, transparent)`;
     return (
       <motion.div
         key={t._id}
@@ -1538,7 +1543,10 @@ function filteredThreadsList(
         className={`p-3 border-b border-white/[0.06] cursor-pointer transition-all min-h-[72px] flex items-center gap-3 ${
           isSelected ? 'bg-white/[0.06] border-l-4' : 'hover:bg-white/[0.04] border-l-4 border-l-transparent'
         }`}
-        style={isSelected ? { borderLeftColor: ac } : undefined}
+        style={{
+          borderLeftColor: rowBorder,
+          background: rowBg,
+        }}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
@@ -1551,7 +1559,7 @@ function filteredThreadsList(
         <div
           className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-white/10"
           style={{
-            background: 'linear-gradient(145deg, #1e3cff, #002366)',
+            background: `linear-gradient(145deg, ${ac}, color-mix(in srgb, ${ac} 55%, #000))`,
           }}
         >
           {(t.is_support || t.tipo === 'evo_chat_support') ? (

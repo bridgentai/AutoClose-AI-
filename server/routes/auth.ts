@@ -304,7 +304,7 @@ router.post('/register', async (req, res) => {
       try {
         const { queryPg } = await import('../config/db-pg.js');
         await queryPg('DELETE FROM users WHERE id = $1', [createdUserId]);
-      } catch (_) {}
+      } catch (_) { }
     }
     if (e?.message?.includes('Rol no reconocido') || e?.message?.includes('userId')) {
       return res.status(400).json({ message: e.message });

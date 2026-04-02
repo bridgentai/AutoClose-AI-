@@ -141,7 +141,7 @@ app.use((req, res, next) => {
         }
       };
       setInterval(() => {
-        runReleaseComunicados().catch(() => {});
+        runReleaseComunicados().catch(() => { });
       }, 10_000);
     }
 
@@ -155,9 +155,9 @@ app.use((req, res, next) => {
         }
       };
       // ejecutar una vez al iniciar y luego cada 24h
-      runCleanup().catch(() => {});
+      runCleanup().catch(() => { });
       setInterval(() => {
-        runCleanup().catch(() => {});
+        runCleanup().catch(() => { });
       }, 24 * 60 * 60 * 1000);
     }
 
@@ -238,23 +238,23 @@ app.use((req, res, next) => {
         if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
         const ms = next.getTime() - now.getTime();
         setTimeout(() => {
-          runDueSoonJob().catch(() => {});
+          runDueSoonJob().catch(() => { });
           setInterval(() => {
-            runDueSoonJob().catch(() => {});
+            runDueSoonJob().catch(() => { });
           }, 24 * 60 * 60 * 1000);
         }, ms);
       };
 
       scheduleDailyAt8();
     }
-    
+
     // Abrir el navegador automáticamente en modo desarrollo
     if (app.get("env") === "development") {
       // Función para abrir el navegador
       const openBrowser = () => {
         const platform = process.platform;
         let command: string;
-        
+
         if (platform === "darwin") {
           // macOS - usar open sin comillas, funciona mejor
           // Abrir a la página de bienvenida (home)
@@ -266,7 +266,7 @@ app.use((req, res, next) => {
           // Linux y otros
           command = `xdg-open ${localUrl}`;
         }
-        
+
         exec(command, (error) => {
           if (error) {
             console.log(`⚠️  No se pudo abrir el navegador automáticamente.`);
@@ -293,7 +293,7 @@ app.use((req, res, next) => {
                 resolve(false);
               }
             });
-            
+
             req.on('error', () => {
               req.destroy();
               if (attempts < retries) {
@@ -302,7 +302,7 @@ app.use((req, res, next) => {
                 resolve(false);
               }
             });
-            
+
             req.setTimeout(1000, () => {
               req.destroy();
               if (attempts < retries) {

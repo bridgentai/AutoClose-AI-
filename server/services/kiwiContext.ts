@@ -74,11 +74,8 @@ TERMINOLOGÍA IMPORTANTE:
 - Cada materia puede tener varios grupos asignados
 
 HERRAMIENTAS DISPONIBLES:
-- get_group_grades: Ver notas de un grupo en tus materias
-- get_group_attendance: Ver asistencia de un grupo
-- register_attendance: Registrar asistencia de un grupo
-- create_comunicado: Crear comunicado para un grupo o materia
-- get_academic_alerts: Ver alertas de bajo rendimiento o inasistencias
+- list_my_courses: Ver tus materias y grupos asignados (y sus IDs de courseId)
+- create_assignment: Crear/asignar una tarea a un grupo+materia (requiere confirmación antes de crear)
 - get_my_schedule: Ver tu horario de clases`,
 
   padre: `
@@ -174,11 +171,33 @@ const TOOLS_BY_ROLE: Record<string, ToolDefinition[]> = {
     TOOL_GET_MY_SCHEDULE,
   ],
   profesor: [
-    { name: 'get_group_grades', description: 'Ver notas de un grupo en las materias asignadas al profesor' },
-    { name: 'get_group_attendance', description: 'Ver asistencia de un grupo' },
-    { name: 'register_attendance', description: 'Registrar asistencia de un grupo' },
-    { name: 'create_comunicado', description: 'Crear comunicado para un grupo o materia' },
-    { name: 'get_academic_alerts', description: 'Ver alertas de bajo rendimiento o exceso de inasistencias' },
+    {
+      name: 'list_my_courses',
+      description: 'Lista tus cursos/materias asignadas (group_subjects) con sus IDs (courseId) para crear tareas.',
+      parameters: { type: 'object', properties: {} },
+    },
+    {
+      name: 'create_assignment',
+      description:
+        'Crear/asignar una tarea en un courseId (group_subject_id) del profesor. Si no tienes courseId, usa list_my_courses primero. Requiere confirmación explícita antes de crear.',
+      parameters: {
+        type: 'object',
+        properties: {
+          courseId: { type: 'string', description: 'ID del group_subject (courseId) donde crear la tarea' },
+          group: { type: 'string', description: 'Nombre del grupo (ej: 11H). Alternativa a courseId.' },
+          subject: { type: 'string', description: 'Nombre de la materia (ej: Sociales). Requerido si usas group.' },
+          title: { type: 'string', description: 'Título de la tarea' },
+          description: { type: 'string', description: 'Descripción de la tarea' },
+          dueDate: { type: 'string', description: 'Fecha de entrega (YYYY-MM-DD o ISO)' },
+          requiresSubmission: { type: 'boolean', description: 'Si requiere entrega (default true)' },
+          trimestre: { type: 'number', enum: [1, 2, 3], description: 'Trimestre/periodo académico (1-3)' },
+          categoryId: { type: 'string', description: 'ID categoría/logro (opcional)' },
+          categoryWeightPct: { type: 'number', description: 'Peso de la categoría (0-100, opcional)' },
+          confirmed: { type: 'boolean', description: 'true solo si el usuario ya confirmó la creación' },
+        },
+        required: ['title', 'description', 'dueDate'],
+      },
+    },
     TOOL_GET_MY_SCHEDULE,
   ],
   padre: [

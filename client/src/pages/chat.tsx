@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/authContext';
 import { useLocation, useParams } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Loader2, MessageSquare, Plus, History } from 'lucide-react';
+import { Send, Loader2, MessageSquare, Plus, History, BookOpen, Users } from 'lucide-react';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
 import { ChatSidebar } from '@/components/chat-sidebar';
@@ -19,6 +19,62 @@ interface Message {
   timestamp: Date;
   type?: string;
   structuredData?: Record<string, unknown>;
+}
+
+function isKiwiConfirmPayload(text: string): boolean {
+  return typeof text === 'string' && text.startsWith('__CONFIRM__:');
+}
+
+function parseKiwiConfirmPayload(text: string): Record<string, unknown> | null {
+  if (!isKiwiConfirmPayload(text)) return null;
+  const raw = text.slice('__CONFIRM__:'.length).trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+type ParsedCourseItem = { subject: string; group: string };
+
+function parseTeacherCoursesFromText(text: string): ParsedCourseItem[] | null {
+  if (typeof text !== 'string') return null;
+  const t = text.trim();
+  if (!t.toLowerCase().includes('tus cursos activos')) return null;
+
+  const lines = t.split('\n').map((l) => l.trim()).filter(Boolean);
+  const items: ParsedCourseItem[] = [];
+
+  for (const line of lines) {
+    // Ej: "1. **Biología** - 10C" o "1. Biología - 10C"
+    const m = line.match(/^\d+\.\s*(?:\*\*)?(.+?)(?:\*\*)?\s*-\s*([A-Za-z0-9]+)\s*$/);
+    if (!m) continue;
+    const subject = m[1].trim();
+    const group = m[2].trim().toUpperCase();
+    if (!subject || !group) continue;
+    items.push({ subject, group });
+  }
+
+  return items.length > 0 ? items : null;
+}
+
+type ParsedSubjectGroups = { subject: string; groups: string[] };
+
+function parseSubjectGroupsFromText(text: string): ParsedSubjectGroups | null {
+  if (typeof text !== 'string') return null;
+  const t = text.trim();
+  const m = t.match(/tienes\s+asignados\s+los\s+siguientes\s+grupos\s+de\s+(.+?)\s*:/i);
+  if (!m) return null;
+  const subject = m[1]?.trim();
+  if (!subject) return null;
+
+  // Captura grupos tipo 10C, 11H, 9D... vengan con ** o no.
+  const groupMatches = [...t.matchAll(/\b(\d{1,2}[A-Za-z])\b/g)].map((x) => x[1]?.toUpperCase()).filter(Boolean);
+  const groups = Array.from(new Set(groupMatches));
+  return groups.length > 0 ? { subject, groups } : null;
 }
 
 export default function Chat() {
@@ -164,6 +220,25 @@ export default function Chat() {
           }
 
           if (event.type === 'chunk' && event.text) {
+            // Confirmación estructurada (Kiwi)
+            if (firstChunk && isKiwiConfirmPayload(event.text)) {
+              const payload = parseKiwiConfirmPayload(event.text);
+              setLoading(false);
+              setIsStreaming(false);
+              setMessages((prev) => [
+                ...prev,
+                {
+                  emisor: 'ai',
+                  contenido: '',
+                  timestamp: new Date(),
+                  type: 'kiwi_confirm',
+                  structuredData: payload ?? undefined,
+                },
+              ]);
+              firstChunk = false;
+              continue;
+            }
+
             if (firstChunk) {
               setLoading(false);
               setIsStreaming(true);
@@ -431,6 +506,211 @@ export default function Chat() {
                           ctaRoute: String(msg.structuredData.ctaRoute ?? '#'),
                         }}
                       />
+                    ) : msg.type === 'kiwi_confirm' && msg.structuredData ? (
+                      <div className="w-full flex items-start gap-2 max-w-[80%]">
+                        <img
+                          src={kiwiImg}
+                          alt="Kiwi"
+                          className="shrink-0"
+                          style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                          draggable={false}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                          <div
+                            className="px-5 py-4 text-white/90 space-y-3"
+                            style={{
+                              background: 'rgba(37,99,235,0.10)',
+                              border: '1px solid rgba(37,99,235,0.18)',
+                              borderRadius: '16px 16px 16px 4px',
+                            }}
+                          >
+                            <div>
+                              <div className="text-sm font-semibold text-white">Confirmación requerida</div>
+                              <div className="text-xs text-white/60 mt-1">
+                                Voy a crear una tarea. Revisa el resumen y confirma.
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                              <div className="text-xs text-white/60">Título</div>
+                              <div className="text-sm text-white mt-0.5">
+                                {String((msg.structuredData.params as any)?.title ?? '')}
+                              </div>
+                              <div className="text-xs text-white/60 mt-2">Entrega</div>
+                              <div className="text-sm text-white mt-0.5">
+                                {String((msg.structuredData.params as any)?.dueDate ?? '')}
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                className="border-white/20 text-white/80 hover:text-white hover:bg-white/10"
+                                onClick={() => {
+                                  const payload = msg.structuredData ?? {};
+                                  setInput(`KIWI_CONFIRM ${JSON.stringify(payload)}`);
+                                }}
+                              >
+                                Revisar / editar
+                              </Button>
+                              <Button
+                                className="hover:opacity-90"
+                                style={{ background: `linear-gradient(to right, ${accentColorDark}, ${accentColor})` }}
+                                onClick={() => {
+                                  const payload = msg.structuredData ?? {};
+                                  setInput(`KIWI_CONFIRM ${JSON.stringify(payload)}`);
+                                  setTimeout(() => handleSend(), 0);
+                                }}
+                              >
+                                Confirmar y crear
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : msg.emisor === 'ai' && parseTeacherCoursesFromText(msg.contenido) ? (
+                      <div className="w-full flex items-start gap-2 max-w-[80%]">
+                        <img
+                          src={kiwiImg}
+                          alt="Kiwi"
+                          className="shrink-0"
+                          style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                          draggable={false}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                          <div
+                            className="px-5 py-4 text-white/90"
+                            style={{
+                              background: 'rgba(37,99,235,0.10)',
+                              border: '1px solid rgba(37,99,235,0.18)',
+                              borderRadius: '16px 16px 16px 4px',
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-9 h-9 rounded-xl flex items-center justify-center border border-white/10"
+                                style={{
+                                  background:
+                                    'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
+                                  boxShadow: '0 0 22px rgba(37,99,235,0.20)',
+                                }}
+                              >
+                                <BookOpen className="w-4 h-4 text-[#00c8ff]" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-white">Tus cursos activos</div>
+                                <div className="text-xs text-white/60">
+                                  Selecciona uno para asignar una tarea más rápido.
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {parseTeacherCoursesFromText(msg.contenido)!.slice(0, 24).map((c, i) => (
+                                <button
+                                  key={`${c.subject}-${c.group}-${i}`}
+                                  type="button"
+                                  onClick={() => setInput(`Asignar una tarea para ${c.group} de ${c.subject}.`)}
+                                  className="text-left rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors px-3 py-2"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium text-white truncate">{c.subject}</div>
+                                      <div className="text-xs text-white/60 flex items-center gap-1.5 mt-0.5">
+                                        <Users className="w-3.5 h-3.5 text-white/55" />
+                                        <span className="truncate">{c.group}</span>
+                                      </div>
+                                    </div>
+                                    <div
+                                      className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-full"
+                                      style={{
+                                        background: 'rgba(0,200,255,0.14)',
+                                        border: '1px solid rgba(0,200,255,0.28)',
+                                        color: 'rgba(125,211,252,0.95)',
+                                      }}
+                                    >
+                                      {c.group}
+                                    </div>
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+
+                            <div className="mt-3 text-[12px] text-white/60">
+                              Tip: también puedes decir “asigna una tarea para <span className="text-white/80">11H</span> de <span className="text-white/80">Biología</span> para el viernes”.
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : msg.emisor === 'ai' && parseSubjectGroupsFromText(msg.contenido) ? (
+                      <div className="w-full flex items-start gap-2 max-w-[80%]">
+                        <img
+                          src={kiwiImg}
+                          alt="Kiwi"
+                          className="shrink-0"
+                          style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                          draggable={false}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                          <div
+                            className="px-5 py-4 text-white/90"
+                            style={{
+                              background: 'rgba(37,99,235,0.10)',
+                              border: '1px solid rgba(37,99,235,0.18)',
+                              borderRadius: '16px 16px 16px 4px',
+                            }}
+                          >
+                            {(() => {
+                              const parsed = parseSubjectGroupsFromText(msg.contenido)!;
+                              return (
+                                <>
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-9 h-9 rounded-xl flex items-center justify-center border border-white/10"
+                                      style={{
+                                        background:
+                                          'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
+                                        boxShadow: '0 0 22px rgba(37,99,235,0.20)',
+                                      }}
+                                    >
+                                      <BookOpen className="w-4 h-4 text-[#00c8ff]" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-semibold text-white truncate">
+                                        {parsed.subject}
+                                      </div>
+                                      <div className="text-xs text-white/60">
+                                        Tus grupos asignados ({parsed.groups.length})
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 flex flex-wrap gap-2">
+                                    {parsed.groups.slice(0, 24).map((g) => (
+                                      <button
+                                        key={g}
+                                        type="button"
+                                        onClick={() => setInput(`Asignar una tarea para ${g} de ${parsed.subject}.`)}
+                                        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors px-3 py-1.5"
+                                      >
+                                        <Users className="w-4 h-4 text-white/60" />
+                                        <span className="text-sm text-white font-medium">{g}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+
+                                  <div className="mt-3 text-[12px] text-white/60">
+                                    Tip: toca un grupo para preparar una tarea; luego me dices título, descripción y fecha.
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       <div className="w-full flex items-start gap-2 max-w-[80%]">
                         <img

@@ -16,6 +16,7 @@ import {
 } from './kiwiContext.js';
 import type { KiwiUserContext } from './kiwiContext.js';
 import { executeKiwiAction } from './kiwiActions.js';
+import { buildEvoKnowledge } from './kiwiKnowledge.js';
 import {
   getRecentMessages,
   upsertUserMemory,
@@ -807,7 +808,10 @@ export async function generateKiwiResponse(
       }));
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: buildKiwiSystemPrompt(kiwiContext, kiwiContext.memory) },
+      {
+        role: 'system',
+        content: buildKiwiSystemPrompt(kiwiContext, kiwiContext.memory) + '\n\n' + buildEvoKnowledge(kiwiContext.rol),
+      },
       ...history,
       { role: 'user', content: sanitizeText(userMessage).sanitized },
     ];

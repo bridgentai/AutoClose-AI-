@@ -4,10 +4,10 @@ import { forwardRef, useEffect, useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/authContext";
 import { useQuery } from "@tanstack/react-query";
-import { 
-  MessageSquare, 
-  Sparkles, 
-  X, 
+import {
+  MessageSquare,
+  Sparkles,
+  X,
   Home,
   BookOpen,
   GraduationCap,
@@ -38,6 +38,8 @@ interface Message {
   emisor: 'user' | 'ai';
   contenido: string;
   timestamp: Date;
+  type?: string;
+  structuredData?: Record<string, unknown>;
 }
 
 interface AIDockProps {
@@ -247,7 +249,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     }
   }, [isChatOpen, isExpanded, onChatStateChange]);
 
-  
+
   // Use prop if provided, otherwise use hook
   const handleOpenCommandPalette = () => {
     if (onOpenCommandPalette) {
@@ -256,7 +258,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
       setCommandOpen(true);
     }
   };
-  
+
   // Chat state
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -310,6 +312,16 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
         description: "Chat con tus acudientes y con tus cursos",
         path: "/evo-send?open=family",
         roles: ["estudiante"],
+        accentHex: "#f43f5e",
+        iconShellClassName:
+          "bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30 border-0",
+      },
+      {
+        icon: Send,
+        label: "Evo Send",
+        description: "Mensajería con acudientes y cursos",
+        path: "/evo-send",
+        roles: ["profesor"],
         accentHex: "#f43f5e",
         iconShellClassName:
           "bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30 border-0",
@@ -422,6 +434,55 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     });
   };
 
+  const isKiwiConfirmPayload = (text: string) => typeof text === 'string' && text.startsWith('__CONFIRM__:');
+
+  const parseKiwiConfirmPayload = (text: string): Record<string, unknown> | null => {
+    if (!isKiwiConfirmPayload(text)) return null;
+    const raw = text.slice('__CONFIRM__:'.length).trim();
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  type ParsedCourseItem = { subject: string; group: string };
+  const parseTeacherCoursesFromText = (text: string): ParsedCourseItem[] | null => {
+    if (typeof text !== 'string') return null;
+    const t = text.trim();
+    if (!t.toLowerCase().includes('tus cursos activos')) return null;
+
+    const lines = t.split('\n').map((l) => l.trim()).filter(Boolean);
+    const items: ParsedCourseItem[] = [];
+    for (const line of lines) {
+      const m = line.match(/^\d+\.\s*(?:\*\*)?(.+?)(?:\*\*)?\s*-\s*([A-Za-z0-9]+)\s*$/);
+      if (!m) continue;
+      const subject = m[1].trim();
+      const group = m[2].trim().toUpperCase();
+      if (!subject || !group) continue;
+      items.push({ subject, group });
+    }
+    return items.length > 0 ? items : null;
+  };
+
+  type ParsedSubjectGroups = { subject: string; groups: string[] };
+  const parseSubjectGroupsFromText = (text: string): ParsedSubjectGroups | null => {
+    if (typeof text !== 'string') return null;
+    const t = text.trim();
+    const m = t.match(/tienes\s+asignados\s+los\s+siguientes\s+grupos\s+de\s+(.+?)\s*:/i);
+    if (!m) return null;
+    const subject = (m[1] ?? '').trim();
+    if (!subject) return null;
+    const groupMatches = [...t.matchAll(/\b(\d{1,2}[A-Za-z])\b/g)]
+      .map((x) => (x[1] ?? '').toUpperCase())
+      .filter(Boolean);
+    const groups = Array.from(new Set(groupMatches));
+    return groups.length > 0 ? { subject, groups } : null;
+  };
+
   const handleSend = async () => {
     if (!input.trim() || loading || isStreaming) return;
 
@@ -490,6 +551,25 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
 
           if (parsed.type === 'chunk' && parsed.text) {
             const chunk = parsed.text;
+
+            // Confirmación estructurada: reemplaza el placeholder por una card
+            if (isKiwiConfirmPayload(chunk)) {
+              const payload = parseKiwiConfirmPayload(chunk);
+              setMessages((prev) => {
+                const next = [...prev];
+                next[next.length - 1] = {
+                  emisor: 'ai',
+                  contenido: '',
+                  timestamp: new Date(),
+                  type: 'kiwi_confirm',
+                  structuredData: payload ?? undefined,
+                };
+                return next;
+              });
+              setIsStreaming(false);
+              setTimeout(() => scrollToBottom(), 50);
+              continue;
+            }
             setMessages(prev => {
               const next = [...prev];
               const last = next[next.length - 1];
@@ -540,7 +620,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           aria-hidden="true"
         />
       )}
-      
+
       {/* Overlay transparente para cerrar el chat - Sin blur para poder ver el contenido */}
       {isChatOpen && (
         <div
@@ -554,7 +634,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           aria-hidden="true"
         />
       )}
-      
+
       <div
         className={cn(
           "fixed right-0 top-0 bottom-0 z-30",
@@ -650,8 +730,8 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  
-                  <div 
+
+                  <div
                     id="chat-messages"
                     className="flex-1 overflow-y-auto p-4 space-y-4"
                     style={{ scrollBehavior: 'smooth', overscrollBehavior: 'contain' }}
@@ -683,18 +763,145 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                               msg.emisor === 'user' ? 'justify-end' : 'justify-start'
                             )}
                           >
-                            <div
-                              className={cn(
-                                "max-w-[85%] px-4 py-2 rounded-xl text-sm",
-                                msg.emisor === 'user'
-                                  ? 'text-white rounded-br-sm border border-white/10 shadow-sm bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8]'
-                                  : 'bg-white/10 text-white rounded-bl-sm border border-white/20'
-                              )}
-                            >
-                              <p className="leading-relaxed whitespace-pre-wrap">
-                                {msg.contenido}
-                              </p>
-                            </div>
+                            {msg.emisor === 'ai' && msg.type === 'kiwi_confirm' && msg.structuredData ? (
+                              <div className="max-w-[92%] w-full bg-white/10 text-white rounded-xl rounded-bl-sm border border-white/20 p-3">
+                                <div className="text-xs text-white/60">Confirmación requerida</div>
+                                <div className="text-sm font-semibold text-white mt-1">Crear tarea</div>
+                                <div className="mt-2 rounded-lg border border-white/10 bg-white/5 p-3">
+                                  <div className="text-[11px] text-white/60">Título</div>
+                                  <div className="text-sm text-white mt-0.5">
+                                    {String((msg.structuredData as any)?.params?.title ?? '')}
+                                  </div>
+                                  <div className="text-[11px] text-white/60 mt-2">Entrega</div>
+                                  <div className="text-sm text-white mt-0.5">
+                                    {String((msg.structuredData as any)?.params?.dueDate ?? '')}
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 mt-3">
+                                  <Button
+                                    variant="outline"
+                                    className="h-8 border-white/20 text-white/80 hover:text-white hover:bg-white/10"
+                                    onClick={() => {
+                                      const payload = msg.structuredData ?? {};
+                                      setInput(`KIWI_CONFIRM ${JSON.stringify(payload)}`);
+                                    }}
+                                  >
+                                    Editar
+                                  </Button>
+                                  <Button
+                                    className="h-8 bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8] hover:from-[#2563EB] hover:to-[#1e3cff] border border-white/10"
+                                    onClick={() => {
+                                      const payload = msg.structuredData ?? {};
+                                      setInput(`KIWI_CONFIRM ${JSON.stringify(payload)}`);
+                                      setTimeout(() => handleSend(), 0);
+                                    }}
+                                  >
+                                    Confirmar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div
+                                className={cn(
+                                  "max-w-[85%] px-4 py-2 rounded-xl text-sm",
+                                  msg.emisor === 'user'
+                                    ? 'text-white rounded-br-sm border border-white/10 shadow-sm bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8]'
+                                    : 'bg-white/10 text-white rounded-bl-sm border border-white/20'
+                                )}
+                              >
+                                {msg.emisor === 'ai' && parseTeacherCoursesFromText(msg.contenido) ? (
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="w-8 h-8 rounded-lg flex items-center justify-center border border-white/10"
+                                        style={{
+                                          background:
+                                            'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
+                                        }}
+                                      >
+                                        <BookOpen className="w-4 h-4 text-[#00c8ff]" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-semibold text-white">Tus cursos activos</div>
+                                        <div className="text-[11px] text-white/60">Toca uno para empezar una tarea.</div>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2">
+                                      {parseTeacherCoursesFromText(msg.contenido)!.slice(0, 16).map((c, i) => (
+                                        <button
+                                          key={`${c.subject}-${c.group}-${i}`}
+                                          type="button"
+                                          onClick={() => setInput(`Asignar una tarea para ${c.group} de ${c.subject}.`)}
+                                          className="text-left rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors px-3 py-2"
+                                        >
+                                          <div className="flex items-center justify-between gap-2">
+                                            <div className="min-w-0">
+                                              <div className="text-sm font-medium text-white truncate">{c.subject}</div>
+                                              <div className="text-[11px] text-white/60 flex items-center gap-1.5 mt-0.5">
+                                                <Users className="w-3.5 h-3.5 text-white/55" />
+                                                <span className="truncate">{c.group}</span>
+                                              </div>
+                                            </div>
+                                            <span
+                                              className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                              style={{
+                                                background: 'rgba(0,200,255,0.14)',
+                                                border: '1px solid rgba(0,200,255,0.28)',
+                                                color: 'rgba(125,211,252,0.95)',
+                                              }}
+                                            >
+                                              {c.group}
+                                            </span>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : msg.emisor === 'ai' && parseSubjectGroupsFromText(msg.contenido) ? (
+                                  <div className="space-y-3">
+                                    {(() => {
+                                      const parsed = parseSubjectGroupsFromText(msg.contenido)!;
+                                      return (
+                                        <>
+                                          <div className="flex items-center gap-2">
+                                            <div
+                                              className="w-8 h-8 rounded-lg flex items-center justify-center border border-white/10"
+                                              style={{
+                                                background:
+                                                  'linear-gradient(145deg, rgba(30,58,138,0.35), rgba(15,23,42,0.6))',
+                                              }}
+                                            >
+                                              <BookOpen className="w-4 h-4 text-[#00c8ff]" />
+                                            </div>
+                                            <div className="min-w-0">
+                                              <div className="text-sm font-semibold text-white truncate">{parsed.subject}</div>
+                                              <div className="text-[11px] text-white/60">Grupos asignados ({parsed.groups.length})</div>
+                                            </div>
+                                          </div>
+                                          <div className="flex flex-wrap gap-2">
+                                            {parsed.groups.slice(0, 20).map((g) => (
+                                              <button
+                                                key={g}
+                                                type="button"
+                                                onClick={() => setInput(`Asignar una tarea para ${g} de ${parsed.subject}.`)}
+                                                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 transition-colors px-3 py-1.5"
+                                              >
+                                                <Users className="w-4 h-4 text-white/60" />
+                                                <span className="text-sm text-white font-medium">{g}</span>
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                ) : (
+                                  <p className="leading-relaxed whitespace-pre-wrap">
+                                    {msg.contenido}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
                         {loading && (
@@ -925,7 +1132,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                               onClick={() => handleNavClick(item.path, item.action)}
                               iconShellClassName={
                                 'iconShellClassName' in item &&
-                                typeof (item as { iconShellClassName?: string }).iconShellClassName ===
+                                  typeof (item as { iconShellClassName?: string }).iconShellClassName ===
                                   'string'
                                   ? (item as { iconShellClassName: string }).iconShellClassName
                                   : undefined

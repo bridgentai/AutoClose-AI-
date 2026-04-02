@@ -2,6 +2,7 @@ import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
 import kiwiMascot from '@/assets/Kiwi.png';
 import kiwiChill from '@/assets/kiwi chill.png';
+import evoLogo from '@/assets/Screenshot_2026-04-01_at_8.05.11_PM-removebg-preview.png';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -236,7 +237,7 @@ export default function Home() {
         title: "Potencia tu Enseñanza con IA",
         features: [
           "Crea y gestiona cursos fácilmente",
-          "Genera materiales educativos automáticamente",
+          "Analiza tendencias...",
           "Monitorea el progreso de tus estudiantes",
           "Asistente IA para responder dudas frecuentes",
         ],
@@ -385,9 +386,19 @@ export default function Home() {
           <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 28px', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             {/* Logo */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ background: PALETTE.primary, borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 16px rgba(59,130,246,0.35)' }}>
-                <span style={{ color: '#fff', fontWeight: 800, fontSize: 13, letterSpacing: '-0.3px' }}>evo</span>
-              </div>
+              <img
+                src={evoLogo}
+                alt="Evo.OS"
+                draggable={false}
+                style={{
+                  width: 38,
+                  height: 38,
+                  objectFit: 'contain',
+                  userSelect: 'none',
+                  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.25))',
+                  flexShrink: 0,
+                }}
+              />
               <span style={{ color: '#fff', fontWeight: 700, fontSize: 17, letterSpacing: '-0.3px' }}>Caobos</span>
             </div>
 
@@ -546,11 +557,11 @@ export default function Home() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
               {[
                 { icon: MessageSquare, title: "Asistente IA Personalizado", desc: "IA que conoce tu currículo y responde consultas académicas 24/7" },
-                { icon: BookOpen,      title: "Gestión de Cursos",          desc: "Organiza cursos, materiales y tareas en una interfaz intuitiva" },
-                { icon: Users,         title: "Multi-Rol",                  desc: "Interfaces para estudiantes, profesores, directivos y padres" },
-                { icon: BarChart3,     title: "Análisis en Tiempo Real",    desc: "Métricas y reportes automáticos del rendimiento académico" },
-                { icon: Shield,        title: "Seguro y Privado",           desc: "Datos protegidos con encriptación y controles por rol" },
-                { icon: Sparkles,      title: "Personalización Total",      desc: "Configura logo, colores y nombre del asistente de tu institución" },
+                { icon: BookOpen, title: "Gestión de Cursos", desc: "Organiza cursos, materiales y tareas en una interfaz intuitiva" },
+                { icon: Users, title: "Multi-Rol", desc: "Interfaces para estudiantes, profesores, directivos y padres" },
+                { icon: BarChart3, title: "Análisis en Tiempo Real", desc: "Métricas y reportes automáticos del rendimiento académico" },
+                { icon: Shield, title: "Seguro y Privado", desc: "Datos protegidos con encriptación y controles por rol" },
+                { icon: Sparkles, title: "Personalización Total", desc: "Configura logo, colores y nombre del asistente de tu institución" },
               ].map(({ icon: Icon, title, desc }, idx) => (
                 <div key={idx} className="feature-card">
                   <div style={{ width: 44, height: 44, borderRadius: 10, background: 'linear-gradient(145deg, #3B82F6, #2563EB)', border: '1px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, boxShadow: '0 4px 12px rgba(59,130,246,0.25)' }}>
