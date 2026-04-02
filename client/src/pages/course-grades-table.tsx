@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { Plus, Percent, Award, ChevronDown, ListFilter } from 'lucide-react';
+import { Plus, Percent, Award, ChevronDown, ListFilter, TrendingUp, TrendingDown } from 'lucide-react';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Button } from '@/components/ui/button';
 import { GradesInlineAssignmentPanel } from '@/components/assignment/GradesInlineAssignmentPanel';
@@ -234,6 +234,20 @@ function calcularPrediccion(
 }
 
 // =========================================================
+// SEMÁFORO DE COLOR
+// =========================================================
+
+function gradeColor(value: number | string | undefined | null): { text: string; bg: string; border: string } {
+  if (value === '' || value === undefined || value === null)
+    return { text: 'text-white/40', bg: 'bg-transparent', border: 'border-white/[0.06]' };
+  const n = Number(value);
+  if (Number.isNaN(n)) return { text: 'text-white/40', bg: 'bg-transparent', border: 'border-white/[0.06]' };
+  if (n < 65) return { text: 'text-red-400', bg: 'bg-red-500/[0.10]', border: 'border-red-500/30' };
+  if (n < 75) return { text: 'text-yellow-400', bg: 'bg-yellow-500/[0.08]', border: 'border-yellow-500/25' };
+  return { text: 'text-emerald-400', bg: 'bg-emerald-500/[0.08]', border: 'border-emerald-500/25' };
+}
+
+// =========================================================
 // CELDA DE NOTA (mini card)
 // =========================================================
 
@@ -320,6 +334,7 @@ function NoteCell({
     );
   }
 
+  const gc = gradeColor(isEmpty ? '' : local);
   return (
     <div
       role="button"
@@ -334,9 +349,9 @@ function NoteCell({
           setEditing(true);
         }
       }}
-      className="flex items-center justify-center w-full min-h-[44px] py-2.5 rounded-[12px] font-medium text-[#E2E8F0] cursor-text bg-white/[0.03] border border-white/[0.06] transition-colors duration-150 hover:bg-[rgba(59,130,246,0.15)] hover:border-[rgba(59,130,246,0.4)] overflow-hidden"
+      className={`flex items-center justify-center w-full min-h-[44px] py-2.5 rounded-[12px] font-medium cursor-text border transition-colors duration-150 hover:bg-[rgba(59,130,246,0.15)] hover:border-[rgba(59,130,246,0.4)] overflow-hidden ${gc.bg} ${gc.border}`}
     >
-      {isEmpty ? <span className="text-white/40">—</span> : <span className="tabular-nums">{String(value)}</span>}
+      {isEmpty ? <span className="text-white/40">—</span> : <span className={`tabular-nums ${gc.text}`}>{String(value)}</span>}
     </div>
   );
 }
@@ -368,18 +383,22 @@ function StudentAvatar({ nombre }: { nombre: string }) {
 // CELDA PREDICCIÓN (solo pronóstico de la IA integrada; si no hay dato, "—")
 // =========================================================
 
-function PredictionCellFromAI({ courseId, studentId }: { courseId: string; studentId: string }) {
+function PredictionCellFromAI({ courseId, studentId, tendencia }: { courseId: string; studentId: string; tendencia?: number }) {
   const { data: forecast } = useForecast(courseId, studentId);
   const value = forecast?.projectedFinalGrade ?? null;
   const display = value != null && !Number.isNaN(value) ? Math.round(value * 10) / 10 : null;
+  const gc = gradeColor(display);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-1 py-1">
+    <div className="flex flex-col items-center justify-center gap-0.5 py-1">
+      <span className="text-[9px] uppercase tracking-widest text-white/40 leading-none">Proyección</span>
       <div className="flex items-center gap-1">
-        <span className="text-[20px] font-semibold tabular-nums text-[#E2E8F0]">
+        <span className={`text-[20px] font-semibold tabular-nums ${display != null ? gc.text : 'text-white/40'}`}>
           {display != null ? display : '—'}
         </span>
         {display != null && <span className="text-white/50 text-[10px]">/ 100</span>}
+        {tendencia != null && tendencia > 2 && <TrendingUp className="h-3.5 w-3.5 text-emerald-400 shrink-0" />}
+        {tendencia != null && tendencia < -2 && <TrendingDown className="h-3.5 w-3.5 text-red-400 shrink-0" />}
       </div>
     </div>
   );
@@ -395,6 +414,7 @@ function StudentRow({
   gridTemplateColumns,
   getGradeFor,
   getPromedioForDisplay,
+  getTendencia,
   onSaveGrade,
   courseId,
   onStudentClick,
@@ -404,11 +424,13 @@ function StudentRow({
   gridTemplateColumns: string;
   getGradeFor: (studentId: string, assignmentId: string) => number | string;
   getPromedioForDisplay: (studentId: string) => number | string;
+  getTendencia: (studentId: string) => number;
   onSaveGrade: (assignmentId: string, estudianteId: string, calificacion: number | null) => void;
   courseId: string;
   onStudentClick: (studentId: string) => void;
 }) {
   const promedio = getPromedioForDisplay(student._id);
+  const tendencia = getTendencia(student._id);
 
   return (
     <div
@@ -416,8 +438,8 @@ function StudentRow({
       style={{ gridTemplateColumns }}
     >
       <div
-        className="flex items-center gap-3 pl-2 cursor-pointer group sticky left-0 z-10 pr-2 py-1 rounded-r-lg backdrop-blur-md min-w-0 border-r border-white/[0.06]"
-        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.42), rgba(15, 23, 42, 0.72))' }}
+        className="flex items-center gap-3 pl-2 cursor-pointer group sticky left-0 z-10 pr-2 py-1 rounded-r-lg min-w-0 border-r border-white/[0.06]"
+        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.95), rgba(15, 23, 42, 0.98))' }}
         onClick={() => onStudentClick(student._id)}
       >
         <StudentAvatar nombre={student.nombre} />
@@ -437,16 +459,21 @@ function StudentRow({
       ))}
       {/* Columna PROMEDIO: mismo valor que la tarjeta de la materia (promedio ponderado por logros) */}
       <div className="flex items-center justify-center">
-        <div className="rounded-[12px] bg-white/[0.03] border border-white/[0.06] px-2 py-1.5 min-w-[60px] text-center">
-          <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : 'text-[#E2E8F0]'}`}>
-            {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
-          </span>
-          {promedio !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
-        </div>
+        {(() => {
+          const gc = gradeColor(promedio === '—' ? '' : promedio);
+          return (
+            <div className={`rounded-[12px] border px-2 py-1.5 min-w-[60px] text-center ${gc.bg} ${gc.border}`}>
+              <span className={`text-sm font-semibold ${promedio === '—' ? 'text-white/40' : gc.text}`}>
+                {typeof promedio === 'number' ? promedio.toFixed(1) : promedio}
+              </span>
+              {promedio !== '—' && <span className="text-white/50 text-[10px] ml-0.5">/ 100</span>}
+            </div>
+          );
+        })()}
       </div>
       {/* Columna PREDICCIÓN: pronóstico de la IA integrada (API forecast); si no hay dato, "—" */}
       <div className="flex items-center justify-center pr-2">
-        <PredictionCellFromAI courseId={courseId} studentId={student._id} />
+        <PredictionCellFromAI courseId={courseId} studentId={student._id} tendencia={tendencia} />
       </div>
     </div>
   );
@@ -826,6 +853,9 @@ export default function CourseGradesTablePage() {
     return Number.isNaN(rounded) ? '—' : rounded;
   };
 
+  const getPredictionDataFor = (estudianteId: string) =>
+    calcularPrediccion(estudianteId, assignmentsByIndicador, outcomeNodesForGrades);
+
   /** En Vista completa: promedio final ponderado. En una categoría: solo el promedio de esa categoría. Evita NaN. */
   const getPromedioForDisplay = (estudianteId: string): number | string => {
     if (activePrimaryTab === TAB_VISTA_COMPLETA) return getPromedioFor(estudianteId);
@@ -1122,7 +1152,8 @@ export default function CourseGradesTablePage() {
               <Skeleton className="h-[72px] w-full rounded-xl bg-white/10" />
             </div>
           ) : students.length > 0 ? (
-            <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-md shadow-[0_0_40px_rgba(37,99,235,0.12)]">
+            <div className="flex-1 min-h-0 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-md shadow-[0_0_40px_rgba(37,99,235,0.12)] overflow-hidden">
+            <div className="overflow-x-auto overflow-y-auto h-full w-full">
               {showTrimesterEmptyState ? (
                 <div className="min-w-[min(100%,560px)] px-2 sm:px-4 py-2">
                   <div
@@ -1133,8 +1164,8 @@ export default function CourseGradesTablePage() {
                     }}
                   >
                     <div
-                      className="pl-1 sticky left-0 z-30 pr-2 -ml-px backdrop-blur-md"
-                      style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.6))' }}
+                      className="pl-1 sticky left-0 z-30 pr-2 -ml-px"
+                      style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.95), rgba(15, 23, 42, 0.98))' }}
                     >
                       Estudiante
                     </div>
@@ -1177,7 +1208,7 @@ export default function CourseGradesTablePage() {
                       >
                         <div
                           className="pl-2 sticky left-0 z-30 pr-2 py-2 flex items-center border-r border-white/[0.06] rounded-r-lg"
-                          style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.42), rgba(15, 23, 42, 0.72))' }}
+                          style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.95), rgba(15, 23, 42, 0.98))' }}
                         >
                           Estudiante
                         </div>
@@ -1187,16 +1218,26 @@ export default function CourseGradesTablePage() {
                             <div
                               key={`${seg.title}-${idx}`}
                               className="text-center px-2 py-2 flex items-center justify-center border-r border-white/[0.06] last:border-r-0"
-                              style={{ gridColumn: `span ${seg.span}` }}
+                              style={{
+                                gridColumn: `span ${seg.span}`,
+                                background: 'rgba(37, 99, 235, 0.10)',
+                                borderBottom: '2px solid rgba(37, 99, 235, 0.6)',
+                              }}
                               title={seg.title}
                             >
-                              <span className="line-clamp-2 leading-tight break-words">{seg.title}</span>
+                              <span className="line-clamp-2 leading-tight break-words text-[11px] font-bold uppercase tracking-widest text-blue-300">{seg.title}</span>
                             </div>
                           ))}
-                        <div className="text-center flex items-center justify-center px-1 text-[10px] uppercase tracking-wider text-white/75">
+                        <div
+                          className="text-center flex items-center justify-center px-1 text-[10px] uppercase tracking-wider text-white/75"
+                          style={{ background: 'rgba(255,255,255,0.02)' }}
+                        >
                           Promedio
                         </div>
-                        <div className="text-center pr-2 flex items-center justify-center text-[10px] uppercase tracking-wider text-white/75">
+                        <div
+                          className="text-center pr-2 flex items-center justify-center text-[10px] uppercase tracking-wider text-white/75"
+                          style={{ background: 'rgba(255,255,255,0.02)' }}
+                        >
                           Predicción
                         </div>
                       </div>
@@ -1209,7 +1250,7 @@ export default function CourseGradesTablePage() {
                       >
                         <div
                           className="pl-2 sticky left-0 z-30 pr-2 border-r border-white/[0.06] rounded-r-lg"
-                          style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.35), rgba(15, 23, 42, 0.65))' }}
+                          style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.95), rgba(15, 23, 42, 0.98))' }}
                         />
                         {activeAssignments.map((a) => (
                           <div key={a._id} className="text-center px-1.5 py-1 flex items-center justify-center min-h-[48px]">
@@ -1232,7 +1273,7 @@ export default function CourseGradesTablePage() {
                     >
                       <div
                         className="pl-2 sticky left-0 z-30 pr-2 py-1.5 flex items-center self-center border-r border-white/[0.06] rounded-r-lg min-h-0 text-[10px] uppercase tracking-wider text-white/75"
-                        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.42), rgba(15, 23, 42, 0.72))' }}
+                        style={{ background: 'linear-gradient(145deg, rgba(30, 58, 138, 0.95), rgba(15, 23, 42, 0.98))' }}
                       >
                         Estudiante
                       </div>
@@ -1267,6 +1308,7 @@ export default function CourseGradesTablePage() {
                         gridTemplateColumns={gradeGridTemplate}
                         getGradeFor={getGradeFor}
                         getPromedioForDisplay={getPromedioForDisplay}
+                        getTendencia={(id) => getPredictionDataFor(id).tendencia}
                         onSaveGrade={(assignmentId, estudianteId, calificacion) =>
                           updateGradeMutation.mutate({ assignmentId, estudianteId, calificacion })
                         }
@@ -1279,6 +1321,7 @@ export default function CourseGradesTablePage() {
                   </div>
                 </div>
               )}
+            </div>
             </div>
           ) : (
             <div className="text-center py-16 flex-1">
