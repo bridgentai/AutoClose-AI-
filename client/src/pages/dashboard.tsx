@@ -812,9 +812,36 @@ function ProfesorDashboard() {
 
   const clasesHoy = useMemo(() => {
     const slots = scheduleData?.slots ?? {};
-    const diaJS = now.getDay();
-    if (diaJS === 0) return [];
-    const diaEscolar = diaJS;
+    // Jueves 2 abril 2026 = día escolar 4
+    const REF_DATE = new Date(2026, 3, 2); // mes 3 = abril (0-indexed)
+    const REF_DIA_ESCOLAR = 4;
+
+    const contarDiasHabiles = (desde: Date, hasta: Date): number => {
+      let count = 0;
+      const cursor = new Date(desde);
+      cursor.setHours(0, 0, 0, 0);
+      const target = new Date(hasta);
+      target.setHours(0, 0, 0, 0);
+      const dir = target >= cursor ? 1 : -1;
+      while (cursor.getTime() !== target.getTime()) {
+        cursor.setDate(cursor.getDate() + dir);
+        const dow = cursor.getDay();
+        if (dow !== 0 && dow !== 6) count += dir;
+      }
+      return count;
+    };
+
+    const hoy = new Date(now);
+    hoy.setHours(0, 0, 0, 0);
+    const dowHoy = hoy.getDay();
+
+    // Fin de semana: no hay clases
+    if (dowHoy === 0 || dowHoy === 6) return [];
+
+    const diasDesdeRef = contarDiasHabiles(REF_DATE, hoy);
+    // diaEscolar: ciclo 1-6
+    const diaEscolar = ((REF_DIA_ESCOLAR - 1 + diasDesdeRef) % 6 + 6) % 6 + 1;
+
     const ahora = now.getHours() * 60 + now.getMinutes();
 
     const clasesDelDia = Object.entries(slots)
