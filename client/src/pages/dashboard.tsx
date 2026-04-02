@@ -780,6 +780,13 @@ function ProfesorDashboard() {
     staleTime: 60 * 1000,
   });
 
+  const { data: scheduleData } = useQuery<{ slots: Record<string, string> }>({
+    queryKey: ['/api/schedule/my-professor', user?.id],
+    queryFn: () => apiRequest('GET', '/api/schedule/my-professor'),
+    enabled: !!user?.id && user?.rol === 'profesor',
+    staleTime: 5 * 60 * 1000,
+  });
+
   const siguientesPorGrupo = useMemo(() => {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
@@ -794,13 +801,50 @@ function ProfesorDashboard() {
     return Array.from(porGrupo.entries()).map(([grupo, asignacion]) => ({ grupo, asignacion }));
   }, [misAsignaciones]);
 
-  // TODO: reemplazar con lógica real de horario cuando esté disponible
-  const clasesHoyMock = professorGroups.map((g, i) => ({
-    groupId: g.groupId,
-    groupName: g.groupName ?? `Grupo ${i + 1}`,
-    hora: i === 0 ? '7:00 AM' : i === 1 ? '10:00 AM' : '2:00 PM',
-    esSiguiente: i === 1,
-  }));
+  const PERIODOS_HORARIO: Record<number, { inicio: string; fin: string }> = {
+    1: { inicio: '7:30', fin: '8:25' },
+    2: { inicio: '8:30', fin: '9:25' },
+    3: { inicio: '9:30', fin: '10:30' },
+    5: { inicio: '10:50', fin: '11:45' },
+    6: { inicio: '11:50', fin: '12:50' },
+    8: { inicio: '13:35', fin: '14:25' },
+  };
+
+  const clasesHoy = useMemo(() => {
+    const slots = scheduleData?.slots ?? {};
+    const diaJS = now.getDay();
+    if (diaJS === 0) return [];
+    const diaEscolar = diaJS;
+    const ahora = now.getHours() * 60 + now.getMinutes();
+
+    const clasesDelDia = Object.entries(slots)
+      .filter(([key]) => {
+        const [dia, periodo] = key.split('-').map(Number);
+        return dia === diaEscolar && PERIODOS_HORARIO[periodo] !== undefined;
+      })
+      .map(([key, groupId]) => {
+        const [, periodo] = key.split('-').map(Number);
+        const p = PERIODOS_HORARIO[periodo];
+        const [hI, mI] = p.inicio.split(':').map(Number);
+        const [hF, mF] = p.fin.split(':').map(Number);
+        const inicioMin = hI * 60 + mI;
+        const finMin = hF * 60 + mF;
+        const groupName = professorGroups.find(g => g.groupId === groupId)?.groupName ?? groupId;
+        const enCurso = ahora >= inicioMin && ahora < finMin;
+        const esSiguiente = ahora < inicioMin;
+        return { groupId, groupName, inicio: p.inicio, fin: p.fin, inicioMin, enCurso, esSiguiente };
+      })
+      .sort((a, b) => a.inicioMin - b.inicioMin);
+
+    let marcado = false;
+    return clasesDelDia.map(c => {
+      if (!marcado && (c.enCurso || c.esSiguiente)) {
+        marcado = true;
+        return { ...c, destacar: true };
+      }
+      return { ...c, destacar: false };
+    });
+  }, [scheduleData, professorGroups, now]);
 
   const handleDayClick = (assignment: Assignment, event?: React.MouseEvent) => {
     if (event) {
@@ -880,7 +924,7 @@ function ProfesorDashboard() {
           </CardContent>
         </Card>
 
-        {/* KPI 4 — Hoy (mock) */}
+        {/* KPI 4 — Hoy */}
         <Card className={`${CARD_STYLE} reveal-scale`} style={{ animationDelay: '0.25s' }}>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
@@ -890,25 +934,30 @@ function ProfesorDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-1.5">
-              {clasesHoyMock.length === 0 ? (
+              {now.getDay() === 0 ? (
+                <p className="text-xs text-white/40">No hay clases hoy</p>
+              ) : clasesHoy.length === 0 ? (
                 <p className="text-xs text-white/40">Sin clases registradas</p>
-              ) : clasesHoyMock.map((clase) => (
+              ) : clasesHoy.map((clase) => (
                 <button
-                  key={clase.groupId}
+                  key={`${clase.groupId}-${clase.inicioMin}`}
                   type="button"
                   onClick={() => setLocation(`/course-detail/${clase.groupId}`)}
                   className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
                 >
                   <span className="text-xs text-white/80 font-medium">{clase.groupName}</span>
-                  <Badge className={clase.esSiguiente
-                    ? 'bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-[10px]'
-                    : 'bg-white/5 text-white/50 border-0 text-[10px]'}>
-                    {clase.esSiguiente ? 'Siguiente' : clase.hora}
+                  <Badge className={
+                    clase.enCurso
+                      ? 'bg-emerald-500/20 text-emerald-300 border-0 text-[10px]'
+                      : clase.destacar
+                        ? 'bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-[10px]'
+                        : 'bg-white/5 text-white/50 border-0 text-[10px]'
+                  }>
+                    {clase.enCurso ? 'En curso' : clase.destacar ? 'Siguiente' : `${clase.inicio}–${clase.fin}`}
                   </Badge>
                 </button>
               ))}
             </div>
-            {/* TODO: reemplazar mock con lógica real de horario */}
           </CardContent>
         </Card>
 
