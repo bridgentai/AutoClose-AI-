@@ -941,10 +941,10 @@ function ProfesorDashboard() {
         </Card>
 
         {/* Columna derecha — Stack de cards */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
+        <div className="lg:col-span-2 flex flex-col gap-4 min-h-0">
 
           {/* Card — Siguiente asignación por curso */}
-          <Card className={`${CARD_STYLE} flex-1 reveal-slide`} style={{ animationDelay: '0.35s' }}>
+          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.35s' }}>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-white text-sm">
                 <GraduationCap className="w-4 h-4 text-[#ffd700]" />
@@ -1013,15 +1013,15 @@ function ProfesorDashboard() {
             </CardContent>
           </Card>
 
+          {/* Card — Kiwi Assist como flex-1 para absorber espacio restante */}
+          <Card className={`${CARD_STYLE} reveal-slide flex-1 min-h-[300px]`} style={{ animationDelay: '0.45s' }}>
+            <CardContent className="p-0 h-full">
+              <AIChatBox rol="profesor" />
+            </CardContent>
+          </Card>
+
         </div>
       </div>
-
-      {/* SECCIÓN 3 — Kiwi Assist ancho completo */}
-      <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.45s' }}>
-        <CardContent className="p-0">
-          <AIChatBox rol="profesor" />
-        </CardContent>
-      </Card>
 
     </div>
   );
