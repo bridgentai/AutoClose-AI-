@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { useAuth } from '@/lib/authContext';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { useCourseGrading, useAnalyticsSummary, useCourseIntelligence } from '@/hooks/useCourseGrading';
+import { useCourseGrading, useAnalyticsSummary, useCourseIntelligence, type PerformanceSnapshotResponse } from '@/hooks/useCourseGrading';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, AlertTriangle, Lightbulb, Loader2 } from 'lucide-react';
+import { ArrowLeft, Lightbulb, Loader2 } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -44,6 +44,22 @@ const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'school_
 // Paleta evoOS (azules + acento) para analíticas
 const BAR_COLORS = ['#3B82F6', '#00C8FF', '#1D4ED8', '#38BDF8', '#60A5FA', '#FFD700'];
 
+function analyticsGradeText(n: number | null | undefined): string {
+  if (n == null) return 'text-white/40';
+  if (n < 65) return 'text-red-400';
+  if (n < 75) return 'text-yellow-400';
+  return 'text-emerald-400';
+}
+
+function studentInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((w) => w[0] ?? '')
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+}
+
 export default function CourseAnalyticsPage() {
   const [, params] = useRoute('/course/:cursoId/analytics');
   const cursoId = params?.cursoId ?? '';
@@ -52,6 +68,7 @@ export default function CourseAnalyticsPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   /** Materia (group_subject) elegida por el profesor cuando hay varias; se sincroniza con ?gs= como en /course/:id/grades */
   const [materiaSeleccionada, setMateriaSeleccionada] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'general' | 'individual'>('general');
 
   const gsFromQuery =
     typeof window !== 'undefined'
@@ -124,9 +141,7 @@ export default function CourseAnalyticsPage() {
   const {
     categories,
     snapshot,
-    forecast,
     risk,
-    insights,
     isLoading: gradingLoading,
   } = useCourseGrading(firstSubjectId, effectiveStudentId || undefined);
 
@@ -135,10 +150,6 @@ export default function CourseAnalyticsPage() {
     effectiveStudentId || undefined
   );
   const aiSummary = analyticsSummary?.aiSummary ?? '';
-  const mergedInsights = [
-    ...(analyticsSummary?.insights ?? []),
-    ...(insights?.insights ?? []),
-  ].filter((item, index, arr) => arr.indexOf(item) === index);
 
   const { data: intelligence } = useCourseIntelligence(
     firstSubjectId,
@@ -147,6 +158,50 @@ export default function CourseAnalyticsPage() {
 
   const groupComparison = intelligence?.groupComparison;
   const commitment = intelligence?.commitment;
+
+  const studentSnapshotQueries = useQueries({
+    queries: students.map((s) => ({
+      queryKey: ['snapshots', firstSubjectId, s._id],
+      queryFn: () =>
+        apiRequest<PerformanceSnapshotResponse[]>(
+          'GET',
+          `/api/courses/${firstSubjectId}/snapshots?studentId=${encodeURIComponent(s._id)}`
+        ),
+      enabled: !!firstSubjectId && viewMode === 'general' && students.length > 0,
+      staleTime: 2 * 60 * 1000,
+    })),
+  });
+
+  const studentsWithData = students.map((s, i) => {
+    const latest = studentSnapshotQueries[i]?.data?.[0] ?? null;
+    const avg = latest?.weightedFinalAverage ?? null;
+    const categoryImpacts = latest?.categoryImpacts ?? {};
+    const categoryNames = latest?.categoryNames;
+    const lowestEntry =
+      Object.keys(categoryImpacts).length > 0
+        ? (Object.entries(categoryImpacts) as [string, number][]).reduce((a, b) => (a[1] < b[1] ? a : b))
+        : null;
+    const lowestCategoryName = lowestEntry && categoryNames?.[lowestEntry[0]] ? categoryNames[lowestEntry[0]] : null;
+    return { student: s, avg, lowestCategoryName };
+  });
+
+  const validAvgs = studentsWithData.map((x) => x.avg).filter((x): x is number => x != null);
+  const courseAvgGeneral =
+    validAvgs.length > 0
+      ? Math.round((validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length) * 10) / 10
+      : null;
+  const kpiEnRiesgo = studentsWithData.filter((x) => x.avg != null && x.avg < 65).length;
+  const kpiEnAlerta = studentsWithData.filter((x) => x.avg != null && x.avg >= 65 && x.avg < 75).length;
+  const kpiAlDia = studentsWithData.filter((x) => x.avg != null && x.avg >= 75).length;
+
+  const sortedStudentsForGeneral = [
+    ...studentsWithData.filter((x) => x.avg != null && x.avg < 65),
+    ...studentsWithData.filter((x) => x.avg != null && x.avg >= 65 && x.avg < 75),
+    ...studentsWithData.filter((x) => x.avg != null && x.avg >= 75),
+    ...studentsWithData.filter((x) => x.avg == null),
+  ];
+
+  const selectedStudent = students.find((s) => s._id === effectiveStudentId);
 
   const categoryImpactBreakdown = useMemo(() => {
     if (snapshot?.categoryImpacts && (snapshot.categoryNames || categories.length)) {
@@ -249,6 +304,20 @@ export default function CourseAnalyticsPage() {
           </div>
           {!isStudent && (
             <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-xl p-1">
+                <button
+                  onClick={() => setViewMode('general')}
+                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${viewMode === 'general' ? 'bg-white/[0.08] border border-white/20 text-white' : 'text-white/50 border border-transparent'}`}
+                >
+                  Vista general
+                </button>
+                <button
+                  onClick={() => setViewMode('individual')}
+                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${viewMode === 'individual' ? 'bg-white/[0.08] border border-white/20 text-white' : 'text-white/50 border border-transparent'}`}
+                >
+                  Por estudiante
+                </button>
+              </div>
               {subjectsForGroup.length > 1 && firstSubjectId ? (
                 <div className="flex items-center gap-2">
                   <span className="text-white/60 text-sm whitespace-nowrap">Materia</span>
@@ -266,124 +335,250 @@ export default function CourseAnalyticsPage() {
                   </Select>
                 </div>
               ) : null}
-              <div className="flex items-center gap-2">
-                <span className="text-white/60 text-sm whitespace-nowrap">Estudiante</span>
-                <Select
-                  value={effectiveStudentId || undefined}
-                  onValueChange={setSelectedStudentId}
-                >
-                  <SelectTrigger className="w-[min(100vw-4rem,16rem)] sm:w-56 bg-white/5 border-white/20 text-white rounded-lg">
-                    <SelectValue placeholder={students.length ? 'Seleccionar' : 'Sin estudiantes'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {students.map((s) => (
-                      <SelectItem key={s._id} value={s._id}>
-                        {s.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {viewMode === 'individual' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-white/60 text-sm whitespace-nowrap">Estudiante</span>
+                  <Select
+                    value={effectiveStudentId || undefined}
+                    onValueChange={setSelectedStudentId}
+                  >
+                    <SelectTrigger className="w-[min(100vw-4rem,16rem)] sm:w-56 bg-white/5 border-white/20 text-white rounded-lg">
+                      <SelectValue placeholder={students.length ? 'Seleccionar' : 'Sin estudiantes'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
         </header>
 
         {!firstSubjectId ? (
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md rounded-2xl border p-6">
+          <div className="panel-grades rounded-2xl p-6">
             <p className="text-white/80">
-              {isStudent ? 'No se pudo cargar la materia. Verifica que estés inscrito en esta materia.' : 'No hay materias para este grupo.'}
+              {isStudent
+                ? 'No se pudo cargar la materia. Verifica que estés inscrito en esta materia.'
+                : 'No hay materias para este grupo.'}
             </p>
-          </Card>
+          </div>
+        ) : !isStudent && viewMode === 'general' ? (
+          /* ═══════════════════════════════════════════════════════
+             VISTA GENERAL
+          ═══════════════════════════════════════════════════════ */
+          <div className="space-y-6">
+            {/* KPI Row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="panel-grades rounded-2xl p-4">
+                <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Promedio curso</p>
+                <p className="text-3xl font-bold text-[#E2E8F0] tabular-nums leading-none">
+                  {courseAvgGeneral != null ? courseAvgGeneral.toFixed(1) : '—'}
+                </p>
+                <p className="text-xs text-white/50 mt-2">{students.length} estudiantes</p>
+              </div>
+              <div className="panel-grades rounded-2xl p-4">
+                <p className="text-xs uppercase tracking-wider text-white/50 mb-1">En riesgo</p>
+                <p className="text-3xl font-bold text-red-400 tabular-nums leading-none">{kpiEnRiesgo}</p>
+                <p className="text-xs text-white/50 mt-2">Promedio {'<'} 65</p>
+              </div>
+              <div className="panel-grades rounded-2xl p-4">
+                <p className="text-xs uppercase tracking-wider text-white/50 mb-1">En alerta</p>
+                <p className="text-3xl font-bold text-yellow-400 tabular-nums leading-none">{kpiEnAlerta}</p>
+                <p className="text-xs text-white/50 mt-2">Entre 65 y 74</p>
+              </div>
+              <div className="panel-grades rounded-2xl p-4">
+                <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Al día</p>
+                <p className="text-3xl font-bold text-emerald-400 tabular-nums leading-none">{kpiAlDia}</p>
+                <p className="text-xs text-white/50 mt-2">Promedio {'>='} 75</p>
+              </div>
+            </div>
+
+            {/* Student grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sortedStudentsForGeneral.map(({ student, avg, lowestCategoryName }) => {
+                const isRisk = avg != null && avg < 65;
+                const isAlert = avg != null && avg >= 65 && avg < 75;
+                const isOk = avg != null && avg >= 75;
+                const borderColor = isRisk
+                  ? 'rgba(239,68,68,0.7)'
+                  : isAlert
+                    ? 'rgba(234,179,8,0.7)'
+                    : isOk
+                      ? 'rgba(52,211,153,0.7)'
+                      : 'rgba(255,255,255,0.15)';
+                return (
+                  <div
+                    key={student._id}
+                    className="panel-grades rounded-2xl p-4 cursor-pointer hover:border-white/20 transition-colors"
+                    style={{ borderLeft: `3px solid ${borderColor}` }}
+                    onClick={() => {
+                      setSelectedStudentId(student._id);
+                      setViewMode('individual');
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-300 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                        {studentInitials(student.nombre)}
+                      </div>
+                      <span className="text-sm font-medium text-[#E2E8F0] flex-1 min-w-0 truncate">
+                        {student.nombre}
+                      </span>
+                      {isRisk && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 flex-shrink-0">
+                          Riesgo
+                        </span>
+                      )}
+                      {isAlert && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 flex-shrink-0">
+                          Alerta
+                        </span>
+                      )}
+                      {isOk && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex-shrink-0">
+                          Al día
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 border-t border-white/[0.06] mt-3 pt-3">
+                      <div className="text-center">
+                        <p className={`text-base font-semibold tabular-nums ${analyticsGradeText(avg)}`}>
+                          {avg != null ? avg.toFixed(1) : '—'}
+                        </p>
+                        <p className="text-[11px] text-white/50 mt-0.5">Promedio</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-base font-semibold text-white/70 tabular-nums">
+                          {commitment?.tasksCompletionRate != null
+                            ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
+                            : '—'}
+                        </p>
+                        <p className="text-[11px] text-white/50 mt-0.5">Entrega</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-base font-semibold text-white/70 tabular-nums">
+                          {risk?.level === 'high' ? 'Alto' : risk?.level === 'medium' ? 'Medio' : risk?.level === 'low' ? 'Bajo' : '—'}
+                        </p>
+                        <p className="text-[11px] text-white/50 mt-0.5">Riesgo</p>
+                      </div>
+                    </div>
+                    {isRisk && lowestCategoryName && (
+                      <span className="mt-2 text-[11px] px-2 py-0.5 rounded-md bg-red-500/[0.08] text-red-400 border border-red-500/20 inline-block">
+                        Categoría baja: {lowestCategoryName}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         ) : gradingLoading ? (
           <Skeleton className="h-96 bg-white/10 rounded-2xl" />
         ) : (
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md rounded-2xl border overflow-hidden">
-            <CardContent className="p-6 md:p-8 space-y-8">
-              {/* 1. Indicadores + Proyección en una fila */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div>
-                  <h2 className="text-lg font-semibold text-white font-['Poppins'] mb-4">
-                    Indicadores estratégicos
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Promedio ponderado</p>
-                      <p className="text-4xl font-bold text-white tabular-nums leading-none">
-                        {weightedAverage != null ? weightedAverage.toFixed(1) : '—'}
-                      </p>
-                      <p className="text-white/50 text-xs mt-1">/ 100</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Ranking</p>
-                      <p className="text-xl font-semibold tabular-nums text-white">
-                        {groupComparison?.rank != null && groupComparison.totalStudents > 0
-                          ? `Puesto ${groupComparison.rank} de ${groupComparison.totalStudents}`
-                          : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-white/50 mb-1">Índice de compromiso</p>
-                      <p className="text-2xl font-semibold tabular-nums text-white">
-                        {commitment?.commitmentIndex != null
-                          ? `${Math.round(commitment.commitmentIndex * 100)}%`
-                          : '—'}
-                      </p>
-                      <p className="text-white/60 text-xs mt-1">
-                        {commitment?.attendanceRate != null && commitment?.tasksCompletionRate != null
-                          ? `Asistencia ${Math.round(commitment.attendanceRate * 100)}% • Tareas ${Math.round(commitment.tasksCompletionRate * 100)}%`
-                          : 'Sin datos suficientes'}
-                      </p>
-                    </div>
+          /* ═══════════════════════════════════════════════════════
+             VISTA INDIVIDUAL
+          ═══════════════════════════════════════════════════════ */
+          <div className="space-y-4">
+            {/* Bloque A — Hero row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Col izq — métricas del estudiante */}
+              <div className="panel-grades rounded-2xl p-5">
+                <p className="text-lg font-semibold text-[#E2E8F0] font-['Poppins']">
+                  {selectedStudent?.nombre ?? 'Estudiante'}
+                </p>
+                <p className="text-sm text-white/50 mt-0.5">
+                  {groupDisplayName}{subjectName ? ` • ${subjectName}` : ''}
+                </p>
+                <div className="border-t border-white/[0.06] my-3" />
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-white/50 mb-1">Promedio</p>
+                    <p className={`text-4xl font-bold font-['Poppins'] tabular-nums leading-none ${analyticsGradeText(weightedAverage)}`}>
+                      {weightedAverage != null ? weightedAverage.toFixed(1) : '—'}
+                    </p>
+                    <p className="text-white/40 text-xs mt-1">/ 100</p>
                   </div>
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-white font-['Poppins'] mb-4">
-                    Proyección final
-                  </h2>
-                  {forecast ? (
-                    <div className="space-y-4">
-                      <p className="text-3xl font-bold text-[#3B82F6] tabular-nums">
-                        {forecast.projectedFinalGrade.toFixed(1)}
-                        <span className="text-lg font-normal text-white/60 ml-1">/ 100</span>
-                      </p>
-                      {weightedAverage != null && (
-                        <p className="text-white/60 text-sm">
-                          Promedio actual: <span className="text-white font-medium">{weightedAverage.toFixed(1)}</span>
-                        </p>
-                      )}
-                      <div className="space-y-2">
-                        <p className="text-white/60 text-xs">Intervalo de confianza</p>
-                        <div className="relative h-3 bg-white/10 rounded-full overflow-hidden">
-                          <div
-                            className="absolute h-full bg-[#3B82F6]/70 rounded-full transition-all duration-700 ease-out"
-                            style={{
-                              left: `${Math.max(0, Math.min(100, forecast.confidenceInterval.low))}%`,
-                              width: `${Math.max(0, Math.min(100 - forecast.confidenceInterval.low, forecast.confidenceInterval.high - forecast.confidenceInterval.low))}%`,
-                            }}
-                          />
-                        </div>
-                        <div className="flex justify-between text-xs text-white/50">
-                          <span>{Math.round(forecast.confidenceInterval.low)}</span>
-                          <span>{Math.round(forecast.confidenceInterval.high)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-white/50 text-sm">Sin datos de pronóstico aún.</p>
-                  )}
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-white/50 mb-1">Ranking</p>
+                    <p className="text-2xl font-semibold text-[#E2E8F0] tabular-nums">
+                      {groupComparison?.rank != null && groupComparison.totalStudents > 0
+                        ? `#${groupComparison.rank} de ${groupComparison.totalStudents}`
+                        : '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-white/50 mb-1">Entrega</p>
+                    <p className="text-2xl font-semibold text-[#E2E8F0] tabular-nums">
+                      {commitment?.tasksCompletionRate != null
+                        ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
+                        : '—'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* 2. Impacto por categoría — gráfico con nombres de categorías */}
-              <div>
-                <h2 className="text-xl font-semibold text-white font-['Poppins'] mb-4">
-                  Impacto por categoría
-                </h2>
+              {/* Col der — estado académico / riesgo */}
+              <div className="panel-grades rounded-2xl p-5">
+                <p className="text-xs uppercase tracking-wider text-white/50 mb-3">Estado académico</p>
+                <div className="flex items-center justify-center mb-3">
+                  {risk == null ? (
+                    <span className="text-white/40 text-lg">Sin datos</span>
+                  ) : (
+                    <span
+                      className={`text-lg font-semibold px-4 py-2 rounded-xl border ${
+                        risk.level === 'high'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                          : risk.level === 'medium'
+                            ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      }`}
+                    >
+                      {risk.level === 'high'
+                        ? 'Alto riesgo'
+                        : risk.level === 'medium'
+                          ? 'Riesgo medio'
+                          : 'Rendimiento estable'}
+                    </span>
+                  )}
+                </div>
+                {(risk?.factors?.length ?? 0) > 0 && (
+                  <div className="mt-1">
+                    {risk!.factors.map((f, i) => (
+                      <span
+                        key={i}
+                        className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-white/60 inline-block mr-1 mt-1"
+                      >
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bloque B — Análisis IA */}
+            {aiSummary && aiSummary.trim().length > 0 && (
+              <div className="panel-grades rounded-2xl p-5">
+                <div className="flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4 text-[#ffd700] flex-shrink-0" />
+                  <span className="text-sm font-semibold text-white/80">Análisis IA</span>
+                  {analyticsSummaryLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-white/40 ml-1" />}
+                </div>
+                <p className="text-sm text-white/70 leading-relaxed mt-3">{aiSummary}</p>
+              </div>
+            )}
+
+            {/* Bloque C — Gráficos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Desempeño por categoría */}
+              <div className="panel-grades rounded-2xl p-5">
+                <h2 className="text-sm font-semibold text-white/80 mb-4">Desempeño por categoría</h2>
                 {categoryImpactBreakdown.length > 0 ? (
-                  <div
-                    className="w-full"
-                    style={{ height: impactChartHeight }}
-                  >
+                  <div style={{ height: impactChartHeight }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={categoryImpactBreakdown}
@@ -428,7 +623,6 @@ export default function CourseAnalyticsPage() {
                           {categoryImpactBreakdown.map((_, i) => (
                             <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
                           ))}
-                          {/* Etiqueta numérica al final de cada barra para lectura rápida */}
                           <LabelList
                             dataKey="impact"
                             position="right"
@@ -440,17 +634,15 @@ export default function CourseAnalyticsPage() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <p className="text-white/50 text-sm">No hay datos por categoría.</p>
+                  <p className="text-white/40 text-sm text-center py-8">Sin datos suficientes para este trimestre</p>
                 )}
               </div>
 
               {/* Evolución de notas */}
-              {snapshot?.evolucion && snapshot.evolucion.labels.length > 1 && (
-                <div>
-                  <h2 className="text-lg font-semibold text-white font-['Poppins'] mb-4">
-                    Evolución de notas
-                  </h2>
-                  <div className="h-40 w-full">
+              <div className="panel-grades rounded-2xl p-5">
+                <h2 className="text-sm font-semibold text-white/80 mb-4">Evolución de notas</h2>
+                {snapshot?.evolucion && snapshot.evolucion.labels.length > 1 ? (
+                  <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart
                         data={snapshot.evolucion.labels.map((label, i) => ({
@@ -492,127 +684,12 @@ export default function CourseAnalyticsPage() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                </div>
-              )}
-
-              {/* 3. Estabilidad + Riesgo en una fila */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                  <h2 className="text-lg font-semibold text-white font-['Poppins'] mb-4">
-                    Estabilidad académica
-                  </h2>
-                  <div className="flex items-center gap-4">
-                    <div className="relative w-24 h-24 flex-shrink-0">
-                      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                        <path
-                          className="text-white/10 stroke-[3]"
-                          stroke="currentColor"
-                          fill="none"
-                          strokeDasharray="100"
-                          d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"
-                        />
-                        <path
-                          className="stroke-[3] fill-none transition-all duration-700 ease-out stroke-[#3B82F6]"
-                          stroke="currentColor"
-                          strokeDasharray="100"
-                          strokeDashoffset={
-                            100 -
-                            (risk?.academicStabilityIndex != null ? risk.academicStabilityIndex * 100 : 0)
-                          }
-                          strokeLinecap="round"
-                          d="M18 2.5 a 15.5 15.5 0 0 1 0 31 a 15.5 15.5 0 0 1 0 -31"
-                        />
-                      </svg>
-                      <span className="absolute inset-0 flex items-center justify-center text-xl font-bold text-white">
-                        {risk?.academicStabilityIndex != null
-                          ? (risk.academicStabilityIndex * 100).toFixed(0)
-                          : '—'}
-                      </span>
-                    </div>
-                    <p className="text-white/70 text-sm">
-                      {risk?.academicStabilityIndex != null
-                        ? risk.academicStabilityIndex >= 0.7
-                          ? 'Rendimiento estable'
-                          : risk.academicStabilityIndex >= 0.4
-                            ? 'Estabilidad moderada'
-                            : 'Requiere atención'
-                        : 'Sin datos'}
-                    </p>
-                  </div>
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-white font-['Poppins'] flex items-center gap-2 mb-4">
-                    <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
-                    Riesgo académico
-                  </h2>
-                  {risk ? (
-                    <div className="space-y-3">
-                      <div
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${
-                          risk.level === 'high'
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/40'
-                            : risk.level === 'medium'
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                        }`}
-                      >
-                        {risk.level}
-                      </div>
-                      <ul className="text-sm text-white/70 space-y-1">
-                        {commitment?.attendanceRate != null &&
-                          !risk.factors?.some((f) => f.toLowerCase().includes('asistencia')) && (
-                            <li>• Asistencia {Math.round(commitment.attendanceRate * 100)}%</li>
-                          )}
-                        {risk.factors?.map((f, i) => (
-                          <li key={i}>• {f}</li>
-                        ))}
-                        {risk.recoveryPotentialScore != null &&
-                          !risk.factors?.some((f) => f.toLowerCase().includes('recuperación')) && (
-                            <li>• Potencial de recuperación: {(risk.recoveryPotentialScore * 100).toFixed(0)}%</li>
-                          )}
-                      </ul>
-                    </div>
-                  ) : (
-                    <p className="text-white/50 text-sm">Sin evaluación de riesgo aún.</p>
-                  )}
-                </div>
-              </div>
-
-              {/* 4. Retroalimentación IA — análisis y feedback sobre el estudiante */}
-              <div className="pt-4 border-t border-white/10">
-                <h2 className="text-lg font-semibold text-white font-['Poppins'] flex items-center gap-2 mb-4">
-                  <Lightbulb className="w-5 h-5 text-[#ffd700]" />
-                  Retroalimentación sobre el estudiante
-                </h2>
-                {analyticsSummaryLoading && (
-                  <div className="flex items-center gap-2 text-white/60 text-sm mb-4">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Generando análisis con IA...</span>
-                  </div>
-                )}
-                {aiSummary && (
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10 mb-4">
-                    <p className="text-white/90 text-sm leading-relaxed whitespace-pre-wrap">{aiSummary}</p>
-                  </div>
-                )}
-                {mergedInsights.length > 0 && (
-                  <ul className="space-y-2 text-sm text-white/90">
-                    {mergedInsights.map((item, i) => (
-                      <li key={i} className="flex gap-2">
-                        <span className="text-[#ffd700] flex-shrink-0">•</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {!analyticsSummaryLoading && !aiSummary && mergedInsights.length === 0 && (
-                  <p className="text-white/50 text-sm">
-                    No hay retroalimentación disponible aún. El análisis con IA se generará al cargar los datos del estudiante.
-                  </p>
+                ) : (
+                  <p className="text-white/40 text-sm text-center py-8">Sin datos suficientes para este trimestre</p>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </div>
