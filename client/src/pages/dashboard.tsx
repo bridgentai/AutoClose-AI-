@@ -898,9 +898,9 @@ function ProfesorDashboard() {
         </Card>
 
         {/* Columna derecha: stack de 3 cards */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
+        <div className="lg:col-span-2 flex flex-col gap-4 h-full">
           {/* Card A — Clase de hoy (mock UI) */}
-          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.6s' }}>
+          <Card className={`${CARD_STYLE} flex-1 reveal-slide`} style={{ animationDelay: '0.6s' }}>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white text-sm font-medium">Hoy</CardTitle>
@@ -988,10 +988,12 @@ function ProfesorDashboard() {
         </div>
       </div>
 
-      {/* SECCIÓN 3 — AIChatBox ancho completo */}
-      <div className="reveal-slide" style={{ animationDelay: '0.9s' }}>
-        <AIChatBox rol="profesor" />
-      </div>
+      {/* SECCIÓN 3 — AIChatBox ancho completo contenido en card */}
+      <Card className={`${CARD_STYLE}`}>
+        <CardContent className="p-0">
+          <AIChatBox rol="profesor" />
+        </CardContent>
+      </Card>
     </div>
   );
 }
