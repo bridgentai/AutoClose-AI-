@@ -377,10 +377,44 @@ export default function StudentTasksPage() {
           </div>
         </div>
 
-        {/* Layout principal: calendario + lista */}
+        {/* Layout principal: columna izquierda + columna derecha */}
         <div className="grid grid-cols-5 gap-6">
-          {/* Columna calendario */}
-          <div className="col-span-2">
+          {/* Columna izquierda: filtro por materia + calendario */}
+          <div className="col-span-2 flex flex-col gap-4">
+            {/* Filtro por materia */}
+            {materiasUnicas.length > 1 && (
+              <div className="flex items-center gap-3">
+                <Select
+                  value={materiaFiltro || 'todas'}
+                  onValueChange={v => setMateriaFiltro(v === 'todas' ? '' : v)}
+                >
+                  <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white">
+                    <SelectValue placeholder="Todas las materias" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas" className="text-white focus:bg-white/10">
+                      Todas las materias
+                    </SelectItem>
+                    {materiasUnicas.filter(Boolean).map(m => (
+                      <SelectItem key={m} value={m} className="text-white focus:bg-white/10">
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {materiaFiltro && (
+                  <button
+                    type="button"
+                    className="text-xs text-white/40 hover:text-white/70 transition"
+                    onClick={() => setMateriaFiltro('')}
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Calendario */}
             <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 sticky top-6">
               {selectedDay && (
                 <div className="flex items-center justify-between mb-3">
@@ -405,59 +439,26 @@ export default function StudentTasksPage() {
             </div>
           </div>
 
-          {/* Columna lista */}
+          {/* Columna derecha: solo los tabs */}
           <div className="col-span-3">
-            {/* Filtro por materia */}
-            {materiasUnicas.length > 1 && (
-              <div className="flex items-center gap-3 mb-4">
-                <Select
-                  value={materiaFiltro || 'todas'}
-                  onValueChange={v => setMateriaFiltro(v === 'todas' ? '' : v)}
-                >
-                  <SelectTrigger className="w-[220px] bg-white/5 border-white/10 text-white">
-                    <SelectValue placeholder="Todas las materias" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas" className="text-white focus:bg-white/10">
-                      Todas las materias
-                    </SelectItem>
-                    {materiasUnicas.filter(Boolean).map(m => (
-                      <SelectItem key={m} value={m} className="text-white focus:bg-white/10">
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {materiaFiltro && (
-                  <button
-                    type="button"
-                    className="text-xs text-white/40 hover:text-white/70 transition"
-                    onClick={() => setMateriaFiltro('')}
-                  >
-                    Quitar filtro
-                  </button>
-                )}
-              </div>
-            )}
-
             {/* Tabs */}
             <Tabs defaultValue="pendientes" className="w-full">
-              <TabsList className="bg-white/5 border border-white/10 mb-4">
+              <TabsList className="bg-transparent border-b border-white/10 mb-4 rounded-none p-0 gap-4">
                 <TabsTrigger
                   value="pendientes"
-                  className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300"
+                  className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-blue-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
                 >
                   Pendientes ({tareasPorEntregarFiltradas.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="vencidas"
-                  className="data-[state=active]:bg-red-500/20 data-[state=active]:text-red-300"
+                  className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-red-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
                 >
                   Vencidas ({tareasVencidasFiltradas.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="completadas"
-                  className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-300"
+                  className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-green-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
                 >
                   Completadas ({tareasCompletadasFiltradas.length})
                 </TabsTrigger>
