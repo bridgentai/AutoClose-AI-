@@ -377,139 +377,134 @@ export default function StudentTasksPage() {
           </div>
         </div>
 
-        {/* Layout principal: columna izquierda + columna derecha */}
-        <div className="grid grid-cols-5 gap-6">
-          {/* Columna izquierda: filtro por materia + calendario */}
-          <div className="col-span-2 flex flex-col gap-4">
-            {/* Filtro por materia */}
-            {materiasUnicas.length > 1 && (
-              <div className="flex items-center gap-3">
-                <Select
-                  value={materiaFiltro || 'todas'}
-                  onValueChange={v => setMateriaFiltro(v === 'todas' ? '' : v)}
-                >
-                  <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white">
-                    <SelectValue placeholder="Todas las materias" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas" className="text-white focus:bg-white/10">
-                      Todas las materias
+        {/* Sección tareas */}
+        <div className="mb-8">
+          {/* Filtro por materia */}
+          {materiasUnicas.length > 1 && (
+            <div className="flex items-center gap-3 mb-4">
+              <Select
+                value={materiaFiltro || 'todas'}
+                onValueChange={v => setMateriaFiltro(v === 'todas' ? '' : v)}
+              >
+                <SelectTrigger className="w-[220px] bg-white/5 border-white/10 text-white">
+                  <SelectValue placeholder="Todas las materias" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas" className="text-white focus:bg-white/10">
+                    Todas las materias
+                  </SelectItem>
+                  {materiasUnicas.filter(Boolean).map(m => (
+                    <SelectItem key={m} value={m} className="text-white focus:bg-white/10">
+                      {m}
                     </SelectItem>
-                    {materiasUnicas.filter(Boolean).map(m => (
-                      <SelectItem key={m} value={m} className="text-white focus:bg-white/10">
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {materiaFiltro && (
-                  <button
-                    type="button"
-                    className="text-xs text-white/40 hover:text-white/70 transition"
-                    onClick={() => setMateriaFiltro('')}
-                  >
-                    Quitar
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Calendario */}
-            <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 sticky top-6">
-              {selectedDay && (
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-white/60">
-                    {selectedDay.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-xs text-white/40 hover:text-white/70 transition"
-                    onClick={() => setSelectedDay(null)}
-                  >
-                    Quitar filtro
-                  </button>
-                </div>
+                  ))}
+                </SelectContent>
+              </Select>
+              {materiaFiltro && (
+                <button
+                  type="button"
+                  className="text-xs text-white/40 hover:text-white/70 transition"
+                  onClick={() => setMateriaFiltro('')}
+                >
+                  Quitar filtro
+                </button>
               )}
-              <Calendar
-                assignments={assignments as unknown as CalendarAssignment[]}
-                onDayBubbleClick={handleDayBubbleClick}
-                onDayClick={a => setLocation(`/assignment/${a._id}${assignmentFromQuery}`)}
-                variant="student"
-              />
             </div>
-          </div>
+          )}
 
-          {/* Columna derecha: solo los tabs */}
-          <div className="col-span-3">
-            {/* Tabs */}
-            <Tabs defaultValue="pendientes" className="w-full">
-              <TabsList className="bg-transparent border-b border-white/10 mb-4 rounded-none p-0 gap-4">
-                <TabsTrigger
-                  value="pendientes"
-                  className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-blue-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
-                >
-                  Pendientes ({tareasPorEntregarFiltradas.length})
-                </TabsTrigger>
-                <TabsTrigger
-                  value="vencidas"
-                  className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-red-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
-                >
-                  Vencidas ({tareasVencidasFiltradas.length})
-                </TabsTrigger>
-                <TabsTrigger
-                  value="completadas"
-                  className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-green-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
-                >
-                  Completadas ({tareasCompletadasFiltradas.length})
-                </TabsTrigger>
-              </TabsList>
+          {/* Tabs */}
+          <Tabs defaultValue="pendientes" className="w-full">
+            <TabsList className="bg-transparent border-b border-white/10 mb-4 rounded-none p-0 gap-4">
+              <TabsTrigger
+                value="pendientes"
+                className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-blue-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
+              >
+                Pendientes ({tareasPorEntregarFiltradas.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="vencidas"
+                className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-red-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
+              >
+                Vencidas ({tareasVencidasFiltradas.length})
+              </TabsTrigger>
+              <TabsTrigger
+                value="completadas"
+                className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-green-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
+              >
+                Completadas ({tareasCompletadasFiltradas.length})
+              </TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="pendientes">
-                {renderMateriaGroups(
-                  tareasPorEntregarFiltradas.sort(
-                    (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
-                  ),
-                  'pendientes',
-                  materiaFiltro
-                    ? `No hay tareas pendientes en ${materiaFiltro}`
-                    : '¡Sin tareas pendientes!'
-                )}
-              </TabsContent>
+            <TabsContent value="pendientes">
+              {renderMateriaGroups(
+                tareasPorEntregarFiltradas.sort(
+                  (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+                ),
+                'pendientes',
+                materiaFiltro
+                  ? `No hay tareas pendientes en ${materiaFiltro}`
+                  : '¡Sin tareas pendientes!'
+              )}
+            </TabsContent>
 
-              <TabsContent value="vencidas">
-                {renderMateriaGroups(
-                  tareasVencidasFiltradas.sort(
-                    (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
-                  ),
-                  'vencidas',
-                  materiaFiltro
-                    ? `No hay tareas vencidas en ${materiaFiltro}`
-                    : 'Sin tareas vencidas.'
-                )}
-              </TabsContent>
+            <TabsContent value="vencidas">
+              {renderMateriaGroups(
+                tareasVencidasFiltradas.sort(
+                  (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+                ),
+                'vencidas',
+                materiaFiltro
+                  ? `No hay tareas vencidas en ${materiaFiltro}`
+                  : 'Sin tareas vencidas.'
+              )}
+            </TabsContent>
 
-              <TabsContent value="completadas">
-                {renderMateriaGroups(
-                  tareasCompletadasFiltradas.sort((a, b) => {
-                    const subsA = a.submissions || a.entregas || [];
-                    const subsB = b.submissions || b.entregas || [];
-                    const entregaA = viewingStudentId
-                      ? subsA.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
-                      : undefined;
-                    const entregaB = viewingStudentId
-                      ? subsB.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
-                      : undefined;
-                    if (!entregaA || !entregaB) return 0;
-                    return new Date(entregaB.fechaEntrega).getTime() - new Date(entregaA.fechaEntrega).getTime();
-                  }),
-                  'completadas',
-                  materiaFiltro
-                    ? `No hay tareas completadas en ${materiaFiltro}`
-                    : 'Las tareas que entregues aparecerán aquí.'
-                )}
-              </TabsContent>
-            </Tabs>
-          </div>
+            <TabsContent value="completadas">
+              {renderMateriaGroups(
+                tareasCompletadasFiltradas.sort((a, b) => {
+                  const subsA = a.submissions || a.entregas || [];
+                  const subsB = b.submissions || b.entregas || [];
+                  const entregaA = viewingStudentId
+                    ? subsA.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+                    : undefined;
+                  const entregaB = viewingStudentId
+                    ? subsB.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+                    : undefined;
+                  if (!entregaA || !entregaB) return 0;
+                  return new Date(entregaB.fechaEntrega).getTime() - new Date(entregaA.fechaEntrega).getTime();
+                }),
+                'completadas',
+                materiaFiltro
+                  ? `No hay tareas completadas en ${materiaFiltro}`
+                  : 'Las tareas que entregues aparecerán aquí.'
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Calendario — sección inferior, ancho completo */}
+        <div className="rounded-xl bg-white/[0.03] border border-white/10 p-6">
+          {selectedDay && (
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm text-white/60">
+                Filtrando tareas del{' '}
+                {selectedDay.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </span>
+              <button
+                type="button"
+                className="text-xs text-white/40 hover:text-white/70 transition"
+                onClick={() => setSelectedDay(null)}
+              >
+                Quitar filtro de día
+              </button>
+            </div>
+          )}
+          <Calendar
+            assignments={assignments as unknown as CalendarAssignment[]}
+            onDayBubbleClick={handleDayBubbleClick}
+            onDayClick={a => setLocation(`/assignment/${a._id}${assignmentFromQuery}`)}
+            variant="student"
+          />
         </div>
       </div>
     </div>
