@@ -9,12 +9,14 @@ import {
   AlertCircle,
   MessageSquare,
   BarChart3,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Cell, LabelList, ResponsiveContainer, Tooltip } from 'recharts';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -239,6 +241,7 @@ export default function StudentNotesPage() {
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [collapsedIndicators, setCollapsedIndicators] = useState<Set<string>>(new Set());
 
   const role = user?.rol;
   const isPadre = role === 'padre';
@@ -478,56 +481,19 @@ export default function StudentNotesPage() {
     ? subjectsWithGrades.reduce((acc, s) => acc + (s.promedio ?? 0), 0) / subjectsWithGrades.length
     : 0;
 
-  // Evolución por materia y datos para gráfico (hook antes de cualquier return)
-  const { chartData, chartConfig, subjectsWithEvolucion } = useMemo(() => {
-    const withGrades = subjects.filter((s) => s.promedio !== null);
-    const materiasConNotas = notesData?.materias ?? [];
-    const byId = new Map(materiasConNotas.map((m) => [m._id, m]));
-
-    const evolucionPorMateria: Record<string, { date: Date; dateStr: string; promedio: number }[]> = {};
-    const allPoints: { date: Date; dateStr: string }[] = [];
-    for (const s of withGrades) {
-      const m = byId.get(s._id);
-      if (!m) continue;
-      const ev = computeEvolucion(m, undefined);
-      evolucionPorMateria[s._id] = ev;
-      for (const p of ev) allPoints.push({ date: p.date, dateStr: p.dateStr });
-    }
-    allPoints.sort((a, b) => a.date.getTime() - b.date.getTime());
-    const seen = new Set<string>();
-    const sortedRows: { date: Date; dateStr: string }[] = [];
-    for (const p of allPoints) {
-      const t = p.date.getTime();
-      if (Number.isNaN(t) || !p.dateStr) continue;
-      const key = String(t);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      sortedRows.push(p);
-    }
-    const getValue = (subjectId: string, rowDate: Date): number | undefined => {
-      const ev = evolucionPorMateria[subjectId];
-      if (!ev?.length) return undefined;
-      let last: { promedio: number } | null = null;
-      for (const point of ev) {
-        if (point.date.getTime() <= rowDate.getTime()) last = point;
-        else break;
-      }
-      return last?.promedio;
-    };
-    const chartData = sortedRows.map((row) => {
-      const rowData: Record<string, string | number> = { period: row.dateStr };
-      for (const s of withGrades) {
-        const v = getValue(s._id, row.date);
-        if (v !== undefined) rowData[s._id] = v;
-      }
-      return rowData;
-    });
-    const chartConfig: Record<string, { label: string; color: string }> = {};
-    for (const s of withGrades) {
-      chartConfig[s._id] = { label: s.nombre, color: s.colorAcento || '#00c8ff' };
-    }
-    return { chartData, chartConfig, subjectsWithEvolucion: withGrades };
-  }, [subjects, notesData?.materias]);
+  // Datos para el BarChart horizontal de comparativa de materias
+  const barData = useMemo(
+    () =>
+      [...subjects]
+        .filter((s) => s.promedio !== null)
+        .sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0))
+        .map((s) => ({
+          nombre: s.nombre.length > 20 ? s.nombre.slice(0, 19) + '\u2026' : s.nombre,
+          promedio: s.promedio,
+          fill: s.colorAcento ?? '#2563eb',
+        })),
+    [subjects]
+  );
 
   const getEstadoColor = (estado: string) => {
     switch (estado) {
@@ -699,95 +665,142 @@ export default function StudentNotesPage() {
             </div>
           </div>
 
-          {/* Gráfica General */}
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
+          {/* Gráfica Comparativa */}
+          <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-6">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#00c8ff]" />
-                Promedio General por Materia
+                <BarChart3 className="w-5 h-5 text-[#00c8ff]" />
+                Comparativa de Materias
               </CardTitle>
-              <CardDescription className="text-white/60 space-y-2">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span>Promedio general: <span className="text-white font-semibold">{subjectsWithGrades.length > 0 ? Math.round(promedioGeneral * 10) / 10 : '—'}</span></span>
-                  {subjectsWithGrades.length > 0 && (
-                    <div className="flex-1 min-w-[120px] max-w-[200px] h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-[#00c8ff] transition-all duration-300"
-                        style={{ width: `${Math.min(100, Math.max(0, promedioGeneral))}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </CardDescription>
             </CardHeader>
             <CardContent className="p-4 md:p-6">
-              {chartData.length > 0 && subjectsWithEvolucion.length > 0 ? (
-                <div className="w-full flex flex-col md:flex-row gap-4">
-                  <div className="flex-1 overflow-x-auto">
-                    <ChartContainer config={chartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
-                      <LineChart data={chartData} margin={{ top: 20, right: 24, bottom: 40, left: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                        <XAxis
-                          dataKey="period"
-                          stroke="rgba(255,255,255,0.5)"
-                          tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={60}
-                          interval={0}
-                        />
-                        <YAxis
-                          domain={[0, 100]}
-                          stroke="rgba(255,255,255,0.5)"
-                          tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                          width={40}
-                        />
-                        <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: 'rgba(255,255,255,0.3)' }} />
-                        {subjectsWithEvolucion.map((s) => (
-                          <Line
-                            key={s._id}
-                            type="monotone"
-                            dataKey={s._id}
-                            name={s.nombre}
-                            stroke={s.colorAcento || '#00c8ff'}
-                            strokeWidth={2}
-                            dot={{ fill: s.colorAcento || '#00c8ff', r: 4 }}
-                            activeDot={{ r: 6 }}
-                            connectNulls
-                          />
+              {barData.length > 0 ? (
+                <div style={{ width: '100%', height: Math.max(200, barData.length * 40 + 60) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={barData}
+                      layout="vertical"
+                      margin={{ top: 8, right: 60, bottom: 8, left: 8 }}
+                    >
+                      <XAxis
+                        type="number"
+                        domain={[0, 100]}
+                        tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+                        stroke="rgba(255,255,255,0.15)"
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="nombre"
+                        width={160}
+                        tick={{ fill: 'rgba(255,255,255,0.85)', fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval={0}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: 'rgba(15,23,42,0.92)',
+                          border: '1px solid rgba(255,255,255,0.10)',
+                          borderRadius: 10,
+                        }}
+                        formatter={(v: number) => [`${Number(v).toFixed(1)}/100`, 'Promedio']}
+                        labelStyle={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}
+                      />
+                      <Bar dataKey="promedio" radius={[4, 8, 8, 4]} maxBarSize={24}>
+                        {barData.map((entry, i) => (
+                          <Cell key={i} fill={entry.fill} />
                         ))}
-                      </LineChart>
-                    </ChartContainer>
-                  </div>
-
-                  {/* Llave de colores / materias */}
-                  <div className="md:w-[220px] md:shrink-0">
-                    <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md p-3">
-                      <p className="text-xs font-medium uppercase tracking-wider text-white/60 mb-2">Materias</p>
-                      <div className="space-y-2">
-                        {subjectsWithEvolucion.map((s) => (
-                          <div key={s._id} className="flex items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 rounded-sm shrink-0"
-                              style={{ backgroundColor: s.colorAcento || '#00c8ff' }}
-                              aria-hidden="true"
-                            />
-                            <span className="text-sm text-white/85 leading-tight truncate" title={s.nombre}>
-                              {s.nombre}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                        <LabelList
+                          dataKey="promedio"
+                          position="right"
+                          formatter={(v: number) => `${Number(v).toFixed(1)}`}
+                          style={{ fill: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 600 }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="h-[280px] flex items-center justify-center text-white/50 text-sm">
-                  No hay promedios por materia aún. Las notas aparecerán aquí cuando se registren calificaciones.
+                <div className="h-[180px] flex items-center justify-center text-white/50 text-sm">
+                  No hay promedios registrados aún.
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Banner de alerta: materias en riesgo */}
+          {subjects.filter((s) => s.promedio !== null && s.promedio < 65).length > 0 && (
+            <div
+              style={{
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.25)',
+                borderRadius: 10,
+                padding: '12px 16px',
+                marginBottom: 16,
+              }}
+            >
+              <p style={{ color: '#fca5a5', fontWeight: 600, marginBottom: 4, fontSize: 14 }}>
+                Tienes {subjects.filter((s) => s.promedio !== null && s.promedio < 65).length} materia(s) que necesitan atención
+              </p>
+              <p style={{ color: 'rgba(252,165,165,0.7)', fontSize: 13 }}>
+                {subjects
+                  .filter((s) => s.promedio !== null && s.promedio < 65)
+                  .map((s) => s.nombre)
+                  .join(' · ')}
+              </p>
+            </div>
+          )}
+
+          {/* KPI Strip */}
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+            {[
+              {
+                label: 'Promedio general',
+                value: subjectsWithGrades.length > 0
+                  ? (Math.round(promedioGeneral * 10) / 10).toFixed(1)
+                  : '—',
+              },
+              {
+                label: 'Mejor materia',
+                value: (() => {
+                  const best = [...subjects]
+                    .filter((s) => s.promedio !== null)
+                    .sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0))[0];
+                  if (!best) return '—';
+                  return best.nombre.length > 18 ? best.nombre.slice(0, 17) + '\u2026' : best.nombre;
+                })(),
+              },
+              {
+                label: 'Materias en curso',
+                value: `${subjects.length}`,
+              },
+            ].map((chip, i) => (
+              <div
+                key={i}
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 12,
+                  padding: '12px 16px',
+                  flex: '1',
+                  minWidth: 140,
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: 'rgba(255,255,255,0.5)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    marginBottom: 6,
+                  }}
+                >
+                  {chip.label}
+                </p>
+                <p style={{ fontSize: 22, fontWeight: 600, color: 'white' }}>{chip.value}</p>
+              </div>
+            ))}
+          </div>
 
           {/* Lista de Materias */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -795,6 +808,18 @@ export default function StudentNotesPage() {
               <Card
                 key={subject._id}
                 className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
+                style={{
+                  borderLeft:
+                    subject.promedio == null
+                      ? undefined
+                      : subject.promedio >= 85
+                      ? '3px solid #10b981'
+                      : subject.promedio >= 70
+                      ? '3px solid #2563eb'
+                      : subject.promedio >= 60
+                      ? '3px solid #f59e0b'
+                      : '3px solid #ef4444',
+                }}
                 onClick={() => setSelectedSubject(subject._id)}
               >
                 <CardHeader className="p-6">
@@ -811,10 +836,14 @@ export default function StudentNotesPage() {
                     {subject.nombre}
                   </CardTitle>
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-3xl font-bold text-white">
-                      {subject.promedio !== null ? Math.round(subject.promedio) : '—'}
-                    </span>
-                    {subject.promedio !== null && <span className="text-white/50">/ 100</span>}
+                    {subject.promedio !== null ? (
+                      <>
+                        <span className="text-3xl font-bold text-white">{Math.round(subject.promedio)}</span>
+                        <span className="text-white/50">/ 100</span>
+                      </>
+                    ) : (
+                      <span className="text-sm text-white/40">Sin calificar</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mb-2">
                     <Badge className={getEstadoColor(subject.estado)}>
@@ -944,107 +973,463 @@ export default function StudentNotesPage() {
           </div>
 
           {/* Gráfica de Evolución */}
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-[#00c8ff]" />
-                Evolución del Promedio
-              </CardTitle>
-              <CardDescription className="text-white/60">
-                Progreso mensual en {subjectDetail.nombre}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 md:p-6">
-              <div className="w-full overflow-x-auto">
-                <ChartContainer config={detailChartConfig} className="h-[280px] md:h-[320px] min-w-[300px]">
-                  <LineChart 
-                    data={subjectDetail.evolucion}
-                    margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                    <XAxis 
-                      dataKey="mes" 
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis 
-                      domain={[0, 100]}
-                      stroke="rgba(255,255,255,0.5)"
-                      tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
-                      width={40}
-                    />
-                    <ChartTooltip 
-                      content={<ChartTooltipContent />}
-                      cursor={{ stroke: '#00c8ff', strokeWidth: 1 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="promedio" 
-                      stroke="#00c8ff"
-                      strokeWidth={3}
-                      dot={{ fill: '#00c8ff', r: 6 }}
-                    />
-                  </LineChart>
-                </ChartContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Notas por Categoría */}
-          <div className="space-y-6">
-            {subjectDetail.categorias.map((categoria, idx) => (
-              <Card key={idx} className="bg-white/5 border-white/10 backdrop-blur-md">
+          {(() => {
+            const evolucion = subjectDetail.evolucion;
+            const allSameDateStr =
+              evolucion.length > 0 && evolucion.every((p) => p.mes === evolucion[0].mes);
+            const showPlaceholder = evolucion.length <= 1 || allSameDateStr;
+            const totalNotas = subjectDetail.categorias.reduce(
+              (sum, cat) => sum + cat.notas.length,
+              0
+            );
+            return (
+              <Card className="bg-white/5 border-white/10 backdrop-blur-md mb-8">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-white">{categoria.categoria}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">
-                        {categoria.promedio != null ? Math.round(categoria.promedio) : '—'}
-                      </span>
-                      {categoria.promedio != null && <span className="text-white/50">/ 100</span>}
-                    </div>
-                  </div>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-[#00c8ff]" />
+                    Evolución del Promedio
+                  </CardTitle>
                   <CardDescription className="text-white/60">
-                    Promedio de {categoria.notas.length} {categoria.notas.length === 1 ? 'actividad' : 'actividades'}
+                    Progreso en {subjectDetail.nombre}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {categoria.notas.map((nota, notaIdx) => (
-                      <div
-                        key={notaIdx}
-                        className="p-4 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors"
+                <CardContent className="p-4 md:p-6">
+                  {showPlaceholder ? (
+                    <div
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px dashed rgba(255,255,255,0.12)',
+                        borderRadius: 12,
+                        padding: '32px 24px',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <TrendingUp
+                        className="mx-auto mb-4"
+                        style={{ width: 40, height: 40, color: 'rgba(255,255,255,0.3)' }}
+                      />
+                      <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: 8, fontWeight: 500 }}>
+                        La evolución se mostrará conforme el profesor califique más actividades
+                      </p>
+                      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>
+                        Actualmente hay {totalNotas} nota(s) registrada(s)
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="w-full overflow-x-auto">
+                      <ChartContainer
+                        config={detailChartConfig}
+                        className="h-[280px] md:h-[320px] min-w-[300px]"
                       >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <h4 className="font-semibold text-white mb-1">{nota.actividad}</h4>
-                            <p className="text-sm text-white/60">{formatNotaFecha(nota.fecha)}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-2xl font-bold text-white">
-                              {nota.nota != null ? Math.round(nota.nota) : '—'}
-                            </span>
-                            {nota.nota != null && <span className="text-white/50">/ 100</span>}
-                          </div>
-                        </div>
-                        {nota.comentario && (
-                          <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                            <div className="flex items-start gap-2">
-                              <MessageSquare className="w-4 h-4 text-[#00c8ff] mt-0.5 flex-shrink-0" />
-                              <p className="text-sm text-white/80">{nota.comentario}</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                        <LineChart
+                          data={evolucion}
+                          margin={{ top: 20, right: 20, bottom: 40, left: 20 }}
+                        >
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="rgba(255,255,255,0.1)"
+                          />
+                          <XAxis
+                            dataKey="mes"
+                            stroke="rgba(255,255,255,0.5)"
+                            tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
+                          />
+                          <YAxis
+                            domain={[0, 100]}
+                            stroke="rgba(255,255,255,0.5)"
+                            tick={{ fill: 'rgba(255,255,255,0.7)', fontSize: 12 }}
+                            width={40}
+                          />
+                          <ChartTooltip
+                            content={<ChartTooltipContent />}
+                            cursor={{ stroke: '#00c8ff', strokeWidth: 1 }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="promedio"
+                            stroke="#00c8ff"
+                            strokeWidth={3}
+                            dot={{ fill: '#00c8ff', r: 6 }}
+                          />
+                        </LineChart>
+                      </ChartContainer>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            ))}
-          </div>
+            );
+          })()}
+
+          {/* Notas por Logro (jerarquía) o fallback plano */}
+          {logrosData?.logros?.length ? (
+            <div className="space-y-6">
+              {[...logrosData.logros]
+                .sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999))
+                .map((logro) => {
+                  const indicadoresConCat = logro.indicadores.map((ind) => {
+                    const catKey = `${ind.nombre} (${ind.porcentaje}%)`;
+                    const cat = subjectDetail!.categorias.find((c) => c.categoria === catKey);
+                    return { ind, cat };
+                  });
+
+                  let weightedSum = 0;
+                  let totalPct = 0;
+                  for (const { ind, cat } of indicadoresConCat) {
+                    if (cat?.promedio != null) {
+                      weightedSum += cat.promedio * ind.porcentaje;
+                      totalPct += ind.porcentaje;
+                    }
+                  }
+                  const promedioLogro = totalPct > 0 ? weightedSum / totalPct : null;
+                  const nivelLogro =
+                    promedioLogro == null
+                      ? null
+                      : promedioLogro >= 85
+                      ? 'excelente'
+                      : promedioLogro >= 70
+                      ? 'bueno'
+                      : promedioLogro >= 60
+                      ? 'regular'
+                      : 'bajo';
+
+                  const notaColor = (n: number | null) =>
+                    n == null
+                      ? 'rgba(255,255,255,0.4)'
+                      : n >= 75
+                      ? '#10b981'
+                      : n >= 65
+                      ? '#f59e0b'
+                      : '#ef4444';
+
+                  return (
+                    <div
+                      key={logro._id}
+                      style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.10)',
+                        borderRadius: 14,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {/* Header del logro */}
+                      <div
+                        style={{
+                          padding: '16px 20px',
+                          borderBottom: '1px solid rgba(255,255,255,0.07)',
+                        }}
+                      >
+                        <p
+                          style={{
+                            fontSize: 11,
+                            color: 'rgba(255,255,255,0.5)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.1em',
+                            marginBottom: 4,
+                          }}
+                        >
+                          LOGRO &middot; {logro.pesoEnCurso}% DEL CURSO
+                        </p>
+                        <p
+                          style={{
+                            color: 'white',
+                            fontWeight: 500,
+                            marginBottom: 8,
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {logro.descripcion}
+                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                            Promedio en este logro:{' '}
+                            {promedioLogro != null
+                              ? `${(Math.round(promedioLogro * 10) / 10).toFixed(1)}/100`
+                              : '—'}
+                          </span>
+                          {nivelLogro && (
+                            <Badge className={getEstadoColor(nivelLogro)}>
+                              {nivelLogro.charAt(0).toUpperCase() + nivelLogro.slice(1)}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Indicadores */}
+                      <div
+                        style={{
+                          padding: '12px 16px 16px 24px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 10,
+                        }}
+                      >
+                        {indicadoresConCat.map(({ ind, cat }) => {
+                          const isOpen = !collapsedIndicators.has(ind._id);
+                          const toggleInd = () => {
+                            setCollapsedIndicators((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(ind._id)) next.delete(ind._id);
+                              else next.add(ind._id);
+                              return next;
+                            });
+                          };
+
+                          return (
+                            <div
+                              key={ind._id}
+                              style={{
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                                borderRadius: 8,
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 14px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                }}
+                                onClick={toggleInd}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {isOpen ? (
+                                    <ChevronDown className="w-4 h-4 text-white/40" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-white/40" />
+                                  )}
+                                  <span
+                                    style={{ color: 'white', fontWeight: 600, fontSize: 14 }}
+                                  >
+                                    {ind.nombre}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      color: 'rgba(255,255,255,0.5)',
+                                      background: 'rgba(255,255,255,0.08)',
+                                      padding: '2px 6px',
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    {ind.porcentaje}%
+                                  </span>
+                                </div>
+                                <span
+                                  style={{
+                                    fontSize: 15,
+                                    fontWeight: 700,
+                                    color: notaColor(cat?.promedio ?? null),
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {cat?.promedio != null
+                                    ? `${(Math.round(cat.promedio * 10) / 10).toFixed(1)}/100`
+                                    : !cat || cat.notas.length === 0
+                                    ? 'Sin actividades'
+                                    : '—'}
+                                </span>
+                              </button>
+
+                              {isOpen && cat && cat.notas.length > 0 && (
+                                <div
+                                  style={{
+                                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                                    padding: '8px 14px 12px 36px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 8,
+                                  }}
+                                >
+                                  {cat.notas.map((nota, ni) => (
+                                    <div
+                                      key={ni}
+                                      style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'flex-start',
+                                        padding: '8px 10px',
+                                        background: 'rgba(255,255,255,0.03)',
+                                        borderRadius: 6,
+                                      }}
+                                    >
+                                      <div style={{ flex: 1 }}>
+                                        <p
+                                          style={{
+                                            color: 'white',
+                                            fontSize: 13,
+                                            fontWeight: 500,
+                                            marginBottom: 2,
+                                          }}
+                                        >
+                                          {nota.actividad}
+                                        </p>
+                                        <p
+                                          style={{
+                                            color: 'rgba(255,255,255,0.5)',
+                                            fontSize: 12,
+                                          }}
+                                        >
+                                          {formatNotaFecha(nota.fecha)}
+                                        </p>
+                                        {nota.comentario && (
+                                          <p
+                                            style={{
+                                              color: 'rgba(255,255,255,0.6)',
+                                              fontSize: 12,
+                                              marginTop: 4,
+                                            }}
+                                          >
+                                            {nota.comentario}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div
+                                        style={{
+                                          flexShrink: 0,
+                                          marginLeft: 12,
+                                          textAlign: 'right',
+                                        }}
+                                      >
+                                        {nota.nota === null ? (
+                                          <span
+                                            style={{
+                                              fontSize: 12,
+                                              padding: '3px 8px',
+                                              background: 'rgba(255,255,255,0.06)',
+                                              borderRadius: 4,
+                                              color: 'rgba(255,255,255,0.5)',
+                                            }}
+                                          >
+                                            Sin calificar
+                                          </span>
+                                        ) : (
+                                          <>
+                                            <span
+                                              style={{
+                                                fontSize: 18,
+                                                fontWeight: 700,
+                                                color: nota.nota === 0
+                                                  ? '#ef4444'
+                                                  : notaColor(nota.nota),
+                                              }}
+                                            >
+                                              {nota.nota}
+                                            </span>
+                                            <span
+                                              style={{
+                                                fontSize: 11,
+                                                color: 'rgba(255,255,255,0.4)',
+                                              }}
+                                            >
+                                              /100
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {isOpen && (!cat || cat.notas.length === 0) && (
+                                <div
+                                  style={{
+                                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                                    padding: '12px 14px 12px 36px',
+                                  }}
+                                >
+                                  <p
+                                    style={{
+                                      color: 'rgba(255,255,255,0.4)',
+                                      fontSize: 13,
+                                      fontStyle: 'italic',
+                                    }}
+                                  >
+                                    El profesor aún no ha calificado este indicador
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            /* Fallback: vista plana si no hay logros estructurados */
+            <div className="space-y-6">
+              {subjectDetail.categorias.map((categoria, idx) => (
+                <Card key={idx} className="bg-white/5 border-white/10 backdrop-blur-md">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-white">{categoria.categoria}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl font-bold text-white">
+                          {categoria.promedio != null ? Math.round(categoria.promedio) : '—'}
+                        </span>
+                        {categoria.promedio != null && (
+                          <span className="text-white/50">/ 100</span>
+                        )}
+                      </div>
+                    </div>
+                    <CardDescription className="text-white/60">
+                      {categoria.notas.length}{' '}
+                      {categoria.notas.length === 1 ? 'actividad' : 'actividades'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {categoria.notas.map((nota, notaIdx) => (
+                        <div
+                          key={notaIdx}
+                          className="p-4 bg-white/5 border border-white/10 rounded-lg"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-white mb-1">{nota.actividad}</h4>
+                              <p className="text-sm text-white/60">{formatNotaFecha(nota.fecha)}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {nota.nota === null ? (
+                                <span className="text-sm text-white/40">Sin calificar</span>
+                              ) : (
+                                <>
+                                  <span className="text-2xl font-bold text-white">
+                                    {Math.round(nota.nota)}
+                                  </span>
+                                  <span className="text-white/50">/ 100</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {nota.comentario && (
+                            <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                              <div className="flex items-start gap-2">
+                                <MessageSquare className="w-4 h-4 text-[#00c8ff] mt-0.5 flex-shrink-0" />
+                                <p className="text-sm text-white/80">{nota.comentario}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );

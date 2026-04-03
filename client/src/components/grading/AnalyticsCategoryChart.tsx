@@ -18,6 +18,7 @@ export type AnalyticsCategoryRow = {
   percentage: number;
   average: number;
   count: number;
+  color?: string;
 };
 
 function truncateLabel(value: unknown, max = 24): string {
@@ -42,12 +43,13 @@ export function AnalyticsCategoryChart({
 }: AnalyticsCategoryChartProps) {
   const data = useMemo(() => {
     if (!byCategory?.length) return [];
-    return byCategory.map((c) => ({
+    return byCategory.map((c, i) => ({
       categoria: c.categoryName,
       promedio: Math.round(c.average * 10) / 10,
       peso: c.percentage,
       impacto: Math.round(c.average * (c.percentage / 100) * 10) / 10,
       notas: c.count,
+      barColor: c.color ?? BAR_COLORS[i % BAR_COLORS.length],
     }));
   }, [byCategory]);
 
@@ -115,8 +117,8 @@ export function AnalyticsCategoryChart({
                 }}
               />
               <Bar dataKey="promedio" radius={[6, 10, 10, 6]} maxBarSize={26} barSize={22}>
-                {data.map((_, i) => (
-                  <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+                {data.map((d, i) => (
+                  <Cell key={i} fill={d.barColor} />
                 ))}
                 <LabelList
                   dataKey="promedio"
