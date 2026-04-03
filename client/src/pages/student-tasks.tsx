@@ -1,18 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { useLocation } from 'wouter';
-import { 
+import {
   Calendar as CalendarIcon,
   Clock,
-  User,
   CheckCircle2,
-  Circle,
-  FileText,
   AlertCircle,
-  Star,
-  Filter
+  ChevronDown,
+  ChevronRight,
+  FileText,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -22,10 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
-import { courseDisplayLabel } from '@/lib/assignmentUtils';
+import { Calendar } from '@/components/Calendar';
+import type { CalendarAssignment } from '@/components/Calendar';
 
 interface Assignment {
   _id: string;
@@ -50,18 +53,12 @@ interface Assignment {
   }>;
 }
 
-// Mismo criterio de color que el calendario (por materia)
-const MATERIA_COLORS = [
-  '#1e3cff', '#002366', '#00c8ff', '#003d7a', '#10b981', '#f59e0b',
-  '#ef4444', '#06b6d4', '#f97316', '#14b8a6', '#84cc16', '#ffd700',
-];
-function colorForMateria(name: string): string {
-  if (!name) return MATERIA_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return MATERIA_COLORS[Math.abs(hash) % MATERIA_COLORS.length];
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 export default function StudentTasksPage() {
@@ -109,9 +106,9 @@ export default function StudentTasksPage() {
     viewingStudentId
       ? submissions(assignment).find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
       : undefined;
-  
+
   const tareasPorEntregar = assignments.filter(assignment => {
-    const estado = assignment.estado || (mySubmission(assignment) 
+    const estado = assignment.estado || (mySubmission(assignment)
       ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
       : 'pendiente');
     const fechaEntrega = new Date(assignment.fechaEntrega);
@@ -119,21 +116,21 @@ export default function StudentTasksPage() {
   });
 
   const tareasCompletadas = assignments.filter(assignment => {
-    const estado = assignment.estado || (mySubmission(assignment) 
+    const estado = assignment.estado || (mySubmission(assignment)
       ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
       : 'pendiente');
     return estado === 'calificada' || estado === 'entregada';
   });
 
   const tareasVencidas = assignments.filter(assignment => {
-    const estado = assignment.estado || (mySubmission(assignment) 
+    const estado = assignment.estado || (mySubmission(assignment)
       ? (mySubmission(assignment)?.calificacion !== undefined ? 'calificada' : 'entregada')
       : 'pendiente');
     const fechaEntrega = new Date(assignment.fechaEntrega);
     return estado === 'pendiente' && fechaEntrega < now;
   });
 
-  // Materias únicas para el filtro (ordenadas)
+  // Materias únicas para el filtro
   const materiasUnicas = useMemo(() => {
     const set = new Set<string>();
     assignments.forEach(a => {
@@ -143,12 +140,16 @@ export default function StudentTasksPage() {
     return ['', ...Array.from(set).sort()];
   }, [assignments]);
 
-  // Inicializar filtro desde URL (ej. /mi-aprendizaje/tareas?materia=Física)
+  // Inicializar filtro desde URL
   const [materiaFiltro, setMateriaFiltro] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
     const p = new URLSearchParams(window.location.search);
     return p.get('materia') || '';
   });
+
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
 
   const coincideMateria = (a: Assignment) => {
     if (!materiaFiltro) return true;
@@ -156,22 +157,35 @@ export default function StudentTasksPage() {
     return m === materiaFiltro;
   };
 
-  const tareasPorEntregarFiltradas = useMemo(() => tareasPorEntregar.filter(coincideMateria), [tareasPorEntregar, materiaFiltro]);
-  const tareasVencidasFiltradas = useMemo(() => tareasVencidas.filter(coincideMateria), [tareasVencidas, materiaFiltro]);
-  const tareasCompletadasFiltradas = useMemo(() => tareasCompletadas.filter(coincideMateria), [tareasCompletadas, materiaFiltro]);
+  const coincideDia = (a: Assignment) => {
+    if (!selectedDay) return true;
+    return isSameDay(new Date(a.fechaEntrega), selectedDay);
+  };
 
-  // Función para determinar el estado de una tarea
+  const tareasPorEntregarFiltradas = useMemo(
+    () => tareasPorEntregar.filter(a => coincideMateria(a) && coincideDia(a)),
+    [tareasPorEntregar, materiaFiltro, selectedDay]
+  );
+  const tareasVencidasFiltradas = useMemo(
+    () => tareasVencidas.filter(a => coincideMateria(a) && coincideDia(a)),
+    [tareasVencidas, materiaFiltro, selectedDay]
+  );
+  const tareasCompletadasFiltradas = useMemo(
+    () => tareasCompletadas.filter(a => coincideMateria(a) && coincideDia(a)),
+    [tareasCompletadas, materiaFiltro, selectedDay]
+  );
+
+  // Función para determinar el estado visual de una tarea
   const getEstadoTarea = (assignment: Assignment) => {
-    const submissions = assignment.submissions || assignment.entregas || [];
+    const subs = assignment.submissions || assignment.entregas || [];
     const mySub = viewingStudentId
-      ? submissions.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+      ? subs.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
       : undefined;
-    const estado = assignment.estado || (mySub 
+    const estado = assignment.estado || (mySub
       ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada')
       : 'pendiente');
-    
     const fechaEntrega = new Date(assignment.fechaEntrega);
-    
+
     if (estado === 'calificada') {
       return { texto: 'Calificada', color: 'bg-green-500/20 text-green-400 border-green-500/40', icon: CheckCircle2 };
     }
@@ -185,108 +199,120 @@ export default function StudentTasksPage() {
     if (diasRestantes <= 3) {
       return { texto: 'Próxima', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40', icon: Clock };
     }
-    return { texto: 'Pendiente', color: 'bg-blue-500/20 text-blue-400 border-blue-500/40', icon: Circle };
+    return { texto: 'Pendiente', color: 'bg-blue-500/20 text-blue-400 border-blue-500/40', icon: Clock };
   };
 
-  // Función para calcular días restantes
-  const getDiasRestantes = (fechaEntrega: string) => {
-    const fecha = new Date(fechaEntrega);
-    const diff = fecha.getTime() - now.getTime();
-    const dias = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return dias;
+  const handleDayBubbleClick = (date: Date) => {
+    setSelectedDay(prev => (prev && isSameDay(prev, date) ? null : date));
   };
 
-  // Componente para renderizar una tarjeta de tarea
+  // Card de tarea — diseño nuevo
   const renderTaskCard = (assignment: Assignment) => {
     const estado = getEstadoTarea(assignment);
     const EstadoIcon = estado.icon;
-    const diasRestantes = getDiasRestantes(assignment.fechaEntrega);
     const fechaEntrega = new Date(assignment.fechaEntrega);
-    const materiaNombre = (() => {
-      const label = courseDisplayLabel(assignment);
-      return label === 'Curso' ? 'Sin materia' : label;
-    })();
-    const materiaColor = colorForMateria(materiaNombre);
 
     return (
       <div
         key={assignment._id}
-        className="p-6 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all cursor-pointer group relative overflow-hidden"
-        style={{ borderLeftWidth: '4px', borderLeftColor: materiaColor }}
+        className="border border-white/10 rounded-xl p-4 bg-white/[0.03] hover:bg-white/[0.06] transition cursor-pointer"
         onClick={() => setLocation(`/assignment/${assignment._id}${assignmentFromQuery}`)}
       >
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <h3 className="font-semibold text-white text-lg group-hover:text-[#00c8ff] transition-colors">
-                {assignment.titulo}
-              </h3>
-              <Badge className={estado.color}>
-                <EstadoIcon className="w-3 h-3 mr-1" />
-                {estado.texto}
-              </Badge>
-              <Badge
-                className="bg-white/10 text-white/90 border border-white/20 font-medium"
-                style={{ backgroundColor: `${materiaColor}22`, borderColor: materiaColor, color: materiaColor }}
-              >
-                {materiaNombre}
-              </Badge>
-            </div>
-            <p className="text-sm text-white/70 mb-4 line-clamp-2">
-              {assignment.descripcion}
-            </p>
-            <div className="flex flex-wrap items-center gap-4 text-sm">
-              <div className="flex items-center gap-2 text-white/60">
-                <User className="w-4 h-4" />
-                <span>{assignment.profesorNombre}</span>
-              </div>
-              <div className="flex items-center gap-2 text-white/60">
-                <CalendarIcon className="w-4 h-4" />
-                <span>
-                  {fechaEntrega.toLocaleDateString('es-CO', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                  })}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-white/60">
-                <Clock className="w-4 h-4" />
-                <span>
-                  {fechaEntrega.toLocaleTimeString('es-CO', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </span>
-              </div>
-              {(() => {
-                const submissions = assignment.submissions || assignment.entregas || [];
-                const mySub = viewingStudentId
-                  ? submissions.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
-                  : undefined;
-                const estado = assignment.estado || (mySub 
-                  ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada')
-                  : 'pendiente');
-                
-                if (estado === 'pendiente') {
-                  return (
-                    <div className="text-[#00c8ff] font-medium">
-                      {diasRestantes > 0 ? `${diasRestantes} días restantes` : 'Vencida'}
-                    </div>
-                  );
-                }
-                if (estado === 'calificada' && mySub?.calificacion !== undefined) {
-                  return (
-                    <div className="text-green-400 font-semibold">
-                      Calificación: {mySub.calificacion}/100
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-            </div>
-          </div>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <p className="font-semibold text-white text-sm leading-snug">{assignment.titulo}</p>
+          <Badge className={`${estado.color} shrink-0 text-xs py-0.5 px-2 flex items-center gap-1 whitespace-nowrap`}>
+            <EstadoIcon className="w-3 h-3" />
+            {estado.texto}
+          </Badge>
         </div>
+        {assignment.profesorNombre && (
+          <p className="text-sm text-white/50 mb-1">{assignment.profesorNombre}</p>
+        )}
+        {assignment.descripcion && (
+          <p className="text-sm text-white/60 truncate">{assignment.descripcion}</p>
+        )}
+        <div className="flex items-center gap-1.5 text-xs text-white/40 mt-2">
+          <CalendarIcon className="w-3 h-3" />
+          <span>
+            {fechaEntrega.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+            {' · '}
+            {fechaEntrega.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  // Grupos de materias con acordeón
+  const renderMateriaGroups = (tasks: Assignment[], tabKey: string, emptyText: string) => {
+    if (tasks.length === 0) {
+      return (
+        <div className="text-center py-10">
+          <FileText className="w-12 h-12 text-white/20 mx-auto mb-3" />
+          <p className="text-white/40 text-sm">{emptyText}</p>
+        </div>
+      );
+    }
+
+    const groups: Record<string, Assignment[]> = {};
+    tasks.forEach(a => {
+      const m = a.materiaNombre || a.curso || 'Sin materia';
+      if (!groups[m]) groups[m] = [];
+      groups[m].push(a);
+    });
+
+    return (
+      <div className="space-y-3">
+        {Object.entries(groups)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([materia, tareas]) => {
+            const groupKey = `${tabKey}_${materia}`;
+            const isOpen = expandedGroups[groupKey] !== false;
+            const limit = visibleCounts[groupKey] ?? 5;
+            const shown = tareas.slice(0, limit);
+            const remaining = tareas.length - limit;
+
+            return (
+              <Collapsible
+                key={materia}
+                open={isOpen}
+                onOpenChange={o => setExpandedGroups(prev => ({ ...prev, [groupKey]: o }))}
+              >
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between p-3 rounded-lg bg-white/[0.04] border border-white/10 hover:bg-white/[0.07] transition text-left"
+                  >
+                    <span className="font-medium text-white text-sm">{materia}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/40">
+                        {tareas.length} tarea{tareas.length !== 1 ? 's' : ''}
+                      </span>
+                      {isOpen
+                        ? <ChevronDown className="w-4 h-4 text-white/40" />
+                        : <ChevronRight className="w-4 h-4 text-white/40" />}
+                    </div>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-2 mt-2">
+                    {shown.map(a => renderTaskCard(a))}
+                    {remaining > 0 && (
+                      <button
+                        type="button"
+                        className="w-full text-xs text-white/40 hover:text-white/70 py-2 text-center transition"
+                        onClick={() =>
+                          setVisibleCounts(prev => ({ ...prev, [groupKey]: (prev[groupKey] ?? 5) + 5 }))
+                        }
+                      >
+                        Ver más (+{remaining})
+                      </button>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
       </div>
     );
   };
@@ -322,202 +348,169 @@ export default function StudentTasksPage() {
         {/* Header */}
         <div className="mb-8">
           <NavBackButton to={backTo} label={backLabel} />
-          <div>
-            <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
-              {isPadre ? `Tareas de ${nombreHijo}` : 'Mis Tareas'}
-            </h1>
-            <p className="text-white/60">
-              {isPadre
-                ? 'Puedes revisar tareas, fechas, estado y calificaciones. Los archivos adjuntos (materiales y entregas) no están disponibles por privacidad. No puedes entregar en nombre del estudiante.'
-                : 'Gestiona todas tus tareas asignadas'}
-            </p>
+          <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
+            {isPadre ? `Tareas de ${nombreHijo}` : 'Mis Tareas'}
+          </h1>
+          <p className="text-white/60">
+            {isPadre
+              ? 'Puedes revisar tareas, fechas, estado y calificaciones. Los archivos adjuntos no están disponibles por privacidad.'
+              : 'Gestiona todas tus tareas asignadas'}
+          </p>
+        </div>
+
+        {/* KPI Cards — fila completa */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="rounded-[13px] p-5 bg-white/[0.03] border border-white/10">
+            <Clock className="w-5 h-5 text-blue-400 mb-3" />
+            <p className="text-3xl font-bold text-white">{tareasPorEntregar.length}</p>
+            <p className="text-xs text-white/50 uppercase tracking-wide mt-1">Por Entregar</p>
+          </div>
+          <div className="rounded-[13px] p-5 bg-white/[0.03] border border-white/10">
+            <AlertCircle className="w-5 h-5 text-red-400 mb-3" />
+            <p className="text-3xl font-bold text-white">{tareasVencidas.length}</p>
+            <p className="text-xs text-white/50 uppercase tracking-wide mt-1">Vencidas</p>
+          </div>
+          <div className="rounded-[13px] p-5 bg-white/[0.03] border border-white/10">
+            <CheckCircle2 className="w-5 h-5 text-green-400 mb-3" />
+            <p className="text-3xl font-bold text-white">{tareasCompletadas.length}</p>
+            <p className="text-xs text-white/50 uppercase tracking-wide mt-1">Completadas</p>
           </div>
         </div>
 
-        {/* Estadísticas rápidas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-500/20">
-                  <Circle className="w-6 h-6 text-blue-400" />
+        {/* Layout principal: calendario + lista */}
+        <div className="grid grid-cols-5 gap-6">
+          {/* Columna calendario */}
+          <div className="col-span-2">
+            <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 sticky top-6">
+              {selectedDay && (
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-white/60">
+                    {selectedDay.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-white/40 hover:text-white/70 transition"
+                    onClick={() => setSelectedDay(null)}
+                  >
+                    Quitar filtro
+                  </button>
                 </div>
-                <div>
-                  <p className="text-white/60 text-sm">Por Entregar</p>
-                  <p className="text-2xl font-bold text-white">{tareasPorEntregar.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-red-500/20">
-                  <AlertCircle className="w-6 h-6 text-red-400" />
-                </div>
-                <div>
-                  <p className="text-white/60 text-sm">Vencidas</p>
-                  <p className="text-2xl font-bold text-white">{tareasVencidas.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-green-500/20">
-                  <CheckCircle2 className="w-6 h-6 text-green-400" />
-                </div>
-                <div>
-                  <p className="text-white/60 text-sm">Completadas</p>
-                  <p className="text-2xl font-bold text-white">{tareasCompletadas.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Filtro por materia */}
-        {materiasUnicas.length > 1 && (
-          <div className="flex flex-wrap items-center gap-3 mb-6">
-            <div className="flex items-center gap-2 text-white/80">
-              <Filter className="w-4 h-4 text-[#00c8ff]" />
-              <span className="text-sm font-medium">Filtrar por materia</span>
+              )}
+              <Calendar
+                assignments={assignments as unknown as CalendarAssignment[]}
+                onDayBubbleClick={handleDayBubbleClick}
+                onDayClick={a => setLocation(`/assignment/${a._id}${assignmentFromQuery}`)}
+                variant="student"
+              />
             </div>
-            <Select value={materiaFiltro || 'todas'} onValueChange={(v) => setMateriaFiltro(v === 'todas' ? '' : v)}>
-              <SelectTrigger className="w-[200px] bg-white/5 border-white/10 text-white">
-                <SelectValue placeholder="Todas las materias" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas" className="text-white focus:bg-white/10">
-                  Todas las materias
-                </SelectItem>
-                {materiasUnicas.filter(Boolean).map((m) => (
-                  <SelectItem key={m} value={m} className="text-white focus:bg-white/10">
-                    {m}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {materiaFiltro && (
-              <Badge
-                variant="outline"
-                className="cursor-pointer border-white/20 text-white/80 hover:bg-white/10"
-                onClick={() => setMateriaFiltro('')}
-              >
-                Quitar filtro
-              </Badge>
-            )}
           </div>
-        )}
 
-        {/* Tabs para Por Entregar y Completadas (conteos según filtro) */}
-        <Tabs defaultValue="por-entregar" className="w-full">
-          <TabsList className="bg-white/5 border border-white/10 mb-6">
-            <TabsTrigger value="por-entregar" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
-              Por Entregar ({tareasPorEntregarFiltradas.length + tareasVencidasFiltradas.length})
-            </TabsTrigger>
-            <TabsTrigger value="completadas" className="data-[state=active]:bg-[#00c8ff] data-[state=active]:text-white">
-              Completadas ({tareasCompletadasFiltradas.length})
-            </TabsTrigger>
-          </TabsList>
+          {/* Columna lista */}
+          <div className="col-span-3">
+            {/* Filtro por materia */}
+            {materiasUnicas.length > 1 && (
+              <div className="flex items-center gap-3 mb-4">
+                <Select
+                  value={materiaFiltro || 'todas'}
+                  onValueChange={v => setMateriaFiltro(v === 'todas' ? '' : v)}
+                >
+                  <SelectTrigger className="w-[220px] bg-white/5 border-white/10 text-white">
+                    <SelectValue placeholder="Todas las materias" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas" className="text-white focus:bg-white/10">
+                      Todas las materias
+                    </SelectItem>
+                    {materiasUnicas.filter(Boolean).map(m => (
+                      <SelectItem key={m} value={m} className="text-white focus:bg-white/10">
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {materiaFiltro && (
+                  <button
+                    type="button"
+                    className="text-xs text-white/40 hover:text-white/70 transition"
+                    onClick={() => setMateriaFiltro('')}
+                  >
+                    Quitar filtro
+                  </button>
+                )}
+              </div>
+            )}
 
-          <TabsContent value="por-entregar">
-            <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-              <CardHeader>
-                <CardTitle className="text-white">Tareas por Entregar</CardTitle>
-                <CardDescription className="text-white/60">
-                  {materiaFiltro ? `Tareas pendientes y vencidas en ${materiaFiltro}` : 'Tareas pendientes y vencidas'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {tareasVencidasFiltradas.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-400" />
-                      Vencidas ({tareasVencidasFiltradas.length})
-                    </h3>
-                    <div className="space-y-4">
-                      {tareasVencidasFiltradas
-                        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
-                        .map(assignment => renderTaskCard(assignment))}
-                    </div>
-                  </div>
-                )}
-                {tareasPorEntregarFiltradas.length > 0 ? (
-                  <div>
-                    {tareasVencidasFiltradas.length > 0 && (
-                      <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-yellow-400" />
-                        Pendientes ({tareasPorEntregarFiltradas.length})
-                      </h3>
-                    )}
-                    <div className="space-y-4">
-                      {tareasPorEntregarFiltradas
-                        .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
-                        .map(assignment => renderTaskCard(assignment))}
-                    </div>
-                  </div>
-                ) : (
-                  tareasVencidasFiltradas.length === 0 && (
-                    <div className="text-center py-12">
-                      <FileText className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
-                      <h3 className="text-xl font-semibold text-white mb-2">
-                        {materiaFiltro ? `No hay tareas pendientes en ${materiaFiltro}` : 'No hay tareas pendientes'}
-                      </h3>
-                      <p className="text-white/60">
-                        {materiaFiltro ? 'Prueba otra materia o quita el filtro.' : '¡Excelente! Has completado todas tus tareas.'}
-                      </p>
-                    </div>
-                  )
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+            {/* Tabs */}
+            <Tabs defaultValue="pendientes" className="w-full">
+              <TabsList className="bg-white/5 border border-white/10 mb-4">
+                <TabsTrigger
+                  value="pendientes"
+                  className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-300"
+                >
+                  Pendientes ({tareasPorEntregarFiltradas.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="vencidas"
+                  className="data-[state=active]:bg-red-500/20 data-[state=active]:text-red-300"
+                >
+                  Vencidas ({tareasVencidasFiltradas.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="completadas"
+                  className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-300"
+                >
+                  Completadas ({tareasCompletadasFiltradas.length})
+                </TabsTrigger>
+              </TabsList>
 
-          <TabsContent value="completadas">
-            <Card className="bg-white/5 border-white/10 backdrop-blur-md">
-              <CardHeader>
-                <CardTitle className="text-white">Tareas Completadas</CardTitle>
-                <CardDescription className="text-white/60">
-                  {materiaFiltro ? `Tareas entregadas en ${materiaFiltro}` : 'Tareas que ya has entregado'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {tareasCompletadasFiltradas.length > 0 ? (
-                  <div className="space-y-4">
-                    {tareasCompletadasFiltradas
-                      .sort((a, b) => {
-                        const subsA = a.submissions || a.entregas || [];
-                        const subsB = b.submissions || b.entregas || [];
-                        const entregaA = viewingStudentId
-                          ? subsA.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
-                          : undefined;
-                        const entregaB = viewingStudentId
-                          ? subsB.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
-                          : undefined;
-                        if (!entregaA || !entregaB) return 0;
-                        return new Date(entregaB.fechaEntrega).getTime() - new Date(entregaA.fechaEntrega).getTime();
-                      })
-                      .map(assignment => renderTaskCard(assignment))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <CheckCircle2 className="w-16 h-16 text-[#00c8ff]/40 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-white mb-2">
-                      {materiaFiltro ? `No hay tareas completadas en ${materiaFiltro}` : 'No hay tareas completadas'}
-                    </h3>
-                    <p className="text-white/60">
-                      {materiaFiltro ? 'Prueba otra materia o quita el filtro.' : 'Las tareas que entregues aparecerán aquí.'}
-                    </p>
-                  </div>
+              <TabsContent value="pendientes">
+                {renderMateriaGroups(
+                  tareasPorEntregarFiltradas.sort(
+                    (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+                  ),
+                  'pendientes',
+                  materiaFiltro
+                    ? `No hay tareas pendientes en ${materiaFiltro}`
+                    : '¡Sin tareas pendientes!'
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              </TabsContent>
+
+              <TabsContent value="vencidas">
+                {renderMateriaGroups(
+                  tareasVencidasFiltradas.sort(
+                    (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+                  ),
+                  'vencidas',
+                  materiaFiltro
+                    ? `No hay tareas vencidas en ${materiaFiltro}`
+                    : 'Sin tareas vencidas.'
+                )}
+              </TabsContent>
+
+              <TabsContent value="completadas">
+                {renderMateriaGroups(
+                  tareasCompletadasFiltradas.sort((a, b) => {
+                    const subsA = a.submissions || a.entregas || [];
+                    const subsB = b.submissions || b.entregas || [];
+                    const entregaA = viewingStudentId
+                      ? subsA.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+                      : undefined;
+                    const entregaB = viewingStudentId
+                      ? subsB.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
+                      : undefined;
+                    if (!entregaA || !entregaB) return 0;
+                    return new Date(entregaB.fechaEntrega).getTime() - new Date(entregaA.fechaEntrega).getTime();
+                  }),
+                  'completadas',
+                  materiaFiltro
+                    ? `No hay tareas completadas en ${materiaFiltro}`
+                    : 'Las tareas que entregues aparecerán aquí.'
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
-
