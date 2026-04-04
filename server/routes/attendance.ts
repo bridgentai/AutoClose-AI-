@@ -605,4 +605,46 @@ router.get(
   }
 });
 
+const restrictToStaff = restrictTo(
+  'directivo', 'admin-general-colegio', 'super_admin', 'asistente-academica'
+);
+
+router.get('/tendencia-institucional', protect, restrictToStaff, async (req: AuthRequest, res) => {
+  try {
+    const colegioId = req.user?.colegioId ?? req.user?.institutionId;
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+
+    const semanas = Math.min(4, Math.max(1, parseInt(String(req.query.semanas ?? '2'), 10)));
+    const diasAtras = semanas * 7;
+
+    const r = await queryPg<{ dia: string; total: number; presentes: number }>(
+      `SELECT
+         a.date::text AS dia,
+         COUNT(*)::int AS total,
+         SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END)::int AS presentes
+       FROM attendance a
+       WHERE a.institution_id = $1
+         AND a.date >= CURRENT_DATE - $2::int
+       GROUP BY a.date
+       ORDER BY a.date ASC`,
+      [colegioId, diasAtras]
+    );
+
+    const result = r.rows.map((row) => {
+      const d = new Date(row.dia + 'T12:00:00');
+      const dayLabel = d.toLocaleDateString('es-CO', { weekday: 'short' });
+      return {
+        dia: dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1),
+        fecha: row.dia,
+        pct: row.total > 0 ? Math.round((row.presentes / row.total) * 100) : null,
+      };
+    });
+
+    return res.json(result);
+  } catch (e: unknown) {
+    console.error(e);
+    return res.status(500).json({ message: 'Error al obtener tendencia de asistencia.' });
+  }
+});
+
 export default router;

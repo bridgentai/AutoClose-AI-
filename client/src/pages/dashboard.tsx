@@ -222,7 +222,7 @@ function AIChatBox({ rol }: AIChatBoxProps) {
         </CardDescription>
       </CardHeader>
 
-      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-0 min-h-0">
+      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-4 min-h-0">
         <div className="flex-1 space-y-3 overflow-y-auto pr-2">
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
@@ -727,7 +727,12 @@ function EstudianteDashboard() {
               </div>
             ) : (
               <div className="pulse-blue">
-                <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
+                <Calendar
+                  assignments={assignments}
+                  viewingStudentId={user?.id}
+                  onDayClick={handleDayClick}
+                  variant="student"
+                />
               </div>
             )}
           </CardContent>
@@ -1224,10 +1229,12 @@ function DirectivoDashboard() {
     return count > 0 ? Math.round((sum / count) * 10) / 10 : null;
   }, [resumenCursos]);
 
-  const tendenciaMock = useMemo(() => {
-    const base = stats?.asistenciaResumen?.porcentajePromedio ?? 88;
-    return ['L', 'M', 'X', 'J', 'V', 'L', 'M', 'X', 'J', 'V'].map((dia, i) => ({ dia, pct: Math.min(100, Math.max(82, base + (i % 3 === 0 ? 4 : -2))) }));
-  }, [stats?.asistenciaResumen?.porcentajePromedio]);
+  const { data: tendenciaData = [], isLoading: isLoadingTendencia } = useQuery<{ dia: string; fecha: string; pct: number | null }[]>({
+    queryKey: ['attendance/tendencia-institucional', user?.colegioId],
+    queryFn: () => apiRequest('GET', '/api/attendance/tendencia-institucional?semanas=2'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
+    staleTime: 60 * 1000,
+  });
 
   return (
     <div className="space-y-6">
@@ -1323,15 +1330,24 @@ function DirectivoDashboard() {
             <CardTitle className="text-white text-base">Tendencia de asistencia — últimas 2 semanas</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={{ pct: { label: 'Asistencia %', color: '#3B82F6' } }} className="h-[200px] w-full">
-              <LineChart data={tendenciaMock} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                <XAxis dataKey="dia" tick={{ fill: '#E2E8F0', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
-                <YAxis domain={[80, 100]} tick={{ fill: '#E2E8F0', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
-                <Tooltip content={<ChartTooltipContent />} formatter={(v: number) => [v + '%', 'Asistencia']} />
-                <Line type="monotone" dataKey="pct" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6' }} name="pct" />
-              </LineChart>
-            </ChartContainer>
+            {isLoadingTendencia ? (
+              <div className="h-[200px] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-white/50" /></div>
+            ) : tendenciaData.length === 0 ? (
+              <div className="h-[200px] flex flex-col items-center justify-center gap-2 text-white/40">
+                <ClipboardList className="w-8 h-8" />
+                <p className="text-sm">Sin registros de asistencia recientes</p>
+              </div>
+            ) : (
+              <ChartContainer config={{ pct: { label: 'Asistencia %', color: 'var(--primary-blue)' } }} className="h-[200px] w-full">
+                <LineChart data={tendenciaData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="dia" tick={{ fill: 'var(--text-primary)', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
+                  <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-primary)', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
+                  <Tooltip content={<ChartTooltipContent />} formatter={(v: number) => [v + '%', 'Asistencia']} />
+                  <Line type="monotone" dataKey="pct" stroke="var(--primary-blue)" strokeWidth={2} dot={{ fill: 'var(--primary-blue)' }} name="pct" />
+                </LineChart>
+              </ChartContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -2288,7 +2304,12 @@ function PadreDashboard() {
           </CardHeader>
           <CardContent>
             <div className="pulse-blue">
-              <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
+              <Calendar
+                assignments={assignments}
+                viewingStudentId={primerHijoId}
+                onDayClick={handleDayClick}
+                variant="student"
+              />
             </div>
           </CardContent>
         </Card>
