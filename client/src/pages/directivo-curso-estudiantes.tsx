@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-states";
 
 interface StudentInGroup {
   _id: string;
@@ -34,7 +35,7 @@ export default function DirectivoCursoEstudiantesPage() {
   });
   const groupDisplayName = groupInfo?.nombre?.trim() || grupoId;
 
-  const { data: estudiantes = [], isLoading } = useQuery<StudentInGroup[]>({
+  const { data: estudiantes = [], isLoading, isError, refetch } = useQuery<StudentInGroup[]>({
     queryKey: ["/api/groups", grupoId, "students"],
     queryFn: () =>
       apiRequest<StudentInGroup[]>("GET", `/api/groups/${encodeURIComponent(grupoId)}/students`),
@@ -69,7 +70,9 @@ export default function DirectivoCursoEstudiantesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isError ? (
+            <QueryError message="No se pudieron cargar los estudiantes del curso" onRetry={refetch} />
+          ) : isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => (
                 <Skeleton key={i} className="h-14 w-full bg-white/10 rounded-lg" />

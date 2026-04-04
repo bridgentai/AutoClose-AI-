@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-states";
 
 interface Profesor {
   _id: string;
@@ -26,7 +27,7 @@ export default function DirectivoProfesoresPage() {
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
 
-  const { data: profesores = [], isLoading } = useQuery<Profesor[]>({
+  const { data: profesores = [], isLoading, isError, refetch } = useQuery<Profesor[]>({
     queryKey: ["/api/users/by-role", "profesor", user?.colegioId],
     queryFn: () => apiRequest<Profesor[]>("GET", "/api/users/by-role?rol=profesor"),
     enabled: !!user?.colegioId,
@@ -90,7 +91,9 @@ export default function DirectivoProfesoresPage() {
               className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-white/40"
             />
           </div>
-          {isLoading ? (
+          {isError ? (
+            <QueryError message="No se pudieron cargar los profesores" onRetry={refetch} />
+          ) : isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => (
                 <Skeleton key={i} className="h-14 w-full bg-white/10 rounded-lg" />

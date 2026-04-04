@@ -9,6 +9,7 @@ import { NavBackButton } from "@/components/nav-back-button";
 import { DirectivoGuard } from "@/components/directivo-guard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryError } from "@/components/query-states";
 
 interface MateriaItem {
   group_subject_id: string;
@@ -32,7 +33,7 @@ export default function DirectivoCursosPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  const { data: grupos = [], isLoading } = useQuery<GroupItem[]>({
+  const { data: grupos = [], isLoading, isError, refetch } = useQuery<GroupItem[]>({
     queryKey: ["/api/groups/all"],
     queryFn: () => apiRequest<GroupItem[]>("GET", "/api/groups/all"),
     enabled: !!user?.colegioId,
@@ -60,7 +61,9 @@ export default function DirectivoCursosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isError ? (
+            <QueryError message="No se pudieron cargar los cursos" onRetry={refetch} />
+          ) : isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((i) => (
                 <Skeleton key={i} className="h-14 w-full bg-white/10 rounded-lg" />
