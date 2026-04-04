@@ -17,6 +17,7 @@
     "seed:bodytech": "tsx server/scripts/seed-bodytech-courses.ts",
     "seed:bodytech:reset": "tsx server/scripts/reset-and-seed-bodytech.ts",
     "seed:horarios": "tsx server/scripts/seed-horarios-11h-andres.ts",
+    "seed:grades-min5": "tsx server/scripts/seed-assignments-grades-min5.ts",
     "migrate:fix-announcements": "tsx server/scripts/fix-announcements-unique-index.ts",
     "delete:horarios": "tsx server/scripts/delete-horarios-11h-andres.ts"
   },

@@ -1,26 +1,60 @@
-/** Color estable por id de curso/grupo (misma paleta que cursos/calendario). */
-export function generateCourseColor(id: string): string {
-  if (!id) return '#002366';
+export interface GroupSubjectColorInput {
+  groupSubjectId?: string | null;
+  fallbackId?: string | null;
+  colorAcento?: string | null;
+  subjectName?: string | null;
+}
+
+/**
+ * Paleta de tonalidades de azul para identificar group subjects en toda la app.
+ * Cada tono es visualmente distinto pero dentro del espectro azul.
+ */
+export const GROUP_SUBJECT_COLORS = [
+  '#1e40af', // azul marino profundo
+  '#2563eb', // azul royal
+  '#3b82f6', // azul medio
+  '#1d4ed8', // azul intenso
+  '#0ea5e9', // azul cielo
+  '#0284c7', // azul océano
+  '#0369a1', // azul acero
+  '#075985', // azul petróleo
+  '#4f46e5', // azul índigo
+  '#3730a3', // índigo oscuro
+  '#60a5fa', // azul claro vibrante
+  '#38bdf8', // azul aguamarina
+] as const;
+
+function hashString(value: string): number {
   let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < value.length; i++) {
+    hash = value.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const colors = [
-    '#002366',
-    '#1e3cff',
-    '#00c8ff',
-    '#3b82f6',
-    '#10b981',
-    '#f59e0b',
-    '#ef4444',
-    '#8b5cf6',
-    '#06b6d4',
-    '#f97316',
-    '#ec4899',
-    '#14b8a6',
-    '#6366f1',
-    '#84cc16',
-    '#f43f5e',
-  ];
-  return colors[Math.abs(hash) % colors.length];
+  return hash;
+}
+
+function resolveStableColor(seed: string): string {
+  if (!seed) return GROUP_SUBJECT_COLORS[0];
+  return GROUP_SUBJECT_COLORS[Math.abs(hashString(seed)) % GROUP_SUBJECT_COLORS.length];
+}
+
+/**
+ * Compatibilidad con llamadas existentes que solo pasan un id.
+ */
+export function generateCourseColor(id: string): string {
+  return resolveStableColor(id);
+}
+
+/**
+ * Fuente de verdad para el color visual de una materia/group subject.
+ * Siempre retorna una tonalidad de azul estable por id.
+ * Si el backend envía colorAcento explícito, se respeta.
+ */
+export function getGroupSubjectColor({
+  groupSubjectId,
+  fallbackId,
+  colorAcento,
+}: GroupSubjectColorInput): string {
+  const explicitColor = colorAcento?.trim();
+  if (explicitColor) return explicitColor;
+  return resolveStableColor(groupSubjectId?.trim() || fallbackId?.trim() || '');
 }

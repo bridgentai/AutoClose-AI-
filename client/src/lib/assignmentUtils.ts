@@ -24,6 +24,29 @@ export function courseDisplayLabel(a: AssignmentCourseInfo): string {
   return 'Curso';
 }
 
+export type StudentAssignmentEstado = 'pendiente' | 'entregada' | 'calificada';
+
+export interface AssignmentEstadoSource {
+  estado?: StudentAssignmentEstado;
+  submissions?: Array<{ estudianteId?: string; calificacion?: number }>;
+  entregas?: Array<{ estudianteId?: string; calificacion?: number }>;
+}
+
+/** Estado efectivo según entregas del estudiante (el API a veces no envía `estado`). */
+export function resolveStudentAssignmentEstado(
+  assignment: AssignmentEstadoSource,
+  viewingStudentId: string | undefined
+): StudentAssignmentEstado {
+  const subs = assignment.submissions || assignment.entregas || [];
+  const mySub = viewingStudentId
+    ? subs.find((e) => e.estudianteId === viewingStudentId)
+    : undefined;
+  return (
+    assignment.estado ||
+    (mySub ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada') : 'pendiente')
+  );
+}
+
 /**
  * Día calendario local para pintar burbujas en el calendario.
  * Si el valor es solo `YYYY-MM-DD`, se usa tal cual (evita desfase por UTC medianoche).

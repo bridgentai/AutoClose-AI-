@@ -18,7 +18,7 @@ const navigationItems = [
     icon: GraduationCap,
   },
   {
-    title: "Tareas",
+    title: "Asignaciones",
     path: "/mi-aprendizaje/tareas",
     icon: CheckSquare,
   },

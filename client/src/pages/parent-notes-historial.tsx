@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { getGroupSubjectColor } from '@/lib/courseColor';
 
 interface NotaItem {
   _id: string;
@@ -25,6 +26,7 @@ interface MateriaItem {
   estado: string;
   notas: NotaItem[];
   colorAcento?: string;
+  groupSubjectId?: string | null;
 }
 
 export default function ParentNotesHistorialPage() {
@@ -93,7 +95,13 @@ export default function ParentNotesHistorialPage() {
                     <CardTitle className="text-white flex items-center gap-2">
                       <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: materia.colorAcento || '#1e3cff' }}
+                        style={{
+                          backgroundColor: getGroupSubjectColor({
+                            groupSubjectId: materia.groupSubjectId,
+                            fallbackId: materia._id,
+                            colorAcento: materia.colorAcento,
+                          }),
+                        }}
                       >
                         <BookOpen className="w-5 h-5 text-white" />
                       </div>

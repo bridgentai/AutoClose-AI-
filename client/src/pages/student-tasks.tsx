@@ -6,6 +6,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   FileText,
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/collapsible';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { resolveStudentAssignmentEstado } from '@/lib/assignmentUtils';
 import { NavBackButton } from '@/components/nav-back-button';
 import { Calendar } from '@/components/Calendar';
 import type { CalendarAssignment } from '@/components/Calendar';
@@ -59,6 +61,26 @@ function isSameDay(a: Date, b: Date): boolean {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
+}
+
+type TasksTab = 'todas' | 'pendientes' | 'vencidas' | 'completadas';
+
+function assignmentMatchesTasksTab(
+  assignment: Assignment,
+  tab: TasksTab,
+  viewingStudentId: string | undefined,
+  now: Date
+): boolean {
+  if (tab === 'todas') return true;
+  const estado = resolveStudentAssignmentEstado(assignment, viewingStudentId);
+  const fechaEntrega = new Date(assignment.fechaEntrega);
+  if (tab === 'completadas') {
+    return estado === 'calificada' || estado === 'entregada';
+  }
+  if (tab === 'pendientes') {
+    return estado === 'pendiente' && fechaEntrega >= now;
+  }
+  return estado === 'pendiente' && fechaEntrega < now;
 }
 
 export default function StudentTasksPage() {
@@ -148,6 +170,7 @@ export default function StudentTasksPage() {
   });
 
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [tasksTab, setTasksTab] = useState<TasksTab>('todas');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
 
@@ -175,15 +198,33 @@ export default function StudentTasksPage() {
     [tareasCompletadas, materiaFiltro, selectedDay]
   );
 
+  const tareasTodasFiltradas = useMemo(
+    () => assignments.filter(a => coincideMateria(a) && coincideDia(a)),
+    [assignments, materiaFiltro, selectedDay]
+  );
+
+  const assignmentsForCalendar = useMemo(() => {
+    const nowCal = new Date();
+    return assignments.filter(a => {
+      if (!assignmentMatchesTasksTab(a, tasksTab, viewingStudentId, nowCal)) return false;
+      if (!materiaFiltro) return true;
+      const m = a.materiaNombre || a.curso || 'Sin materia';
+      return m === materiaFiltro;
+    });
+  }, [assignments, materiaFiltro, tasksTab, viewingStudentId]);
+
+  const tasksTabLabel =
+    tasksTab === 'todas'
+      ? 'Todas'
+      : tasksTab === 'pendientes'
+        ? 'Pendientes'
+        : tasksTab === 'vencidas'
+          ? 'Vencidas'
+          : 'Completadas';
+
   // Función para determinar el estado visual de una tarea
   const getEstadoTarea = (assignment: Assignment) => {
-    const subs = assignment.submissions || assignment.entregas || [];
-    const mySub = viewingStudentId
-      ? subs.find((e: { estudianteId?: string }) => e.estudianteId === viewingStudentId)
-      : undefined;
-    const estado = assignment.estado || (mySub
-      ? (mySub.calificacion !== undefined ? 'calificada' : 'entregada')
-      : 'pendiente');
+    const estado = resolveStudentAssignmentEstado(assignment, viewingStudentId);
     const fechaEntrega = new Date(assignment.fechaEntrega);
 
     if (estado === 'calificada') {
@@ -261,16 +302,34 @@ export default function StudentTasksPage() {
       groups[m].push(a);
     });
 
+    const taskCountUnderlineClass =
+      tabKey === 'todas'
+        ? 'border-cyan-400'
+        : tabKey === 'pendientes'
+          ? 'border-blue-400'
+          : tabKey === 'vencidas'
+            ? 'border-red-400'
+            : 'border-green-400';
+
     return (
       <div className="space-y-3">
         {Object.entries(groups)
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([materia, tareas]) => {
             const groupKey = `${tabKey}_${materia}`;
-            const isOpen = expandedGroups[groupKey] !== false;
+            const isOpen = expandedGroups[groupKey] === true;
             const limit = visibleCounts[groupKey] ?? 5;
             const shown = tareas.slice(0, limit);
             const remaining = tareas.length - limit;
+            const isPendientesOverload =
+              tabKey === 'pendientes' && tareas.length > 3;
+
+            const triggerBase =
+              'w-full flex items-center justify-between p-3 rounded-lg border transition text-left';
+            const triggerNormal =
+              'bg-white/[0.04] border-white/10 hover:bg-white/[0.07]';
+            const triggerAlert =
+              'bg-red-500/15 border-red-500/45 hover:bg-red-500/25 shadow-[0_0_0_1px_rgba(239,68,68,0.2)]';
 
             return (
               <Collapsible
@@ -281,16 +340,42 @@ export default function StudentTasksPage() {
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full flex items-center justify-between p-3 rounded-lg bg-white/[0.04] border border-white/10 hover:bg-white/[0.07] transition text-left"
+                    className={`${triggerBase} ${isPendientesOverload ? triggerAlert : triggerNormal}`}
                   >
-                    <span className="font-medium text-white text-sm">{materia}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-white/40">
+                    <span className="flex items-center gap-2 min-w-0">
+                      {isPendientesOverload && (
+                        <AlertTriangle
+                          className="w-4 h-4 shrink-0 text-red-400"
+                          aria-hidden
+                        />
+                      )}
+                      <span
+                        className={`font-medium text-sm truncate ${
+                          isPendientesOverload ? 'text-red-100' : 'text-white'
+                        }`}
+                      >
+                        {materia}
+                      </span>
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className={`text-xs inline-block pb-0.5 border-b-2 ${taskCountUnderlineClass} ${
+                          isPendientesOverload ? 'text-red-300/90' : 'text-white/40'
+                        }`}
+                      >
                         {tareas.length} tarea{tareas.length !== 1 ? 's' : ''}
                       </span>
                       {isOpen
-                        ? <ChevronDown className="w-4 h-4 text-white/40" />
-                        : <ChevronRight className="w-4 h-4 text-white/40" />}
+                        ? (
+                            <ChevronDown
+                              className={`w-4 h-4 ${isPendientesOverload ? 'text-red-300/80' : 'text-white/40'}`}
+                            />
+                          )
+                        : (
+                            <ChevronRight
+                              className={`w-4 h-4 ${isPendientesOverload ? 'text-red-300/80' : 'text-white/40'}`}
+                            />
+                          )}
                     </div>
                   </button>
                 </CollapsibleTrigger>
@@ -322,8 +407,8 @@ export default function StudentTasksPage() {
       <div className="flex-1 overflow-y-auto p-6 md:p-10">
         <div className="max-w-7xl mx-auto">
           <NavBackButton to="/parent/aprendizaje" label="Aprendizaje del hijo/a" />
-          <h1 className="text-2xl font-bold text-white mt-4 mb-2 font-['Poppins']">Tareas</h1>
-          <p className="text-white/60">Vincula un estudiante en tu perfil para ver sus tareas.</p>
+          <h1 className="text-2xl font-bold text-white mt-4 mb-2 font-['Poppins']">Asignaciones</h1>
+          <p className="text-white/60">Vincula un estudiante en tu perfil para ver sus asignaciones.</p>
         </div>
       </div>
     );
@@ -333,7 +418,7 @@ export default function StudentTasksPage() {
     return (
       <div className="flex-1 overflow-y-auto p-6 md:p-10">
         <div className="max-w-7xl mx-auto">
-          <div className="text-white">Cargando tareas...</div>
+          <div className="text-white">Cargando asignaciones...</div>
         </div>
       </div>
     );
@@ -349,12 +434,12 @@ export default function StudentTasksPage() {
         <div className="mb-8">
           <NavBackButton to={backTo} label={backLabel} />
           <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">
-            {isPadre ? `Tareas de ${nombreHijo}` : 'Mis Tareas'}
+            {isPadre ? `Asignaciones de ${nombreHijo}` : 'Mis Asignaciones'}
           </h1>
           <p className="text-white/60">
             {isPadre
-              ? 'Puedes revisar tareas, fechas, estado y calificaciones. Los archivos adjuntos no están disponibles por privacidad.'
-              : 'Gestiona todas tus tareas asignadas'}
+              ? 'Puedes revisar asignaciones, fechas, estado y calificaciones. Los archivos adjuntos no están disponibles por privacidad.'
+              : 'Gestiona todas tus asignaciones'}
           </p>
         </div>
 
@@ -413,8 +498,18 @@ export default function StudentTasksPage() {
           )}
 
           {/* Tabs */}
-          <Tabs defaultValue="pendientes" className="w-full">
-            <TabsList className="bg-transparent border-b border-white/10 mb-4 rounded-none p-0 gap-4">
+          <Tabs
+            value={tasksTab}
+            onValueChange={v => setTasksTab(v as TasksTab)}
+            className="w-full"
+          >
+            <TabsList className="bg-transparent border-b border-white/10 mb-4 rounded-none p-0 gap-4 flex-wrap">
+              <TabsTrigger
+                value="todas"
+                className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-cyan-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
+              >
+                Todas ({tareasTodasFiltradas.length})
+              </TabsTrigger>
               <TabsTrigger
                 value="pendientes"
                 className="rounded-none border-b-2 border-transparent pb-2 data-[state=active]:border-blue-400 data-[state=active]:bg-transparent data-[state=active]:text-white text-white/50"
@@ -434,6 +529,16 @@ export default function StudentTasksPage() {
                 Completadas ({tareasCompletadasFiltradas.length})
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="todas">
+              {renderMateriaGroups(
+                tareasTodasFiltradas.sort(
+                  (a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime()
+                ),
+                'todas',
+                materiaFiltro ? `No hay tareas en ${materiaFiltro}` : 'No hay tareas asignadas.'
+              )}
+            </TabsContent>
 
             <TabsContent value="pendientes">
               {renderMateriaGroups(
@@ -482,25 +587,54 @@ export default function StudentTasksPage() {
           </Tabs>
         </div>
 
-        {/* Calendario — sección inferior, ancho completo */}
+        {/* Calendario — misma pestaña y materia que arriba */}
         <div className="rounded-xl bg-white/[0.03] border border-white/10 p-6">
-          {selectedDay && (
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-sm text-white/60">
-                Filtrando tareas del{' '}
-                {selectedDay.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </span>
-              <button
-                type="button"
-                className="text-xs text-white/40 hover:text-white/70 transition"
-                onClick={() => setSelectedDay(null)}
-              >
-                Quitar filtro de día
-              </button>
+          {(materiaFiltro || selectedDay || tasksTab !== 'todas') && (
+            <div className="space-y-2 mb-4">
+              {(materiaFiltro || tasksTab !== 'todas') && (
+                <p className="text-sm text-white/60">
+                  Calendario:{' '}
+                  <span
+                    className={
+                      tasksTab === 'todas'
+                        ? 'text-cyan-400 font-medium'
+                        : tasksTab === 'vencidas'
+                          ? 'text-red-400 font-medium'
+                          : tasksTab === 'completadas'
+                            ? 'text-green-400 font-medium'
+                            : 'text-white/85 font-medium'
+                    }
+                  >
+                    {tasksTabLabel}
+                  </span>
+                  {materiaFiltro && (
+                    <>
+                      {' · '}
+                      <span className="text-blue-400 font-medium">{materiaFiltro}</span>
+                    </>
+                  )}
+                </p>
+              )}
+              {selectedDay && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-white/60">
+                    Filtrando tareas del{' '}
+                    {selectedDay.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-white/40 hover:text-white/70 transition shrink-0"
+                    onClick={() => setSelectedDay(null)}
+                  >
+                    Quitar filtro de día
+                  </button>
+                </div>
+              )}
             </div>
           )}
           <Calendar
-            assignments={assignments as unknown as CalendarAssignment[]}
+            assignments={assignmentsForCalendar as CalendarAssignment[]}
+            viewingStudentId={viewingStudentId}
             onDayBubbleClick={handleDayBubbleClick}
             onDayClick={a => setLocation(`/assignment/${a._id}${assignmentFromQuery}`)}
             variant="student"

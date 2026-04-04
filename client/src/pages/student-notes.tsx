@@ -20,6 +20,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Cell, Labe
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { getGradeLevel, GRADE_COLORS } from '@/lib/gradeUtils';
 import {
   weightedGradeWithinLogro,
   courseGradeFromOutcomes,
@@ -115,9 +116,6 @@ interface GradingPack {
   nested: LogroBloqueApi[];
   plano: LogroItem[];
 }
-
-/** Colores distintos por materia (icono y línea en el gráfico). */
-const SUBJECT_COLORS = ['#00c8ff', '#1e3cff', '#ffd700', '#10b981', '#f43f5e', '#8b5cf6', '#f97316', '#06b6d4', '#84cc16', '#ec4899'];
 
 function promedioForScoreMap(
   allNotas: NotaReal[],
@@ -325,8 +323,7 @@ export default function StudentNotesPage() {
     const byId = new Map<string, MateriaConNotas>();
     for (const m of materiasConNotas) byId.set(m._id, m);
     const coursesToShow = allCourses.length > 0 ? allCourses : materiasConNotas.map((m) => ({ _id: m._id, nombre: m.nombre }));
-    return coursesToShow.map((course, index) => {
-      const color = SUBJECT_COLORS[index % SUBJECT_COLORS.length];
+    return coursesToShow.map((course) => {
       const m = byId.get(course._id);
       if (m) {
         // Importante: NO precargar logros para todas las materias aquí.
@@ -334,8 +331,8 @@ export default function StudentNotesPage() {
         // Para la lista general y el gráfico, calculamos con las notas disponibles; los pesos (logros)
         // se consultan on-demand al abrir el detalle de una materia.
         const { promedioFinal, ultimaNota } = computeWeightedPromedioAndUltima(m, undefined);
-        const estado: SubjectGrade['estado'] =
-          promedioFinal == null ? 'sin_notas' : promedioFinal >= 65 ? 'bueno' : 'bajo';
+        const estado = getGradeLevel(promedioFinal);
+        const colorAcento = GRADE_COLORS[estado].accent;
         return {
           _id: m._id,
           groupSubjectId: m.groupSubjectId ?? null,
@@ -344,7 +341,7 @@ export default function StudentNotesPage() {
           ultimaNota,
           estado,
           tendencia: m.tendencia ?? 'stable',
-          colorAcento: color,
+          colorAcento,
         };
       }
       return {
@@ -353,9 +350,9 @@ export default function StudentNotesPage() {
         nombre: course.nombre,
         promedio: null,
         ultimaNota: null,
-        estado: 'sin_notas',
-        tendencia: 'stable',
-        colorAcento: color,
+        estado: 'sin_notas' as const,
+        tendencia: 'stable' as const,
+        colorAcento: GRADE_COLORS['sin_notas'].accent,
       };
     });
   }, [allCourses, notesData?.materias]);
@@ -382,8 +379,7 @@ export default function StudentNotesPage() {
       pack?.nested
     );
     const ultimaNota = computedUltima;
-    const estado: SubjectGrade['estado'] =
-      computedFinal == null ? 'sin_notas' : computedFinal >= 65 ? 'bueno' : 'bajo';
+    const estado = getGradeLevel(computedFinal);
     const notas = selectedSubjectData.notas ?? [];
     const logrosList = pack?.plano ?? [];
     const hasWeightedLogros = logrosList.length > 0;
@@ -467,7 +463,7 @@ export default function StudentNotesPage() {
       ultimaNota,
       estado,
       tendencia: selectedSubjectData.tendencia ?? 'stable',
-      colorAcento: selectedSubjectData.colorAcento || '#00c8ff',
+      colorAcento: GRADE_COLORS[estado].accent,
       promedioFinal,
       profesorNombre: selectedSubjectData.profesorNombre ?? notas[0]?.profesorNombre ?? null,
       categorias,
@@ -482,18 +478,16 @@ export default function StudentNotesPage() {
     : 0;
 
   // Datos para el BarChart horizontal de comparativa de materias
-  const barData = useMemo(
-    () =>
-      [...subjects]
-        .filter((s) => s.promedio !== null)
-        .sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0))
-        .map((s) => ({
-          nombre: s.nombre.length > 20 ? s.nombre.slice(0, 19) + '\u2026' : s.nombre,
-          promedio: s.promedio,
-          fill: s.colorAcento ?? '#2563eb',
-        })),
-    [subjects]
-  );
+  const barData = useMemo(() => {
+    return [...subjects]
+      .filter((s) => s.promedio !== null)
+      .sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0))
+      .map((s) => ({
+        nombre: s.nombre.length > 20 ? s.nombre.slice(0, 19) + '\u2026' : s.nombre,
+        promedio: s.promedio,
+        fill: GRADE_COLORS[getGradeLevel(s.promedio)].accent,
+      }));
+  }, [subjects]);
 
   const getEstadoColor = (estado: string) => {
     switch (estado) {
@@ -674,6 +668,20 @@ export default function StudentNotesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 md:p-6">
+              {/* Leyenda de tiers */}
+              <div className="flex flex-wrap gap-3 mb-4">
+                {(['excelente', 'bueno', 'regular', 'bajo'] as const).map((level) => (
+                  <div key={level} className="flex items-center gap-1.5">
+                    <div
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ background: GRADE_COLORS[level].accent }}
+                    />
+                    <span className="text-xs text-white/50">
+                      {GRADE_COLORS[level].label}
+                    </span>
+                  </div>
+                ))}
+              </div>
               {barData.length > 0 ? (
                 <div style={{ width: '100%', height: Math.max(200, barData.length * 40 + 60) }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -753,84 +761,109 @@ export default function StudentNotesPage() {
 
           {/* KPI Strip */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-            {[
-              {
-                label: 'Promedio general',
-                value: subjectsWithGrades.length > 0
-                  ? (Math.round(promedioGeneral * 10) / 10).toFixed(1)
-                  : '—',
-              },
-              {
-                label: 'Mejor materia',
-                value: (() => {
-                  const best = [...subjects]
-                    .filter((s) => s.promedio !== null)
-                    .sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0))[0];
-                  if (!best) return '—';
-                  return best.nombre.length > 18 ? best.nombre.slice(0, 17) + '\u2026' : best.nombre;
-                })(),
-              },
-              {
-                label: 'Materias en curso',
-                value: `${subjects.length}`,
-              },
-            ].map((chip, i) => (
-              <div
-                key={i}
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: 12,
-                  padding: '12px 16px',
-                  flex: '1',
-                  minWidth: 140,
-                }}
-              >
-                <p
+            {(() => {
+              const generalNum = subjectsWithGrades.length > 0
+                ? Math.round(promedioGeneral * 10) / 10
+                : null;
+              const generalColor = generalNum === null
+                ? 'rgba(255,255,255,0.5)'
+                : GRADE_COLORS[getGradeLevel(generalNum)].accent;
+
+              const bestSubject = [...subjects]
+                .filter((s) => s.promedio !== null)
+                .sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0))[0];
+              const bestName = bestSubject
+                ? (bestSubject.nombre.length > 18 ? bestSubject.nombre.slice(0, 17) + '\u2026' : bestSubject.nombre)
+                : '—';
+
+              const worstSubject = [...subjects]
+                .filter((s) => s.promedio !== null)
+                .sort((a, b) => (a.promedio ?? 0) - (b.promedio ?? 0))[0];
+              const worstName = worstSubject
+                ? (worstSubject.nombre.length > 18 ? worstSubject.nombre.slice(0, 17) + '\u2026' : worstSubject.nombre)
+                : '—';
+
+              const chips = [
+                {
+                  label: 'Promedio general',
+                  value: generalNum !== null ? generalNum.toFixed(1) : '—',
+                  accentColor: generalColor,
+                  borderColor: `${generalColor}40`,
+                  bgColor: `${generalColor}10`,
+                  borderLeft: undefined as string | undefined,
+                },
+                {
+                  label: 'Mejor materia',
+                  value: bestName,
+                  accentColor: '#10b981',
+                  borderColor: 'rgba(16,185,129,0.25)',
+                  bgColor: 'rgba(16,185,129,0.06)',
+                  borderLeft: '3px solid #10b981',
+                },
+                {
+                  label: 'Peor materia',
+                  value: worstName,
+                  accentColor: '#ef4444',
+                  borderColor: 'rgba(239,68,68,0.25)',
+                  bgColor: 'rgba(239,68,68,0.06)',
+                  borderLeft: '3px solid #ef4444',
+                },
+              ];
+
+              return chips.map((chip, i) => (
+                <div
+                  key={i}
                   style={{
-                    fontSize: 11,
-                    color: 'rgba(255,255,255,0.5)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    marginBottom: 6,
+                    background: chip.bgColor,
+                    border: `1px solid ${chip.borderColor}`,
+                    borderLeft: chip.borderLeft ?? `1px solid ${chip.borderColor}`,
+                    borderRadius: 12,
+                    padding: '12px 16px',
+                    flex: '1',
+                    minWidth: 140,
                   }}
                 >
-                  {chip.label}
-                </p>
-                <p style={{ fontSize: 22, fontWeight: 600, color: 'white' }}>{chip.value}</p>
-              </div>
-            ))}
+                  <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                    {chip.label}
+                  </p>
+                  <p style={{ color: '#ffffff', fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>
+                    {chip.value}
+                  </p>
+                </div>
+              ));
+            })()}
           </div>
 
           {/* Lista de Materias */}
+          <div className="mb-4">
+            <h2 className="text-xs font-semibold text-white/35 uppercase tracking-widest">Tus materias</h2>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {subjects.map((subject) => (
+            {subjects.map((subject) => {
+              const tier = GRADE_COLORS[subject.estado];
+              return (
               <Card
                 key={subject._id}
-                className="bg-white/5 border-white/10 backdrop-blur-md hover-elevate cursor-pointer group"
+                className="hover-elevate cursor-pointer group overflow-hidden"
                 style={{
-                  borderLeft:
-                    subject.promedio == null
-                      ? undefined
-                      : subject.promedio >= 85
-                      ? '3px solid #10b981'
-                      : subject.promedio >= 70
-                      ? '3px solid #2563eb'
-                      : subject.promedio >= 60
-                      ? '3px solid #f59e0b'
-                      : '3px solid #ef4444',
+                  background: `radial-gradient(circle at 0% 0%, ${tier.accent}14 0%, rgba(255,255,255,0.02) 55%)`,
+                  border: `1px solid ${tier.accent}35`,
+                  borderLeft: `4px solid ${tier.accent}`,
                 }}
                 onClick={() => setSelectedSubject(subject._id)}
               >
                 <CardHeader className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div
-                      className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                      style={{ backgroundColor: subject.colorAcento || '#00c8ff' }}
+                      className="w-20 h-20 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-105"
+                      style={{
+                        backgroundColor: tier.bg,
+                        border: `2px solid ${tier.accent}50`,
+                        boxShadow: `0 0 18px ${tier.accent}35`,
+                      }}
                     >
-                      <BookOpen className="w-8 h-8 text-white" />
+                      <BookOpen className="w-9 h-9 text-white" />
                     </div>
-                    {getTendenciaIcon(subject.tendencia)}
                   </div>
                   <CardTitle className="text-white text-2xl font-bold mb-2">
                     {subject.nombre}
@@ -838,26 +871,32 @@ export default function StudentNotesPage() {
                   <div className="flex items-center gap-2 mb-3">
                     {subject.promedio !== null ? (
                       <>
-                        <span className="text-3xl font-bold text-white">{Math.round(subject.promedio)}</span>
-                        <span className="text-white/50">/ 100</span>
+                        <span className="text-3xl font-bold text-white">
+                          {Math.round(subject.promedio)}
+                        </span>
+                        <span className="text-white/70">/ 100</span>
                       </>
                     ) : (
-                      <span className="text-sm text-white/40">Sin calificar</span>
+                      <span className="text-sm text-white/60">Sin calificar</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mb-2">
-                    <Badge className={getEstadoColor(subject.estado)}>
-                      {subject.estado === 'sin_notas' ? '—' : subject.estado.charAt(0).toUpperCase() + subject.estado.slice(1)}
+                    <Badge variant="outline" className={`${tier.badgeClass} flex items-center gap-1`}>
+                      {tier.arrow && <span>{tier.arrow}</span>}
+                      {tier.label}
                     </Badge>
                   </div>
-                  <p className="text-sm text-white/60">
+                  <p className="text-sm text-white/70">
                     Última nota: <span className="text-white font-semibold">{subject.ultimaNota !== null ? Math.round(subject.ultimaNota) : '—'}</span>
                   </p>
                 </CardHeader>
                 <CardContent className="p-6 pt-0">
                   <Button
                     variant="outline"
-                    className="w-full border-[#3B82F6]/50 text-[#00c8ff] hover:bg-[#3B82F6]/10 hover:border-[#3B82F6]"
+                    className="w-full text-white hover:bg-white/10 transition-colors"
+                    style={{
+                      borderColor: `${tier.accent}60`,
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       setLocation(analyticsHref(subject.groupSubjectId, subject._id));
@@ -868,7 +907,8 @@ export default function StudentNotesPage() {
                   </Button>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -896,7 +936,7 @@ export default function StudentNotesPage() {
                 </h1>
                 <Badge className={getEstadoColor('sin_notas')}>—</Badge>
               </div>
-              <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ backgroundColor: subjectCard?.colorAcento || '#00c8ff' }}>
+              <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ backgroundColor: subjectCard?.colorAcento }}>
                 <BookOpen className="w-10 h-10 text-white" />
               </div>
             </div>
@@ -928,7 +968,7 @@ export default function StudentNotesPage() {
     const detailChartConfig = {
       promedio: {
         label: 'Promedio',
-        color: subjectDetail.colorAcento || '#00c8ff'
+        color: subjectDetail.colorAcento
       }
     };
 
@@ -965,7 +1005,7 @@ export default function StudentNotesPage() {
               </div>
               <div
                 className="w-20 h-20 rounded-2xl flex items-center justify-center"
-                style={{ backgroundColor: subjectDetail.colorAcento || '#00c8ff' }}
+                style={{ backgroundColor: subjectDetail.colorAcento }}
               >
                 <BookOpen className="w-10 h-10 text-white" />
               </div>
@@ -1045,14 +1085,14 @@ export default function StudentNotesPage() {
                           />
                           <ChartTooltip
                             content={<ChartTooltipContent />}
-                            cursor={{ stroke: '#00c8ff', strokeWidth: 1 }}
+                            cursor={{ stroke: subjectDetail.colorAcento, strokeWidth: 1 }}
                           />
                           <Line
                             type="monotone"
                             dataKey="promedio"
-                            stroke="#00c8ff"
+                            stroke={subjectDetail.colorAcento}
                             strokeWidth={3}
-                            dot={{ fill: '#00c8ff', r: 6 }}
+                            dot={{ fill: subjectDetail.colorAcento, r: 6 }}
                           />
                         </LineChart>
                       </ChartContainer>
@@ -1088,21 +1128,21 @@ export default function StudentNotesPage() {
                     promedioLogro == null
                       ? null
                       : promedioLogro >= 85
-                      ? 'excelente'
-                      : promedioLogro >= 70
-                      ? 'bueno'
-                      : promedioLogro >= 60
-                      ? 'regular'
-                      : 'bajo';
+                        ? 'excelente'
+                        : promedioLogro >= 70
+                          ? 'bueno'
+                          : promedioLogro >= 60
+                            ? 'regular'
+                            : 'bajo';
 
                   const notaColor = (n: number | null) =>
                     n == null
                       ? 'rgba(255,255,255,0.4)'
                       : n >= 75
-                      ? '#10b981'
-                      : n >= 65
-                      ? '#f59e0b'
-                      : '#ef4444';
+                        ? '#10b981'
+                        : n >= 65
+                          ? '#f59e0b'
+                          : '#ef4444';
 
                   return (
                     <div
@@ -1235,8 +1275,8 @@ export default function StudentNotesPage() {
                                   {cat?.promedio != null
                                     ? `${(Math.round(cat.promedio * 10) / 10).toFixed(1)}/100`
                                     : !cat || cat.notas.length === 0
-                                    ? 'Sin actividades'
-                                    : '—'}
+                                      ? 'Sin actividades'
+                                      : '—'}
                                 </span>
                               </button>
 

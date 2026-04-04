@@ -10,10 +10,12 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { cn } from '@/lib/utils';
+import { getGroupSubjectColor } from '@/lib/courseColor';
 import {
   calendarColorKey,
   calendarDisplayLabel,
   getAssignmentCalendarLocalParts,
+  resolveStudentAssignmentEstado,
   type CalendarVariant,
 } from '@/lib/assignmentUtils';
 
@@ -35,6 +37,8 @@ export interface CalendarAssignment {
 
 interface CalendarProps {
   assignments: CalendarAssignment[];
+  /** Si se pasa (variant student), se deriva `estado` desde entregas para colorear celdas. */
+  viewingStudentId?: string;
   onDayClick?: (assignment: CalendarAssignment) => void;
   onEmptyDayClick?: (date: Date) => void;
   onDayBubbleClick?: (date: Date) => void;
@@ -42,24 +46,6 @@ interface CalendarProps {
   currentDate?: Date;
   onCurrentDateChange?: (d: Date) => void;
 }
-
-const MATERIA_PALETTE = [
-  '#1e3cff',
-  '#00c8ff',
-  '#ffd700',
-  '#f97316',
-  '#22c55e',
-  '#ef4444',
-  '#14b8a6',
-  '#a3e635',
-  '#06b6d4',
-  '#eab308',
-  '#002366',
-  '#f59e0b',
-];
-
-const getColorForMateriaIndex = (index: number): string =>
-  MATERIA_PALETTE[index % MATERIA_PALETTE.length];
 
 type DeliveryBucket =
   | 'future'
@@ -117,10 +103,10 @@ const BUCKET_STATUS_COLORS: Record<
   { border: string; text: string; dot: string; bg: string }
 > = {
   past_ok: {
-    border: 'rgba(34, 197, 94, 0.55)',
-    text: '#4ade80',
-    dot: '#22c55e',
-    bg: 'rgba(34, 197, 94, 0.08)',
+    border: 'rgba(59, 130, 246, 0.55)',
+    text: '#60a5fa',
+    dot: '#3b82f6',
+    bg: 'rgba(59, 130, 246, 0.08)',
   },
   past_late: {
     border: 'rgba(239, 68, 68, 0.55)',
@@ -129,16 +115,16 @@ const BUCKET_STATUS_COLORS: Record<
     bg: 'rgba(239, 68, 68, 0.08)',
   },
   due_today_pending: {
-    border: 'rgba(245, 158, 11, 0.65)',
-    text: '#fbbf24',
-    dot: '#f59e0b',
-    bg: 'rgba(245, 158, 11, 0.1)',
+    border: 'rgba(99, 102, 241, 0.6)',
+    text: '#818cf8',
+    dot: '#6366f1',
+    bg: 'rgba(99, 102, 241, 0.1)',
   },
   due_today_done: {
-    border: 'rgba(34, 197, 94, 0.55)',
-    text: '#4ade80',
-    dot: '#22c55e',
-    bg: 'rgba(34, 197, 94, 0.1)',
+    border: 'rgba(14, 165, 233, 0.55)',
+    text: '#38bdf8',
+    dot: '#0ea5e9',
+    bg: 'rgba(14, 165, 233, 0.1)',
   },
 };
 
@@ -155,6 +141,7 @@ function isStatusBucket(b: DeliveryBucket): b is Exclude<DeliveryBucket, 'future
 
 export function Calendar({
   assignments,
+  viewingStudentId,
   onDayClick,
   onEmptyDayClick,
   onDayBubbleClick,
@@ -174,9 +161,13 @@ export function Calendar({
   );
 
   const isStudent = variant === 'student';
-  const legendTitle = isStudent ? 'Leyenda de materias' : 'Leyenda de cursos';
-  const multipleLabel = isStudent ? 'Varias materias' : 'Varios cursos';
-
+  const effectiveAssignments = useMemo(() => {
+    if (!isStudent || !viewingStudentId) return assignments;
+    return assignments.map((a) => ({
+      ...a,
+      estado: resolveStudentAssignmentEstado(a, viewingStudentId),
+    }));
+  }, [assignments, isStudent, viewingStudentId]);
   const monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -193,25 +184,25 @@ export function Calendar({
 
   const tasksThisMonth = useMemo(() => {
     let n = 0;
-    for (const a of assignments) {
+    for (const a of effectiveAssignments) {
       const p = getAssignmentCalendarLocalParts(a.fechaEntrega);
       if (p && p.year === year && p.monthIndex === month) n++;
     }
     return n;
-  }, [assignments, year, month]);
+  }, [effectiveAssignments, year, month]);
 
   const uniqueKeys = useMemo(() => {
     const keys = new Set<string>();
-    assignments.forEach((a) => {
+    effectiveAssignments.forEach((a) => {
       const key = calendarColorKey(a, variant);
       if (key) keys.add(key);
     });
     return Array.from(keys).sort();
-  }, [assignments, variant]);
+  }, [effectiveAssignments, variant]);
 
   const keyToLabel = useMemo(() => {
     const map = new Map<string, string>();
-    assignments.forEach((a) => {
+    effectiveAssignments.forEach((a) => {
       const key = calendarColorKey(a, variant);
       const label = calendarDisplayLabel(a, variant);
       if (key && !map.has(key)) map.set(key, label);
@@ -220,18 +211,26 @@ export function Calendar({
       if (!map.has(key)) map.set(key, key);
     });
     return map;
-  }, [assignments, variant, uniqueKeys]);
+  }, [effectiveAssignments, variant, uniqueKeys]);
 
   const colorMap = useMemo(() => {
     const map = new Map<string, string>();
-    uniqueKeys.forEach((key, index) => {
-      map.set(key, getColorForMateriaIndex(index));
+    effectiveAssignments.forEach((assignment) => {
+      const key = calendarColorKey(assignment, variant);
+      if (!key || map.has(key)) return;
+      map.set(
+        key,
+        getGroupSubjectColor({
+          groupSubjectId: variant === 'student' ? assignment.subjectId : assignment.groupId,
+          fallbackId: key,
+        })
+      );
     });
     return map;
-  }, [uniqueKeys]);
+  }, [effectiveAssignments, variant]);
 
   const assignmentsByDay: Record<number, CalendarAssignment[]> = {};
-  assignments.forEach((assignment) => {
+  effectiveAssignments.forEach((assignment) => {
     const parts = getAssignmentCalendarLocalParts(assignment.fechaEntrega);
     if (!parts || parts.monthIndex !== month || parts.year !== year) return;
     const d = parts.day;
@@ -323,7 +322,7 @@ export function Calendar({
           </p>
         </div>
         {Array.from(assignmentsByKey.entries()).map(([key, keyAssignments]) => {
-          const color = colorMap.get(key) || MATERIA_PALETTE[0];
+          const color = colorMap.get(key) || getGroupSubjectColor({ fallbackId: key });
           const label = keyToLabel.get(key) || key;
           return (
             <div key={key} className="space-y-2">
@@ -400,12 +399,12 @@ export function Calendar({
     };
 
     if (!isStudent) {
-      const courseDots = Array.from(assignmentsByKey.keys()).map((key) => colorMap.get(key) || '#9ca3af');
+      const courseDots = Array.from(assignmentsByKey.keys()).map((key) => colorMap.get(key) || getGroupSubjectColor({ fallbackId: key }));
 
       // Caso 1: un solo curso (mostrar etiqueta, color del curso como “acento”)
       if (keyCount === 1) {
         const onlyKey = Array.from(assignmentsByKey.keys())[0];
-        const courseColor = colorMap.get(onlyKey) || '#1e3cff';
+        const courseColor = colorMap.get(onlyKey) || getGroupSubjectColor({ fallbackId: onlyKey });
         const label = keyToLabel.get(onlyKey) || onlyKey;
         const totalLabel = total === 1 ? label : `+${total} tareas`;
 
@@ -465,7 +464,7 @@ export function Calendar({
       const a = dayAssignments[0];
       const b = buckets[0] ?? 'no_delivery';
       const key = calendarColorKey(a, variant) || 'Sin materia';
-      const subjectColor = colorMap.get(key) || MATERIA_PALETTE[0];
+      const subjectColor = colorMap.get(key) || getGroupSubjectColor({ fallbackId: key });
       const label = keyToLabel.get(key) || calendarDisplayLabel(a, variant);
 
       if (b === 'future') {
@@ -539,7 +538,7 @@ export function Calendar({
 
     if (keyCount === 1 && total > 1) {
       const firstKey = Array.from(assignmentsByKey.keys())[0];
-      const subjectColor = colorMap.get(firstKey) || MATERIA_PALETTE[0];
+      const subjectColor = colorMap.get(firstKey) || getGroupSubjectColor({ fallbackId: firstKey });
       const merged = worstBucket(buckets);
 
       if (merged === 'future' && allFuture) {
@@ -564,7 +563,7 @@ export function Calendar({
       if (merged === 'future') {
         const dots = dayAssignments.map((a) => {
           const k = calendarColorKey(a, variant) || '';
-          return colorMap.get(k) || '#9ca3af';
+          return colorMap.get(k) || getGroupSubjectColor({ fallbackId: k });
         });
         pushDay(
           <>
@@ -629,11 +628,11 @@ export function Calendar({
       continue;
     }
 
-    const subjectDots = Array.from(assignmentsByKey.keys()).map((key) => colorMap.get(key) || '#9ca3af');
+    const subjectDots = Array.from(assignmentsByKey.keys()).map((key) => colorMap.get(key) || getGroupSubjectColor({ fallbackId: key }));
     const statusDots = dayAssignments.map((a) => {
       const bk = getDeliveryBucket(a) ?? 'no_delivery';
       const k = calendarColorKey(a, variant) || '';
-      const subCol = colorMap.get(k) || '#9ca3af';
+      const subCol = colorMap.get(k) || getGroupSubjectColor({ fallbackId: k });
       return dotForBucket(bk, subCol);
     });
 
@@ -662,14 +661,25 @@ export function Calendar({
 
     const dominant = worstBucket(buckets);
     const neutralBg = 'rgba(15, 23, 42, 0.55)';
-    const borderCol =
-      dominant === 'past_late'
-        ? BUCKET_STATUS_COLORS.past_late.border
-        : dominant === 'due_today_pending'
-          ? BUCKET_STATUS_COLORS.due_today_pending.border
-          : dominant === 'no_delivery' || allNoDelivery
-            ? NO_DELIVERY_STYLE.border
-            : 'rgba(255,255,255,0.12)';
+    let borderCol = 'rgba(255,255,255,0.12)';
+    let cellBg = neutralBg;
+    if (dominant === 'past_late') {
+      borderCol = BUCKET_STATUS_COLORS.past_late.border;
+      cellBg = BUCKET_STATUS_COLORS.past_late.bg;
+    } else if (dominant === 'due_today_pending') {
+      borderCol = BUCKET_STATUS_COLORS.due_today_pending.border;
+      cellBg = BUCKET_STATUS_COLORS.due_today_pending.bg;
+    } else if (dominant === 'past_ok' || dominant === 'due_today_done') {
+      const st =
+        dominant === 'due_today_done'
+          ? BUCKET_STATUS_COLORS.due_today_done
+          : BUCKET_STATUS_COLORS.past_ok;
+      borderCol = st.border;
+      cellBg = st.bg;
+    } else if (dominant === 'no_delivery' || allNoDelivery) {
+      borderCol = NO_DELIVERY_STYLE.border;
+      cellBg = NO_DELIVERY_STYLE.bg;
+    }
 
     pushDay(
       <>
@@ -682,7 +692,7 @@ export function Calendar({
             <span key={i} className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/20" style={{ backgroundColor: c }} />
           ))}
         </div>
-        <div className="absolute inset-0 z-0" style={{ background: neutralBg }} />
+        <div className="absolute inset-0 z-0" style={{ background: cellBg }} />
       </>,
       `calendar-day-${day}`,
       undefined,
@@ -721,30 +731,6 @@ export function Calendar({
       <p className="text-sm text-white/60 mb-5">
         {tasksThisMonth} {tasksThisMonth === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes
       </p>
-
-      {uniqueKeys.length > 0 && (
-        <div className="mb-5 p-3 sm:p-4 rounded-2xl bg-white/[0.06] border border-white/10 backdrop-blur-md">
-          <p className="text-xs font-semibold text-white/55 uppercase tracking-wider mb-2.5">{legendTitle}</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {uniqueKeys.map((key) => {
-              const color = colorMap.get(key) || '#1e3cff';
-              const label = keyToLabel.get(key) || key;
-              return (
-                <div key={key} className="flex items-center gap-2">
-                  <div className="w-3.5 h-3.5 rounded-full flex-shrink-0 border border-white/15" style={{ backgroundColor: color }} />
-                  <span className="text-xs text-white/85 font-medium">{label}</span>
-                </div>
-              );
-            })}
-            {uniqueKeys.length > 1 && (
-              <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 rounded-full flex-shrink-0 bg-gray-500 border border-white/15" />
-                <span className="text-xs text-white/85 font-medium">{multipleLabel}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">
         {dayNames.map((d) => (

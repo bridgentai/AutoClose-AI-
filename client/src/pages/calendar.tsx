@@ -116,7 +116,12 @@ export default function CalendarPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2 pb-6">
-            <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
+            <Calendar
+              assignments={assignments}
+              viewingStudentId={isPadre ? primerHijoId : user?.id}
+              onDayClick={handleDayClick}
+              variant="student"
+            />
           </CardContent>
         </Card>
 

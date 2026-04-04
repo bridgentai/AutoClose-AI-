@@ -3,6 +3,10 @@
     "browser": {
       "command": "npx",
       "args": ["-y", "@browsermcp/mcp@latest"]
+    },
+    "neon": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@latest", "https://mcp.neon.tech/mcp"]
     }
   }
 }

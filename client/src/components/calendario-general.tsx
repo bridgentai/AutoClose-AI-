@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { getGroupSubjectColor } from '@/lib/courseColor';
 import {
   HoverCard,
   HoverCardContent,
@@ -40,20 +41,6 @@ interface CalendarEvent {
 }
 
 type ViewMode = 'month' | 'week' | 'day';
-
-// Paleta de colores para cursos (si no tienen colorAcento)
-const DEFAULT_COLORS = [
-  '#1e3cff', // Purple Core
-  '#3b82f6', // Blue
-  '#10b981', // Green
-  '#f59e0b', // Amber
-  '#ef4444', // Red
-  '#8b5cf6', // Violet
-  '#06b6d4', // Cyan
-  '#f97316', // Orange
-  '#ec4899', // Pink
-  '#14b8a6', // Teal
-];
 
 const INSTITUTIONAL_COLOR = '#002366'; // Purple Deep para eventos institucionales
 
@@ -88,8 +75,15 @@ export function CalendarioGeneral() {
   // Crear mapa de colores por curso
   const courseColorMap = useMemo(() => {
     const map = new Map<string, string>();
-    courses.forEach((course, index) => {
-      map.set(course._id, course.colorAcento || DEFAULT_COLORS[index % DEFAULT_COLORS.length]);
+    courses.forEach((course) => {
+      map.set(
+        course._id,
+        getGroupSubjectColor({
+          groupSubjectId: course._id,
+          fallbackId: course._id,
+          colorAcento: course.colorAcento,
+        })
+      );
     });
     return map;
   }, [courses]);
@@ -97,8 +91,15 @@ export function CalendarioGeneral() {
   // Crear mapa de colores por nombre de curso (para tareas sin courseId)
   const courseNameColorMap = useMemo(() => {
     const map = new Map<string, string>();
-    courses.forEach((course, index) => {
-      map.set(course.nombre.toLowerCase(), course.colorAcento || DEFAULT_COLORS[index % DEFAULT_COLORS.length]);
+    courses.forEach((course) => {
+      map.set(
+        course.nombre.toLowerCase(),
+        getGroupSubjectColor({
+          groupSubjectId: course._id,
+          fallbackId: course._id,
+          colorAcento: course.colorAcento,
+        })
+      );
     });
     return map;
   }, [courses]);
@@ -114,7 +115,7 @@ export function CalendarioGeneral() {
       return courseNameColorMap.get(courseName)!;
     }
     // Color por defecto
-    return DEFAULT_COLORS[0];
+    return getGroupSubjectColor({});
   };
 
   // Eventos institucionales (placeholder - por ahora vacío)
@@ -123,7 +124,7 @@ export function CalendarioGeneral() {
   // Agrupar tareas y eventos por día
   const eventsByDay = useMemo(() => {
     const map = new Map<number, { assignments: Assignment[]; events: CalendarEvent[] }>();
-    
+
     assignments.forEach((assignment) => {
       const parts = getAssignmentCalendarLocalParts(assignment.fechaEntrega);
       if (!parts || parts.monthIndex + 1 !== currentMonth || parts.year !== currentYear) return;
@@ -186,7 +187,7 @@ export function CalendarioGeneral() {
   // Renderizar vista de mes
   const renderMonthView = () => {
     const calendarDays = [];
-    
+
     // Días vacíos antes del primer día del mes
     for (let i = 0; i < startingDayOfWeek; i++) {
       calendarDays.push(
@@ -240,7 +241,7 @@ export function CalendarioGeneral() {
                 </div>
               </button>
             </HoverCardTrigger>
-            <HoverCardContent 
+            <HoverCardContent
               className="w-80 bg-black/90 border-[#1e3cff]/30 backdrop-blur-lg max-h-96 overflow-y-auto"
             >
               <div className="space-y-3">
@@ -250,8 +251,8 @@ export function CalendarioGeneral() {
                 {dayEvents.assignments.map((assignment) => {
                   const color = getAssignmentColor(assignment);
                   return (
-                    <div 
-                      key={assignment._id} 
+                    <div
+                      key={assignment._id}
                       className="border-l-4 pl-3 py-1"
                       style={{ borderColor: color }}
                     >
@@ -266,8 +267,8 @@ export function CalendarioGeneral() {
                   );
                 })}
                 {dayEvents.events.map((event) => (
-                  <div 
-                    key={event._id} 
+                  <div
+                    key={event._id}
                     className="border-l-4 pl-3 py-1"
                     style={{ borderColor: INSTITUTIONAL_COLOR }}
                   >
@@ -469,8 +470,8 @@ export function CalendarioGeneral() {
                   onClick={() => setViewMode('month')}
                   className={cn(
                     "h-8 px-3 text-xs",
-                    viewMode === 'month' 
-                      ? "bg-[#1e3cff] text-white" 
+                    viewMode === 'month'
+                      ? "bg-[#1e3cff] text-white"
                       : "text-white/70 hover:text-white hover:bg-white/10"
                   )}
                 >
@@ -482,8 +483,8 @@ export function CalendarioGeneral() {
                   onClick={() => setViewMode('week')}
                   className={cn(
                     "h-8 px-3 text-xs",
-                    viewMode === 'week' 
-                      ? "bg-[#1e3cff] text-white" 
+                    viewMode === 'week'
+                      ? "bg-[#1e3cff] text-white"
                       : "text-white/70 hover:text-white hover:bg-white/10"
                   )}
                 >
@@ -495,8 +496,8 @@ export function CalendarioGeneral() {
                   onClick={() => setViewMode('day')}
                   className={cn(
                     "h-8 px-3 text-xs",
-                    viewMode === 'day' 
-                      ? "bg-[#1e3cff] text-white" 
+                    viewMode === 'day'
+                      ? "bg-[#1e3cff] text-white"
                       : "text-white/70 hover:text-white hover:bg-white/10"
                   )}
                 >
@@ -562,7 +563,11 @@ export function CalendarioGeneral() {
                     </p>
                     <div className="space-y-2">
                       {courses.map((course) => {
-                        const color = course.colorAcento || DEFAULT_COLORS[courses.indexOf(course) % DEFAULT_COLORS.length];
+                        const color = getGroupSubjectColor({
+                          groupSubjectId: course._id,
+                          fallbackId: course._id,
+                          colorAcento: course.colorAcento,
+                        });
                         return (
                           <div key={course._id} className="flex items-center gap-2">
                             <div

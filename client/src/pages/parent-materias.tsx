@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { NavBackButton } from '@/components/nav-back-button';
-import { generateCourseColor } from '@/lib/courseColor';
+import { getGroupSubjectColor } from '@/lib/courseColor';
 
 interface Professor {
   _id: string;
@@ -112,7 +112,11 @@ export default function ParentMateriasPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {courses.map((course) => {
               const primaryProfessor = course.profesorIds?.[0]?.nombre || 'No asignado';
-              const displayColor = course.colorAcento || generateCourseColor(course._id);
+              const displayColor = getGroupSubjectColor({
+                groupSubjectId: course._id,
+                fallbackId: course._id,
+                colorAcento: course.colorAcento,
+              });
               const showEmoji = course.icono && course.icono.trim().length > 0;
               return (
                 <Card

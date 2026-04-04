@@ -22,12 +22,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getGroupSubjectColor } from '@/lib/courseColor';
 import {
-  weightedGradeWithinLogro,
-  courseWeightedFromLogros,
-  courseGradeFromOutcomes,
-  hasRecordedScore,
-  type OutcomeGradeNode,
+    weightedGradeWithinLogro,
+    courseWeightedFromLogros,
+    courseGradeFromOutcomes,
+    hasRecordedScore,
+    type OutcomeGradeNode,
 } from '@shared/weightedGrades';
 import {
     buildLogroBloquesForSelect,
@@ -1070,22 +1071,22 @@ export default function CourseDetailPage() {
                 <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                                    <Breadcrumb
-                                        items={[
-                                            { label: 'Dashboard', href: '/dashboard' },
-                                            ...(isProfessor ? [{ label: 'Academia', href: '/profesor/academia' }] : []),
-                                            { label: coursesHomeLabel, href: coursesHomeHref },
-                                            ...(subjects.length > 1
-                                                ? [
-                                                      {
-                                                          label: `Grupo ${groupDisplayName}`,
-                                                          href: `/course-detail/${cursoId}`,
-                                                      },
-                                                      { label: activeSubjectNombre || 'Materia' },
-                                                  ]
-                                                : [{ label: `Grupo ${groupDisplayName}` }]),
-                                        ]}
-                                    />
+                            <Breadcrumb
+                                items={[
+                                    { label: 'Dashboard', href: '/dashboard' },
+                                    ...(isProfessor ? [{ label: 'Academia', href: '/profesor/academia' }] : []),
+                                    { label: coursesHomeLabel, href: coursesHomeHref },
+                                    ...(subjects.length > 1
+                                        ? [
+                                            {
+                                                label: `Grupo ${groupDisplayName}`,
+                                                href: `/course-detail/${cursoId}`,
+                                            },
+                                            { label: activeSubjectNombre || 'Materia' },
+                                        ]
+                                        : [{ label: `Grupo ${groupDisplayName}` }]),
+                                ]}
+                            />
                         </div>
                         <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 font-['Poppins'] break-words mt-2">
                             {activeSubjectNombre ? (
@@ -1288,283 +1289,283 @@ export default function CourseDetailPage() {
                     </div>
 
                     {showAssignmentForm && (
-                    <Card className="bg-[#0a0a2a]/80 border border-white/10 backdrop-blur-md mb-8 rounded-[14px] shadow-xl transition-colors duration-150 ease-in-out">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva asignación</CardTitle>
-                            <p className="text-white/50 text-sm mt-0.5">Actividad para el curso (con o sin entrega de los estudiantes)</p>
-                        </CardHeader>
-                        <CardContent className="pt-4">
-                            {assignmentCreationPhase === 'choose-delivery' ? (
-                                <div className="space-y-4">
-                                    <p className="text-white/80 mb-2 font-medium">¿Los estudiantes deben entregar esta actividad?</p>
-                                    <p className="text-white/50 text-sm mb-4">
-                                        Si eliges <strong className="text-white/80">No</strong>, la tarea aparece en el calendario como cualquier otra, pero no podrán subir entrega ni se calificará por entrega.
-                                    </p>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <Button
-                                            type="button"
-                                            onClick={() => {
-                                                setAssignmentDeliveryMode('evo');
-                                                setAssignmentCreationPhase('form');
-                                            }}
-                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/25 to-[#002366]/25 border border-[#1e3cff]/50 hover:from-[#1e3cff]/35 hover:to-[#002366]/35 rounded-[12px] transition-all duration-150 ease-in-out"
-                                        >
-                                            <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
-                                            <span className="text-white font-semibold">Sí requiere entrega en Evo</span>
-                                            <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">Los estudiantes envían archivos o texto y se puede calificar la entrega.</span>
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            onClick={() => {
-                                                setAssignmentDeliveryMode('clase');
-                                                setAssignmentCreationPhase('form');
-                                            }}
-                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-white/10 to-white/5 border border-white/20 hover:bg-white/10 rounded-[12px] transition-all duration-150 ease-in-out"
-                                        >
-                                            <FileText className="w-8 h-8 text-white/80" />
-                                            <span className="text-white font-semibold">Entrega en Clase</span>
-                                            <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">No se sube en la plataforma; el docente puede calificar en clase.</span>
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            onClick={() => {
-                                                setAssignmentDeliveryMode('sin-entrega');
-                                                setAssignmentCreationPhase('form');
-                                            }}
-                                            className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-white/10 to-white/5 border border-white/20 hover:bg-white/10 rounded-[12px] transition-all duration-150 ease-in-out"
-                                        >
-                                            <FileText className="w-8 h-8 text-white/80" />
-                                            <span className="text-white font-semibold">No requiere entrega</span>
-                                            <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">Solo aviso o actividad informativa; sin entrega ni calificación.</span>
-                                        </Button>
-                                    </div>
-                                </div>
-                            ) : assignmentCreationPhase === 'form' ? (
-                                <>
-                                    <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 rounded-[10px]">
-                                                Asignación
-                                            </Badge>
-                                            <Badge
-                                                className={requiresStudentDelivery
-                                                    ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
-                                                    : 'bg-white/10 text-white/80 border-white/25'}
+                        <Card className="bg-[#0a0a2a]/80 border border-white/10 backdrop-blur-md mb-8 rounded-[14px] shadow-xl transition-colors duration-150 ease-in-out">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-white text-xl font-semibold font-['Poppins']">Nueva asignación</CardTitle>
+                                <p className="text-white/50 text-sm mt-0.5">Actividad para el curso (con o sin entrega de los estudiantes)</p>
+                            </CardHeader>
+                            <CardContent className="pt-4">
+                                {assignmentCreationPhase === 'choose-delivery' ? (
+                                    <div className="space-y-4">
+                                        <p className="text-white/80 mb-2 font-medium">¿Los estudiantes deben entregar esta actividad?</p>
+                                        <p className="text-white/50 text-sm mb-4">
+                                            Si eliges <strong className="text-white/80">No</strong>, la tarea aparece en el calendario como cualquier otra, pero no podrán subir entrega ni se calificará por entrega.
+                                        </p>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <Button
+                                                type="button"
+                                                onClick={() => {
+                                                    setAssignmentDeliveryMode('evo');
+                                                    setAssignmentCreationPhase('form');
+                                                }}
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1e3cff]/25 to-[#002366]/25 border border-[#1e3cff]/50 hover:from-[#1e3cff]/35 hover:to-[#002366]/35 rounded-[12px] transition-all duration-150 ease-in-out"
                                             >
-                                                {assignmentDeliveryMode === 'evo'
-                                                    ? 'Con entrega en Evo'
-                                                    : assignmentDeliveryMode === 'clase'
-                                                        ? 'Entrega en clase'
-                                                        : 'Sin entrega'}
-                                            </Badge>
+                                                <ClipboardList className="w-8 h-8 text-[#00c8ff]" />
+                                                <span className="text-white font-semibold">Sí requiere entrega en Evo</span>
+                                                <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">Los estudiantes envían archivos o texto y se puede calificar la entrega.</span>
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                onClick={() => {
+                                                    setAssignmentDeliveryMode('clase');
+                                                    setAssignmentCreationPhase('form');
+                                                }}
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-white/10 to-white/5 border border-white/20 hover:bg-white/10 rounded-[12px] transition-all duration-150 ease-in-out"
+                                            >
+                                                <FileText className="w-8 h-8 text-white/80" />
+                                                <span className="text-white font-semibold">Entrega en Clase</span>
+                                                <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">No se sube en la plataforma; el docente puede calificar en clase.</span>
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                onClick={() => {
+                                                    setAssignmentDeliveryMode('sin-entrega');
+                                                    setAssignmentCreationPhase('form');
+                                                }}
+                                                className="h-32 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-white/10 to-white/5 border border-white/20 hover:bg-white/10 rounded-[12px] transition-all duration-150 ease-in-out"
+                                            >
+                                                <FileText className="w-8 h-8 text-white/80" />
+                                                <span className="text-white font-semibold">No requiere entrega</span>
+                                                <span className="text-white/60 text-xs leading-snug text-center px-1 whitespace-normal max-w-full">Solo aviso o actividad informativa; sin entrega ni calificación.</span>
+                                            </Button>
                                         </div>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setAssignmentCreationPhase('choose-delivery')}
-                                            className="text-white/70 hover:text-white rounded-[10px]"
-                                        >
-                                            <X className="w-4 h-4 mr-1" />
-                                            Cambiar
-                                        </Button>
                                     </div>
-
-                                    {subjectsForForm.length === 0 && (
-                                        <Alert className="mb-4 bg-red-500/10 border-red-500/50">
-                                            <AlertCircle className="h-4 w-4 text-red-400" />
-                                            <AlertDescription className="text-red-200">
-                                                No tienes materias asignadas a este curso ({displayGroupId}). Por favor contacta al administrador.
-                                            </AlertDescription>
-                                        </Alert>
-                                    )}
-
-                                    <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-start">
-                                        {/* Columna izquierda: contenido principal */}
-                                        <div className="space-y-6">
-                                            <div>
-                                                <Label htmlFor="titulo" className="text-white text-xs font-medium uppercase tracking-wider text-white/70">Nombre</Label>
-                                                <Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="mt-1.5 text-lg font-semibold text-white bg-transparent border-0 border-b border-white/10 rounded-none px-0 py-3 focus-visible:ring-0 focus-visible:border-[#4DBBFF]/50 placeholder:text-white/40 transition-colors duration-150 ease-in-out" placeholder="Nombre de la tarea" />
+                                ) : assignmentCreationPhase === 'form' ? (
+                                    <>
+                                        <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 rounded-[10px]">
+                                                    Asignación
+                                                </Badge>
+                                                <Badge
+                                                    className={requiresStudentDelivery
+                                                        ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
+                                                        : 'bg-white/10 text-white/80 border-white/25'}
+                                                >
+                                                    {assignmentDeliveryMode === 'evo'
+                                                        ? 'Con entrega en Evo'
+                                                        : assignmentDeliveryMode === 'clase'
+                                                            ? 'Entrega en clase'
+                                                            : 'Sin entrega'}
+                                                </Badge>
                                             </div>
-                                            <div>
-                                                <Label htmlFor="instrucciones" className="text-white text-xs font-medium uppercase tracking-wider text-white/70">Instrucciones</Label>
-                                                <Textarea id="instrucciones" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="mt-1.5 min-h-[180px] bg-white/[0.04] border border-white/10 rounded-xl text-white placeholder:text-white/40 py-4 px-4 focus-visible:ring-2 focus-visible:ring-[#4DBBFF]/30 focus-visible:border-[#4DBBFF]/40 transition-all duration-150 ease-in-out" placeholder="Instrucciones para el estudiante" rows={6} />
-                                            </div>
-
-                                            <div className="space-y-3">
-                                                <h3 className="text-sm font-semibold uppercase tracking-wider text-white/90">Materiales (Evo Drive)</h3>
-                                                <p className="text-white/50 text-xs">Añade enlaces, archivos de Google Drive o crea documentos nuevos. Se vincularán a esta asignación.</p>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button type="button" variant="outline" size="sm" className="h-9 rounded-[12px] bg-[#4DBBFF]/[0.13] border-[1.5px] border-[#4DBBFF]/50 text-[#4DBBFF] text-[13px] font-medium hover:bg-[#4DBBFF]/20 hover:border-[#4DBBFF]/60 px-4 transition-all duration-150 ease-in-out">
-                                                            <Plus className="w-4 h-4 mr-2" />
-                                                            Añadir o crear
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="start" sideOffset={8} className="w-[230px] rounded-[14px] border-[#4DBBFF]/20 bg-[#0f1c35] shadow-xl shadow-black/40 p-0 overflow-hidden">
-                                                        <div className="py-2.5">
-                                                            <DropdownMenuItem
-                                                                onSelect={() => googleStatus.connected && setTimeout(() => setAddFromGoogleOpen(true), 50)}
-                                                                disabled={!googleStatus.connected}
-                                                                className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
-                                                            >
-                                                                <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
-                                                                    <Cloud className="w-4 h-4 text-[#4DBBFF]" />
-                                                                </div>
-                                                                Google Drive
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                onSelect={() => setTimeout(() => { setEvoLinkUrl(''); setEvoLinkName(''); setAddFromEvoOpen(true); }, 50)}
-                                                                className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
-                                                            >
-                                                                <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
-                                                                    <Link2 className="w-4 h-4 text-[#4DBBFF]" />
-                                                                </div>
-                                                                Enlace
-                                                            </DropdownMenuItem>
-                                                        </div>
-                                                        <div className="border-t border-[#4DBBFF]/10" />
-                                                        <div className="py-2">
-                                                            <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#4DBBFF]/50">Crear</p>
-                                                            <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('doc'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
-                                                                <div className="w-8 h-8 rounded-[9px] bg-[#1a56d6] flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-white" /></div>
-                                                                Documentos
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('slide'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
-                                                                <div className="w-8 h-8 rounded-[9px] bg-[#d97706] flex items-center justify-center shrink-0"><Presentation className="w-4 h-4 text-white" /></div>
-                                                                Presentaciones
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('sheet'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
-                                                                <div className="w-8 h-8 rounded-[9px] bg-[#16a34a] flex items-center justify-center shrink-0"><FileSpreadsheet className="w-4 h-4 text-white" /></div>
-                                                                Hojas de cálculo
-                                                            </DropdownMenuItem>
-                                                        </div>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                                {assignmentMaterials.length > 0 && (
-                                                    <ul className="space-y-3 mt-2">
-                                                        {assignmentMaterials.map((m, i) => {
-                                                            const isGoogle = m.type === 'gdoc';
-                                                            const displayName = m.fileName || m.url;
-                                                            const u = (m.url || '').toLowerCase();
-                                                            const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
-                                                            const iconBg = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
-                                                            const Icon = m.type === 'gdoc' ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
-                                                            const iconColor = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
-                                                            return (
-                                                                <li key={i} className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out">
-                                                                    <div className="flex items-center gap-4 min-w-0 flex-1">
-                                                                        <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
-                                                                            <Icon className={`w-5 h-5 ${iconColor}`} />
-                                                                        </div>
-                                                                        <div className="min-w-0 flex-1">
-                                                                            <p className="text-sm font-medium text-white truncate">{displayName}</p>
-                                                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                                                <span className="text-[11px] text-white/60">Material de la asignación</span>
-                                                                                {isGoogle && (
-                                                                                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400">Google</span>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 shrink-0">
-                                                                        {m.url && (
-                                                                            <a href={m.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] hover:underline opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out">
-                                                                                <ExternalLink className="w-3.5 h-3.5" />
-                                                                                {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
-                                                                            </a>
-                                                                        )}
-                                                                        <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:text-white h-8 w-8 p-0 shrink-0" onClick={() => setAssignmentMaterials((prev) => prev.filter((_, j) => j !== i))} aria-label="Quitar">
-                                                                            <X className="w-4 h-4" />
-                                                                        </Button>
-                                                                    </div>
-                                                                </li>
-                                                            );
-                                                        })}
-                                                    </ul>
-                                                )}
-                                            </div>
-
-                                            <Button type="submit" disabled={createAssignmentMutation.isPending || subjectsForForm.length === 0 || (hasIndicadoresForAssignment && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
-                                                {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setAssignmentCreationPhase('choose-delivery')}
+                                                className="text-white/70 hover:text-white rounded-[10px]"
+                                            >
+                                                <X className="w-4 h-4 mr-1" />
+                                                Cambiar
                                             </Button>
                                         </div>
 
-                                        {/* Columna derecha: configuración */}
-                                        <div className="rounded-[12px] border border-white/10 bg-white/[0.03] p-5 space-y-5 lg:sticky lg:top-4 transition-colors duration-150 ease-in-out">
-                                            <p className="text-xs font-semibold uppercase tracking-wider text-[#4DBBFF]/70">Configuración</p>
-                                            {subjectsForForm.length > 1 && (
+                                        {subjectsForForm.length === 0 && (
+                                            <Alert className="mb-4 bg-red-500/10 border-red-500/50">
+                                                <AlertCircle className="h-4 w-4 text-red-400" />
+                                                <AlertDescription className="text-red-200">
+                                                    No tienes materias asignadas a este curso ({displayGroupId}). Por favor contacta al administrador.
+                                                </AlertDescription>
+                                            </Alert>
+                                        )}
+
+                                        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 items-start">
+                                            {/* Columna izquierda: contenido principal */}
+                                            <div className="space-y-6">
                                                 <div>
-                                                    <Label htmlFor="materia" className="text-white text-xs font-medium">Materia *</Label>
-                                                    <Select
-                                                        value={formData.courseId}
-                                                        onValueChange={(value) => {
-                                                            setFormData({ ...formData, courseId: value });
-                                                            setLogroCalificacionId('');
-                                                        }}
-                                                        required
-                                                    >
-                                                        <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {subjectsForForm.map((subject) => (
-                                                                <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
+                                                    <Label htmlFor="titulo" className="text-white text-xs font-medium uppercase tracking-wider text-white/70">Nombre</Label>
+                                                    <Input id="titulo" value={formData.titulo} onChange={(e) => setFormData({ ...formData, titulo: e.target.value })} required className="mt-1.5 text-lg font-semibold text-white bg-transparent border-0 border-b border-white/10 rounded-none px-0 py-3 focus-visible:ring-0 focus-visible:border-[#4DBBFF]/50 placeholder:text-white/40 transition-colors duration-150 ease-in-out" placeholder="Nombre de la tarea" />
                                                 </div>
-                                            )}
-                                            {subjectsForForm.length === 1 && (
                                                 <div>
-                                                    <Label className="text-white text-xs font-medium mb-2 block">Materia</Label>
-                                                    <div className="flex items-center gap-2">
-                                                        <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2 rounded-[10px]">
-                                                            {subjectsForForm[0].nombre}
-                                                        </Badge>
-                                                        <span className="text-white/50 text-sm">(esta vista)</span>
-                                                    </div>
+                                                    <Label htmlFor="instrucciones" className="text-white text-xs font-medium uppercase tracking-wider text-white/70">Instrucciones</Label>
+                                                    <Textarea id="instrucciones" value={formData.descripcion} onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })} required className="mt-1.5 min-h-[180px] bg-white/[0.04] border border-white/10 rounded-xl text-white placeholder:text-white/40 py-4 px-4 focus-visible:ring-2 focus-visible:ring-[#4DBBFF]/30 focus-visible:border-[#4DBBFF]/40 transition-all duration-150 ease-in-out" placeholder="Instrucciones para el estudiante" rows={6} />
                                                 </div>
-                                            )}
-                                            {hasIndicadoresForAssignment && (
-                                                <div>
-                                                    <Label className="text-white text-xs font-medium mb-2 block">Logro de calificación *</Label>
-                                                    <LogroIndicadorSelects
-                                                        bloques={bloquesForAssignmentSelect}
-                                                        indicadorId={logroCalificacionId}
-                                                        onIndicadorIdChange={setLogroCalificacionId}
-                                                        variant="dark"
-                                                    />
+
+                                                <div className="space-y-3">
+                                                    <h3 className="text-sm font-semibold uppercase tracking-wider text-white/90">Materiales (Evo Drive)</h3>
+                                                    <p className="text-white/50 text-xs">Añade enlaces, archivos de Google Drive o crea documentos nuevos. Se vincularán a esta asignación.</p>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button type="button" variant="outline" size="sm" className="h-9 rounded-[12px] bg-[#4DBBFF]/[0.13] border-[1.5px] border-[#4DBBFF]/50 text-[#4DBBFF] text-[13px] font-medium hover:bg-[#4DBBFF]/20 hover:border-[#4DBBFF]/60 px-4 transition-all duration-150 ease-in-out">
+                                                                <Plus className="w-4 h-4 mr-2" />
+                                                                Añadir o crear
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="start" sideOffset={8} className="w-[230px] rounded-[14px] border-[#4DBBFF]/20 bg-[#0f1c35] shadow-xl shadow-black/40 p-0 overflow-hidden">
+                                                            <div className="py-2.5">
+                                                                <DropdownMenuItem
+                                                                    onSelect={() => googleStatus.connected && setTimeout(() => setAddFromGoogleOpen(true), 50)}
+                                                                    disabled={!googleStatus.connected}
+                                                                    className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                                                                >
+                                                                    <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
+                                                                        <Cloud className="w-4 h-4 text-[#4DBBFF]" />
+                                                                    </div>
+                                                                    Google Drive
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                    onSelect={() => setTimeout(() => { setEvoLinkUrl(''); setEvoLinkName(''); setAddFromEvoOpen(true); }, 50)}
+                                                                    className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none"
+                                                                >
+                                                                    <div className="w-8 h-8 rounded-[9px] bg-[#4DBBFF]/20 flex items-center justify-center shrink-0">
+                                                                        <Link2 className="w-4 h-4 text-[#4DBBFF]" />
+                                                                    </div>
+                                                                    Enlace
+                                                                </DropdownMenuItem>
+                                                            </div>
+                                                            <div className="border-t border-[#4DBBFF]/10" />
+                                                            <div className="py-2">
+                                                                <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-[#4DBBFF]/50">Crear</p>
+                                                                <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('doc'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                                                    <div className="w-8 h-8 rounded-[9px] bg-[#1a56d6] flex items-center justify-center shrink-0"><FileText className="w-4 h-4 text-white" /></div>
+                                                                    Documentos
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('slide'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                                                    <div className="w-8 h-8 rounded-[9px] bg-[#d97706] flex items-center justify-center shrink-0"><Presentation className="w-4 h-4 text-white" /></div>
+                                                                    Presentaciones
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onSelect={() => setTimeout(() => { setCreateNewType('sheet'); setCreateNewNombre(''); setCreateNewOpen(true); }, 50)} className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-[#4DBBFF]/10 focus:bg-[#4DBBFF]/10 mx-0 rounded-none">
+                                                                    <div className="w-8 h-8 rounded-[9px] bg-[#16a34a] flex items-center justify-center shrink-0"><FileSpreadsheet className="w-4 h-4 text-white" /></div>
+                                                                    Hojas de cálculo
+                                                                </DropdownMenuItem>
+                                                            </div>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                    {assignmentMaterials.length > 0 && (
+                                                        <ul className="space-y-3 mt-2">
+                                                            {assignmentMaterials.map((m, i) => {
+                                                                const isGoogle = m.type === 'gdoc';
+                                                                const displayName = m.fileName || m.url;
+                                                                const u = (m.url || '').toLowerCase();
+                                                                const gdocKind = u.includes('spreadsheets') ? 'sheet' : u.includes('presentation') ? 'slide' : 'doc';
+                                                                const iconBg = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'bg-emerald-500/15' : gdocKind === 'slide' ? 'bg-orange-500/15' : 'bg-blue-500/15') : 'bg-white/10';
+                                                                const Icon = m.type === 'gdoc' ? (gdocKind === 'sheet' ? FileSpreadsheet : gdocKind === 'slide' ? Presentation : FileText) : Link2;
+                                                                const iconColor = m.type === 'gdoc' ? (gdocKind === 'sheet' ? 'text-[#16a34a]' : gdocKind === 'slide' ? 'text-[#d97706]' : 'text-[#1a73e8]') : 'text-white/70';
+                                                                return (
+                                                                    <li key={i} className="group flex items-center justify-between gap-4 py-3 px-4 rounded-[12px] border border-white/10 bg-[#0f172a]/60 hover:bg-white/[0.06] hover:border-[#4DBBFF]/20 transition-all duration-150 ease-in-out">
+                                                                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                                            <div className={`w-[38px] h-[38px] rounded-[10px] flex items-center justify-center shrink-0 ${iconBg}`}>
+                                                                                <Icon className={`w-5 h-5 ${iconColor}`} />
+                                                                            </div>
+                                                                            <div className="min-w-0 flex-1">
+                                                                                <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                                                                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                                                    <span className="text-[11px] text-white/60">Material de la asignación</span>
+                                                                                    {isGoogle && (
+                                                                                        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-400">Google</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 shrink-0">
+                                                                            {m.url && (
+                                                                                <a href={m.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4DBBFF] hover:underline opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out">
+                                                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                                                    {isGoogle ? 'Abrir en Drive' : 'Abrir enlace'}
+                                                                                </a>
+                                                                            )}
+                                                                            <Button type="button" variant="ghost" size="sm" className="text-white/70 hover:text-white h-8 w-8 p-0 shrink-0" onClick={() => setAssignmentMaterials((prev) => prev.filter((_, j) => j !== i))} aria-label="Quitar">
+                                                                                <X className="w-4 h-4" />
+                                                                            </Button>
+                                                                        </div>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                        </ul>
+                                                    )}
                                                 </div>
-                                            )}
-                                            {!hasIndicadoresForAssignment && courseIdForLogros && !isLoadingLogros && (
-                                                <Alert className="bg-amber-500/10 border-amber-500/50 rounded-[10px]">
-                                                    <AlertCircle className="h-4 w-4 text-amber-400" />
-                                                    <AlertDescription className="text-amber-200">
-                                                        Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a{' '}
-                                                        <Button
-                                                            variant="link"
-                                                            className="p-0 h-auto text-amber-300 underline"
-                                                            onClick={() => {
-                                                                const q = new URLSearchParams();
-                                                                q.set('returnTo', professorDetailBasePath);
-                                                                if (professorGroupSubjectId) q.set('gs', professorGroupSubjectId);
-                                                                setLocation(`/course/${cursoId}/calificacion-logros?${q.toString()}`);
-                                                            }}
-                                                        >
-                                                            Logros de Calificación
-                                                        </Button>
-                                                    </AlertDescription>
-                                                </Alert>
-                                            )}
-                                            <div>
-                                                <Label htmlFor="fechaEntrega" className="text-white text-xs font-medium">Fecha de Entrega</Label>
-                                                <Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20" />
+
+                                                <Button type="submit" disabled={createAssignmentMutation.isPending || subjectsForForm.length === 0 || (hasIndicadoresForAssignment && !logroCalificacionId)} className="w-full rounded-xl py-2.5 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 transition-opacity duration-150 ease-in-out font-medium">
+                                                    {createAssignmentMutation.isPending ? 'Creando...' : 'Crear Asignación'}
+                                                </Button>
                                             </div>
-                                        </div>
-                                    </form>
-                                </>
-                            ) : null}
-                        </CardContent>
-                    </Card>
+
+                                            {/* Columna derecha: configuración */}
+                                            <div className="rounded-[12px] border border-white/10 bg-white/[0.03] p-5 space-y-5 lg:sticky lg:top-4 transition-colors duration-150 ease-in-out">
+                                                <p className="text-xs font-semibold uppercase tracking-wider text-[#4DBBFF]/70">Configuración</p>
+                                                {subjectsForForm.length > 1 && (
+                                                    <div>
+                                                        <Label htmlFor="materia" className="text-white text-xs font-medium">Materia *</Label>
+                                                        <Select
+                                                            value={formData.courseId}
+                                                            onValueChange={(value) => {
+                                                                setFormData({ ...formData, courseId: value });
+                                                                setLogroCalificacionId('');
+                                                            }}
+                                                            required
+                                                        >
+                                                            <SelectTrigger className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20"><SelectValue placeholder="Selecciona la materia" /></SelectTrigger>
+                                                            <SelectContent>
+                                                                {subjectsForForm.map((subject) => (
+                                                                    <SelectItem key={subject._id} value={subject._id}>{subject.nombre}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                )}
+                                                {subjectsForForm.length === 1 && (
+                                                    <div>
+                                                        <Label className="text-white text-xs font-medium mb-2 block">Materia</Label>
+                                                        <div className="flex items-center gap-2">
+                                                            <Badge className="bg-[#1e3cff]/20 text-white border border-[#1e3cff]/40 text-base px-4 py-2 rounded-[10px]">
+                                                                {subjectsForForm[0].nombre}
+                                                            </Badge>
+                                                            <span className="text-white/50 text-sm">(esta vista)</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {hasIndicadoresForAssignment && (
+                                                    <div>
+                                                        <Label className="text-white text-xs font-medium mb-2 block">Logro de calificación *</Label>
+                                                        <LogroIndicadorSelects
+                                                            bloques={bloquesForAssignmentSelect}
+                                                            indicadorId={logroCalificacionId}
+                                                            onIndicadorIdChange={setLogroCalificacionId}
+                                                            variant="dark"
+                                                        />
+                                                    </div>
+                                                )}
+                                                {!hasIndicadoresForAssignment && courseIdForLogros && !isLoadingLogros && (
+                                                    <Alert className="bg-amber-500/10 border-amber-500/50 rounded-[10px]">
+                                                        <AlertCircle className="h-4 w-4 text-amber-400" />
+                                                        <AlertDescription className="text-amber-200">
+                                                            Configura los logros de calificación para esta materia antes de crear asignaciones. Ve a{' '}
+                                                            <Button
+                                                                variant="link"
+                                                                className="p-0 h-auto text-amber-300 underline"
+                                                                onClick={() => {
+                                                                    const q = new URLSearchParams();
+                                                                    q.set('returnTo', professorDetailBasePath);
+                                                                    if (professorGroupSubjectId) q.set('gs', professorGroupSubjectId);
+                                                                    setLocation(`/course/${cursoId}/calificacion-logros?${q.toString()}`);
+                                                                }}
+                                                            >
+                                                                Logros de Calificación
+                                                            </Button>
+                                                        </AlertDescription>
+                                                    </Alert>
+                                                )}
+                                                <div>
+                                                    <Label htmlFor="fechaEntrega" className="text-white text-xs font-medium">Fecha de Entrega</Label>
+                                                    <Input id="fechaEntrega" type="datetime-local" value={formData.fechaEntrega} onChange={(e) => setFormData({ ...formData, fechaEntrega: e.target.value })} required className="mt-1.5 bg-white/5 border-white/10 text-white rounded-[10px] transition-colors duration-150 ease-in-out hover:border-white/20" />
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </>
+                                ) : null}
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
 
@@ -1845,7 +1846,11 @@ export default function CourseDetailPage() {
             );
         }
 
-        const titleColor = details.colorAcento || '#1e3cff';
+        const titleColor = getGroupSubjectColor({
+            groupSubjectId: details.groupSubjectId ?? details._id,
+            fallbackId: details._id,
+            colorAcento: details.colorAcento,
+        });
         const cursoAsignado =
             details.cursoAsignado ||
             (details.cursos?.[0]?.trim() ? details.cursos[0] : undefined) ||
@@ -1866,9 +1871,9 @@ export default function CourseDetailPage() {
         const materiaNotas = materiaNotasForStudent;
         const { promedioFinal: computedPromedio, ultimaNota: computedUltima } = materiaNotas
             ? computeWeightedPromedioAndUltima(
-                  materiaNotas,
-                  logrosStudentNested.length > 0 ? logrosStudentNested : undefined
-              )
+                materiaNotas,
+                logrosStudentNested.length > 0 ? logrosStudentNested : undefined
+            )
             : { promedioFinal: null, ultimaNota: null };
         const promedioReal = materiaNotas != null ? computedPromedio : null;
         const ultimaNotaReal = materiaNotas != null ? computedUltima : null;
@@ -1882,12 +1887,12 @@ export default function CourseDetailPage() {
             estadoReal != null
                 ? estadoReal.charAt(0).toUpperCase() + estadoReal.slice(1)
                 : materiaNotas?.estado === 'sin_notas'
-                  ? 'Sin notas'
-                  : materiaNotas?.estado === 'aprobado'
-                    ? 'Aprobado'
-                    : materiaNotas?.estado === 'reprobado'
-                      ? 'Reprobado'
-                      : 'Sin datos';
+                    ? 'Sin notas'
+                    : materiaNotas?.estado === 'aprobado'
+                        ? 'Aprobado'
+                        : materiaNotas?.estado === 'reprobado'
+                            ? 'Reprobado'
+                            : 'Sin datos';
 
         const getEstadoColor = (estado: string) => {
             switch (estado) {
@@ -2448,11 +2453,10 @@ export default function CourseDetailPage() {
                                         key={emoji}
                                         type="button"
                                         onClick={() => setOptionsIcon(emoji)}
-                                        className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${
-                                            optionsIcon === emoji
+                                        className={`w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all ${optionsIcon === emoji
                                                 ? 'bg-[#1e3cff] text-white ring-2 ring-[#00c8ff]'
                                                 : 'bg-white/10 text-white hover:bg-white/20'
-                                        }`}
+                                            }`}
                                     >
                                         {emoji}
                                     </button>

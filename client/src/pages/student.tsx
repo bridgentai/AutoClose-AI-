@@ -167,7 +167,12 @@ export default function StudentPage() {
                 <p className="text-white/60">Cargando calendario...</p>
               </div>
             ) : (
-              <Calendar assignments={assignments} onDayClick={handleDayClick} variant="student" />
+              <Calendar
+                assignments={assignments}
+                viewingStudentId={user?.id}
+                onDayClick={handleDayClick}
+                variant="student"
+              />
             )}
           </CardContent>
         </Card>

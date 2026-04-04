@@ -523,7 +523,10 @@ export default function AssignmentDetailPage() {
                   },
                 ]
               : []),
-            { label: 'Tareas', href: isProfesor && groupIdOrName ? `/profesor/cursos/${groupIdOrName}/tareas` : '/mi-aprendizaje/tareas' },
+            {
+              label: isProfesor ? 'Tareas' : 'Asignaciones',
+              href: isProfesor && groupIdOrName ? `/profesor/cursos/${groupIdOrName}/tareas` : '/mi-aprendizaje/tareas',
+            },
             { label: assignment.titulo },
           ]}
         />

@@ -771,8 +771,8 @@ export default function CourseGradesTablePage() {
           if (String(a._id) !== String(vars.assignmentId)) return a;
           const subs = [...(a.submissions ?? a.entregas ?? [])];
           const idx = subs.findIndex((s) => {
-            const x = s as { estudianteId?: string; studentId?: string; student_id?: string };
-            const id = x.estudianteId ?? x.studentId ?? x.student_id;
+            const x = s as { estudianteId?: string; studentId?: string; student_id?: string; userId?: string; user_id?: string };
+            const id = x.estudianteId ?? x.studentId ?? x.student_id ?? x.userId ?? x.user_id;
             return String(id) === sid;
           });
           const nextCal = vars.calificacion;
@@ -797,6 +797,9 @@ export default function CourseGradesTablePage() {
     onError: (err: Error, _vars, ctx) => {
       if (ctx?.previous) queryClient.setQueryData([...gradeTableQueryKey], ctx.previous);
       toast({ title: 'Error', description: err.message || 'No se pudo actualizar la nota', variant: 'destructive' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: gradeTableQueryKey });
     },
   });
 
