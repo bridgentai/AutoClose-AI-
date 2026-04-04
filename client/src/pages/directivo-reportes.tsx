@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { DirectivoGuard } from "@/components/directivo-guard";
 import { apiRequest } from "@/lib/queryClient";
 import { FileText, Loader2, CheckCircle, Eye, Download, Info } from "lucide-react";
 import { NavBackButton } from "@/components/nav-back-button";
@@ -126,29 +127,8 @@ export default function DirectivoReportesPage() {
     });
   };
 
-  useEffect(() => {
-    if (user && user.rol !== "directivo" && user.rol !== "admin-general-colegio") {
-      setLocation("/dashboard");
-    }
-  }, [user, setLocation]);
-
-  if (!user) {
-    return (
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-48 bg-white/10 rounded-md" />
-          <Skeleton className="h-32 w-full bg-white/10 rounded-xl" />
-          <Skeleton className="h-48 w-full bg-white/10 rounded-xl" />
-        </div>
-      </div>
-    );
-  }
-
-  if (user.rol !== "directivo" && user.rol !== "admin-general-colegio") {
-    return null;
-  }
-
   return (
+    <DirectivoGuard>
     <div className="p-6 max-w-6xl mx-auto">
       <NavBackButton to="/directivo/academia" label="Academia" />
 
@@ -444,5 +424,6 @@ export default function DirectivoReportesPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </DirectivoGuard>
   );
 }

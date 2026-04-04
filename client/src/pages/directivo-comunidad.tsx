@@ -1,10 +1,8 @@
 import { Link } from "wouter";
 import { Calendar, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAuth } from "@/lib/authContext";
-import { useLocation } from "wouter";
-import { useEffect } from "react";
 import { NavBackButton } from "@/components/nav-back-button";
+import { DirectivoGuard } from "@/components/directivo-guard";
 
 const navigationItems = [
   {
@@ -20,20 +18,8 @@ const navigationItems = [
 ];
 
 export default function DirectivoComunidadLayout() {
-  const { user } = useAuth();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (user && user.rol !== "directivo") {
-      setLocation("/dashboard");
-    }
-  }, [user, setLocation]);
-
-  if (!user || user.rol !== "directivo") {
-    return null;
-  }
-
   return (
+    <DirectivoGuard strictDirectivoOnly>
     <div className="p-6" data-testid="directivo-comunidad-layout">
       <NavBackButton to="/dashboard" label="Dashboard" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
@@ -53,5 +39,6 @@ export default function DirectivoComunidadLayout() {
         ))}
       </div>
     </div>
+    </DirectivoGuard>
   );
 }

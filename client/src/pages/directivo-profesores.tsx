@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { GraduationCap, Search, Calendar } from "lucide-react";
 import { NavBackButton } from "@/components/nav-back-button";
+import { DirectivoGuard } from "@/components/directivo-guard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,16 +26,10 @@ export default function DirectivoProfesoresPage() {
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    if (user && user.rol !== "directivo") {
-      setLocation("/dashboard");
-    }
-  }, [user, setLocation]);
-
   const { data: profesores = [], isLoading } = useQuery<Profesor[]>({
     queryKey: ["/api/users/by-role", "profesor", user?.colegioId],
     queryFn: () => apiRequest<Profesor[]>("GET", "/api/users/by-role?rol=profesor"),
-    enabled: !!user?.colegioId && user?.rol === "directivo",
+    enabled: !!user?.colegioId,
   });
 
   const filtrados = useMemo(() => {
@@ -53,9 +48,8 @@ export default function DirectivoProfesoresPage() {
     return list;
   }, [filtrados]);
 
-  if (!user || user.rol !== "directivo") return null;
-
   return (
+    <DirectivoGuard strictDirectivoOnly>
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
       <NavBackButton to="/directivo/academia/usuarios" label="Usuarios" />
       <div className="mt-4 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -136,5 +130,6 @@ export default function DirectivoProfesoresPage() {
         </CardContent>
       </Card>
     </div>
+    </DirectivoGuard>
   );
 }

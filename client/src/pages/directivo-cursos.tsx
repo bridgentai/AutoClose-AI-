@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { BookOpen, ChevronRight, Users } from "lucide-react";
 import { NavBackButton } from "@/components/nav-back-button";
+import { DirectivoGuard } from "@/components/directivo-guard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,23 +32,16 @@ export default function DirectivoCursosPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    if (user && user.rol !== "directivo") {
-      setLocation("/dashboard");
-    }
-  }, [user, setLocation]);
-
   const { data: grupos = [], isLoading } = useQuery<GroupItem[]>({
     queryKey: ["/api/groups/all"],
     queryFn: () => apiRequest<GroupItem[]>("GET", "/api/groups/all"),
-    enabled: !!user?.colegioId && user?.rol === "directivo",
+    enabled: !!user?.colegioId,
   });
 
-  if (!user || user.rol !== "directivo") return null;
-
   return (
+    <DirectivoGuard strictDirectivoOnly>
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
-      <NavBackButton to="/directivo/academia" label="Academia" />
+      <NavBackButton to="/directivo/academia/usuarios" label="Usuarios" />
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
           <BookOpen className="w-8 h-8 text-[#00c8ff]" />
@@ -110,5 +103,6 @@ export default function DirectivoCursosPage() {
         </CardContent>
       </Card>
     </div>
+    </DirectivoGuard>
   );
 }

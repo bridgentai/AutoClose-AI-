@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/authContext";
 import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { DirectivoGuard } from "@/components/directivo-guard";
 import { apiRequest } from "@/lib/queryClient";
 import * as XLSX from "xlsx";
 import {
@@ -152,19 +153,13 @@ export default function DirectivoCursoDetailPage() {
   const [historialMateria, setHistorialMateria] = useState<string>("");
   const [historialEstudiante, setHistorialEstudiante] = useState<string>("");
 
-  const canAccess =
-    user?.rol === "directivo" || user?.rol === "admin-general-colegio";
   useEffect(() => {
-    if (user && !canAccess) {
-      setLocation("/dashboard");
+    if (user && !grupoId) {
+      setLocation("/directivo/cursos");
     }
-  }, [user, canAccess, setLocation]);
+  }, [user, grupoId, setLocation]);
 
-  if (!user || !canAccess) return null;
-  if (!grupoId) {
-    setLocation("/directivo/cursos");
-    return null;
-  }
+  if (!grupoId) return null;
 
   const hoy = new Date().toISOString().slice(0, 10);
 
@@ -327,6 +322,7 @@ export default function DirectivoCursoDetailPage() {
   ];
 
   return (
+    <DirectivoGuard>
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto min-h-[calc(100vh-8rem)]">
       <Breadcrumb
         className="mb-4"
@@ -864,5 +860,6 @@ export default function DirectivoCursoDetailPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </DirectivoGuard>
   );
 }

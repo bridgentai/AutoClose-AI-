@@ -5,8 +5,9 @@ import { useAuth } from "@/lib/authContext";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, FileText, ChevronLeft } from "lucide-react";
+import { Users, FileText } from "lucide-react";
 import { NavBackButton } from "@/components/nav-back-button";
+import { DirectivoGuard } from "@/components/directivo-guard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,26 +34,23 @@ export default function DirectivoCursoEstudiantesPage() {
   });
   const groupDisplayName = groupInfo?.nombre?.trim() || grupoId;
 
-  useEffect(() => {
-    if (user && user.rol !== "directivo") {
-      setLocation("/dashboard");
-    }
-  }, [user, setLocation]);
-
   const { data: estudiantes = [], isLoading } = useQuery<StudentInGroup[]>({
     queryKey: ["/api/groups", grupoId, "students"],
     queryFn: () =>
       apiRequest<StudentInGroup[]>("GET", `/api/groups/${encodeURIComponent(grupoId)}/students`),
-    enabled: !!user?.colegioId && user?.rol === "directivo" && !!grupoId,
+    enabled: !!user?.colegioId && !!grupoId,
   });
 
-  if (!user || user.rol !== "directivo") return null;
-  if (!grupoId) {
-    setLocation("/directivo/cursos");
-    return null;
-  }
+  useEffect(() => {
+    if (user && !grupoId) {
+      setLocation("/directivo/cursos");
+    }
+  }, [user, grupoId, setLocation]);
+
+  if (!grupoId) return null;
 
   return (
+    <DirectivoGuard strictDirectivoOnly>
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
       <NavBackButton to="/directivo/cursos" label="Cursos" />
       <div className="mt-4 mb-8">
@@ -122,5 +120,6 @@ export default function DirectivoCursoEstudiantesPage() {
         </CardContent>
       </Card>
     </div>
+    </DirectivoGuard>
   );
 }

@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/authContext";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { DirectivoGuard } from "@/components/directivo-guard";
 import { Download, Eye, EyeOff, FileText, MessageSquare, Pencil } from "lucide-react";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,13 +125,7 @@ export default function DirectivoEstudianteNotasPage() {
   const groupDisplayName = groupInfo?.nombre?.trim() || grupoId;
 
   useEffect(() => {
-    if (user && user.rol !== "directivo") {
-      setLocation("/dashboard");
-    }
-  }, [user, setLocation]);
-
-  useEffect(() => {
-    if (user && user.rol === "directivo" && (!grupoId || !estudianteId)) {
+    if (user && (!grupoId || !estudianteId)) {
       setLocation("/directivo/cursos");
     }
   }, [user, grupoId, estudianteId, setLocation]);
@@ -139,7 +134,7 @@ export default function DirectivoEstudianteNotasPage() {
     queryKey: ["/api/student/hijo", estudianteId, "notes"],
     queryFn: () =>
       apiRequest<HijoNotesResponse>("GET", `/api/student/hijo/${estudianteId}/notes`),
-    enabled: !!user?.colegioId && user?.rol === "directivo" && !!estudianteId,
+    enabled: !!user?.colegioId && !!estudianteId,
   });
 
   const { data: activityData, isLoading: activityLoading } = useQuery<{ items: ActivityFeedItem[] }>({
@@ -149,27 +144,15 @@ export default function DirectivoEstudianteNotasPage() {
         "GET",
         `/api/activity/student/${estudianteId}?limit=20`
       ),
-    enabled: !!user?.colegioId && user?.rol === "directivo" && !!estudianteId && mainTab === "actividad",
+    enabled: !!user?.colegioId && !!estudianteId && mainTab === "actividad",
   });
 
-  if (!user) {
-    return (
-      <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
-        <div className="space-y-4">
-          <Skeleton className="h-10 w-48 bg-white/10 rounded-md" />
-          <Skeleton className="h-32 w-full bg-white/10 rounded-xl" />
-          <Skeleton className="h-48 w-full bg-white/10 rounded-xl" />
-        </div>
-      </div>
-    );
-  }
-
-  if (user.rol !== "directivo") return null;
   if (!grupoId || !estudianteId) return null;
 
   const materias = notesData?.materias ?? [];
 
   return (
+    <DirectivoGuard strictDirectivoOnly>
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
       <Breadcrumb
         className="mb-4"
@@ -331,5 +314,6 @@ export default function DirectivoEstudianteNotasPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </DirectivoGuard>
   );
 }

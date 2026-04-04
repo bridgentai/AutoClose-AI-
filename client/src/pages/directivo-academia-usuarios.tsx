@@ -3,10 +3,8 @@
 import { Link } from "wouter";
 import { BookOpen, GraduationCap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAuth } from "@/lib/authContext";
-import { useLocation } from "wouter";
-import { useEffect } from "react";
 import { NavBackButton } from "@/components/nav-back-button";
+import { DirectivoGuard } from "@/components/directivo-guard";
 
 const subItems = [
   {
@@ -24,20 +22,8 @@ const subItems = [
 ];
 
 export default function DirectivoAcademiaUsuariosPage() {
-  const { user } = useAuth();
-  const [, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (user && user.rol !== "directivo") {
-      setLocation("/dashboard");
-    }
-  }, [user, setLocation]);
-
-  if (!user || user.rol !== "directivo") {
-    return null;
-  }
-
   return (
+    <DirectivoGuard strictDirectivoOnly>
     <div className="p-6" data-testid="directivo-academia-usuarios">
       <NavBackButton to="/directivo/academia" label="Academia" />
       <h1 className="text-2xl font-bold mb-2 text-white font-['Poppins']">
@@ -63,5 +49,6 @@ export default function DirectivoAcademiaUsuariosPage() {
         ))}
       </div>
     </div>
+    </DirectivoGuard>
   );
 }
