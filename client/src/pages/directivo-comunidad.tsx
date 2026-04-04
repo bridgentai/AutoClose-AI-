@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { Calendar, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { NavBackButton } from "@/components/nav-back-button";
-import { DirectivoGuard } from "@/components/directivo-guard";
+import { DirectivoGuard, useDirectivoSection } from "@/components/directivo-guard";
 
 const navigationItems = [
   {
@@ -17,13 +17,13 @@ const navigationItems = [
   },
 ];
 
-export default function DirectivoComunidadLayout() {
+function ComunidadContent() {
+  const mySection = useDirectivoSection();
   return (
-    <DirectivoGuard strictDirectivoOnly>
     <div className="p-6" data-testid="directivo-comunidad-layout">
       <NavBackButton to="/dashboard" label="Dashboard" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
-        Comunidad: Gestión Institucional
+        Comunidad: {mySection?.nombre ?? 'Gestión Institucional'}
       </h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -31,7 +31,7 @@ export default function DirectivoComunidadLayout() {
           <Link key={item.path} href={item.path}>
             <Card className="hover-elevate cursor-pointer bg-white/5 border-white/10 backdrop-blur-md">
               <CardContent className="flex flex-col items-center justify-center p-8">
-                <item.icon className="w-12 h-12 mb-4 text-[var(--primary-blue)]" />
+                <item.icon className="w-12 h-12 mb-4" style={{ color: 'var(--section-primary, var(--primary-blue))' }} />
                 <span className="text-lg font-medium text-white">{item.title}</span>
               </CardContent>
             </Card>
@@ -39,6 +39,13 @@ export default function DirectivoComunidadLayout() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function DirectivoComunidadLayout() {
+  return (
+    <DirectivoGuard strictDirectivoOnly>
+      <ComunidadContent />
     </DirectivoGuard>
   );
 }

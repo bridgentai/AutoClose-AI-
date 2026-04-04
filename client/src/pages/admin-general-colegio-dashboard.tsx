@@ -67,6 +67,40 @@ function UserRelations({ userId, activeTab }: { userId: string; activeTab: strin
   return <span className="text-white/50 text-sm">-</span>;
 }
 
+function SectionAssigner({ userId, currentSectionId }: { userId: string; currentSectionId?: string | null }) {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { data: secciones = [] } = useQuery<Array<{ _id: string; nombre: string }>>({
+    queryKey: ['sections', user?.colegioId],
+    queryFn: () => apiRequest('GET', '/api/sections'),
+    enabled: !!user?.colegioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (sectionId: string | null) =>
+      apiRequest('PATCH', `/api/users/${userId}/assign-section`, { sectionId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users/by-role'] });
+    },
+  });
+
+  const currentName = secciones.find(s => s._id === currentSectionId)?.nombre;
+
+  return (
+    <select
+      className="bg-white/5 border border-white/10 text-white text-sm rounded px-2 py-1 cursor-pointer"
+      value={currentSectionId ?? ''}
+      onChange={(e) => assignMutation.mutate(e.target.value || null)}
+    >
+      <option value="" className="bg-[#0f172a]">Sin sección</option>
+      {secciones.map(s => (
+        <option key={s._id} value={s._id} className="bg-[#0f172a]">{s.nombre}</option>
+      ))}
+    </select>
+  );
+}
+
 interface User {
   _id: string;
   id: string;
@@ -79,6 +113,7 @@ interface User {
   telefono?: string;
   celular?: string;
   materias?: string[];
+  sectionId?: string | null;
   createdAt: string;
   rol?: string;
 }
@@ -1201,6 +1236,7 @@ export function AdminGeneralColegioDashboard() {
                             <th className="text-left p-2 text-white/80">Nombre</th>
                             <th className="text-left p-2 text-white/80">Usuario (email)</th>
                             {activeTab === 'estudiantes' && <th className="text-left p-2 text-white/80">Curso</th>}
+                            {activeTab === 'directivos' && <th className="text-left p-2 text-white/80">Sección</th>}
                             {(activeTab === 'estudiantes' || activeTab === 'padres') && (
                               <th className="text-left p-2 text-white/80">Relaciones</th>
                             )}
@@ -1223,6 +1259,11 @@ export function AdminGeneralColegioDashboard() {
                               <td className="p-2 text-white/70 font-mono text-sm">{usuario.email}</td>
                               {activeTab === 'estudiantes' && (
                                 <td className="p-2 text-white/70">{usuario.curso || '-'}</td>
+                              )}
+                              {activeTab === 'directivos' && (
+                                <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                                  <SectionAssigner userId={usuario._id} currentSectionId={usuario.sectionId} />
+                                </td>
                               )}
                               {(activeTab === 'estudiantes' || activeTab === 'padres') && (
                                 <td className="p-2" onClick={(e) => e.stopPropagation()}>

@@ -1,9 +1,21 @@
-import { useEffect } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/authContext";
+import { apiRequest } from "@/lib/queryClient";
 
 const DIRECTIVO_ROLES = ["directivo", "admin-general-colegio"] as const;
-type DirectivoRole = (typeof DIRECTIVO_ROLES)[number];
+
+interface MySectionData {
+  id: string;
+  _id: string;
+  nombre: string;
+  grupos: Array<{ id: string; _id: string; nombre: string }>;
+  totalGrupos: number;
+  totalEstudiantes: number;
+}
+
+const DirectivoSectionContext = createContext<MySectionData | null>(null);
 
 interface DirectivoGuardProps {
   children: React.ReactNode;
@@ -18,6 +30,13 @@ export function DirectivoGuard({ children, strictDirectivoOnly = false }: Direct
     ? ["directivo"]
     : DIRECTIVO_ROLES;
 
+  const { data: mySection } = useQuery<MySectionData>({
+    queryKey: ['directivo/my-section', user?.id],
+    queryFn: () => apiRequest('GET', '/api/sections/my-section'),
+    enabled: user?.rol === 'directivo' && !!user?.colegioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   useEffect(() => {
     if (user && !allowedRoles.includes(user.rol)) {
       setLocation("/dashboard");
@@ -28,7 +47,15 @@ export function DirectivoGuard({ children, strictDirectivoOnly = false }: Direct
     return null;
   }
 
-  return <>{children}</>;
+  return (
+    <DirectivoSectionContext.Provider value={mySection ?? null}>
+      {children}
+    </DirectivoSectionContext.Provider>
+  );
+}
+
+export function useDirectivoSection(): MySectionData | null {
+  return useContext(DirectivoSectionContext);
 }
 
 export function useIsDirectivoAllowed(strictDirectivoOnly = false): boolean {

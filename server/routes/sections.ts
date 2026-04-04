@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect, AuthRequest } from '../middleware/auth';
+import { requireRole } from '../middleware/roleAuth.js';
 import { logAdminAction } from '../services/auditLogger';
 import {
   findSectionsByInstitution,
@@ -14,6 +15,7 @@ import {
   findGroupsBySection,
   updateGroupSection,
 } from '../repositories/groupRepository.js';
+import { queryPg } from '../config/db-pg.js';
 
 const router = express.Router();
 
@@ -24,9 +26,50 @@ function canManageSections(req: AuthRequest): { allowed: boolean; colegioId?: st
   return { allowed, colegioId };
 }
 
+function canViewSections(req: AuthRequest): { allowed: boolean; colegioId?: string } {
+  const colegioId = req.user?.colegioId;
+  if (!req.user?.id || !colegioId) return { allowed: false };
+  const allowed = req.user.rol === 'admin-general-colegio' || req.user.rol === 'school_admin' || req.user.rol === 'directivo';
+  return { allowed, colegioId };
+}
+
+router.get('/my-section', protect, requireRole('directivo'), async (req: AuthRequest, res) => {
+  try {
+    const sectionId = req.user?.sectionId;
+    const colegioId = req.user?.colegioId;
+    if (!sectionId) return res.status(404).json({ message: 'No tienes una sección asignada.' });
+    if (!colegioId) return res.status(401).json({ message: 'No autorizado.' });
+
+    const section = await findSectionById(sectionId);
+    if (!section || section.institution_id !== colegioId) {
+      return res.status(404).json({ message: 'Sección no encontrada.' });
+    }
+
+    const groups = await findGroupsBySection(sectionId);
+    const totalEstudiantes = await queryPg<{ count: number }>(
+      `SELECT COUNT(DISTINCT e.student_id)::int AS count
+       FROM enrollments e
+       WHERE e.group_id = ANY($1::uuid[])`,
+      [groups.map(g => g.id)]
+    );
+
+    return res.json({
+      id: section.id,
+      _id: section.id,
+      nombre: section.name,
+      grupos: groups.map(g => ({ id: g.id, _id: g.id, nombre: g.name })),
+      totalGrupos: groups.length,
+      totalEstudiantes: totalEstudiantes.rows[0]?.count ?? 0,
+    });
+  } catch (e: unknown) {
+    console.error(e);
+    return res.status(500).json({ message: 'Error al obtener sección.' });
+  }
+});
+
 router.get('/', protect, async (req: AuthRequest, res) => {
   try {
-    const { allowed, colegioId } = canManageSections(req);
+    const { allowed, colegioId } = canViewSections(req);
     if (!allowed || !colegioId) {
       return res.status(403).json({ message: 'No autorizado para listar secciones.' });
     }

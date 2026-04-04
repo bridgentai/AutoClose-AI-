@@ -131,18 +131,19 @@ export interface InsertInstitutionConfig {
 
 // Auth Response Types
 export interface AuthResponse {
-  id: string; // ID interno (ObjectId)
-  userId?: string; // ID categorizado (ej: "PROF-507f1f77bcf86cd799439011")
-  _id?: string; // Alias para compatibilidad
+  id: string;
+  userId?: string;
+  _id?: string;
   nombre: string;
   email: string;
   rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin' | 'rector';
   curso?: string;
   materias?: string[];
   colegioId: string;
-  codigoUnico?: string; // Código único de 4 dígitos
-  seccion?: 'junior-school' | 'middle-school' | 'high-school'; // Para asistentes
-  estado?: 'pending' | 'active' | 'suspended'; // Estado del usuario
+  codigoUnico?: string;
+  seccion?: 'junior-school' | 'middle-school' | 'high-school';
+  sectionId?: string | null;
+  estado?: 'pending' | 'active' | 'suspended';
   token: string;
 }
 

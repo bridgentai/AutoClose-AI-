@@ -445,3 +445,18 @@ export async function ensureKiwiSchema(): Promise<void> {
   kiwiSchemaEnsured = true;
   console.log('[schema] kiwi_schema OK');
 }
+
+let usersSectionIdEnsured = false;
+
+/** Adds section_id to users table for directivo section isolation. */
+export async function ensureUsersSectionId(): Promise<void> {
+  if (usersSectionIdEnsured) return;
+  await queryPg(
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS section_id UUID REFERENCES sections(id) ON DELETE SET NULL`
+  );
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_users_section ON users(section_id)`
+  );
+  usersSectionIdEnsured = true;
+  console.log('[schema] users.section_id OK');
+}

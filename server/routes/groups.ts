@@ -26,6 +26,7 @@ import { findActiveAcademicPeriodForInstitution } from '../repositories/academic
 import { protect, AuthRequest } from '../middleware/auth';
 import { requirePermission } from '../middleware/permissionMiddleware.js';
 import { logAdminAction } from '../services/auditLogger.js';
+import { getDirectivoGroupIds } from '../utils/sectionFilter.js';
 
 const router = express.Router();
 
@@ -223,7 +224,13 @@ router.get('/all', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'Acceso denegado.' });
     }
     let groups = await findGroupsByInstitution(colegioId);
-    if (rolUser === 'profesor' && req.user?.id) {
+    if (rolUser === 'directivo') {
+      const sectionGroupIds = await getDirectivoGroupIds(req);
+      if (sectionGroupIds !== null) {
+        const allowed = new Set(sectionGroupIds);
+        groups = groups.filter((g) => allowed.has(g.id));
+      }
+    } else if (rolUser === 'profesor' && req.user?.id) {
       const profesorGroups = await findGroupsByTeacher(req.user.id);
       const profesorGroupIds = new Set(profesorGroups.map((g) => g.id));
       groups = groups.filter((g) => profesorGroupIds.has(g.id));

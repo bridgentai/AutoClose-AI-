@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS users (
   consent_terms BOOLEAN DEFAULT false,
   consent_privacy BOOLEAN DEFAULT false,
   consent_at TIMESTAMPTZ,
+  section_id UUID REFERENCES sections(id) ON DELETE SET NULL,
   config JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -126,6 +127,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_institution ON users(institution_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_section ON users(section_id);
 
 CREATE TABLE IF NOT EXISTS institution_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

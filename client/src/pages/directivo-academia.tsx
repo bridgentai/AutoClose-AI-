@@ -2,7 +2,8 @@ import { Link } from "wouter";
 import { UserCircle, Users, BarChart3, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { NavBackButton } from "@/components/nav-back-button";
-import { DirectivoGuard } from "@/components/directivo-guard";
+import { DirectivoGuard, useDirectivoSection } from "@/components/directivo-guard";
+import { resolveSectionTheme, useSectionThemeApplier } from "@/hooks/useSectionTheme";
 
 const navigationItems = [
   {
@@ -20,21 +21,23 @@ const navigationItems = [
     path: "/directivo/academia/reportes",
     icon: FileText,
   },
-  // Pendiente de activar cuando exista la página:
-  // {
-  //   title: "Analítica Académica",
-  //   path: "/directivo/academia/analitica",
-  //   icon: BarChart3,
-  // },
+  {
+    title: "Analítica de la Sección",
+    path: "/directivo/academia/analitica",
+    icon: BarChart3,
+  },
 ];
 
-export default function DirectivoAcademiaLayout() {
+function AcademiaContent() {
+  const mySection = useDirectivoSection();
+  const theme = resolveSectionTheme(mySection?.nombre);
+  useSectionThemeApplier(theme);
+
   return (
-    <DirectivoGuard strictDirectivoOnly>
     <div className="p-6" data-testid="directivo-academia-layout">
       <NavBackButton to="/dashboard" label="Dashboard" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
-        Academia: Gestión Académica Global
+        Academia: {mySection?.nombre ?? 'Mi Sección'}
       </h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -42,7 +45,7 @@ export default function DirectivoAcademiaLayout() {
           <Link key={item.path} href={item.path}>
             <Card className="hover-elevate cursor-pointer bg-white/5 border-white/10 backdrop-blur-md">
               <CardContent className="flex flex-col items-center justify-center p-8">
-                <item.icon className="w-12 h-12 mb-4 text-[var(--primary-blue)]" />
+                <item.icon className="w-12 h-12 mb-4" style={{ color: 'var(--section-primary, var(--primary-blue))' }} />
                 <span className="text-lg font-medium text-white">{item.title}</span>
               </CardContent>
             </Card>
@@ -50,6 +53,13 @@ export default function DirectivoAcademiaLayout() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function DirectivoAcademiaLayout() {
+  return (
+    <DirectivoGuard strictDirectivoOnly>
+      <AcademiaContent />
     </DirectivoGuard>
   );
 }

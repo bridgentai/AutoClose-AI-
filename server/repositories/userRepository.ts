@@ -14,6 +14,7 @@ export interface UserRow {
   consent_terms: boolean;
   consent_privacy: boolean;
   consent_at: string | null;
+  section_id: string | null;
   config: Record<string, unknown>;
   created_at: string;
   updated_at: string;

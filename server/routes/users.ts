@@ -25,6 +25,9 @@ import { protect, AuthRequest } from '../middleware/auth';
 import { generateUserId } from '../utils/idGenerator';
 import { createBulkUsers, type BulkRowInput } from '../services/bulkUserService';
 import { logAdminAction } from '../services/auditLogger';
+import { getDirectivoGroupIds } from '../utils/sectionFilter.js';
+import { queryPg } from '../config/db-pg.js';
+import { UserRow } from '../repositories/userRepository.js';
 
 const router = express.Router();
 
@@ -234,8 +237,45 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
     if (!rolesPermitidos.includes(rolNormalizado)) {
       return res.status(400).json({ message: `Rol no permitido. Roles permitidos: ${rolesPermitidos.join(', ')}` });
     }
-    const all = await findUsersByInstitution(colegioId);
-    const usuarios = all.filter((u) => u.role === rolNormalizado);
+
+    let usuarios: UserRow[];
+
+    if (rolUser === 'directivo') {
+      const groupIds = await getDirectivoGroupIds(req);
+      if (groupIds !== null && groupIds.length === 0) return res.json([]);
+      if (groupIds !== null && groupIds.length > 0 && rolNormalizado === 'estudiante') {
+        const placeholders = groupIds.map((_, i) => `$${i + 2}`).join(', ');
+        const r = await queryPg<UserRow>(
+          `SELECT DISTINCT u.* FROM users u
+           JOIN enrollments e ON e.student_id = u.id
+           WHERE u.institution_id = $1
+             AND e.group_id IN (${placeholders})
+             AND u.role = 'estudiante'
+           ORDER BY u.full_name`,
+          [colegioId, ...groupIds]
+        );
+        usuarios = r.rows;
+      } else if (groupIds !== null && groupIds.length > 0 && rolNormalizado === 'profesor') {
+        const placeholders = groupIds.map((_, i) => `$${i + 2}`).join(', ');
+        const r = await queryPg<UserRow>(
+          `SELECT DISTINCT u.* FROM users u
+           JOIN group_subjects gs ON gs.teacher_id = u.id
+           WHERE u.institution_id = $1
+             AND gs.group_id IN (${placeholders})
+             AND u.role = 'profesor'
+           ORDER BY u.full_name`,
+          [colegioId, ...groupIds]
+        );
+        usuarios = r.rows;
+      } else {
+        const all = await findUsersByInstitution(colegioId);
+        usuarios = all.filter((u) => u.role === rolNormalizado);
+      }
+    } else {
+      const all = await findUsersByInstitution(colegioId);
+      usuarios = all.filter((u) => u.role === rolNormalizado);
+    }
+
     const usuariosConId = usuarios.map((u) => ({
       _id: u.id,
       id: u.id,
@@ -248,6 +288,7 @@ router.get('/by-role', protect, async (req: AuthRequest, res) => {
       telefono: u.phone,
       celular: u.phone,
       materias: (u.config as { materias?: string[] })?.materias,
+      sectionId: u.section_id,
       createdAt: u.created_at,
       rol: rolNormalizado,
     }));
@@ -955,6 +996,57 @@ router.post('/activar-cuentas', protect, async (req: AuthRequest, res) => {
   } catch (e: unknown) {
     console.error('Error en POST /activar-cuentas:', (e as Error).message);
     res.status(500).json({ message: 'Error al activar cuentas.' });
+  }
+});
+
+// PATCH /api/users/:id/assign-section — admin assigns section to a directivo
+router.patch('/:id/assign-section', protect, async (req: AuthRequest, res) => {
+  try {
+    const check = await ensureAdminColegio(req);
+    if (!check.ok) return res.status(check.status).json({ message: check.message });
+    const colegioId = check.user.institution_id;
+    const { id } = req.params;
+    const { sectionId } = req.body as { sectionId: string | null };
+
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      return res.status(400).json({ message: 'ID de usuario inválido.' });
+    }
+
+    const target = await findUserById(id);
+    if (!target || target.institution_id !== colegioId) {
+      return res.status(404).json({ message: 'Usuario no encontrado.' });
+    }
+    if (target.role !== 'directivo') {
+      return res.status(400).json({ message: 'Solo se puede asignar sección a directivos.' });
+    }
+
+    if (sectionId !== null && sectionId !== undefined) {
+      const { findSectionById } = await import('../repositories/sectionRepository.js');
+      const section = await findSectionById(sectionId);
+      if (!section || section.institution_id !== colegioId) {
+        return res.status(404).json({ message: 'Sección no encontrada.' });
+      }
+    }
+
+    await queryPg(
+      'UPDATE users SET section_id = $1, updated_at = now() WHERE id = $2 AND institution_id = $3',
+      [sectionId ?? null, id, colegioId]
+    );
+
+    await logAdminAction({
+      userId: req.user!.id!,
+      role: check.user.role,
+      action: 'assign_section',
+      entityType: 'user',
+      entityId: id,
+      colegioId,
+      requestData: { sectionId },
+    }).catch(() => {});
+
+    return res.json({ message: 'Sección asignada correctamente.', sectionId: sectionId ?? null });
+  } catch (e: unknown) {
+    console.error('Error PATCH /users/:id/assign-section:', (e as Error).message);
+    return res.status(500).json({ message: 'Error al asignar sección.' });
   }
 });
 

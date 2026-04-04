@@ -12,6 +12,7 @@ import { findGuardianStudent, findGuardianStudentsByStudent } from '../repositor
 import { findUsersByInstitutionAndRoles } from '../repositories/userRepository.js';
 import { notify } from '../repositories/notificationRepository.js';
 import { queryPg } from '../config/db-pg.js';
+import { getDirectivoGroupIds } from '../utils/sectionFilter.js';
 import {
   findAttendanceByGroupSubjectAndDate,
   findAttendanceByStudent,
@@ -617,17 +618,38 @@ router.get('/tendencia-institucional', protect, restrictToStaff, async (req: Aut
     const semanas = Math.min(4, Math.max(1, parseInt(String(req.query.semanas ?? '2'), 10)));
     const diasAtras = semanas * 7;
 
+    const groupIds = await getDirectivoGroupIds(req);
+    if (groupIds !== null && groupIds.length === 0) return res.json([]);
+
+    let attendanceQuery: string;
+    let queryParams: unknown[];
+
+    if (groupIds === null) {
+      attendanceQuery = `
+        SELECT a.date::text AS dia, COUNT(*)::int AS total,
+          SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END)::int AS presentes
+        FROM attendance a
+        WHERE a.institution_id = $1
+          AND a.date >= CURRENT_DATE - $2::int
+        GROUP BY a.date ORDER BY a.date ASC`;
+      queryParams = [colegioId, diasAtras];
+    } else {
+      const placeholders = groupIds.map((_, i) => `$${i + 3}`).join(', ');
+      attendanceQuery = `
+        SELECT a.date::text AS dia, COUNT(*)::int AS total,
+          SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END)::int AS presentes
+        FROM attendance a
+        JOIN group_subjects gs ON gs.id = a.group_subject_id
+        WHERE a.institution_id = $1
+          AND gs.group_id IN (${placeholders})
+          AND a.date >= CURRENT_DATE - $2::int
+        GROUP BY a.date ORDER BY a.date ASC`;
+      queryParams = [colegioId, diasAtras, ...groupIds];
+    }
+
     const r = await queryPg<{ dia: string; total: number; presentes: number }>(
-      `SELECT
-         a.date::text AS dia,
-         COUNT(*)::int AS total,
-         SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END)::int AS presentes
-       FROM attendance a
-       WHERE a.institution_id = $1
-         AND a.date >= CURRENT_DATE - $2::int
-       GROUP BY a.date
-       ORDER BY a.date ASC`,
-      [colegioId, diasAtras]
+      attendanceQuery,
+      queryParams
     );
 
     const result = r.rows.map((row) => {

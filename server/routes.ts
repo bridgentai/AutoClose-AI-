@@ -54,6 +54,7 @@ import {
   ensureGradingOutcomesTable,
   ensureComunicacionModule,
   ensureKiwiSchema,
+  ensureUsersSectionId,
 } from "./db/pgSchemaPatches.js";
 import institucionalComunicadosRoutes from "./routes/institucionalComunicados.js";
 import kiwiRoutes from "./routes/kiwi.js";
@@ -124,6 +125,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await ensureKiwiSchema();
     } catch (e) {
       console.warn("[schema] Parche kiwi_schema:", (e as Error).message);
+    }
+    try {
+      await ensureUsersSectionId();
+    } catch (e) {
+      console.warn("[schema] Parche users.section_id:", (e as Error).message);
     }
   }
 

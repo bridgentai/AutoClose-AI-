@@ -1174,7 +1174,13 @@ function DirectivoDashboard() {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  // Obtener estadísticas reales del colegio (incl. asistencia del mes)
+  const { data: mySection } = useQuery<{ id: string; nombre: string; totalGrupos: number; totalEstudiantes: number }>({
+    queryKey: ['directivo/my-section', user?.id],
+    queryFn: () => apiRequest('GET', '/api/sections/my-section'),
+    enabled: user?.rol === 'directivo' && !!user?.colegioId,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: stats, isLoading: isLoadingStats } = useQuery<{
     estudiantes: number; profesores: number; padres: number; directivos: number; cursos: number; materias: number;
     asistenciaResumen?: { totalRegistros: number; presentes: number; porcentajePromedio: number };
@@ -1238,7 +1244,15 @@ function DirectivoDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* 4 KPIs: Cursos | Docentes | Promedio general | Amonestaciones */}
+      {mySection && (
+        <div className="flex items-center gap-3">
+          <Badge className="bg-[var(--section-primary,#2563eb)]/20 text-[var(--section-accent,#00C8FF)] border border-[var(--section-primary,#2563eb)]/30 text-sm px-3 py-1">
+            Director de {mySection.nombre}
+          </Badge>
+          <span className="text-white/40 text-sm">{mySection.totalGrupos} grupos &middot; {mySection.totalEstudiantes} estudiantes</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className={`${CARD_STYLE} cursor-pointer`} onClick={() => setLocation('/directivo/cursos')}>
           <CardHeader className="pb-1">

@@ -31,6 +31,7 @@ export interface AuthRequest extends Request {
     institution_id?: string;
     institutionId?: string;
     rol: UserRole;
+    sectionId?: string | null;
     curso?: string;
     materias?: string[];
   };
@@ -70,6 +71,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       institution_id: pgUser.institution_id,
       institutionId: pgUser.institution_id,
       rol: pgUser.role as UserRole,
+      sectionId: pgUser.section_id ?? null,
       curso,
       materias: config?.materias,
     };

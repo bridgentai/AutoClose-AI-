@@ -121,6 +121,7 @@ import DirectivoAcademiaLayout from "@/pages/directivo-academia";
 import DirectivoAcademiaUsuariosPage from "@/pages/directivo-academia-usuarios";
 import DirectivoProfesoresPage from "@/pages/directivo-profesores";
 import DirectivoReportesPage from "@/pages/directivo-reportes";
+import DirectivoAnaliticaPage from "@/pages/directivo-analitica";
 
 // Módulos de Administrador General
 import AdministradorGeneralComunidadLayout from "@/pages/administrador-general-comunidad";
@@ -540,6 +541,9 @@ function AppRouter() {
             </Route>
             <Route path="/directivo/academia/reportes">
               <AuthGuard><DirectivoReportesPage /></AuthGuard>
+            </Route>
+            <Route path="/directivo/academia/analitica">
+              <AuthGuard><DirectivoAnaliticaPage /></AuthGuard>
             </Route>
             <Route path="/directivo/academia/usuarios">
               <AuthGuard><DirectivoAcademiaUsuariosPage /></AuthGuard>
