@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Users, Bell, Calendar, FileText } from "lucide-react";
+import { Calendar, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
@@ -8,22 +8,12 @@ import { NavBackButton } from "@/components/nav-back-button";
 
 const navigationItems = [
   {
-    title: "Gestión de Grupos",
-    path: "/directivo/comunidad/grupos",
-    icon: Users,
-  },
-  {
-    title: "Boletines Institucionales",
-    path: "/directivo/comunidad/boletines",
+    title: "Boletines por Curso",
+    path: "/directivo/reportes",
     icon: FileText,
   },
   {
-    title: "Notificaciones Masivas",
-    path: "/directivo/comunidad/notificaciones",
-    icon: Bell,
-  },
-  {
-    title: "Calendario de Eventos",
+    title: "Calendario",
     path: "/comunidad/calendario",
     icon: Calendar,
   },
@@ -45,7 +35,7 @@ export default function DirectivoComunidadLayout() {
 
   return (
     <div className="p-6" data-testid="directivo-comunidad-layout">
-      <NavBackButton to="/directivo/academia" label="Academia" />
+      <NavBackButton to="/dashboard" label="Dashboard" />
       <h1 className="text-2xl font-bold mb-6 text-white font-['Poppins']">
         Comunidad: Gestión Institucional
       </h1>

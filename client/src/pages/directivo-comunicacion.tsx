@@ -1,3 +1,4 @@
+// HUÉRFANO - pendiente de reactivar cuando existan las sub-páginas
 import { Link } from "wouter";
 import { Inbox, Send, Mail, Users, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";

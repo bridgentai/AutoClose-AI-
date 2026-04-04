@@ -18,15 +18,16 @@ const navigationItems = [
     icon: Users,
   },
   {
-    title: "Análisis de Rendimiento",
-    path: "/directivo/academia/rendimiento",
-    icon: BarChart3,
-  },
-  {
     title: "Reportes Académicos",
     path: "/directivo/academia/reportes",
     icon: FileText,
   },
+  // Pendiente de activar cuando exista la página:
+  // {
+  //   title: "Analítica Académica",
+  //   path: "/directivo/academia/analitica",
+  //   icon: BarChart3,
+  // },
 ];
 
 export default function DirectivoAcademiaLayout() {
