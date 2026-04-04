@@ -38,7 +38,7 @@ export default function DirectivoAcademiaUsuariosPage() {
           <Link key={item.path} href={item.path}>
             <Card className="hover-elevate cursor-pointer bg-white/5 border-white/10 backdrop-blur-md">
               <CardContent className="flex flex-col items-center justify-center p-8">
-                <item.icon className="w-12 h-12 mb-4 text-[#1e3cff]" />
+                <item.icon className="w-12 h-12 mb-4 text-[var(--primary-blue)]" />
                 <span className="text-lg font-medium text-white">{item.title}</span>
                 <span className="text-sm text-white/60 mt-1 text-center">
                   {item.description}

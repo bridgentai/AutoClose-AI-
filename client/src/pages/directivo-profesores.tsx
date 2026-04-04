@@ -55,7 +55,7 @@ export default function DirectivoProfesoresPage() {
       <div className="mt-4 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
-            <GraduationCap className="w-8 h-8 text-[#00c8ff]" />
+            <GraduationCap className="w-8 h-8 text-[var(--evo-cyan)]" />
             Profesores del colegio
           </h1>
           <p className="text-white/60 mt-1">
@@ -64,7 +64,7 @@ export default function DirectivoProfesoresPage() {
         </div>
         <Button
           variant="outline"
-          className="border-[#1e3cff]/50 text-[#3B82F6] hover:bg-[#1e3cff]/10 shrink-0"
+          className="border-[var(--primary-blue)]/50 text-[var(--primary-blue)] hover:bg-[var(--primary-blue)]/10 shrink-0"
           onClick={() => setLocation("/asignacion-horarios")}
         >
           <Calendar className="w-4 h-4 mr-2" />
@@ -116,7 +116,7 @@ export default function DirectivoProfesoresPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-[#00c8ff]/50 text-[#00c8ff] hover:bg-[#00c8ff]/10"
+                    className="border-[var(--evo-cyan)]/50 text-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/10"
                     onClick={() => setLocation("/asignacion-horarios")}
                     title="Ir a Asignación de Horarios para editar el horario de este profesor"
                   >

@@ -42,7 +42,7 @@ interface BoletinItem {
   resumen?: { length?: number };
 }
 
-const CARD_STYLE = "panel-grades border border-white/10 rounded-xl hover-lift transition-smooth glass-enhanced";
+const CARD_STYLE = "bg-white/[0.03] border border-white/[0.07] backdrop-blur-md rounded-xl";
 const currentYear = new Date().getFullYear();
 const PERIOD_PRESETS = [
   { id: "T1", label: `T1 ${currentYear}`, value: `Primer trimestre ${currentYear}` },
@@ -134,10 +134,10 @@ export default function DirectivoReportesPage() {
 
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
-          <FileText className="w-8 h-8 text-[#3B82F6]" />
+          <FileText className="w-8 h-8 text-[var(--primary-blue)]" />
           Reportes académicos
         </h1>
-        <p className="text-white/60 mt-1 text-[#E2E8F0]">
+        <p className="text-white/60 mt-1 text-[var(--text-primary)]">
           Genera boletines personalizados por estudiante para un curso completo — todas las materias y promedios incluidos.
         </p>
       </div>
@@ -162,7 +162,7 @@ export default function DirectivoReportesPage() {
                     <SelectTrigger className="w-full h-10 rounded-lg bg-white/5 border-white/20 text-white [&>span]:text-white/90">
                       <SelectValue placeholder="Selecciona un curso" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0F172A] border-white/10">
+                    <SelectContent className="bg-[var(--mid-dark)] border-white/10">
                       {grupos.map((g) => (
                         <SelectItem key={g._id} value={g.nombre} className="text-white focus:bg-white/10 focus:text-white">
                           {g.nombre}
@@ -179,7 +179,7 @@ export default function DirectivoReportesPage() {
                   value={periodo}
                   onChange={(e) => setPeriodo(e.target.value)}
                   placeholder="Ej: Primer trimestre 2026"
-                  className="w-full h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/40 focus:ring-2 focus:ring-[#3B82F6]/50 focus:border-[#3B82F6]"
+                  className="w-full h-10 px-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/40 focus:ring-2 focus:ring-[var(--primary-blue)]/50 focus:border-[var(--primary-blue)]"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -190,7 +190,7 @@ export default function DirectivoReportesPage() {
                     onClick={() => setPeriodoPreset(p.id)}
                     className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                       periodoPreset === p.id
-                        ? "bg-[#3B82F6] text-white"
+                        ? "bg-[var(--primary-blue)] text-white"
                         : "bg-white/5 border border-white/10 text-white/70 hover:bg-white/10"
                     }`}
                   >
@@ -207,7 +207,7 @@ export default function DirectivoReportesPage() {
               <Button
                 onClick={handleGenerar}
                 disabled={generarMutation.isPending || !cursoSeleccionado}
-                className="w-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium rounded-lg"
+                className="w-full bg-[var(--primary-blue)] hover:bg-[var(--primary-blue-hover)] text-white font-medium rounded-lg"
               >
                 {generarMutation.isPending ? (
                   <>
@@ -261,7 +261,7 @@ export default function DirectivoReportesPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-[#3B82F6] hover:bg-[#3B82F6]/10"
+                        className="text-[var(--primary-blue)] hover:bg-[var(--primary-blue)]/10"
                         onClick={async () => {
                           const token = localStorage.getItem("autoclose_token");
                           const url = import.meta.env.VITE_API_URL
@@ -339,9 +339,9 @@ export default function DirectivoReportesPage() {
             </CardContent>
           </Card>
 
-          <Card className={`${CARD_STYLE} cursor-default border-[#3B82F6]/20`}>
+          <Card className={`${CARD_STYLE} cursor-default border-[var(--primary-blue)]/20`}>
             <CardContent className="flex items-start gap-3 p-4">
-              <div className="w-8 h-8 rounded-full bg-[#3B82F6] flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-full bg-[var(--primary-blue)] flex items-center justify-center shrink-0">
                 <Info className="w-4 h-4 text-white" />
               </div>
               <p className="text-white/90 text-sm leading-relaxed">
@@ -378,7 +378,7 @@ export default function DirectivoReportesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-[#3B82F6] hover:bg-[#3B82F6]/10"
+                    className="text-[var(--primary-blue)] hover:bg-[var(--primary-blue)]/10"
                     onClick={() => setSelectedBoletin({ ...b, grupo: ultimosBoletines.grupo })}
                   >
                     <Eye className="w-4 h-4 mr-1" />
@@ -392,7 +392,7 @@ export default function DirectivoReportesPage() {
       )}
 
       <Dialog open={!!selectedBoletin} onOpenChange={(open) => !open && setSelectedBoletin(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-[#0a0a2a] border-white/10">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col bg-[var(--deep-dark)] border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white">
               {selectedBoletin ? selectedBoletin.estudiante.nombre : "Boletín"}

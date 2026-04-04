@@ -70,7 +70,7 @@ export default function DirectivoEstudiantesPage() {
       <NavBackButton to="/directivo/academia" label="Academia" />
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
-          <Users className="w-8 h-8 text-[#00c8ff]" />
+          <Users className="w-8 h-8 text-[var(--evo-cyan)]" />
           Estudiantes del colegio
         </h1>
         <p className="text-white/60 mt-1">
@@ -123,7 +123,7 @@ export default function DirectivoEstudiantesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="border-[#00c8ff]/50 text-[#00c8ff] hover:bg-[#00c8ff]/10"
+                    className="border-[var(--evo-cyan)]/50 text-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/10"
                     onClick={() => {
                       const curso = est.curso || "";
                       if (curso) {

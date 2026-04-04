@@ -95,15 +95,15 @@ function activityDescription(row: ActivityFeedItem): string {
 function activityIcon(action: string) {
   switch (action) {
     case "view_open":
-      return <Eye className="w-4 h-4 text-[#00c8ff]" />;
+      return <Eye className="w-4 h-4 text-[var(--evo-cyan)]" />;
     case "view_close":
       return <EyeOff className="w-4 h-4 text-white/60" />;
     case "download":
-      return <Download className="w-4 h-4 text-[#ffd700]" />;
+      return <Download className="w-4 h-4 text-[var(--evo-gold)]" />;
     case "start_writing":
       return <Pencil className="w-4 h-4 text-emerald-400" />;
     case "message_open":
-      return <MessageSquare className="w-4 h-4 text-[#1e3cff]" />;
+      return <MessageSquare className="w-4 h-4 text-[var(--primary-blue)]" />;
     default:
       return <FileText className="w-4 h-4 text-white/50" />;
   }
@@ -166,7 +166,7 @@ export default function DirectivoEstudianteNotasPage() {
       />
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
-          <FileText className="w-8 h-8 text-[#00c8ff]" />
+          <FileText className="w-8 h-8 text-[var(--evo-cyan)]" />
           Notas del estudiante
         </h1>
         <p className="text-white/60 mt-1">Vista solo lectura. Curso: {groupDisplayName}</p>
@@ -174,10 +174,10 @@ export default function DirectivoEstudianteNotasPage() {
 
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as "notas" | "actividad")} className="w-full">
         <TabsList className="bg-white/5 border border-white/10 mb-6">
-          <TabsTrigger value="notas" className="data-[state=active]:bg-[#1e3cff]">
+          <TabsTrigger value="notas" className="data-[state=active]:bg-[var(--primary-blue)]">
             Notas
           </TabsTrigger>
-          <TabsTrigger value="actividad" className="data-[state=active]:bg-[#1e3cff]">
+          <TabsTrigger value="actividad" className="data-[state=active]:bg-[var(--primary-blue)]">
             Actividad
           </TabsTrigger>
         </TabsList>
@@ -257,7 +257,7 @@ export default function DirectivoEstudianteNotasPage() {
                           {(nota.comentario || nota.logro) && (
                             <div className="mt-3 p-3 bg-white/5 rounded-lg border border-white/10">
                               <div className="flex items-start gap-2">
-                                <MessageSquare className="w-4 h-4 text-[#00c8ff] mt-0.5 flex-shrink-0" />
+                                <MessageSquare className="w-4 h-4 text-[var(--evo-cyan)] mt-0.5 flex-shrink-0" />
                                 <p className="text-sm text-white/80">
                                   {nota.comentario || nota.logro || ""}
                                 </p>

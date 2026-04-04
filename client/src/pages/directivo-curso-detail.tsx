@@ -334,7 +334,7 @@ export default function DirectivoCursoDetailPage() {
       />
       <div className="mt-4 mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
-          <BookOpen className="w-8 h-8 text-[#00c8ff]" />
+          <BookOpen className="w-8 h-8 text-[var(--evo-cyan)]" />
           {groupDisplayName}
         </h1>
         <p className="text-white/60 mt-1">Asistencia, historial, análisis con IA y estudiantes.</p>
@@ -351,7 +351,7 @@ export default function DirectivoCursoDetailPage() {
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
                 tab === t.id
-                  ? "bg-[#00c8ff]/20 text-[#00c8ff] border border-[#00c8ff]/40"
+                  ? "bg-[var(--evo-cyan)]/20 text-[var(--evo-cyan)] border border-[var(--evo-cyan)]/40"
                   : "text-white/60 hover:text-white hover:bg-white/5 border border-transparent"
               )}
             >
@@ -368,7 +368,7 @@ export default function DirectivoCursoDetailPage() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div>
               <CardTitle className="text-white flex items-center gap-2">
-                <ClipboardList className="w-5 h-5 text-[#00c8ff]" />
+                <ClipboardList className="w-5 h-5 text-[var(--evo-cyan)]" />
                 Asistencia hoy
               </CardTitle>
               <CardDescription className="text-white/60">
@@ -426,7 +426,7 @@ export default function DirectivoCursoDetailPage() {
                               </span>
                             )}
                           </span>
-                          <span className="font-medium text-[#00c8ff]">
+                          <span className="font-medium text-[var(--evo-cyan)]">
                             {presentes}/{total} presentes
                           </span>
                         </div>
@@ -470,7 +470,7 @@ export default function DirectivoCursoDetailPage() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="text-[#00c8ff] hover:bg-[#00c8ff]/10 h-8"
+                                    className="text-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/10 h-8"
                                     onClick={() =>
                                       setEditModal({
                                         open: true,
@@ -502,7 +502,7 @@ export default function DirectivoCursoDetailPage() {
         <Card className={CARD_STYLE}>
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <History className="w-5 h-5 text-[#00c8ff]" />
+              <History className="w-5 h-5 text-[var(--evo-cyan)]" />
               Historial de asistencia
             </CardTitle>
             <CardDescription className="text-white/60">
@@ -581,7 +581,7 @@ export default function DirectivoCursoDetailPage() {
               </div>
               <Button
                 variant="outline"
-                className="border-[#00c8ff]/40 text-[#00c8ff] hover:bg-[#00c8ff]/10"
+                className="border-[var(--evo-cyan)]/40 text-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/10"
                 onClick={handleExportExcel}
                 disabled={historialList.length === 0}
               >
@@ -640,7 +640,7 @@ export default function DirectivoCursoDetailPage() {
         <Card className={CARD_STYLE}>
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
-              <Brain className="w-5 h-5 text-[#00c8ff]" />
+              <Brain className="w-5 h-5 text-[var(--evo-cyan)]" />
               Análisis IA – {MESES[analisisMes - 1]} {analisisAnio}
             </CardTitle>
             <CardDescription className="text-white/60">
@@ -686,8 +686,8 @@ export default function DirectivoCursoDetailPage() {
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                         <XAxis dataKey="materia" stroke="rgba(255,255,255,0.6)" fontSize={12} />
                         <YAxis stroke="rgba(255,255,255,0.6)" fontSize={12} domain={[0, 100]} />
-                        <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)" }} />
-                        <Bar dataKey="porcentaje" fill="#00c8ff" radius={[4, 4, 0, 0]} name="%" />
+                        <Tooltip contentStyle={{ background: "var(--mid-dark)", border: "1px solid rgba(255,255,255,0.1)" }} />
+                        <Bar dataKey="porcentaje" fill="var(--evo-cyan)" radius={[4, 4, 0, 0]} name="%" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -715,9 +715,9 @@ export default function DirectivoCursoDetailPage() {
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                           <XAxis dataKey="fecha" stroke="rgba(255,255,255,0.6)" fontSize={11} />
                           <YAxis stroke="rgba(255,255,255,0.6)" fontSize={12} />
-                          <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.1)" }} />
+                          <Tooltip contentStyle={{ background: "var(--mid-dark)", border: "1px solid rgba(255,255,255,0.1)" }} />
                           <Legend />
-                          <Line type="monotone" dataKey="ausentes" stroke="#f87171" name="Ausentes" strokeWidth={2} dot={{ r: 4 }} />
+                          <Line type="monotone" dataKey="ausentes" stroke="var(--evo-danger)" name="Ausentes" strokeWidth={2} dot={{ r: 4 }} />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
@@ -767,7 +767,7 @@ export default function DirectivoCursoDetailPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-[#00c8ff]/50 text-[#00c8ff] hover:bg-[#00c8ff]/10"
+                      className="border-[var(--evo-cyan)]/50 text-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/10"
                       onClick={() =>
                         setLocation(
                           `/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes/${est._id}/notas`
@@ -793,7 +793,7 @@ export default function DirectivoCursoDetailPage() {
 
       {/* Modal Editar registro */}
       <Dialog open={editModal.open} onOpenChange={(open) => !open && setEditModal({ open: false, record: null, estado: "presente", puntualidad: null })}>
-        <DialogContent className="bg-[#0f172a] border-white/10 text-white">
+        <DialogContent className="bg-[var(--mid-dark)] border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Editar asistencia</DialogTitle>
           </DialogHeader>
@@ -842,7 +842,7 @@ export default function DirectivoCursoDetailPage() {
               Cancelar
             </Button>
             <Button
-              className="bg-[#00c8ff] hover:bg-[#00c8ff]/90 text-white"
+              className="bg-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/90 text-white"
               disabled={!editModal.record || patchAttendanceMutation.isPending}
               onClick={() => {
                 if (editModal.record) {

@@ -44,7 +44,7 @@ export default function DirectivoCursosPage() {
       <NavBackButton to="/directivo/academia/usuarios" label="Usuarios" />
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
-          <BookOpen className="w-8 h-8 text-[#00c8ff]" />
+          <BookOpen className="w-8 h-8 text-[var(--evo-cyan)]" />
           Cursos del colegio
         </h1>
         <p className="text-white/60 mt-1">
@@ -78,7 +78,7 @@ export default function DirectivoCursosPage() {
                   className="flex items-center justify-between w-full p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-colors text-left"
                 >
                   <span className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#00c8ff]/20 text-[#00c8ff]">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--evo-cyan)]/20 text-[var(--evo-cyan)]">
                       <Users className="w-5 h-5" />
                     </span>
                     <span className="text-left">
