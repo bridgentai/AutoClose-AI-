@@ -7,6 +7,7 @@ import {
   isStudentGroupEvoThreadType,
   isWithinStudentEvoSendWriteWindow,
 } from './services/evoSendStudentHours.js';
+import { canAccessEvoThread } from './services/evoSendAccess.js';
 
 let io: Server | null = null;
 
@@ -21,7 +22,11 @@ export function setupEvoSocket(httpServer: HttpServer): Server {
     let userId: string | null = null;
 
     try {
-      const secret = process.env.JWT_SECRET || 'fallback';
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        socket.disconnect(true);
+        return;
+      }
       const decoded = jwt.verify(token as string, secret) as { id?: string };
       userId = decoded?.id || null;
     } catch {
@@ -38,13 +43,27 @@ export function setupEvoSocket(httpServer: HttpServer): Server {
     try {
       const u = await findUserById(userId);
       socket.data.role = u?.role ?? null;
+      socket.data.institutionId = u?.institution_id ?? null;
     } catch {
       socket.data.role = null;
+      socket.data.institutionId = null;
     }
     socket.join(`user:${userId}`);
 
     socket.on('evo:join', (threadId: string) => {
-      if (threadId) socket.join(`thread:${threadId}`);
+      if (!threadId) return;
+      void (async () => {
+        const institutionId = socket.data.institutionId as string | undefined;
+        const role = socket.data.role as string | undefined;
+        if (!institutionId) return;
+        const can = await canAccessEvoThread({
+          announcementId: threadId,
+          userId,
+          institutionId,
+          role,
+        });
+        if (can) socket.join(`thread:${threadId}`);
+      })();
     });
 
     socket.on('evo:leave', (threadId: string) => {

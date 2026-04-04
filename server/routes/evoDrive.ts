@@ -105,7 +105,15 @@ function toEvoFileApi(row: Record<string, unknown>) {
 }
 
 function canUsePersonalMyFolder(rol: string | undefined): boolean {
-  return rol === 'estudiante' || rol === 'profesor';
+  return (
+    rol === 'estudiante' ||
+    rol === 'profesor' ||
+    rol === 'directivo' ||
+    rol === 'admin-general-colegio' ||
+    rol === 'asistente-academica' ||
+    rol === 'school_admin' ||
+    rol === 'asistente'
+  );
 }
 
 // GET /api/evo-drive/google/auth-url (protect: usuario debe estar logueado)

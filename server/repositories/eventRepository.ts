@@ -9,6 +9,7 @@ export interface EventRow {
   type: string;
   group_id: string | null;
   created_by_id: string | null;
+  source_announcement_id: string | null;
   created_at: string;
 }
 
@@ -105,10 +106,11 @@ export async function createEvent(row: {
   type: string;
   group_id?: string | null;
   created_by_id?: string | null;
+  source_announcement_id?: string | null;
 }): Promise<EventRow> {
   const r = await queryPg<EventRow>(
-    `INSERT INTO events (institution_id, title, description, date, "type", group_id, created_by_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    `INSERT INTO events (institution_id, title, description, date, "type", group_id, created_by_id, source_announcement_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
     [
       row.institution_id,
       row.title,
@@ -117,6 +119,7 @@ export async function createEvent(row: {
       row.type,
       row.group_id ?? null,
       row.created_by_id ?? null,
+      row.source_announcement_id ?? null,
     ]
   );
   return r.rows[0];
@@ -165,4 +168,16 @@ export async function deleteEvent(id: string, institutionId: string): Promise<bo
     [id, institutionId]
   );
   return (r.rowCount ?? 0) > 0;
+}
+
+/** Borra eventos creados desde un comunicado institucional pendiente cancelado. */
+export async function deleteEventsBySourceAnnouncement(
+  institutionId: string,
+  announcementId: string
+): Promise<number> {
+  const r = await queryPg(
+    `DELETE FROM events WHERE institution_id = $1 AND source_announcement_id = $2 RETURNING id`,
+    [institutionId, announcementId]
+  );
+  return r.rowCount ?? 0;
 }

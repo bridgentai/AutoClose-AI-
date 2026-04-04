@@ -85,6 +85,7 @@ import {
   countDistinctPadresComunicadoGroupSubjectsForPadre,
   findLastParentReplyHighlightForStaff,
   findLastInstitucionalHighlightForViewer,
+  getReadDetailForComunicado,
   type ComunicadoResumenHighlight,
 } from '../repositories/comunicacionRepository.js';
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
@@ -647,6 +648,28 @@ router.post('/comunicado/:id/read', protect, async (req: AuthRequest, res) => {
     return res.status(500).json({ message: 'Error' });
   }
 });
+
+// GET /api/courses/comunicado/:id/read-detail — detalle de lectura para comunicados académicos
+router.get(
+  '/comunicado/:id/read-detail',
+  protect,
+  requireRole('profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'school_admin', 'super_admin'),
+  async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user?.id;
+      const colegioId = req.user?.colegioId ?? req.user?.institution_id;
+      const { id } = req.params;
+      if (!userId || !colegioId || !id) return res.status(401).json({ message: 'No autorizado' });
+      const row = await findComunicadoById(id, colegioId);
+      if (!row || row.type !== 'comunicado_padres') return res.status(404).json({ message: 'No encontrado' });
+      const detail = await getReadDetailForComunicado(id, colegioId);
+      return res.json({ recipients: detail });
+    } catch (e: unknown) {
+      console.error('comunicado read-detail:', (e as Error).message);
+      return res.status(500).json({ message: 'Error' });
+    }
+  }
+);
 
 // POST /api/courses/comunicado/:id/mark-read — padre: alias UX-friendly (best-effort)
 router.post('/comunicado/:id/mark-read', protect, requireRole('padre'), async (req: AuthRequest, res) => {

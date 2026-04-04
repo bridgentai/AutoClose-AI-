@@ -1222,6 +1222,7 @@ export default function CourseDetailPage() {
                             }
                             const params = new URLSearchParams();
                             if (evoSendThreadId) params.set('thread', evoSendThreadId);
+                            params.set('context', activeSubjectNombre || 'actividad del curso');
                             setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
                         }}
                     >
@@ -2139,6 +2140,7 @@ export default function CourseDetailPage() {
                                 }
                                 const params = new URLSearchParams();
                                 if (evoSendThreadId) params.set('thread', evoSendThreadId);
+                                params.set('context', activeSubjectNombre || 'actividad del curso');
                                 setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
                             }}
                         >

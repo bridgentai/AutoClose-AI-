@@ -10,6 +10,8 @@ interface InstitutionConfig {
   nombreIA?: string;
   colorPrimario?: string;
   colorSecundario?: string;
+  /** 1–3, desde institutions.settings */
+  currentAcademicTerm?: number;
 }
 
 /**

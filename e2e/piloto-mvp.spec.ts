@@ -165,16 +165,16 @@ test.describe('Prueba piloto MVP - Requisitos completos', () => {
     ).toBeVisible({ timeout: 8000 });
   });
 
-  test('5.5 Vista directivo: Academia muestra Gestión Académica o Cursos y estudiantes', async ({ page }) => {
-    await page.goto('/directivo/academia');
+  test('5.5 Vista directivo: Gestión muestra hub de tarjetas', async ({ page }) => {
+    await page.goto('/directivo/gestion');
     await expect(
-      page.getByText(/Academia|Gestión Académica|Cursos y estudiantes/i).first()
+      page.getByText(/Gestión|Usuarios|Asignación de Horarios/i).first()
     ).toBeVisible({ timeout: 8000 });
   });
 
-  test('5.6 Vista directivo: ruta /directivo redirige a academia', async ({ page }) => {
+  test('5.6 Vista directivo: ruta /directivo redirige a gestión', async ({ page }) => {
     await page.goto('/directivo');
-    await expect(page).toHaveURL(/\/directivo\/academia/);
+    await expect(page).toHaveURL(/\/directivo\/gestion/);
   });
 
   test('5.7 Login redirige a /dashboard o /consent tras éxito (con credenciales)', async ({ page }) => {

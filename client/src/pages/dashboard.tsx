@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, FolderOpen, Mail, FileText, ArrowUp, ArrowDown, Bell, FileCheck, ChevronRight } from 'lucide-react';
-import { XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
-import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,8 +16,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Calendar } from '@/components/Calendar';
-import { CalendarGeneral } from '@/components/CalendarGeneral';
+import {
+  Calendar,
+  CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS,
+  type CalendarAssignment,
+} from '@/components/Calendar';
 import { useLocation } from 'wouter';
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -31,6 +32,7 @@ import {
   type OutcomeGradeNode,
 } from '@shared/weightedGrades';
 import { AdminGeneralColegioDashboard } from './admin-general-colegio-dashboard';
+import { getAssignmentCalendarLocalParts } from '@/lib/assignmentUtils';
 
 interface Assignment {
   _id: string;
@@ -71,9 +73,10 @@ function readPermisosSalidaCount(userId: string | undefined): number {
 
 interface AIChatBoxProps {
   rol: string;
+  footer?: React.ReactNode;
 }
 
-function AIChatBox({ rol }: AIChatBoxProps) {
+function AIChatBox({ rol, footer }: AIChatBoxProps) {
   const [, setLocation] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -417,6 +420,14 @@ function AIChatBox({ rol }: AIChatBoxProps) {
             </Button>
           </div>
         </div>
+        {footer ? (
+          <div
+            className="border-t border-white/10 pt-3 mt-3 flex-shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {footer}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -1167,80 +1178,102 @@ function ProfesorDashboard() {
   );
 }
 
+interface DirectivoCalendarEventRow {
+  _id: string;
+  titulo: string;
+  descripcion: string;
+  fecha: string;
+  tipo: string;
+  cursoId: { _id: string; nombre: string } | null;
+  creadoPor?: { _id: string; nombre: string } | null;
+}
+
+function mapDirectivoEventsToCalendarAssignments(events: DirectivoCalendarEventRow[]): CalendarAssignment[] {
+  return events.map((e) => {
+    const raw = String(e.fecha ?? '');
+    const dateStr = raw.length >= 10 ? raw.slice(0, 10) : raw;
+    const cursoLabel = e.tipo === 'colegio' ? 'Institucional' : (e.cursoId?.nombre?.trim() || 'Curso');
+    const groupKey = e.cursoId?._id ?? '__institucional__';
+    return {
+      _id: e._id,
+      titulo: e.titulo,
+      descripcion: e.descripcion ?? '',
+      curso: cursoLabel,
+      fechaEntrega: dateStr,
+      profesorNombre: e.creadoPor?.nombre ?? '',
+      groupId: groupKey,
+      requiresSubmission: false,
+      type: 'reminder',
+    };
+  });
+}
+
 function DirectivoDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
+  const [calendarViewDate, setCalendarViewDate] = useState(() => new Date());
+  const calendarFetchYear = calendarViewDate.getFullYear();
 
-  const { data: mySection } = useQuery<{ id: string; nombre: string; totalGrupos: number; totalEstudiantes: number }>({
+  const { data: mySection, isLoading: isLoadingMySection } = useQuery<{
+    id: string;
+    nombre: string;
+    totalGrupos: number;
+    totalEstudiantes: number;
+    totalProfesores: number;
+    totalMaterias: number;
+    promedioGeneral: number | null;
+    totalAmonestaciones: number;
+  }>({
     queryKey: ['directivo/my-section', user?.id],
     queryFn: () => apiRequest('GET', '/api/sections/my-section'),
     enabled: user?.rol === 'directivo' && !!user?.colegioId,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: stats, isLoading: isLoadingStats } = useQuery<{
-    estudiantes: number; profesores: number; padres: number; directivos: number; cursos: number; materias: number;
-    asistenciaResumen?: { totalRegistros: number; presentes: number; porcentajePromedio: number };
-  }>({
-    queryKey: ['adminStats', user?.colegioId],
-    queryFn: () => apiRequest('GET', '/api/users/stats'),
-    enabled: !!user?.colegioId && user?.rol === 'directivo',
-    staleTime: 0,
-  });
+  // Eventos del año que muestra el mini-calendario (navegación mes a mes)
+  const desde = useMemo(
+    () => new Date(calendarFetchYear, 0, 1).toISOString().slice(0, 10),
+    [calendarFetchYear]
+  );
+  const hasta = useMemo(
+    () => new Date(calendarFetchYear, 11, 31).toISOString().slice(0, 10),
+    [calendarFetchYear]
+  );
 
-  // Obtener eventos del calendario general para el directivo
-  const desde = useMemo(() => {
-    const firstDay = new Date(currentYear, currentMonth - 1, 1);
-    return firstDay.toISOString().slice(0, 10);
-  }, [currentYear, currentMonth]);
-
-  const hasta = useMemo(() => {
-    const lastDay = new Date(currentYear, currentMonth, 0);
-    return lastDay.toISOString().slice(0, 10);
-  }, [currentYear, currentMonth]);
-
-  const { data: calendarEvents = [], isLoading: isLoadingEvents } = useQuery<any[]>({
-    queryKey: ['directivoEvents', user?.colegioId, desde, hasta],
+  const { data: calendarEvents = [], isLoading: isLoadingEvents } = useQuery<DirectivoCalendarEventRow[]>({
+    queryKey: ['directivoEvents', user?.colegioId, calendarFetchYear],
     queryFn: () => apiRequest('GET', `/api/events?desde=${desde}&hasta=${hasta}`),
     enabled: !!user?.colegioId && user?.rol === 'directivo',
     staleTime: 0,
   });
 
-  const { data: resumenCursos = [], isLoading: isLoadingResumenCursos } = useQuery<{ _id: string; nombre: string; promedio: number | null; cantidadNotas: number }[]>({
-    queryKey: ['reports/cursos/resumen', user?.colegioId],
-    queryFn: () => apiRequest('GET', '/api/reports/cursos/resumen'),
-    enabled: !!user?.colegioId && user?.rol === 'directivo',
-    staleTime: 60 * 1000,
-  });
+  const calendarAssignments = useMemo(
+    () => mapDirectivoEventsToCalendarAssignments(calendarEvents),
+    [calendarEvents]
+  );
 
   const eventsThisMonth = useMemo(() => {
-    const m = now.getMonth();
-    const y = now.getFullYear();
-    return calendarEvents.filter((e) => {
-      const d = new Date(e.fecha);
-      return d.getMonth() === m && d.getFullYear() === y;
-    });
-  }, [calendarEvents, now]);
+    const y = calendarViewDate.getFullYear();
+    const m = calendarViewDate.getMonth();
+    let n = 0;
+    for (const a of calendarAssignments) {
+      const p = getAssignmentCalendarLocalParts(a.fechaEntrega);
+      if (p && p.year === y && p.monthIndex === m) n++;
+    }
+    return n;
+  }, [calendarAssignments, calendarViewDate]);
 
   const handleEventClick = () => setLocation('/comunidad/calendario');
 
-  const trimestreNum = Math.min(4, Math.ceil((now.getMonth() + 1) / 3));
-  const promedioGeneral = useMemo(() => {
-    if (!resumenCursos.length) return null;
-    const sum = resumenCursos.reduce((s, c) => s + (c.promedio ?? 0), 0);
-    const count = resumenCursos.filter((c) => c.promedio != null).length;
-    return count > 0 ? Math.round((sum / count) * 10) / 10 : null;
-  }, [resumenCursos]);
-
-  const { data: tendenciaData = [], isLoading: isLoadingTendencia } = useQuery<{ dia: string; fecha: string; pct: number | null }[]>({
-    queryKey: ['attendance/tendencia-institucional', user?.colegioId],
-    queryFn: () => apiRequest('GET', '/api/attendance/tendencia-institucional?semanas=2'),
+  const { data: academicTermData } = useQuery<{ currentAcademicTerm: number }>({
+    queryKey: ['institution-academic-term', user?.colegioId],
+    queryFn: () => apiRequest('GET', '/api/institution/academic-term'),
     enabled: !!user?.colegioId && user?.rol === 'directivo',
     staleTime: 60 * 1000,
   });
+
+  const trimestreNum = academicTermData?.currentAcademicTerm ?? 1;
+  const promedioSeccion = mySection?.promedioGeneral ?? null;
 
   return (
     <div className="space-y-6">
@@ -1259,10 +1292,10 @@ function DirectivoDashboard() {
             <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Cursos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingStats ? '—' : (stats?.cursos ?? 0)}</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingMySection ? '—' : (mySection?.totalGrupos ?? 0)}</div>
             <div className="flex items-center gap-2 mt-1">
               <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">Grupos</Badge>
-              <span className="text-white/50 text-sm">{stats?.estudiantes ?? 0} estudiantes</span>
+              <span className="text-white/50 text-sm">{mySection?.totalEstudiantes ?? 0} estudiantes</span>
             </div>
           </CardContent>
         </Card>
@@ -1272,24 +1305,28 @@ function DirectivoDashboard() {
             <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Docentes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingStats ? '—' : (stats?.profesores ?? 0)}</div>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingMySection ? '—' : (mySection?.totalProfesores ?? 0)}</div>
             <div className="flex items-center gap-2 mt-1 text-emerald-400 text-sm">
-              <ArrowUp className="w-4 h-4" /> <span>{stats?.materias ?? 0} materias</span>
+              <ArrowUp className="w-4 h-4" /> <span>{mySection?.totalMaterias ?? 0} materias</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className={`${CARD_STYLE}`}>
+        <Card
+          className={`${CARD_STYLE} cursor-pointer hover-elevate`}
+          onClick={() => setLocation('/directivo/academia/analitica-notas')}
+        >
           <CardHeader className="pb-1">
             <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Promedio general</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">
-              {promedioGeneral != null ? promedioGeneral.toFixed(1) : (isLoadingResumenCursos ? '—' : '—')}
+              {promedioSeccion != null ? Number(promedioSeccion).toFixed(1) : (isLoadingMySection ? '—' : '—')}
             </div>
             <div className="flex items-center gap-2 mt-1 text-amber-400/90 text-sm">
-              <ArrowDown className="w-4 h-4" /> <span>Trimestre {trimestreNum}</span>
+              <ArrowDown className="w-4 h-4" /> <span>Trimestre activo {trimestreNum}</span>
             </div>
+            <p className="text-white/40 text-xs mt-2">Ver análisis por curso e IA</p>
           </CardContent>
         </Card>
 
@@ -1299,7 +1336,7 @@ function DirectivoDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-3xl font-bold text-white font-['Poppins']">0</span>
+              <span className="text-3xl font-bold text-white font-['Poppins']">{isLoadingMySection ? '—' : (mySection?.totalAmonestaciones ?? 0)}</span>
               <Button size="sm" className="bg-red-500/80 hover:bg-red-500 text-white text-xs rounded-full" onClick={(e) => { e.stopPropagation(); setLocation('/directivo/estudiantes'); }}>Revisar</Button>
             </div>
             <p className="text-white/50 text-sm mt-1">Ver en perfiles de estudiantes</p>
@@ -1311,79 +1348,58 @@ function DirectivoDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className={`${CARD_STYLE} reveal-slide flex-1 min-h-[300px]`}>
           <CardContent className="p-0 h-full">
-            <AIChatBox rol="directivo" />
+            <AIChatBox
+              rol="directivo"
+              footer={(
+                <div>
+                  <p className="text-white text-sm font-medium mb-3">Acceso rápido</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button type="button" onClick={() => setLocation('/evo-drive')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                      <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Drive</span>
+                    </button>
+                    <button type="button" onClick={() => setLocation('/evo-send')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                      <Mail className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Send</span>
+                    </button>
+                    <button type="button" onClick={() => setLocation('/directivo/cursos')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                      <FileText className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Calificaciones</span>
+                    </button>
+                    <button type="button" onClick={() => setLocation('/directivo/estudiantes')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
+                      <Users className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Estudiantes</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            />
           </CardContent>
         </Card>
 
-        <Card className={`${CARD_STYLE} cursor-pointer reveal-slide`} onClick={() => setLocation('/comunidad/calendario')}>
+        <Card className={`${CARD_STYLE} reveal-slide`}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Calendario — {now.toLocaleDateString('es', { month: 'long' })}</CardTitle>
+            <CardTitle className="text-white text-base">Calendario del mes</CardTitle>
+            <CardDescription className="text-white/50 text-sm">
+              {isLoadingEvents
+                ? 'Cargando eventos...'
+                : `${eventsThisMonth} ${eventsThisMonth === 1 ? 'evento este mes' : 'eventos este mes'} (${calendarAssignments.length} ${calendarAssignments.length === 1 ? 'evento' : 'eventos'} en ${calendarFetchYear})`}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingEvents ? (
               <div className="h-48 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-white/50" /></div>
             ) : (
-              <div onClick={(e) => e.stopPropagation()}>
-                <CalendarGeneral events={calendarEvents} onDayClick={handleEventClick} />
+              <div className="pulse-blue">
+                <Calendar
+                  assignments={calendarAssignments}
+                  variant="teacher"
+                  currentDate={calendarViewDate}
+                  onCurrentDateChange={setCalendarViewDate}
+                  onDayClick={() => handleEventClick()}
+                  summaryLabels={CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS}
+                  monthLegendOverride={
+                    `${eventsThisMonth} ${eventsThisMonth === 1 ? 'evento' : 'eventos'} programados este mes`
+                  }
+                />
               </div>
             )}
-            <ul className="mt-3 space-y-1 text-sm text-white/70">
-              {eventsThisMonth.slice(0, 3).map((e: any) => (
-                <li key={e._id || e.id || e.fecha}>· {e.titulo ?? e.title ?? 'Evento'} — {new Date(e.fecha).toLocaleDateString('es')}</li>
-              ))}
-              {eventsThisMonth.length === 0 && <li>· Sin eventos este mes</li>}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Fila: Tendencia de asistencia | Acceso rápido */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className={`${CARD_STYLE} reveal-slide`}>
-          <CardHeader>
-            <CardTitle className="text-white text-base">Tendencia de asistencia — últimas 2 semanas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoadingTendencia ? (
-              <div className="h-[200px] flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-white/50" /></div>
-            ) : tendenciaData.length === 0 ? (
-              <div className="h-[200px] flex flex-col items-center justify-center gap-2 text-white/40">
-                <ClipboardList className="w-8 h-8" />
-                <p className="text-sm">Sin registros de asistencia recientes</p>
-              </div>
-            ) : (
-              <ChartContainer config={{ pct: { label: 'Asistencia %', color: 'var(--primary-blue)' } }} className="h-[200px] w-full">
-                <LineChart data={tendenciaData} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis dataKey="dia" tick={{ fill: 'var(--text-primary)', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
-                  <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-primary)', fontSize: 11 }} stroke="rgba(255,255,255,0.2)" />
-                  <Tooltip content={<ChartTooltipContent />} formatter={(v: number) => [v + '%', 'Asistencia']} />
-                  <Line type="monotone" dataKey="pct" stroke="var(--primary-blue)" strokeWidth={2} dot={{ fill: 'var(--primary-blue)' }} name="pct" />
-                </LineChart>
-              </ChartContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className={`${CARD_STYLE} reveal-slide`}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-white text-sm">Acceso rápido</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setLocation('/evo-drive')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Drive</span>
-              </button>
-              <button type="button" onClick={() => setLocation('/evo-send')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <Mail className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Send</span>
-              </button>
-              <button type="button" onClick={() => setLocation('/directivo/cursos')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <FileText className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Calificaciones</span>
-              </button>
-              <button type="button" onClick={() => setLocation('/directivo/estudiantes')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                <Users className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Estudiantes</span>
-              </button>
-            </div>
           </CardContent>
         </Card>
       </div>

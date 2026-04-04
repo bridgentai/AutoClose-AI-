@@ -717,6 +717,73 @@ export async function generateAcademicInsightsSummary(
   }
 }
 
+export interface DirectivoSectionAnalyticsContext {
+  sectionName: string;
+  promedioSeccion: number | null;
+  cursos: Array<{
+    nombre: string;
+    promedio: number | null;
+    estudiantes: number;
+    enRiesgo: number;
+    enAlerta: number;
+    alDia: number;
+  }>;
+}
+
+/**
+ * Informe narrativo para la vista analítica de notas del director de sección (datos agregados).
+ */
+export async function generateDirectivoSectionAnalyticsSummary(
+  context: DirectivoSectionAnalyticsContext
+): Promise<string> {
+  const openaiClient = getOpenAIClient();
+  if (!openaiClient) {
+    return 'Configura OPENAI_API_KEY en .env para ver el análisis con IA.';
+  }
+
+  const lines: string[] = [];
+  lines.push(`Sección: ${context.sectionName}.`);
+  if (context.promedioSeccion != null) {
+    lines.push(
+      `Promedio general de la sección (escala 0–100, metodología jerárquica institucional): ${context.promedioSeccion.toFixed(1)}.`
+    );
+  }
+  if (context.cursos.length > 0) {
+    lines.push('Resumen por curso:');
+    for (const c of context.cursos) {
+      const p = c.promedio != null ? `${c.promedio.toFixed(1)}/100` : 'sin promedio calculable';
+      lines.push(
+        `- Curso ${c.nombre}: promedio ${p}; matrícula ${c.estudiantes}; estudiantes con promedio holístico bajo (<65): ${c.enRiesgo}; entre 65 y 74: ${c.enAlerta}; en 75 o más: ${c.alDia}.`
+      );
+    }
+  }
+
+  const { sanitized: safe } = sanitizeText(lines.join('\n'), {
+    studentNames: [],
+    teacherNames: [],
+  });
+
+  try {
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Eres un asesor académico para directivos de colegios en Colombia. Con datos agregados por curso (sin nombres de estudiantes), redacta un informe breve de 4 a 8 oraciones en español: panorama del rendimiento de la sección, cursos prioritarios para seguimiento, lectura de la distribución de riesgo, y 2 o 3 recomendaciones accionables. Tono ejecutivo, claro y respetuoso. Solo prosa.',
+        },
+        { role: 'user', content: `Datos para analizar:\n${safe}` },
+      ],
+      max_tokens: 550,
+    });
+    return response.choices[0]?.message?.content?.trim() || 'No se pudo generar el análisis.';
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[OpenAI] generateDirectivoSectionAnalyticsSummary:', msg);
+    return 'Error al generar el análisis con IA.';
+  }
+}
+
 /**
  * Genera el resumen de boletín con OpenAI (3-4 oraciones).
  * Retorna null si no hay API key o hay error, para que la ruta use texto de respaldo.

@@ -67,7 +67,32 @@ export async function ensureEvoSendSupportAndReads(): Promise<void> {
       last_read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (user_id, announcement_id)
     )`);
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS evo_send_message_user_state (
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message_id UUID NOT NULL REFERENCES announcement_messages(id) ON DELETE CASCADE,
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      trashed_at TIMESTAMPTZ,
+      starred_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, message_id)
+    )`);
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_evo_send_msg_state_inst_user ON evo_send_message_user_state(institution_id, user_id)`
+  );
   evoSendSchemaEnsured = true;
+}
+
+let evoChatSectionDirectorIndexEnsured = false;
+
+/** Un hilo evo_chat_section_director por (institución, grupo). */
+export async function ensureEvoChatSectionDirectorUniqueIndex(): Promise<void> {
+  if (evoChatSectionDirectorIndexEnsured) return;
+  await queryPg(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_announcements_evo_chat_section_director_group
+    ON announcements (institution_id, group_id)
+    WHERE type = 'evo_chat_section_director' AND group_id IS NOT NULL`);
+  evoChatSectionDirectorIndexEnsured = true;
 }
 
 let evoChatGroupTeacherIndexEnsured = false;
@@ -459,4 +484,59 @@ export async function ensureUsersSectionId(): Promise<void> {
   );
   usersSectionIdEnsured = true;
   console.log('[schema] users.section_id OK');
+}
+
+let eventsSourceAnnouncementEnsured = false;
+
+/** Vincula eventos institucionales al comunicado EvoSend que los originó (cancelación limpia el evento). */
+export async function ensureEventsSourceAnnouncementId(): Promise<void> {
+  if (eventsSourceAnnouncementEnsured) return;
+  await queryPg(
+    `ALTER TABLE events ADD COLUMN IF NOT EXISTS source_announcement_id UUID REFERENCES announcements(id) ON DELETE SET NULL`
+  );
+  await queryPg(
+    `CREATE INDEX IF NOT EXISTS idx_events_source_announcement ON events(source_announcement_id) WHERE source_announcement_id IS NOT NULL`
+  );
+  eventsSourceAnnouncementEnsured = true;
+  console.log('[schema] events.source_announcement_id OK');
+}
+
+let disciplinaryOccurredAtEnsured = false;
+
+/** Fecha/hora del hecho (distinta del registro en sistema). */
+export async function ensureDisciplinaryActionsOccurredAt(): Promise<void> {
+  if (disciplinaryOccurredAtEnsured) return;
+  await queryPg(`ALTER TABLE disciplinary_actions ADD COLUMN IF NOT EXISTS occurred_at TIMESTAMPTZ`);
+  await queryPg(`UPDATE disciplinary_actions SET occurred_at = created_at WHERE occurred_at IS NULL`);
+  try {
+    await queryPg(
+      `ALTER TABLE disciplinary_actions ALTER COLUMN occurred_at SET DEFAULT now()`
+    );
+  } catch {
+    /* ignore */
+  }
+  try {
+    await queryPg(
+      `ALTER TABLE disciplinary_actions ALTER COLUMN occurred_at SET NOT NULL`
+    );
+  } catch {
+    /* ignore */
+  }
+  disciplinaryOccurredAtEnsured = true;
+  console.log('[schema] disciplinary_actions.occurred_at OK');
+}
+
+let communicationLegacyCleanupEnsured = false;
+
+/** Limpieza de artefactos legacy de comunicación ya no usados por el modelo actual. */
+export async function ensureCommunicationLegacyCleanup(): Promise<void> {
+  if (communicationLegacyCleanupEnsured) return;
+  await queryPg(`ALTER TABLE messages DROP COLUMN IF EXISTS grupo_chat_id`);
+  await queryPg(`ALTER TABLE messages DROP COLUMN IF EXISTS sender_name`);
+  await queryPg(`ALTER TABLE messages DROP COLUMN IF EXISTS content`);
+  await queryPg(`DROP TABLE IF EXISTS grupo_chat_members`);
+  await queryPg(`DROP TABLE IF EXISTS grupo_chats`);
+  await queryPg(`DROP TABLE IF EXISTS playing_with_neon`);
+  communicationLegacyCleanupEnsured = true;
+  console.log('[schema] communication legacy cleanup OK');
 }

@@ -42,3 +42,19 @@ export async function createInstitution(row: {
   );
   return r.rows[0];
 }
+
+/** Fusiona claves en institutions.settings (JSONB). */
+export async function mergeInstitutionSettings(
+  institutionId: string,
+  patch: Record<string, unknown>
+): Promise<InstitutionRow | null> {
+  const r = await queryPg<InstitutionRow>(
+    `UPDATE institutions
+     SET settings = COALESCE(settings, '{}'::jsonb) || $2::jsonb,
+         updated_at = now()
+     WHERE id = $1
+     RETURNING *`,
+    [institutionId, JSON.stringify(patch)]
+  );
+  return r.rows[0] ?? null;
+}

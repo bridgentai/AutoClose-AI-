@@ -122,9 +122,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         },
         {
           icon: BookOpen,
-          label: "Academia",
-          path: "/directivo/academia",
-          keywords: ["academia", "cursos", "directivo"],
+          label: "Gestión",
+          path: "/directivo/gestion",
+          keywords: ["gestion", "usuarios", "horarios", "directivo"],
+          roles: ["directivo"]
+        },
+        {
+          icon: BookOpen,
+          label: "Analítica",
+          path: "/directivo/analitica",
+          keywords: ["analitica", "reportes", "notas", "directivo"],
           roles: ["directivo"]
         },
         {
@@ -234,13 +241,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       group: "Módulos Directivo",
       items: [
         {
-          icon: BookOpen,
-          label: "Academia",
-          path: "/directivo/academia",
-          keywords: ["academia", "cursos", "directivo"],
-          roles: ["directivo"]
-        },
-        {
           icon: UsersRound,
           label: "Comunidad",
           path: "/directivo/comunidad",
@@ -249,9 +249,16 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         },
         {
           icon: BookOpen,
-          label: "Academia",
-          path: "/directivo/academia",
-          keywords: ["academia", "directivo", "cursos"],
+          label: "Gestión",
+          path: "/directivo/gestion",
+          keywords: ["gestion", "directivo", "usuarios"],
+          roles: ["directivo"]
+        },
+        {
+          icon: BookOpen,
+          label: "Analítica",
+          path: "/directivo/analitica",
+          keywords: ["analitica", "directivo", "reportes"],
           roles: ["directivo"]
         },
         {

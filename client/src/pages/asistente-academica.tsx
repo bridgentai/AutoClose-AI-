@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useLocation } from 'wouter';
 import {
@@ -9,9 +10,18 @@ import {
   Bell,
   Calendar,
   Plus,
+  BookMarked,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md hover-elevate';
 
@@ -39,6 +49,8 @@ interface NotificationsResponse {
 export default function AsistenteAcademicaDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
+  const [trimestreDraft, setTrimestreDraft] = useState(1);
 
   const { data: stats } = useQuery<Stats>({
     queryKey: ['adminStats', user?.colegioId],
@@ -64,6 +76,31 @@ export default function AsistenteAcademicaDashboard() {
     enabled: !!user?.id,
   });
 
+  const { data: academicTermData } = useQuery<{ currentAcademicTerm: number }>({
+    queryKey: ['institution-academic-term', user?.colegioId],
+    queryFn: () => apiRequest<{ currentAcademicTerm: number }>('GET', '/api/institution/academic-term'),
+    enabled: !!user?.colegioId,
+    staleTime: 30 * 1000,
+  });
+
+  useEffect(() => {
+    const t = academicTermData?.currentAcademicTerm;
+    if (typeof t === 'number' && t >= 1 && t <= 3) {
+      setTrimestreDraft(t);
+    }
+  }, [academicTermData?.currentAcademicTerm]);
+
+  const saveTrimestre = useMutation({
+    mutationFn: (t: number) =>
+      apiRequest<{ currentAcademicTerm: number }>('PATCH', '/api/institution/academic-term', {
+        currentAcademicTerm: t,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['institution-academic-term'] });
+      queryClient.invalidateQueries({ queryKey: ['institutionConfig'] });
+    },
+  });
+
   const comunicadosCount = comunicadosData?.items?.length ?? comunicadosData?.total ?? 0;
   const accesosActivos = Object.values(accessControlsData?.features ?? {}).filter(Boolean).length;
   const estudiantesCount = stats?.estudiantes ?? 0;
@@ -84,6 +121,52 @@ export default function AsistenteAcademicaDashboard() {
           })}
         </p>
       </div>
+
+      <Card className={`${CARD_STYLE} mb-8`}>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+          <div>
+            <CardTitle className="text-sm font-medium text-white">Trimestre académico activo</CardTitle>
+            <p className="text-xs text-white/50 mt-1 max-w-xl">
+              Periodo que ven directivos y reportes (boletines usan el campo por tarea; esto alinea etiquetas en dashboard).
+            </p>
+          </div>
+          <BookMarked className="w-5 h-5 text-[var(--color-primary,#2563eb)] shrink-0" />
+        </CardHeader>
+        <CardContent className="flex flex-col sm:flex-row gap-4 sm:items-end">
+          <div className="flex-1 space-y-2 w-full sm:max-w-xs">
+            <Label htmlFor="trimestre-select" className="text-white/70 text-xs">
+              Trimestre en curso
+            </Label>
+            <Select
+              value={String(trimestreDraft)}
+              onValueChange={(v) => setTrimestreDraft(parseInt(v, 10))}
+            >
+              <SelectTrigger
+                id="trimestre-select"
+                className="bg-white/5 border-white/10 text-white w-full"
+              >
+                <SelectValue placeholder="Elegir trimestre" />
+              </SelectTrigger>
+              <SelectContent className="bg-[var(--card-bg)] border-[var(--card-border)] text-white">
+                <SelectItem value="1">Primer trimestre</SelectItem>
+                <SelectItem value="2">Segundo trimestre</SelectItem>
+                <SelectItem value="3">Tercer trimestre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            className="w-full sm:w-auto bg-[var(--color-primary,#2563eb)] hover:opacity-90 text-white"
+            disabled={
+              saveTrimestre.isPending ||
+              !academicTermData ||
+              trimestreDraft === academicTermData.currentAcademicTerm
+            }
+            onClick={() => saveTrimestre.mutate(trimestreDraft)}
+          >
+            {saveTrimestre.isPending ? 'Guardando…' : 'Guardar trimestre'}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -176,9 +259,9 @@ export default function AsistenteAcademicaDashboard() {
         <Button
           variant="outline"
           className="border-white/10 text-white hover:bg-white/10"
-          onClick={() => setLocation('/directivo/academia')}
+          onClick={() => setLocation('/directivo/gestion')}
         >
-          Academia
+          Gestión
         </Button>
         <Button
           variant="outline"

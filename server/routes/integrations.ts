@@ -11,14 +11,7 @@ const router = express.Router();
  */
 router.post('/google/create-doc', protect, async (req: AuthRequest, res) => {
   try {
-    // TODO: Obtener token OAuth2 del usuario/colegio, llamar a Google Drive API para crear doc
-    // const token = await getStoredGoogleToken(req.userId);
-    // const drive = google.drive({ version: 'v3', auth: oauth2Client });
-    // const file = await drive.files.create({ requestBody: { name: '...', mimeType: 'application/vnd.google-apps.document' }, ... });
-    // return res.json({ url: `https://docs.google.com/document/d/${file.data.id}/edit`, documentId: file.data.id });
-
     const title = (req.body?.title as string) || 'Documento sin título';
-    // Stub: devolver URL placeholder. En producción, crear doc real y devolver su link.
     const stubUrl = `https://docs.google.com/document/d/stub-${Date.now()}/edit?title=${encodeURIComponent(title)}`;
     return res.json({
       url: stubUrl,
@@ -28,6 +21,36 @@ router.post('/google/create-doc', protect, async (req: AuthRequest, res) => {
   } catch (err: any) {
     console.error('Error create-doc:', err.message);
     return res.status(500).json({ message: err.message || 'Error al crear documento.' });
+  }
+});
+
+router.post('/google/create-sheet', protect, async (req: AuthRequest, res) => {
+  try {
+    const title = (req.body?.title as string) || 'Hoja sin título';
+    const stubUrl = `https://docs.google.com/spreadsheets/d/stub-${Date.now()}/edit?title=${encodeURIComponent(title)}`;
+    return res.json({
+      url: stubUrl,
+      spreadsheetId: `stub-${Date.now()}`,
+      message: 'Stub de hoja de cálculo hasta OAuth activo.',
+    });
+  } catch (err: any) {
+    console.error('Error create-sheet:', err.message);
+    return res.status(500).json({ message: err.message || 'Error al crear hoja.' });
+  }
+});
+
+router.post('/google/create-slide', protect, async (req: AuthRequest, res) => {
+  try {
+    const title = (req.body?.title as string) || 'Presentación sin título';
+    const stubUrl = `https://docs.google.com/presentation/d/stub-${Date.now()}/edit?title=${encodeURIComponent(title)}`;
+    return res.json({
+      url: stubUrl,
+      presentationId: `stub-${Date.now()}`,
+      message: 'Stub de presentación hasta OAuth activo.',
+    });
+  } catch (err: any) {
+    console.error('Error create-slide:', err.message);
+    return res.status(500).json({ message: err.message || 'Error al crear presentación.' });
   }
 });
 

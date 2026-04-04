@@ -55,6 +55,7 @@ export function useEvoSocket(token: string | null) {
   }, []);
 
   const clearLastMessage = useCallback(() => setLastMessage(null), []);
+  const clearLastRead = useCallback(() => setLastRead(null), []);
   const clearTyping = useCallback(() => setTyping(null), []);
 
   return {
@@ -65,6 +66,7 @@ export function useEvoSocket(token: string | null) {
     lastRead,
     typing,
     clearLastMessage,
+    clearLastRead,
     clearTyping,
   };
 }

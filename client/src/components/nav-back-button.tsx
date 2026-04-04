@@ -2,7 +2,7 @@
 
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { Breadcrumb } from "@/components/Breadcrumb";
+import { Breadcrumb, type BreadcrumbVariant } from "@/components/Breadcrumb";
 
 interface NavBackButtonProps {
   /** Ruta a la que volver. Si no se proporciona, se calcula automáticamente */
@@ -13,13 +13,15 @@ interface NavBackButtonProps {
   className?: string;
   /** Si true, no muestra el ícono de flecha */
   hideIcon?: boolean;
+  /** Tema del breadcrumb (p. ej. light sobre fondo claro) */
+  breadcrumbVariant?: BreadcrumbVariant;
 }
 
 /**
  * Componente de navegación contextual que muestra un botón "Volver a..."
  * Si no se proporcionan `to` o `label`, los calcula automáticamente según la ruta actual
  */
-export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonProps) {
+export function NavBackButton({ to, label, className, hideIcon, breadcrumbVariant = 'dark' }: NavBackButtonProps) {
   const [location, setLocation] = useLocation();
 
   // Compat: si alguien sigue usando hideIcon, no romper TS.
@@ -162,7 +164,9 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
       "/profesor/academia/cursos": "Cursos",
       "/profesor/academia/tareas": "Asignaciones",
       "/profesor/comunicacion": "Comunicación",
-      "/directivo/academia": "Academia",
+      "/directivo/gestion": "Gestión",
+      "/directivo/analitica": "Analítica",
+      "/directivo/academia": "Gestión",
       "/directivo/comunicacion": "Comunicación",
       "/directivo/comunidad": "Comunidad",
       "/administrador-general": "Administrador General",
@@ -235,8 +239,9 @@ export function NavBackButton({ to, label, className, hideIcon }: NavBackButtonP
 
   return (
     <Breadcrumb
-      className={cn("mb-4", className)}
+      className={cn('mb-4', className)}
       items={items}
+      variant={breadcrumbVariant}
     />
   );
 }

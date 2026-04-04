@@ -111,6 +111,7 @@ router.get(
           gravedad: r.severity,
           razon: r.reason,
           fecha: r.created_at,
+          fechaHecho: r.occurred_at ?? r.created_at,
           registradoPor: creator?.full_name ?? '',
         };
       })
@@ -141,9 +142,15 @@ router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequ
 
     const severityRaw = (req.body?.gravedad ?? req.body?.severity) as unknown;
     const reasonRaw = (req.body?.razon ?? req.body?.reason) as unknown;
+    const occurredRaw = (req.body?.fechaHecho ?? req.body?.occurred_at) as unknown;
     if (!isValidSeverity(severityRaw)) return res.status(400).json({ message: 'Gravedad inválida.' });
     const reason = typeof reasonRaw === 'string' ? reasonRaw.trim() : '';
     if (!reason) return res.status(400).json({ message: 'La razón es obligatoria.' });
+    let occurredAt: string | null = null;
+    if (typeof occurredRaw === 'string' && occurredRaw.trim()) {
+      const d = new Date(occurredRaw);
+      if (!Number.isNaN(d.getTime())) occurredAt = d.toISOString();
+    }
 
     const created = await createDisciplinaryAction({
       institution_id: institutionId,
@@ -151,6 +158,7 @@ router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequ
       created_by_id: requesterId,
       severity: severityRaw,
       reason,
+      occurred_at: occurredAt,
     });
 
     // Notificar a directivos via Evo Send (hilo directo profesor <-> directivo) + notificación
@@ -220,6 +228,7 @@ router.post('/:estudianteId/disciplinary-actions', protect, async (req: AuthRequ
       gravedad: created.severity,
       razon: created.reason,
       fecha: created.created_at,
+      fechaHecho: created.occurred_at ?? created.created_at,
       registradoPor: requester.full_name,
     });
   } catch (e: unknown) {

@@ -5,8 +5,21 @@ import { findUserById } from '../repositories/userRepository.js';
 import { findGuardianStudent } from '../repositories/guardianStudentRepository.js';
 import { queryPg } from '../config/db-pg.js';
 import { getDirectivoGroupIds } from '../utils/sectionFilter.js';
+import { computeSectionHierarchicalGpa } from '../utils/sectionDashboardStats.js';
+import { fetchSectionCourseInsightCards } from '../utils/sectionCourseInsightCards.js';
+import { findSectionById } from '../repositories/sectionRepository.js';
+import { generateDirectivoSectionAnalyticsSummary } from '../services/openai.js';
+import { fetchGroupHolisticAnalytics } from '../utils/groupHolisticAnalytics.js';
+import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 
 const router = express.Router();
+
+/** Comparación estable de UUID (PostgreSQL los devuelve en minúsculas; el front puede enviar mayúsculas). */
+function uuidStringsEqual(a: string, b: string): boolean {
+  const na = a.replace(/-/g, '').toLowerCase();
+  const nb = b.replace(/-/g, '').toLowerCase();
+  return na.length > 0 && na === nb;
+}
 
 export interface CursoResumenItem {
   _id: string;
@@ -108,7 +121,8 @@ router.get('/cursos/resumen', protect, async (req: AuthRequest, res) => {
 
 const allowedAnalyticsRoles = ['directivo', 'admin-general-colegio', 'school_admin', 'super_admin'];
 
-router.get('/section/overview', protect, async (req: AuthRequest, res) => {
+/** Vista analítica de notas del director de sección: KPI + tarjetas por curso (promedios jerárquicos 0–100). */
+router.get('/section/notas-analitica', protect, async (req: AuthRequest, res) => {
   try {
     const rol = req.user?.rol;
     const colegioId = req.user?.colegioId;
@@ -118,56 +132,67 @@ router.get('/section/overview', protect, async (req: AuthRequest, res) => {
 
     const groupIds = await getDirectivoGroupIds(req);
     if (groupIds !== null && groupIds.length === 0) {
-      return res.json({ grupos: 0, estudiantes: 0, profesores: 0, asistenciaPromedio: null });
+      return res.json({
+        sectionName: null,
+        promedioSeccion: null,
+        cursos: [],
+        totales: { enRiesgo: 0, enAlerta: 0, alDia: 0, estudiantes: 0 },
+      });
     }
 
-    const groupFilter = groupIds ? `AND g.id = ANY($2::uuid[])` : '';
-    const params: unknown[] = groupIds ? [colegioId, groupIds] : [colegioId];
+    let ids: string[];
+    if (groupIds === null) {
+      const gr = await queryPg<{ id: string }>(
+        'SELECT id FROM groups WHERE institution_id = $1',
+        [colegioId]
+      );
+      ids = gr.rows.map((r) => r.id);
+    } else {
+      ids = groupIds;
+    }
 
-    const result = await queryPg<{ total_grupos: number; total_estudiantes: number; total_profesores: number }>(
-      `SELECT
-         COUNT(DISTINCT g.id)::int AS total_grupos,
-         COUNT(DISTINCT e.student_id)::int AS total_estudiantes,
-         COUNT(DISTINCT gs.teacher_id)::int AS total_profesores
-       FROM groups g
-       LEFT JOIN enrollments e ON e.group_id = g.id
-       LEFT JOIN group_subjects gs ON gs.group_id = g.id
-       WHERE g.institution_id = $1 ${groupFilter}`,
-      params
+    const sectionRow =
+      rol === 'directivo' && req.user?.sectionId
+        ? await findSectionById(req.user.sectionId)
+        : null;
+    const sectionName = sectionRow?.name ?? null;
+
+    const [promedioSeccion, cursos] = await Promise.all([
+      ids.length > 0 ? computeSectionHierarchicalGpa(ids) : Promise.resolve(null),
+      ids.length > 0 ? fetchSectionCourseInsightCards(ids) : Promise.resolve([]),
+    ]);
+
+    const totales = cursos.reduce(
+      (acc, c) => ({
+        enRiesgo: acc.enRiesgo + c.enRiesgo,
+        enAlerta: acc.enAlerta + c.enAlerta,
+        alDia: acc.alDia + c.alDia,
+        estudiantes: acc.estudiantes + c.estudiantes,
+      }),
+      { enRiesgo: 0, enAlerta: 0, alDia: 0, estudiantes: 0 }
     );
 
-    const attFilter = groupIds
-      ? `AND gs.group_id = ANY($2::uuid[])`
-      : '';
-    const attParams: unknown[] = groupIds ? [colegioId, groupIds] : [colegioId];
-    const att = await queryPg<{ total: number; presentes: number }>(
-      `SELECT COUNT(*)::int AS total,
-              SUM(CASE WHEN a.status = 'present' THEN 1 ELSE 0 END)::int AS presentes
-       FROM attendance a
-       JOIN group_subjects gs ON gs.id = a.group_subject_id
-       WHERE a.institution_id = $1
-         AND a.date >= date_trunc('month', CURRENT_DATE)
-         ${attFilter}`,
-      attParams
-    );
-
-    const row = result.rows[0];
-    const attRow = att.rows[0];
     return res.json({
-      grupos: row?.total_grupos ?? 0,
-      estudiantes: row?.total_estudiantes ?? 0,
-      profesores: row?.total_profesores ?? 0,
-      asistenciaPromedio: attRow?.total > 0
-        ? Math.round((attRow.presentes / attRow.total) * 100)
-        : null,
+      sectionName,
+      promedioSeccion,
+      cursos: cursos.map((c) => ({
+        grupoId: c.groupId,
+        grupo: c.groupName,
+        promedioGeneral: c.promedioGeneral,
+        estudiantes: c.estudiantes,
+        enRiesgo: c.enRiesgo,
+        enAlerta: c.enAlerta,
+        alDia: c.alDia,
+      })),
+      totales,
     });
   } catch (e: unknown) {
     console.error(e);
-    return res.status(500).json({ message: 'Error al obtener overview de sección.' });
+    return res.status(500).json({ message: 'Error al obtener analítica de notas de sección.' });
   }
 });
 
-router.get('/section/grades-by-group', protect, async (req: AuthRequest, res) => {
+router.get('/section/notas-analitica/insights', protect, async (req: AuthRequest, res) => {
   try {
     const rol = req.user?.rol;
     const colegioId = req.user?.colegioId;
@@ -176,41 +201,54 @@ router.get('/section/grades-by-group', protect, async (req: AuthRequest, res) =>
     }
 
     const groupIds = await getDirectivoGroupIds(req);
-    if (groupIds !== null && groupIds.length === 0) return res.json([]);
+    if (groupIds !== null && groupIds.length === 0) {
+      return res.json({ summary: 'No hay cursos en tu sección para analizar.' });
+    }
 
-    const filter = groupIds ? `AND g.id = ANY($2::uuid[])` : '';
-    const params: unknown[] = groupIds ? [colegioId, groupIds] : [colegioId];
+    let ids: string[];
+    if (groupIds === null) {
+      const gr = await queryPg<{ id: string }>(
+        'SELECT id FROM groups WHERE institution_id = $1',
+        [colegioId]
+      );
+      ids = gr.rows.map((r) => r.id);
+    } else {
+      ids = groupIds;
+    }
 
-    const rows = await queryPg<{ group_id: string; group_name: string; promedio: number | null; total_notas: number; estudiantes: number }>(
-      `SELECT
-         g.id AS group_id,
-         g.name AS group_name,
-         ROUND(AVG(CASE WHEN gr.max_score > 0 THEN COALESCE(gr.normalized_score, gr.score::numeric / NULLIF(gr.max_score, 0)) * 5 ELSE NULL END)::numeric, 2) AS promedio,
-         COUNT(gr.id)::int AS total_notas,
-         COUNT(DISTINCT e.student_id)::int AS estudiantes
-       FROM groups g
-       LEFT JOIN enrollments e ON e.group_id = g.id
-       LEFT JOIN grades gr ON gr.user_id = e.student_id AND gr.group_id = g.id
-       WHERE g.institution_id = $1 AND g.name ~ '^[0-9]' ${filter}
-       GROUP BY g.id, g.name
-       ORDER BY g.name`,
-      params
-    );
+    const sectionRow =
+      rol === 'directivo' && req.user?.sectionId
+        ? await findSectionById(req.user.sectionId)
+        : null;
+    const sectionName = sectionRow?.name ?? 'Institución';
 
-    return res.json(rows.rows.map(r => ({
-      grupoId: r.group_id,
-      grupo: r.group_name,
-      promedio: r.promedio ? Number(r.promedio) : null,
-      totalNotas: r.total_notas,
-      estudiantes: r.estudiantes,
-    })));
+    const [promedioSeccion, cursos] = await Promise.all([
+      ids.length > 0 ? computeSectionHierarchicalGpa(ids) : Promise.resolve(null),
+      ids.length > 0 ? fetchSectionCourseInsightCards(ids) : Promise.resolve([]),
+    ]);
+
+    const summary = await generateDirectivoSectionAnalyticsSummary({
+      sectionName,
+      promedioSeccion,
+      cursos: cursos.map((c) => ({
+        nombre: c.groupName,
+        promedio: c.promedioGeneral,
+        estudiantes: c.estudiantes,
+        enRiesgo: c.enRiesgo,
+        enAlerta: c.enAlerta,
+        alDia: c.alDia,
+      })),
+    });
+
+    return res.json({ summary });
   } catch (e: unknown) {
     console.error(e);
-    return res.status(500).json({ message: 'Error al obtener notas por grupo.' });
+    return res.status(500).json({ message: 'Error al generar insights de sección.' });
   }
 });
 
-router.get('/section/at-risk', protect, async (req: AuthRequest, res) => {
+/** Resumen holístico de un curso (misma jerarquía que KPI de sección): un round-trip para la vista analítica del directivo. */
+router.get('/group/:groupId/holistic-resumen', protect, async (req: AuthRequest, res) => {
   try {
     const rol = req.user?.rol;
     const colegioId = req.user?.colegioId;
@@ -218,58 +256,22 @@ router.get('/section/at-risk', protect, async (req: AuthRequest, res) => {
       return res.status(403).json({ message: 'No autorizado.' });
     }
 
+    const raw = decodeURIComponent(req.params.groupId ?? '');
+    const resolved = await resolveGroupId(raw, colegioId);
+    if (!resolved) return res.status(404).json({ message: 'Grupo no encontrado.' });
+
     const groupIds = await getDirectivoGroupIds(req);
-    if (groupIds !== null && groupIds.length === 0) return res.json([]);
+    if (groupIds !== null) {
+      const allowed = groupIds.some((gid) => uuidStringsEqual(gid, resolved.id));
+      if (!allowed) return res.status(403).json({ message: 'No autorizado.' });
+    }
 
-    const filter = groupIds ? `AND e.group_id = ANY($2::uuid[])` : '';
-    const params: unknown[] = groupIds ? [colegioId, groupIds] : [colegioId];
-
-    const rows = await queryPg<{
-      student_id: string; full_name: string; group_name: string;
-      promedio: number | null; pct_asistencia: number | null;
-    }>(
-      `SELECT
-         u.id AS student_id,
-         u.full_name,
-         g.name AS group_name,
-         ROUND(AVG(CASE WHEN gr.max_score > 0 THEN COALESCE(gr.normalized_score, gr.score::numeric / NULLIF(gr.max_score, 0)) * 5 ELSE NULL END)::numeric, 2) AS promedio,
-         CASE
-           WHEN COUNT(att.id) > 0
-           THEN ROUND((SUM(CASE WHEN att.status = 'present' THEN 1 ELSE 0 END)::numeric / COUNT(att.id)) * 100, 1)
-           ELSE NULL
-         END AS pct_asistencia
-       FROM users u
-       JOIN enrollments e ON e.student_id = u.id
-       JOIN groups g ON g.id = e.group_id AND g.name ~ '^[0-9]'
-       LEFT JOIN grades gr ON gr.user_id = u.id AND gr.group_id = e.group_id
-       LEFT JOIN group_subjects gsub ON gsub.group_id = e.group_id
-       LEFT JOIN attendance att ON att.user_id = u.id AND att.group_subject_id = gsub.id
-       WHERE u.institution_id = $1 AND u.role = 'estudiante' ${filter}
-       GROUP BY u.id, u.full_name, g.id, g.name
-       HAVING AVG(CASE WHEN gr.max_score > 0 THEN COALESCE(gr.normalized_score, gr.score::numeric / NULLIF(gr.max_score, 0)) * 5 ELSE NULL END) < 3.0
-          OR (COUNT(att.id) > 0 AND (SUM(CASE WHEN att.status = 'present' THEN 1 ELSE 0 END)::numeric / COUNT(att.id)) < 0.70)
-       ORDER BY promedio ASC NULLS LAST
-       LIMIT 20`,
-      params
-    );
-
-    return res.json(rows.rows.map(r => {
-      const prom = r.promedio ? Number(r.promedio) : null;
-      const pct = r.pct_asistencia ? Number(r.pct_asistencia) : null;
-      const isLowGrade = prom !== null && prom < 3.0;
-      const isLowAtt = pct !== null && pct < 70;
-      return {
-        estudianteId: r.student_id,
-        nombre: r.full_name,
-        grupo: r.group_name,
-        promedio: prom,
-        pctAsistencia: pct,
-        riesgo: isLowGrade && isLowAtt ? 'alto' : (isLowGrade || isLowAtt) ? 'medio' : 'bajo',
-      };
-    }));
+    const data = await fetchGroupHolisticAnalytics(colegioId, resolved.id);
+    if (!data) return res.status(404).json({ message: 'Grupo no encontrado.' });
+    return res.json(data);
   } catch (e: unknown) {
     console.error(e);
-    return res.status(500).json({ message: 'Error al obtener estudiantes en riesgo.' });
+    return res.status(500).json({ message: 'Error al obtener resumen holístico del curso.' });
   }
 });
 

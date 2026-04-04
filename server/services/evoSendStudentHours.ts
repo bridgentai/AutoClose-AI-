@@ -2,7 +2,12 @@
  * Ventana de envío de Evo Send para estudiantes: solo entre 7:00 y 19:00 (hora local configurable).
  * Tipos de hilo considerados "grupos" (no aplica a soporte 1-1 u otros comunicados legacy).
  */
-const GROUP_THREAD_TYPES = new Set(['evo_chat', 'evo_chat_staff', 'evo_chat_direct']);
+const GROUP_THREAD_TYPES = new Set([
+  'evo_chat',
+  'evo_chat_staff',
+  'evo_chat_direct',
+  'evo_chat_section_director',
+]);
 
 export function isStudentGroupEvoThreadType(tipo: string): boolean {
   return GROUP_THREAD_TYPES.has(tipo);

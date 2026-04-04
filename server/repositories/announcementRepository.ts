@@ -399,12 +399,59 @@ export async function findOrCreateEvoChatForGroupTeacher(
   }
 }
 
+/** Chat Evo Send del curso (grupo) con el director de sección y estudiantes matriculados. */
+export async function findOrCreateSectionDirectorGroupChat(
+  groupId: string,
+  institutionId: string,
+  groupName: string,
+  createdByDirectorId: string
+): Promise<AnnouncementRow> {
+  const { ensureEvoChatSectionDirectorUniqueIndex } = await import('../db/pgSchemaPatches.js');
+  await ensureEvoChatSectionDirectorUniqueIndex();
+  const sel = await queryPg<AnnouncementRow>(
+    `SELECT * FROM announcements
+     WHERE institution_id = $1 AND type = 'evo_chat_section_director' AND group_id = $2
+     LIMIT 1`,
+    [institutionId, groupId]
+  );
+  if (sel.rows[0]) return sel.rows[0];
+  const title = `Curso · ${groupName}`;
+  try {
+    return await createAnnouncement({
+      institution_id: institutionId,
+      title,
+      body: null,
+      type: 'evo_chat_section_director',
+      group_id: groupId,
+      group_subject_id: null,
+      created_by_id: createdByDirectorId,
+    });
+  } catch {
+    const again = await queryPg<AnnouncementRow>(
+      `SELECT * FROM announcements
+       WHERE institution_id = $1 AND type = 'evo_chat_section_director' AND group_id = $2
+       LIMIT 1`,
+      [institutionId, groupId]
+    );
+    if (again.rows[0]) return again.rows[0];
+    throw new Error('No se pudo crear el chat curso–director');
+  }
+}
+
 export async function findAnnouncementMessages(announcementId: string): Promise<AnnouncementMessageRow[]> {
   const r = await queryPg<AnnouncementMessageRow>(
     'SELECT * FROM announcement_messages WHERE announcement_id = $1 ORDER BY created_at',
     [announcementId]
   );
   return r.rows;
+}
+
+export async function findAnnouncementMessageById(messageId: string): Promise<AnnouncementMessageRow | null> {
+  const r = await queryPg<AnnouncementMessageRow>(
+    'SELECT * FROM announcement_messages WHERE id = $1 LIMIT 1',
+    [messageId]
+  );
+  return r.rows[0] ?? null;
 }
 
 export async function getLastAnnouncementMessage(announcementId: string): Promise<AnnouncementMessageRow | null> {

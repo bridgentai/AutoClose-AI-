@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { CommandPalette, useCommandPalette } from "./command-palette";
 import { AIDock } from "./ai-dock";
@@ -17,6 +17,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isDockExpanded, setIsDockExpanded] = useState(false);
   const isEvoDrive = location === "/evo-drive";
+  const isEvoSend = location === "/evo-send";
+
+  useEffect(() => {
+    const openCommand = () => setCommandOpen(true);
+    window.addEventListener("evos:open-command-palette", openCommand);
+    return () => window.removeEventListener("evos:open-command-palette", openCommand);
+  }, []);
 
   return (
     <div className="min-h-screen w-full relative overflow-hidden">
@@ -56,13 +63,21 @@ export function AppLayout({ children }: AppLayoutProps) {
         {/* Content Area - with dynamic padding for AI Dock and Chat */}
         <div
           className={cn(
-            "flex flex-col min-h-screen transition-all duration-500 ease-in-out",
+            "flex flex-col transition-all duration-500 ease-in-out",
+            isEvoDrive || isEvoSend
+              ? "h-svh min-h-0 max-h-svh overflow-hidden"
+              : "min-h-screen",
             isChatOpen ? "pr-96" : isDockExpanded ? "pr-80" : "pr-16"
           )}
         >
-          <main className="story-section flex flex-col flex-1 min-h-0">
-            {isEvoDrive ? (
-              <div className="flex flex-col flex-1 min-h-0 w-full">
+          <main
+            className={cn(
+              "story-section flex flex-col flex-1 min-h-0",
+              (isEvoDrive || isEvoSend) && "!overflow-y-hidden min-h-0"
+            )}
+          >
+            {isEvoDrive || isEvoSend ? (
+              <div className="flex flex-col flex-1 min-h-0 w-full max-h-full overflow-hidden">
                 {children}
               </div>
             ) : (

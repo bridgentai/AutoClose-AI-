@@ -38,8 +38,26 @@ interface Student {
   nombre: string;
 }
 
+interface GroupHolisticAnalyticsResponse {
+  grupoId: string;
+  promedioCurso: number | null;
+  materiasTotal: number;
+  estudiantes: Array<{
+    studentId: string;
+    nombre: string;
+    promedioHolistico: number | null;
+    materiasConNotas: number;
+    materiasTotal: number;
+    materiaMasDebil: string | null;
+    porMateria: Array<{ nombre: string; promedio: number }>;
+  }>;
+}
+
 // Nota: Padre y Estudiante tienen vistas analíticas dedicadas (/parent/analytics y /student/course/.../analytics)
 const allowedRoles = ['profesor', 'directivo', 'admin-general-colegio', 'school_admin', 'super_admin'];
+
+/** Valor del Select para el alcance agregado del directivo (todas las materias del curso). */
+const DIRECTIVO_TODAS_MATERIAS_VALUE = '__all__';
 
 // Paleta evoOS (azules + acento) para analíticas
 const BAR_COLORS = ['#3B82F6', '#00C8FF', '#1D4ED8', '#38BDF8', '#60A5FA', '#FFD700'];
@@ -68,6 +86,8 @@ export default function CourseAnalyticsPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   /** Materia (group_subject) elegida por el profesor cuando hay varias; se sincroniza con ?gs= como en /course/:id/grades */
   const [materiaSeleccionada, setMateriaSeleccionada] = useState<string | null>(null);
+  /** Directivo: 'all' = KPI holístico del curso; id = group_subject (misma analítica que el profesor en esa materia). */
+  const [directivoMateriaFiltro, setDirectivoMateriaFiltro] = useState<'all' | string>('all');
   const [viewMode, setViewMode] = useState<'general' | 'individual'>('general');
 
   const gsFromQuery =
@@ -75,10 +95,14 @@ export default function CourseAnalyticsPage() {
       ? new URLSearchParams(window.location.search).get('gs')?.trim() || ''
       : '';
 
-  const displayGroupId =
-    cursoId && cursoId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cursoId)
-      ? cursoId
-      : (cursoId || '').toUpperCase().trim();
+  /** UUID en minúsculas para coincidir con PostgreSQL; nombres de curso en mayúsculas (9C); legacy 24-hex sin tocar. */
+  const groupApiId = useMemo(() => {
+    const raw = (cursoId || '').trim();
+    if (!raw) return '';
+    if (raw.length === 24 && /^[0-9a-fA-F]{24}$/.test(raw)) return raw;
+    if (raw.length === 36 && raw.includes('-')) return raw.toLowerCase();
+    return raw.toUpperCase();
+  }, [cursoId]);
 
   const { data: groupInfo } = useQuery<{ _id: string; id: string; nombre: string }>({
     queryKey: ['group', cursoId],
@@ -86,7 +110,7 @@ export default function CourseAnalyticsPage() {
     enabled: !!cursoId,
     staleTime: 5 * 60 * 1000,
   });
-  const groupDisplayName = (groupInfo?.nombre?.trim() || displayGroupId) as string;
+  const groupDisplayName = (groupInfo?.nombre?.trim() || groupApiId || cursoId) as string;
 
   const { data: subjectsForGroup = [] } = useQuery<CourseSubject[]>({
     queryKey: ['subjectsForGroup', cursoId],
@@ -102,28 +126,65 @@ export default function CourseAnalyticsPage() {
   });
 
   const { data: students = [] } = useQuery<Student[]>({
-    queryKey: ['students', cursoId, displayGroupId],
+    queryKey: ['students', cursoId, groupApiId],
     queryFn: async () => {
       try {
-        const res = await apiRequest('GET', `/api/groups/${encodeURIComponent(displayGroupId)}/students`);
+        const res = await apiRequest('GET', `/api/groups/${encodeURIComponent(groupApiId)}/students`);
         return Array.isArray(res) ? res : [];
       } catch {
         return [];
       }
     },
-    enabled: !!displayGroupId && !!user?.id && user?.rol !== 'estudiante',
+    enabled: !!groupApiId && !!user?.id && user?.rol !== 'estudiante',
   });
 
   const isStudent = user?.rol === 'estudiante';
+  const isDirectivo = user?.rol === 'directivo';
 
   useEffect(() => {
-    if (isStudent) return;
+    if (!isDirectivo) return;
+    setDirectivoMateriaFiltro('all');
+  }, [cursoId, isDirectivo]);
+
+  useEffect(() => {
+    if (!isDirectivo || directivoMateriaFiltro === 'all' || subjectsForGroup.length === 0) return;
+    if (!subjectsForGroup.some((s) => s._id === directivoMateriaFiltro)) {
+      setDirectivoMateriaFiltro('all');
+    }
+  }, [isDirectivo, directivoMateriaFiltro, subjectsForGroup]);
+
+  const directivoSoloMateriaId = useMemo(() => {
+    if (!isDirectivo || directivoMateriaFiltro === 'all') return null;
+    return subjectsForGroup.some((s) => s._id === directivoMateriaFiltro) ? directivoMateriaFiltro : null;
+  }, [isDirectivo, directivoMateriaFiltro, subjectsForGroup]);
+
+  const {
+    data: holisticGroup,
+    isLoading: holisticLoading,
+    isError: holisticError,
+    error: holisticQueryError,
+  } = useQuery<GroupHolisticAnalyticsResponse>({
+    queryKey: ['reports/group/holistic-resumen', groupApiId, user?.colegioId],
+    queryFn: () =>
+      apiRequest<GroupHolisticAnalyticsResponse>(
+        'GET',
+        `/api/reports/group/${encodeURIComponent(groupApiId)}/holistic-resumen`
+      ),
+    enabled: isDirectivo && directivoMateriaFiltro === 'all' && !!groupApiId && !!user?.colegioId,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (isStudent || isDirectivo) return;
     setMateriaSeleccionada(null);
-  }, [cursoId, gsFromQuery, isStudent]);
+  }, [cursoId, gsFromQuery, isStudent, isDirectivo]);
 
   const firstSubjectId = useMemo(() => {
     if (isStudent) return cursoId;
     if (!subjectsForGroup.length) return '';
+    if (isDirectivo) {
+      return directivoSoloMateriaId ?? '';
+    }
     if (materiaSeleccionada && subjectsForGroup.some((s) => s._id === materiaSeleccionada)) {
       return materiaSeleccionada;
     }
@@ -131,63 +192,167 @@ export default function CourseAnalyticsPage() {
       return gsFromQuery;
     }
     return subjectsForGroup[0]._id;
-  }, [isStudent, cursoId, subjectsForGroup, gsFromQuery, materiaSeleccionada]);
+  }, [isStudent, isDirectivo, cursoId, subjectsForGroup, gsFromQuery, materiaSeleccionada, directivoSoloMateriaId]);
 
   const subjectName = isStudent
     ? (courseDetails?.nombre ?? '')
     : (subjectsForGroup.find((s) => s._id === firstSubjectId)?.nombre ?? subjectsForGroup[0]?.nombre ?? '');
+
+  /** Alcance analítico: directivo elige todas las materias (holístico) o una materia (snapshots / categorías). */
+  const analyticsScopeLabel = isDirectivo
+    ? directivoSoloMateriaId
+      ? (subjectsForGroup.find((s) => s._id === directivoSoloMateriaId)?.nombre ?? 'Materia')
+      : 'Todas las materias'
+    : subjectName;
   const effectiveStudentId = isStudent ? (user?.id ?? '') : (selectedStudentId || (students[0]?._id ?? ''));
+
+  /** Directivo en “todas las materias”: sin grading por materia; en una materia concreta: igual que profesor. */
+  const gradingCourseId = isDirectivo ? (directivoSoloMateriaId ?? undefined) : firstSubjectId;
 
   const {
     categories,
     snapshot,
     risk,
     isLoading: gradingLoading,
-  } = useCourseGrading(firstSubjectId, effectiveStudentId || undefined);
+  } = useCourseGrading(gradingCourseId, effectiveStudentId || undefined);
 
   const { data: analyticsSummary, isLoading: analyticsSummaryLoading } = useAnalyticsSummary(
-    firstSubjectId,
+    gradingCourseId,
     effectiveStudentId || undefined
   );
   const aiSummary = analyticsSummary?.aiSummary ?? '';
 
   const { data: intelligence } = useCourseIntelligence(
-    firstSubjectId,
+    gradingCourseId,
     effectiveStudentId || undefined
   );
 
   const groupComparison = intelligence?.groupComparison;
   const commitment = intelligence?.commitment;
 
+  const generalSnapshotCourseId = isDirectivo ? (directivoSoloMateriaId ?? '') : firstSubjectId;
+
   const studentSnapshotQueries = useQueries({
-    queries: students.map((s) => ({
-      queryKey: ['snapshots', firstSubjectId, s._id],
-      queryFn: () =>
-        apiRequest<PerformanceSnapshotResponse[]>(
-          'GET',
-          `/api/courses/${firstSubjectId}/snapshots?studentId=${encodeURIComponent(s._id)}`
-        ),
-      enabled: !!firstSubjectId && viewMode === 'general' && students.length > 0,
-      staleTime: 2 * 60 * 1000,
-    })),
+    queries:
+      !!generalSnapshotCourseId && viewMode === 'general' && students.length > 0 && !isStudent
+        ? students.map((s) => ({
+            queryKey: ['snapshots', generalSnapshotCourseId, s._id],
+            queryFn: () =>
+              apiRequest<PerformanceSnapshotResponse[]>(
+                'GET',
+                `/api/courses/${generalSnapshotCourseId}/snapshots?studentId=${encodeURIComponent(s._id)}`
+              ),
+            staleTime: 2 * 60 * 1000,
+          }))
+        : [],
   });
 
-  const studentsWithData = students.map((s, i) => {
-    const latest = studentSnapshotQueries[i]?.data?.[0] ?? null;
-    const avg = latest?.weightedFinalAverage ?? null;
-    const categoryImpacts = latest?.categoryImpacts ?? {};
-    const categoryNames = latest?.categoryNames;
-    const lowestEntry =
-      Object.keys(categoryImpacts).length > 0
-        ? (Object.entries(categoryImpacts) as [string, number][]).reduce((a, b) => (a[1] < b[1] ? a : b))
-        : null;
-    const lowestCategoryName = lowestEntry && categoryNames?.[lowestEntry[0]] ? categoryNames[lowestEntry[0]] : null;
-    return { student: s, avg, lowestCategoryName };
-  });
+  const studentsWithData = useMemo(() => {
+    if (isDirectivo) {
+      if (!directivoSoloMateriaId && holisticGroup && Array.isArray(holisticGroup.estudiantes)) {
+        const byId = new Map(
+          holisticGroup.estudiantes.map((e) => [e.studentId.replace(/-/g, '').toLowerCase(), e])
+        );
+        const materiasTotal = holisticGroup.materiasTotal;
+        return students.map((s) => {
+          const h = byId.get(s._id.replace(/-/g, '').toLowerCase());
+          if (!h) {
+            return {
+              student: s,
+              avg: null as number | null,
+              lowestCategoryName: null as string | null,
+              coberturaMateriasPct: materiasTotal > 0 ? 0 : null,
+            };
+          }
+          const pct =
+            materiasTotal > 0 ? Math.round((h.materiasConNotas / materiasTotal) * 100) : null;
+          return {
+            student: s,
+            avg: h.promedioHolistico,
+            lowestCategoryName: h.materiaMasDebil,
+            coberturaMateriasPct: pct,
+          };
+        });
+      }
+      if (directivoSoloMateriaId) {
+        return students.map((s, i) => {
+          const latest = studentSnapshotQueries[i]?.data?.[0] ?? null;
+          const avg = latest?.weightedFinalAverage ?? null;
+          const categoryImpacts = latest?.categoryImpacts ?? {};
+          const categoryNames = latest?.categoryNames;
+          const lowestEntry =
+            Object.keys(categoryImpacts).length > 0
+              ? (Object.entries(categoryImpacts) as [string, number][]).reduce((a, b) =>
+                  a[1] < b[1] ? a : b
+                )
+              : null;
+          const lowestCategoryName =
+            lowestEntry && categoryNames?.[lowestEntry[0]] ? categoryNames[lowestEntry[0]] : null;
+          return { student: s, avg, lowestCategoryName, coberturaMateriasPct: null as number | null };
+        });
+      }
+      return students.map((s) => ({
+        student: s,
+        avg: null as number | null,
+        lowestCategoryName: null as string | null,
+        coberturaMateriasPct: null as number | null,
+      }));
+    }
+    return students.map((s, i) => {
+      const latest = studentSnapshotQueries[i]?.data?.[0] ?? null;
+      const avg = latest?.weightedFinalAverage ?? null;
+      const categoryImpacts = latest?.categoryImpacts ?? {};
+      const categoryNames = latest?.categoryNames;
+      const lowestEntry =
+        Object.keys(categoryImpacts).length > 0
+          ? (Object.entries(categoryImpacts) as [string, number][]).reduce((a, b) => (a[1] < b[1] ? a : b))
+          : null;
+      const lowestCategoryName =
+        lowestEntry && categoryNames?.[lowestEntry[0]] ? categoryNames[lowestEntry[0]] : null;
+      return { student: s, avg, lowestCategoryName, coberturaMateriasPct: null as number | null };
+    });
+  }, [isDirectivo, directivoSoloMateriaId, holisticGroup, students, studentSnapshotQueries]);
+
+  function riskLabelFromAvg(avg: number | null): string {
+    if (avg == null) return '—';
+    if (avg < 65) return 'Alto';
+    if (avg < 75) return 'Medio';
+    return 'Bajo';
+  }
+
+  const selectedHolistic = useMemo(() => {
+    if (!isDirectivo || directivoSoloMateriaId || !holisticGroup?.estudiantes || !effectiveStudentId)
+      return null;
+    const key = effectiveStudentId.replace(/-/g, '').toLowerCase();
+    return (
+      holisticGroup.estudiantes.find(
+        (e) => e.studentId.replace(/-/g, '').toLowerCase() === key
+      ) ?? null
+    );
+  }, [isDirectivo, directivoSoloMateriaId, holisticGroup, effectiveStudentId]);
+
+  const directivoStudentRank = useMemo(() => {
+    if (!isDirectivo || directivoSoloMateriaId || !holisticGroup?.estudiantes?.length || !effectiveStudentId)
+      return null;
+    const key = effectiveStudentId.replace(/-/g, '').toLowerCase();
+    const ranked = [...holisticGroup.estudiantes]
+      .filter((e) => e.promedioHolistico != null)
+      .sort((a, b) => (b.promedioHolistico ?? 0) - (a.promedioHolistico ?? 0));
+    const idx = ranked.findIndex(
+      (e) => e.studentId.replace(/-/g, '').toLowerCase() === key
+    );
+    if (idx < 0) return null;
+    return { rank: idx + 1, total: ranked.length };
+  }, [isDirectivo, directivoSoloMateriaId, holisticGroup, effectiveStudentId]);
 
   const validAvgs = studentsWithData.map((x) => x.avg).filter((x): x is number => x != null);
-  const courseAvgGeneral =
-    validAvgs.length > 0
+  const courseAvgGeneral = isDirectivo
+    ? directivoSoloMateriaId
+      ? validAvgs.length > 0
+        ? Math.round((validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length) * 10) / 10
+        : null
+      : (holisticGroup?.promedioCurso ?? null)
+    : validAvgs.length > 0
       ? Math.round((validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length) * 10) / 10
       : null;
   const kpiEnRiesgo = studentsWithData.filter((x) => x.avg != null && x.avg < 65).length;
@@ -231,11 +396,36 @@ export default function CourseAnalyticsPage() {
     return [];
   }, [snapshot, categories, analyticsSummary]);
 
+  const chartCategoryData = useMemo(() => {
+    if (
+      isDirectivo &&
+      viewMode === 'individual' &&
+      !directivoSoloMateriaId &&
+      selectedHolistic?.porMateria?.length
+    ) {
+      const n = Math.max(1, holisticGroup?.materiasTotal ?? selectedHolistic.porMateria.length);
+      const w = Math.round(100 / n);
+      return selectedHolistic.porMateria.map((p) => ({
+        name: p.nombre,
+        categoria: p.nombre,
+        impact: p.promedio,
+        weight: w,
+      }));
+    }
+    return categoryImpactBreakdown;
+  }, [
+    isDirectivo,
+    directivoSoloMateriaId,
+    viewMode,
+    selectedHolistic,
+    holisticGroup?.materiasTotal,
+    categoryImpactBreakdown,
+  ]);
+
   const impactChartHeight = useMemo(() => {
-    // Ajuste dinámico para evitar solape de labels en categorías largas o muchas filas.
-    const rows = categoryImpactBreakdown.length;
+    const rows = chartCategoryData.length;
     return Math.min(520, Math.max(260, rows * 42));
-  }, [categoryImpactBreakdown.length]);
+  }, [chartCategoryData.length]);
 
   const truncateLabel = (value: unknown, max = 22) => {
     const s = String(value ?? '');
@@ -244,6 +434,13 @@ export default function CourseAnalyticsPage() {
   };
 
   const weightedAverage = analyticsSummary?.weightedAverage ?? snapshot?.weightedFinalAverage ?? null;
+  const displayWeightedAverage =
+    isDirectivo &&
+    viewMode === 'individual' &&
+    !directivoSoloMateriaId &&
+    selectedHolistic?.promedioHolistico != null
+      ? selectedHolistic.promedioHolistico
+      : weightedAverage;
   const canAccess = user?.rol && allowedRoles.includes(user.rol);
 
   if (user && !canAccess) {
@@ -253,10 +450,12 @@ export default function CourseAnalyticsPage() {
           <Button
             variant="ghost"
             className="text-white/70 hover:text-white mb-6"
-            onClick={() => setLocation(`/course-detail/${cursoId}`)}
+            onClick={() =>
+              setLocation(isDirectivo ? '/directivo/academia/analitica-notas' : `/course-detail/${cursoId}`)
+            }
           >
             <ArrowLeft className="w-4 h-4 mr-2 inline" />
-            Volver al curso
+            {isDirectivo ? 'Volver a sección' : 'Volver al curso'}
           </Button>
           <Card className="bg-white/5 border-white/10 rounded-2xl p-6">
             <CardContent>
@@ -284,10 +483,14 @@ export default function CourseAnalyticsPage() {
           <Button
             variant="ghost"
             className="text-white/70 hover:text-white p-0 h-auto font-normal"
-            onClick={() => setLocation(isStudent ? '/mi-aprendizaje/cursos' : `/course-detail/${cursoId}`)}
+            onClick={() => {
+              if (isStudent) setLocation('/mi-aprendizaje/cursos');
+              else if (isDirectivo) setLocation('/directivo/academia/analitica-notas');
+              else setLocation(`/course-detail/${cursoId}`);
+            }}
           >
             <ArrowLeft className="w-4 h-4 mr-2 inline" />
-            {isStudent ? 'Volver a mis cursos' : 'Volver al curso'}
+            {isStudent ? 'Volver a mis cursos' : isDirectivo ? 'Volver a sección' : 'Volver al curso'}
           </Button>
         </div>
 
@@ -299,7 +502,7 @@ export default function CourseAnalyticsPage() {
             <p className="text-white/60 text-sm">
               {isStudent
                 ? (subjectName ? subjectName : 'Materia')
-                : `Grupo ${groupDisplayName}${subjectName ? ` • ${subjectName}` : ''}`}
+                : `Grupo ${groupDisplayName}${analyticsScopeLabel ? ` • ${analyticsScopeLabel}` : ''}`}
             </p>
           </div>
           {!isStudent && (
@@ -318,7 +521,34 @@ export default function CourseAnalyticsPage() {
                   Por estudiante
                 </button>
               </div>
-              {subjectsForGroup.length > 1 && firstSubjectId ? (
+              {isDirectivo && subjectsForGroup.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-white/60 text-sm whitespace-nowrap">Materia</span>
+                  <Select
+                    value={
+                      directivoMateriaFiltro === 'all'
+                        ? DIRECTIVO_TODAS_MATERIAS_VALUE
+                        : (directivoSoloMateriaId ?? DIRECTIVO_TODAS_MATERIAS_VALUE)
+                    }
+                    onValueChange={(v) => {
+                      if (v === DIRECTIVO_TODAS_MATERIAS_VALUE) setDirectivoMateriaFiltro('all');
+                      else setDirectivoMateriaFiltro(v);
+                    }}
+                  >
+                    <SelectTrigger className="w-[min(100vw-4rem,18rem)] sm:w-64 bg-white/5 border-white/20 text-white rounded-lg">
+                      <SelectValue placeholder="Alcance" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={DIRECTIVO_TODAS_MATERIAS_VALUE}>Todas las materias</SelectItem>
+                      {subjectsForGroup.map((s) => (
+                        <SelectItem key={s._id} value={s._id}>
+                          {s.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : !isDirectivo && subjectsForGroup.length > 1 && firstSubjectId ? (
                 <div className="flex items-center gap-2">
                   <span className="text-white/60 text-sm whitespace-nowrap">Materia</span>
                   <Select value={firstSubjectId} onValueChange={(id) => setMateriaSeleccionada(id)}>
@@ -359,7 +589,7 @@ export default function CourseAnalyticsPage() {
           )}
         </header>
 
-        {!firstSubjectId ? (
+        {!firstSubjectId && !isDirectivo ? (
           <div className="panel-grades rounded-2xl p-6">
             <p className="text-white/80">
               {isStudent
@@ -367,11 +597,37 @@ export default function CourseAnalyticsPage() {
                 : 'No hay materias para este grupo.'}
             </p>
           </div>
+        ) : isDirectivo && directivoMateriaFiltro === 'all' && holisticLoading ? (
+          viewMode === 'general' ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-28 bg-white/10 rounded-2xl" />
+                ))}
+              </div>
+              <Skeleton className="h-[420px] bg-white/10 rounded-2xl" />
+            </div>
+          ) : (
+            <Skeleton className="h-[560px] bg-white/10 rounded-2xl" />
+          )
+        ) : isDirectivo && directivoMateriaFiltro === 'all' && holisticError && !holisticLoading ? (
+          <div className="panel-grades rounded-2xl p-6">
+            <p className="text-white font-medium font-['Poppins']">No se pudo cargar la analítica del curso</p>
+            <p className="text-white/55 text-sm mt-2 leading-relaxed">
+              {(holisticQueryError as Error)?.message ||
+                'Verifica tu sesión o que este curso pertenezca a tu sección.'}
+            </p>
+          </div>
         ) : !isStudent && viewMode === 'general' ? (
           /* ═══════════════════════════════════════════════════════
              VISTA GENERAL
           ═══════════════════════════════════════════════════════ */
           <div className="space-y-6">
+            {isDirectivo && directivoSoloMateriaId &&
+            studentSnapshotQueries.length > 0 &&
+            studentSnapshotQueries.some((q) => q.isFetching) ? (
+              <p className="text-white/45 text-sm">Cargando notas por estudiante en esta materia…</p>
+            ) : null}
             {/* KPI Row */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="panel-grades rounded-2xl p-4">
@@ -400,7 +656,7 @@ export default function CourseAnalyticsPage() {
 
             {/* Student grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sortedStudentsForGeneral.map(({ student, avg, lowestCategoryName }) => {
+              {sortedStudentsForGeneral.map(({ student, avg, lowestCategoryName, coberturaMateriasPct }) => {
                 const isRisk = avg != null && avg < 65;
                 const isAlert = avg != null && avg >= 65 && avg < 75;
                 const isOk = avg != null && avg >= 75;
@@ -453,22 +709,42 @@ export default function CourseAnalyticsPage() {
                       </div>
                       <div className="text-center">
                         <p className="text-base font-semibold text-white/70 tabular-nums">
-                          {commitment?.tasksCompletionRate != null
-                            ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
-                            : '—'}
+                          {isDirectivo
+                            ? directivoSoloMateriaId
+                              ? commitment?.tasksCompletionRate != null
+                                ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
+                                : '—'
+                              : coberturaMateriasPct != null
+                                ? `${coberturaMateriasPct}%`
+                                : '—'
+                            : commitment?.tasksCompletionRate != null
+                              ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
+                              : '—'}
                         </p>
-                        <p className="text-[11px] text-white/50 mt-0.5">Entrega</p>
+                        <p className="text-[11px] text-white/50 mt-0.5">
+                          {isDirectivo && !directivoSoloMateriaId ? 'Con notas' : 'Entrega'}
+                        </p>
                       </div>
                       <div className="text-center">
                         <p className="text-base font-semibold text-white/70 tabular-nums">
-                          {risk?.level === 'high' ? 'Alto' : risk?.level === 'medium' ? 'Medio' : risk?.level === 'low' ? 'Bajo' : '—'}
+                          {isDirectivo
+                            ? riskLabelFromAvg(avg)
+                            : risk?.level === 'high'
+                              ? 'Alto'
+                              : risk?.level === 'medium'
+                                ? 'Medio'
+                                : risk?.level === 'low'
+                                  ? 'Bajo'
+                                  : '—'}
                         </p>
                         <p className="text-[11px] text-white/50 mt-0.5">Riesgo</p>
                       </div>
                     </div>
                     {isRisk && lowestCategoryName && (
                       <span className="mt-2 text-[11px] px-2 py-0.5 rounded-md bg-red-500/[0.08] text-red-400 border border-red-500/20 inline-block">
-                        Categoría baja: {lowestCategoryName}
+                        {isDirectivo && !directivoSoloMateriaId
+                          ? `Materia más débil: ${lowestCategoryName}`
+                          : `Categoría baja: ${lowestCategoryName}`}
                       </span>
                     )}
                   </div>
@@ -491,31 +767,50 @@ export default function CourseAnalyticsPage() {
                   {selectedStudent?.nombre ?? 'Estudiante'}
                 </p>
                 <p className="text-sm text-white/50 mt-0.5">
-                  {groupDisplayName}{subjectName ? ` • ${subjectName}` : ''}
+                  {groupDisplayName}
+                  {analyticsScopeLabel ? ` • ${analyticsScopeLabel}` : ''}
                 </p>
                 <div className="border-t border-white/[0.06] my-3" />
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-white/50 mb-1">Promedio</p>
-                    <p className={`text-4xl font-bold font-['Poppins'] tabular-nums leading-none ${analyticsGradeText(weightedAverage)}`}>
-                      {weightedAverage != null ? weightedAverage.toFixed(1) : '—'}
+                    <p className={`text-4xl font-bold font-['Poppins'] tabular-nums leading-none ${analyticsGradeText(displayWeightedAverage)}`}>
+                      {displayWeightedAverage != null ? displayWeightedAverage.toFixed(1) : '—'}
                     </p>
                     <p className="text-white/40 text-xs mt-1">/ 100</p>
                   </div>
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-white/50 mb-1">Ranking</p>
                     <p className="text-2xl font-semibold text-[#E2E8F0] tabular-nums">
-                      {groupComparison?.rank != null && groupComparison.totalStudents > 0
-                        ? `#${groupComparison.rank} de ${groupComparison.totalStudents}`
-                        : '—'}
+                      {isDirectivo
+                        ? directivoSoloMateriaId
+                          ? groupComparison?.rank != null && groupComparison.totalStudents > 0
+                            ? `#${groupComparison.rank} de ${groupComparison.totalStudents}`
+                            : '—'
+                          : directivoStudentRank != null
+                            ? `#${directivoStudentRank.rank} de ${directivoStudentRank.total}`
+                            : '—'
+                        : groupComparison?.rank != null && groupComparison.totalStudents > 0
+                          ? `#${groupComparison.rank} de ${groupComparison.totalStudents}`
+                          : '—'}
                     </p>
                   </div>
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-white/50 mb-1">Entrega</p>
                     <p className="text-2xl font-semibold text-[#E2E8F0] tabular-nums">
-                      {commitment?.tasksCompletionRate != null
-                        ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
-                        : '—'}
+                      {isDirectivo
+                        ? directivoSoloMateriaId
+                          ? commitment?.tasksCompletionRate != null
+                            ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
+                            : '—'
+                          : selectedHolistic &&
+                              holisticGroup &&
+                              holisticGroup.materiasTotal > 0
+                            ? `${Math.round((selectedHolistic.materiasConNotas / holisticGroup.materiasTotal) * 100)}%`
+                            : '—'
+                        : commitment?.tasksCompletionRate != null
+                          ? `${Math.round(commitment.tasksCompletionRate * 100)}%`
+                          : '—'}
                     </p>
                   </div>
                 </div>
@@ -525,7 +820,27 @@ export default function CourseAnalyticsPage() {
               <div className="panel-grades rounded-2xl p-5">
                 <p className="text-xs uppercase tracking-wider text-white/50 mb-3">Estado académico</p>
                 <div className="flex items-center justify-center mb-3">
-                  {risk == null ? (
+                  {isDirectivo && !directivoSoloMateriaId ? (
+                    displayWeightedAverage == null ? (
+                      <span className="text-white/40 text-lg">Sin datos</span>
+                    ) : (
+                      <span
+                        className={`text-lg font-semibold px-4 py-2 rounded-xl border ${
+                          displayWeightedAverage < 65
+                            ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                            : displayWeightedAverage < 75
+                              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        }`}
+                      >
+                        {displayWeightedAverage < 65
+                          ? 'Alto riesgo'
+                          : displayWeightedAverage < 75
+                            ? 'Riesgo medio'
+                            : 'Rendimiento estable'}
+                      </span>
+                    )
+                  ) : risk == null ? (
                     <span className="text-white/40 text-lg">Sin datos</span>
                   ) : (
                     <span
@@ -545,7 +860,14 @@ export default function CourseAnalyticsPage() {
                     </span>
                   )}
                 </div>
-                {(risk?.factors?.length ?? 0) > 0 && (
+                {isDirectivo && !directivoSoloMateriaId && selectedHolistic?.materiaMasDebil ? (
+                  <div className="mt-1">
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-white/60 inline-block">
+                      Materia más débil: {selectedHolistic.materiaMasDebil}
+                    </span>
+                  </div>
+                ) : null}
+                {(!isDirectivo || !!directivoSoloMateriaId) && (risk?.factors?.length ?? 0) > 0 && (
                   <div className="mt-1">
                     {risk!.factors.map((f, i) => (
                       <span
@@ -561,7 +883,7 @@ export default function CourseAnalyticsPage() {
             </div>
 
             {/* Bloque B — Análisis IA */}
-            {aiSummary && aiSummary.trim().length > 0 && (
+            {(!isDirectivo || !!directivoSoloMateriaId) && aiSummary && aiSummary.trim().length > 0 && (
               <div className="panel-grades rounded-2xl p-5">
                 <div className="flex items-center gap-2">
                   <Lightbulb className="w-4 h-4 text-[#ffd700] flex-shrink-0" />
@@ -576,12 +898,16 @@ export default function CourseAnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Desempeño por categoría */}
               <div className="panel-grades rounded-2xl p-5">
-                <h2 className="text-sm font-semibold text-white/80 mb-4">Desempeño por categoría</h2>
-                {categoryImpactBreakdown.length > 0 ? (
+                <h2 className="text-sm font-semibold text-white/80 mb-4">
+                  {isDirectivo && viewMode === 'individual' && !directivoSoloMateriaId
+                    ? 'Promedio por materia (todo del curso)'
+                    : 'Desempeño por categoría'}
+                </h2>
+                {chartCategoryData.length > 0 ? (
                   <div style={{ height: impactChartHeight }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={categoryImpactBreakdown}
+                        data={chartCategoryData}
                         margin={{ top: 12, right: 28, bottom: 12, left: 12 }}
                         layout="vertical"
                       >
@@ -620,7 +946,7 @@ export default function CourseAnalyticsPage() {
                           animationDuration={800}
                           animationEasing="ease-out"
                         >
-                          {categoryImpactBreakdown.map((_, i) => (
+                          {chartCategoryData.map((_, i) => (
                             <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
                           ))}
                           <LabelList
@@ -641,7 +967,11 @@ export default function CourseAnalyticsPage() {
               {/* Evolución de notas */}
               <div className="panel-grades rounded-2xl p-5">
                 <h2 className="text-sm font-semibold text-white/80 mb-4">Evolución de notas</h2>
-                {snapshot?.evolucion && snapshot.evolucion.labels.length > 1 ? (
+                {isDirectivo && !directivoSoloMateriaId ? (
+                  <p className="text-white/40 text-sm text-center py-8">
+                    La evolución temporal se muestra al elegir una materia concreta en el filtro superior.
+                  </p>
+                ) : snapshot?.evolucion && snapshot.evolucion.labels.length > 1 ? (
                   <div className="h-48 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart

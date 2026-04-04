@@ -68,7 +68,7 @@ export default function DirectivoEstudiantesPage() {
   return (
     <DirectivoGuard strictDirectivoOnly>
     <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto">
-      <NavBackButton to="/directivo/academia" label="Academia" />
+      <NavBackButton to="/directivo/gestion" label="Gestión" />
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">
           <Users className="w-8 h-8 text-[var(--evo-cyan)]" />

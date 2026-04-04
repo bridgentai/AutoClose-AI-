@@ -9,6 +9,7 @@ export interface DisciplinaryActionRow {
   created_by_id: string;
   severity: DisciplinarySeverity;
   reason: string;
+  occurred_at: string;
   created_at: string;
 }
 
@@ -34,15 +35,22 @@ export async function createDisciplinaryAction(row: {
   created_by_id: string;
   severity: DisciplinarySeverity;
   reason: string;
+  occurred_at?: string | null;
 }): Promise<DisciplinaryActionRow> {
   const r = await queryPg<DisciplinaryActionRow>(
-    `INSERT INTO disciplinary_actions (institution_id, student_id, created_by_id, severity, reason)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO disciplinary_actions (institution_id, student_id, created_by_id, severity, reason, occurred_at)
+     VALUES ($1, $2, $3, $4, $5, COALESCE($6::timestamptz, now()))
      RETURNING *`,
-    [row.institution_id, row.student_id, row.created_by_id, row.severity, row.reason]
+    [
+      row.institution_id,
+      row.student_id,
+      row.created_by_id,
+      row.severity,
+      row.reason,
+      row.occurred_at ?? null,
+    ]
   );
   const inserted = r.rows[0];
   if (!inserted) throw new Error('No se pudo crear la amonestación.');
   return inserted;
 }
-

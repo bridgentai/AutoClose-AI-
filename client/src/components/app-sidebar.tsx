@@ -19,6 +19,8 @@ import {
   Megaphone,
   Shield,
   Bot,
+  BarChart3,
+  Settings2,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -40,7 +42,7 @@ export function AppSidebar() {
     { icon: Home, label: "Dashboard", path: "/asistente-academica", roles: ["asistente-academica"] },
     { icon: Megaphone, label: "Comunicados", path: "/asistente-academica/comunicados", roles: ["asistente-academica"] },
     { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["asistente-academica"] },
-    { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["asistente-academica"] },
+    { icon: BookOpen, label: "Gestión", path: "/directivo/gestion", roles: ["asistente-academica"] },
     { icon: Shield, label: "Control de accesos", path: "/asistente-academica/accesos", roles: ["asistente-academica"] },
     { icon: Bot, label: "Kiwi Assist", path: "/chat", roles: ["asistente-academica"] },
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
@@ -96,7 +98,8 @@ export function AppSidebar() {
       ],
     },
 
-    { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
+    { icon: Settings2, label: "Gestión", path: "/directivo/gestion", roles: ["directivo"] },
+    { icon: BarChart3, label: "Analítica", path: "/directivo/analitica", roles: ["directivo"] },
     { icon: Settings, label: "Configuración", path: "/settings", roles: ["directivo"] },
 
     { icon: User, label: "Mi Perfil", path: "/mi-perfil", roles: ["estudiante", "profesor", "directivo", "padre"] }

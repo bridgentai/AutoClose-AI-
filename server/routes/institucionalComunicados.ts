@@ -16,8 +16,19 @@ import {
 } from '../repositories/comunicacionRepository.js';
 import { isUserRecipientOfAnnouncement } from '../repositories/announcementRepository.js';
 import { queryPg } from '../config/db-pg.js';
+import { ensureEventsSourceAnnouncementId } from '../db/pgSchemaPatches.js';
+import { createEvent, deleteEventsBySourceAnnouncement } from '../repositories/eventRepository.js';
 
 const router = express.Router();
+
+function parseEventoFechaIso(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const d = new Date(s.includes('T') ? s : `${s}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
 
 const PUBLISH_ROLES = ['directivo', 'admin-general-colegio', 'asistente', 'asistente-academica', 'rector'] as const;
 
@@ -41,6 +52,7 @@ router.post('/comunicado', protect, requireRole(...PUBLISH_ROLES), async (req: A
       audience?: string;
       category?: string;
       priority?: string;
+      eventoFecha?: string;
     };
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const text = typeof body.body === 'string' ? body.body.trim() : '';
@@ -50,6 +62,13 @@ router.post('/comunicado', protect, requireRole(...PUBLISH_ROLES), async (req: A
     if (!title) return res.status(400).json({ message: 'El título es obligatorio.' });
     if (!audience || !['all', 'parents', 'teachers', 'staff'].includes(audience)) {
       return res.status(400).json({ message: 'Audiencia inválida.' });
+    }
+    let eventoFechaIso: string | null = null;
+    if (category === 'evento') {
+      eventoFechaIso = parseEventoFechaIso(body.eventoFecha);
+      if (!eventoFechaIso) {
+        return res.status(400).json({ message: 'La categoría Evento requiere una fecha válida (eventoFecha).' });
+      }
     }
     const recipientIds = await resolveInstitutionalRecipientIds(instId, audience);
     const scheduled = new Date(Date.now() + 30_000).toISOString();
@@ -70,6 +89,19 @@ router.post('/comunicado', protect, requireRole(...PUBLISH_ROLES), async (req: A
     });
     const { addAnnouncementRecipients } = await import('../repositories/announcementRepository.js');
     await addAnnouncementRecipients(created.id, recipientIds);
+    if (category === 'evento' && eventoFechaIso) {
+      await ensureEventsSourceAnnouncementId();
+      await createEvent({
+        institution_id: instId,
+        title,
+        description: text || null,
+        date: eventoFechaIso,
+        type: 'colegio',
+        group_id: null,
+        created_by_id: userId,
+        source_announcement_id: created.id,
+      });
+    }
     return res.status(201).json({ id: created.id, scheduled_send_at: scheduled });
   } catch (e: unknown) {
     console.error('institucional comunicado:', (e as Error).message);
@@ -90,6 +122,8 @@ router.delete('/comunicado/:id/cancel', protect, requireRole(...PUBLISH_ROLES), 
     }
     const result = await cancelComunicadoPending(id, userId, instId);
     if (!result.ok) return res.status(400).json({ message: result.message });
+    await ensureEventsSourceAnnouncementId();
+    await deleteEventsBySourceAnnouncement(instId, id);
     return res.json({ ok: true });
   } catch (e: unknown) {
     console.error('institucional cancel:', (e as Error).message);

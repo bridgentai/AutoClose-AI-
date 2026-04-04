@@ -10,6 +10,8 @@ import {
   User,
   Calendar,
   Users,
+  BarChart3,
+  Settings2,
   Globe,
   Menu,
   X,
@@ -51,7 +53,8 @@ export function TopNavigation() {
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },
     { icon: Cloud, label: "Evo Drive", path: "/evo-drive", roles: ["profesor", "directivo"] },
 
-    { icon: BookOpen, label: "Academia", path: "/directivo/academia", roles: ["directivo"] },
+    { icon: Settings2, label: "Gestión", path: "/directivo/gestion", roles: ["directivo"] },
+    { icon: BarChart3, label: "Analítica", path: "/directivo/analitica", roles: ["directivo"] },
     { icon: Settings, label: "Configuracion", path: "/settings", roles: ["directivo"] },
 
     { icon: User, label: "Mi Perfil", path: "/mi-perfil", roles: ["estudiante", "profesor", "directivo", "padre"] }

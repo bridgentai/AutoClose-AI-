@@ -357,6 +357,8 @@ export function AdminGeneralColegioDashboard() {
   const [newSectionCursoIds, setNewSectionCursoIds] = useState<string[]>([]);
   const [newSectionNuevosCursos, setNewSectionNuevosCursos] = useState<string[]>([]);
   const [newSectionNuevoCursoInput, setNewSectionNuevoCursoInput] = useState('');
+  const [newSectionDirectivoNombre, setNewSectionDirectivoNombre] = useState('');
+  const [newSectionDirectivoEmail, setNewSectionDirectivoEmail] = useState('');
   const [addCursosToSectionId, setAddCursosToSectionId] = useState('');
   const [addCursosToSectionIds, setAddCursosToSectionIds] = useState<string[]>([]);
   const [addCursosToSectionOpen, setAddCursosToSectionOpen] = useState(false);
@@ -585,30 +587,48 @@ export function AdminGeneralColegioDashboard() {
   });
 
   const createSectionMutation = useMutation({
-    mutationFn: async (payload: { nombre: string; cursoIds: string[]; nuevosCursos: string[] }) => {
-      const res = await apiRequest<{ section: { _id: string; nombre: string; cursos: { _id: string; nombre: string }[] } }>(
-        'POST',
-        '/api/sections',
-        { nombre: payload.nombre, cursoIds: payload.cursoIds }
-      );
-      const sectionId = res?.section?._id;
-      if (sectionId && payload.nuevosCursos.length > 0) {
-        for (const nombre of payload.nuevosCursos) {
-          const name = nombre.trim().toUpperCase();
-          if (name) {
-            await apiRequest('POST', '/api/groups/create', { nombre: name, sectionId });
-          }
-        }
-      }
-      return res;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sections', 'groupsAll', 'adminStats'] });
+    mutationFn: (payload: {
+      nombre: string;
+      cursoIds: string[];
+      nuevosCursos: string[];
+      directivo?: { nombre: string; email: string };
+    }) =>
+      apiRequest<{
+        section: { _id: string; nombre: string; cursos: { _id: string; nombre: string }[] };
+        directivo?: { _id: string; nombre: string; email: string; passwordTemporal: string; userId: string };
+      }>('POST', '/api/sections', {
+        nombre: payload.nombre,
+        cursoIds: payload.cursoIds,
+        nuevosCursos: payload.nuevosCursos,
+        ...(payload.directivo ? { directivo: payload.directivo } : {}),
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['sections'] });
+      queryClient.invalidateQueries({ queryKey: ['groupsAll'] });
+      queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      queryClient.invalidateQueries({ queryKey: ['usuariosByRole'] });
       setCreateSectionOpen(false);
       setNewSectionNombre('');
       setNewSectionCursoIds([]);
       setNewSectionNuevosCursos([]);
       setNewSectionNuevoCursoInput('');
+      setNewSectionDirectivoNombre('');
+      setNewSectionDirectivoEmail('');
+      const d = data?.directivo;
+      if (d?._id && d.passwordTemporal) {
+        setUserPasswordTemporal((prev) => ({ ...prev, [d._id]: d.passwordTemporal }));
+        setCreatedUserInfo({
+          _id: d._id,
+          nombre: d.nombre,
+          email: d.email,
+          rol: 'directivo',
+          passwordTemporal: d.passwordTemporal,
+          cuentasCreadas: [],
+        });
+      }
+    },
+    onError: (err: Error) => {
+      alert(err.message ?? 'No se pudo crear la sección.');
     },
   });
 
@@ -1032,9 +1052,9 @@ export function AdminGeneralColegioDashboard() {
           )}
           {kpiCard(
             () => { setActiveSection('usuarios'); setActiveTab('directivos'); },
-            'Directivos',
+            'Directores de sección',
             statsLoading ? '...' : (stats?.directivos ?? 0),
-            (stats?.directivos ?? 0) > 0 ? 'Directiva' : '—',
+            (stats?.directivos ?? 0) > 0 ? 'Dir. sección' : '—',
             <UserCog className="w-5 h-5 text-white/40 shrink-0" />
           )}
           {kpiCard(
@@ -1195,7 +1215,7 @@ export function AdminGeneralColegioDashboard() {
                 Padres
               </TabsTrigger>
               <TabsTrigger value="directivos" className="text-white data-[state=active]:bg-white/10">
-                Directivas
+                Directores de sección
               </TabsTrigger>
               <TabsTrigger value="asistentes" className="text-white data-[state=active]:bg-white/10">
                 Asistentes
@@ -1208,7 +1228,7 @@ export function AdminGeneralColegioDashboard() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/40" />
                   <Input
                     type="text"
-                    placeholder={`Buscar ${activeTab === 'estudiantes' ? 'estudiantes' : activeTab === 'profesores' ? 'profesores' : activeTab === 'padres' ? 'padres' : activeTab === 'directivos' ? 'directivos' : 'asistentes'} por nombre, email${activeTab === 'estudiantes' ? ' o curso' : ''}...`}
+                    placeholder={`Buscar ${activeTab === 'estudiantes' ? 'estudiantes' : activeTab === 'profesores' ? 'profesores' : activeTab === 'padres' ? 'padres' : activeTab === 'directivos' ? 'directores de sección' : 'asistentes'} por nombre, email${activeTab === 'estudiantes' ? ' o curso' : ''}...`}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="bg-white/5 border-white/10 text-white pl-10 placeholder:text-white/40"
@@ -2315,9 +2335,9 @@ export function AdminGeneralColegioDashboard() {
       >
         <DialogContent className="bg-[#0a0a2a] border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle>Crear {createUserType === 'curso' ? 'Curso' : createUserType === 'estudiante' ? 'Estudiante' : createUserType === 'profesor' ? 'Profesor' : createUserType === 'directivo' ? 'Directiva' : createUserType === 'asistente' ? 'Asistente' : 'Padre'}</DialogTitle>
+            <DialogTitle>Crear {createUserType === 'curso' ? 'Curso' : createUserType === 'estudiante' ? 'Estudiante' : createUserType === 'profesor' ? 'Profesor' : createUserType === 'directivo' ? 'Director de sección' : createUserType === 'asistente' ? 'Asistente' : 'Padre'}</DialogTitle>
             <DialogDescription className="text-white/60">
-              Completa los datos para crear un nuevo {createUserType === 'curso' ? 'curso' : createUserType === 'directivo' ? 'miembro de directiva' : createUserType === 'asistente' ? 'asistente' : 'usuario'}
+              Completa los datos para crear un nuevo {createUserType === 'curso' ? 'curso' : createUserType === 'directivo' ? 'director de sección' : createUserType === 'asistente' ? 'asistente' : 'usuario'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -2433,7 +2453,7 @@ export function AdminGeneralColegioDashboard() {
                     {createUserType === 'estudiante' 
                       ? 'El correo funciona como usuario. Se genera una contraseña temporal automáticamente. El estudiante no puede iniciar sesión hasta vincularse con un padre y activar la cuenta.'
                       : createUserType === 'directivo'
-                      ? 'Se genera una contraseña temporal automáticamente. La directiva tendrá acceso al panel de directivo del colegio.'
+                      ? 'Se genera una contraseña temporal automáticamente. El director de sección accede al panel correspondiente del colegio.'
                       : 'Se genera una contraseña temporal automáticamente. La cuenta solo funciona para este colegio.'}
                   </p>
                 </div>
@@ -2761,6 +2781,31 @@ export function AdminGeneralColegioDashboard() {
                 </div>
               )}
             </div>
+            <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 space-y-3">
+              <p className="text-white/80 text-sm font-medium">Directivo de la sección (opcional)</p>
+              <p className="text-white/50 text-xs">
+                Si completas nombre y correo, se crea un usuario con rol directivo y queda vinculado a esta sección.
+              </p>
+              <div>
+                <Label className="text-white/90">Nombre del directivo</Label>
+                <Input
+                  value={newSectionDirectivoNombre}
+                  onChange={(e) => setNewSectionDirectivoNombre(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white mt-1"
+                  placeholder="Ej: María López"
+                />
+              </div>
+              <div>
+                <Label className="text-white/90">Correo del directivo</Label>
+                <Input
+                  type="email"
+                  value={newSectionDirectivoEmail}
+                  onChange={(e) => setNewSectionDirectivoEmail(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white mt-1"
+                  placeholder="directivo@colegio.edu"
+                />
+              </div>
+            </div>
             <div className="flex gap-2 pt-2">
               <Button
                 onClick={() => {
@@ -2768,10 +2813,17 @@ export function AdminGeneralColegioDashboard() {
                     alert('Indica el nombre de la sección.');
                     return;
                   }
+                  const dn = newSectionDirectivoNombre.trim();
+                  const de = newSectionDirectivoEmail.trim().toLowerCase();
+                  if ((dn && !de) || (!dn && de)) {
+                    alert('Para crear el directivo completa nombre y correo, o deja ambos vacíos.');
+                    return;
+                  }
                   createSectionMutation.mutate({
                     nombre: newSectionNombre.trim(),
                     cursoIds: newSectionCursoIds,
                     nuevosCursos: newSectionNuevosCursos,
+                    ...(dn && de ? { directivo: { nombre: dn, email: de } } : {}),
                   });
                 }}
                 disabled={createSectionMutation.isPending || !newSectionNombre.trim()}
@@ -2859,7 +2911,9 @@ export function AdminGeneralColegioDashboard() {
             <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
               {/* Cuenta principal (estudiante / usuario) */}
               <div className="rounded-lg border border-white/20 bg-white/5 p-4 space-y-3">
-                <p className="text-xs text-white/60 uppercase tracking-wider font-semibold">{createdUserInfo.rol}</p>
+                <p className="text-xs text-white/60 uppercase tracking-wider font-semibold">
+                  {createdUserInfo.rol === 'directivo' ? 'Director de sección' : createdUserInfo.rol}
+                </p>
                 <div>
                   <p className="text-xs text-white/50 uppercase tracking-wider mb-1">Nombre</p>
                   <p className="text-white font-medium">{createdUserInfo.nombre}</p>

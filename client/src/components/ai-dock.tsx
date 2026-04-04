@@ -22,6 +22,8 @@ import {
   FileCheck,
   Bell,
   Cloud,
+  BarChart3,
+  Settings2,
   Building2,
   ChevronRight,
   Inbox,
@@ -75,6 +77,39 @@ function dockPathActive(currentLocation: string, itemPath: string): boolean {
   return false;
 }
 
+function normDockPath(loc: string): string {
+  return (loc.split('?')[0] ?? '/').replace(/\/$/, '') || '/';
+}
+
+function directivoGestionDockActive(loc: string): boolean {
+  const p = normDockPath(loc);
+  return (
+    p === '/directivo/gestion' ||
+    p.startsWith('/directivo/academia/usuarios') ||
+    p.startsWith('/asignacion-horarios') ||
+    p.startsWith('/directivo/profesores') ||
+    p.startsWith('/directivo/estudiantes') ||
+    p.startsWith('/directivo/cursos')
+  );
+}
+
+function directivoAnaliticaDockActive(loc: string): boolean {
+  const p = normDockPath(loc);
+  return (
+    p === '/directivo/analitica' ||
+    p.startsWith('/directivo/academia/reportes') ||
+    p.startsWith('/directivo/academia/analitica-notas')
+  );
+}
+
+function dockNavItemActive(
+  currentLocation: string,
+  item: { path: string; pathActive?: (s: string) => boolean },
+): boolean {
+  if (item.pathActive) return item.pathActive(currentLocation);
+  return dockPathActive(currentLocation, item.path);
+}
+
 function isParentAprendizajeSection(loc: string): boolean {
   const p = loc.split('?')[0] ?? '';
   const roots = [
@@ -109,6 +144,23 @@ function getDockLocationLabel(location: string): string {
     { match: (s) => s.startsWith('/mi-aprendizaje'), label: 'Mi Aprendizaje' },
     { match: (s) => s.startsWith('/profesor/academia'), label: 'Academia' },
     { match: (s) => s.startsWith('/profesor/comunicacion'), label: 'Comunicación' },
+    {
+      match: (s) =>
+        s.startsWith('/directivo/gestion') ||
+        s.startsWith('/directivo/academia/usuarios') ||
+        s.startsWith('/asignacion-horarios') ||
+        s.startsWith('/directivo/profesores') ||
+        s.startsWith('/directivo/estudiantes') ||
+        s.startsWith('/directivo/cursos'),
+      label: 'Gestión',
+    },
+    {
+      match: (s) =>
+        s.startsWith('/directivo/analitica') ||
+        s.startsWith('/directivo/academia/reportes') ||
+        s.startsWith('/directivo/academia/analitica-notas'),
+      label: 'Analítica',
+    },
     { match: (s) => s.startsWith('/directivo/academia'), label: 'Academia' },
     { match: (s) => s.startsWith('/directivo/comunicacion'), label: 'Comunicación' },
     { match: (s) => s.startsWith('/comunicacion'), label: 'Comunicación' },
@@ -275,13 +327,39 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
 
   // Navigation items based on role
   const getNavigationItems = () => {
-    // Vista directivo: Dashboard, Comunicación, Academia, Evo Drive
+    // Vista directivo: Dashboard, Comunicación, Gestión, Analítica, Evo Drive
     if (user?.rol === "directivo") {
       return [
         { icon: Home, label: "Dashboard", description: "Resumen y métricas del colegio", path: "/dashboard", roles: ["directivo"], accentHex: "#1e3cff" },
         { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["directivo"], action: "chat" },
-        { icon: Mail, label: "Comunicación", description: "Mensajes, anuncios y novedades", path: "/directivo/comunicacion", roles: ["directivo"], accentHex: "#1e3cff" },
-        { icon: BookOpen, label: "Academia", description: "Cursos, planes y gestión académica", path: "/directivo/academia", roles: ["directivo"], accentHex: "#1e3cff" },
+        {
+          icon: Send,
+          label: "Evo Send",
+          description: "Chat en tiempo real y comunicación 1:1",
+          path: "/evo-send",
+          roles: ["directivo"],
+          accentHex: "#f43f5e",
+          iconShellClassName:
+            "bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30 border-0",
+        },
+        {
+          icon: Settings2,
+          label: "Gestión",
+          description: "Usuarios y asignación de horarios",
+          path: "/directivo/gestion",
+          roles: ["directivo"],
+          accentHex: "#1e3cff",
+          pathActive: directivoGestionDockActive,
+        },
+        {
+          icon: BarChart3,
+          label: "Analítica",
+          description: "Reportes, sección y análisis de notas",
+          path: "/directivo/analitica",
+          roles: ["directivo"],
+          accentHex: "#1e3cff",
+          pathActive: directivoAnaliticaDockActive,
+        },
         { icon: Cloud, label: "Evo Drive", description: "Acceder al drive de la plataforma", path: "/evo-drive", roles: ["directivo"], accentHex: "#00c8ff" },
       ];
     }
@@ -972,7 +1050,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                   {user?.rol === 'padre' &&
                     padreDockPrimary.map((item) => {
                       const Icon = item.icon;
-                      const isActive = dockPathActive(location, item.path);
+                      const isActive = dockNavItemActive(location, item);
                       return (
                         <Tooltip key={item.path}>
                           <TooltipTrigger asChild>
@@ -1111,7 +1189,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                     </p>
                     {dockNavigationItems.map((item) => {
                       const Icon = item.icon;
-                      const isActive = dockPathActive(location, item.path);
+                      const isActive = dockNavItemActive(location, item);
                       return (
                         <Tooltip key={item.path}>
                           <TooltipTrigger asChild>

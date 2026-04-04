@@ -93,9 +93,6 @@ import ParentPage from "@/pages/parent";
 
 // Módulos del profesor
 import ProfesorAcademiaLayout from "@/pages/profesor-academia";
-import ProfesorBandejaEntrada from "@/pages/profesor-bandeja-entrada";
-import ProfesorRedactarMensaje from "@/pages/profesor-redactar-mensaje";
-import ProfesorMensajesEnviados from "@/pages/profesor-mensajes-enviados";
 import ProfesorTareasPage from "@/pages/profesor-tareas";
 import ProfesorCalificacionLogrosPage from "@/pages/profesor-calificacion-logros";
 import ProfesorAsignarTareaPage from "@/pages/profesor-asignar-tarea";
@@ -117,11 +114,12 @@ import CafeteriaPage from "@/pages/cafeteria";
 
 // Módulos de Directivo
 import DirectivoComunidadLayout from "@/pages/directivo-comunidad";
-import DirectivoAcademiaLayout from "@/pages/directivo-academia";
+import { DirectivoGestionHub, DirectivoAnaliticaHub } from "@/pages/directivo-academia";
 import DirectivoAcademiaUsuariosPage from "@/pages/directivo-academia-usuarios";
 import DirectivoProfesoresPage from "@/pages/directivo-profesores";
 import DirectivoReportesPage from "@/pages/directivo-reportes";
-import DirectivoAnaliticaPage from "@/pages/directivo-analitica";
+import DirectivoNotasAnaliticaPage from "@/pages/directivo-notas-analitica";
+import DirectivoAmonestacionesPage from "@/pages/directivo-amonestaciones";
 
 // Módulos de Administrador General
 import AdministradorGeneralComunidadLayout from "@/pages/administrador-general-comunidad";
@@ -147,7 +145,6 @@ import CafeteriaComunicacionLayout from "@/pages/cafeteria-comunicacion";
 
 // Asistente
 import AsistentePage from "@/pages/asistente";
-import AsistenteComunicacionLayout from "@/pages/asistente-comunicacion";
 
 // Asistente Académica
 import AsistenteAcademicaDashboard from "@/pages/asistente-academica";
@@ -234,7 +231,7 @@ function AppRouter() {
               <AuthGuard><StudentTasksPage /></AuthGuard>
             </Route>
             <Route path="/directivo">
-              <AuthGuard><Redirect to="/directivo/academia" /></AuthGuard>
+              <AuthGuard><Redirect to="/directivo/gestion" /></AuthGuard>
             </Route>
             <Route path="/administrador-general">
               <AuthGuard><AdministradorGeneralPage /></AuthGuard>
@@ -255,13 +252,13 @@ function AppRouter() {
               <AuthGuard><AsistentePage /></AuthGuard>
             </Route>
             <Route path="/asistente/comunicacion">
-              <AuthGuard><AsistenteComunicacionLayout /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/asistente/comunicacion/bandeja">
-              <AuthGuard><BandejaDeEntrada /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/asistente/comunicacion/redactar">
-              <AuthGuard><ProfesorRedactarMensaje /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
 
             {/* Módulos de Asistente Académica */}
@@ -377,7 +374,7 @@ function AppRouter() {
               <AuthGuard><ComunicacionAcademico /></AuthGuard>
             </Route>
             <Route path="/comunicacion/redactar">
-              <AuthGuard><ProfesorRedactarMensaje /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/evo-send">
               <AuthGuard><EvoSendPage /></AuthGuard>
@@ -523,16 +520,16 @@ function AppRouter() {
             </Route>
 
             <Route path="/profesor/comunicacion">
-              <AuthGuard><ComunicacionHome /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/profesor/comunicacion/bandeja">
-              <AuthGuard><ProfesorBandejaEntrada /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/profesor/comunicacion/redactar">
-              <AuthGuard><ProfesorRedactarMensaje /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/profesor/comunicacion/enviados">
-              <AuthGuard><ProfesorMensajesEnviados /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
 
             {/* Módulos de Directivo */}
@@ -543,13 +540,25 @@ function AppRouter() {
               <AuthGuard><DirectivoReportesPage /></AuthGuard>
             </Route>
             <Route path="/directivo/academia/analitica">
-              <AuthGuard><DirectivoAnaliticaPage /></AuthGuard>
+              <AuthGuard><Redirect to="/directivo/academia/analitica-notas" /></AuthGuard>
+            </Route>
+            <Route path="/directivo/academia/analitica-notas">
+              <AuthGuard><DirectivoNotasAnaliticaPage /></AuthGuard>
             </Route>
             <Route path="/directivo/academia/usuarios">
               <AuthGuard><DirectivoAcademiaUsuariosPage /></AuthGuard>
             </Route>
+            <Route path="/directivo/gestion/amonestaciones">
+              <AuthGuard><DirectivoAmonestacionesPage /></AuthGuard>
+            </Route>
+            <Route path="/directivo/gestion">
+              <AuthGuard><DirectivoGestionHub /></AuthGuard>
+            </Route>
+            <Route path="/directivo/analitica">
+              <AuthGuard><DirectivoAnaliticaHub /></AuthGuard>
+            </Route>
             <Route path="/directivo/academia">
-              <AuthGuard><DirectivoAcademiaLayout /></AuthGuard>
+              <AuthGuard><Redirect to="/directivo/gestion" /></AuthGuard>
             </Route>
             <Route path="/directivo/profesores">
               <AuthGuard><DirectivoProfesoresPage /></AuthGuard>
@@ -566,11 +575,14 @@ function AppRouter() {
             <Route path="/directivo/cursos/:grupoId/estudiantes/:estudianteId/notas">
               <AuthGuard><DirectivoEstudianteNotasPage /></AuthGuard>
             </Route>
+            <Route path="/directivo/cursos/:grupoId/estudiantes/:estudianteId">
+              <AuthGuard><StudentProfilePage /></AuthGuard>
+            </Route>
             <Route path="/directivo/cursos/:grupoId">
               <AuthGuard><DirectivoCursoDetailPage /></AuthGuard>
             </Route>
             <Route path="/directivo/comunicacion">
-              <AuthGuard><ComunicacionHome /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
 
             {/* Módulos de Administrador General */}

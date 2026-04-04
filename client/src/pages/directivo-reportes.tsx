@@ -130,7 +130,7 @@ export default function DirectivoReportesPage() {
   return (
     <DirectivoGuard>
     <div className="p-6 max-w-6xl mx-auto">
-      <NavBackButton to="/directivo/academia" label="Academia" />
+      <NavBackButton to="/directivo/analitica" label="Analítica" />
 
       <div className="mt-4 mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-white font-['Poppins'] flex items-center gap-2">

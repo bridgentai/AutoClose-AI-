@@ -26,6 +26,8 @@ const routeIcons: Record<string, any> = {
   "/asignacion-horarios": Users,
   "/group-assignment": Users,
   "/plataformas": Globe,
+  "/directivo/gestion": BookOpen,
+  "/directivo/analitica": BookOpen,
   "/directivo/academia": BookOpen,
   "/mi-perfil": User,
 };
@@ -44,7 +46,9 @@ const routeLabels: Record<string, string> = {
   "/asignacion-horarios": "Asignación de Horarios",
   "/group-assignment": "Asignación de Grupos",
   "/plataformas": "Plataformas",
-  "/directivo/academia": "Academia",
+  "/directivo/gestion": "Gestión",
+  "/directivo/analitica": "Analítica",
+  "/directivo/academia": "Gestión",
   "/mi-perfil": "Mi Perfil",
 };
 

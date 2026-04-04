@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/authContext";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, FileText } from "lucide-react";
+import { Users, FileText, UserCircle } from "lucide-react";
 import { NavBackButton } from "@/components/nav-back-button";
 import { DirectivoGuard } from "@/components/directivo-guard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,19 +103,34 @@ export default function DirectivoCursoEstudiantesPage() {
                       {est.estado}
                     </Badge>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-[var(--evo-cyan)]/50 text-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/10"
-                    onClick={() =>
-                      setLocation(
-                        `/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes/${est._id}/notas`
-                      )
-                    }
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Ver notas
-                  </Button>
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-white/20 text-white/90 hover:bg-white/10"
+                      onClick={() =>
+                        setLocation(
+                          `/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes/${est._id}`
+                        )
+                      }
+                    >
+                      <UserCircle className="w-4 h-4 mr-2" />
+                      Ficha estudiante
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-[var(--evo-cyan)]/50 text-[var(--evo-cyan)] hover:bg-[var(--evo-cyan)]/10"
+                      onClick={() =>
+                        setLocation(
+                          `/directivo/cursos/${encodeURIComponent(grupoId)}/estudiantes/${est._id}/notas`
+                        )
+                      }
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Ver notas
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

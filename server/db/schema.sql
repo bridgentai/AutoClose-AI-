@@ -465,6 +465,7 @@ CREATE TABLE IF NOT EXISTS disciplinary_actions (
   created_by_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
   severity VARCHAR(20) NOT NULL CHECK (severity IN ('leve', 'grave', 'suma gravedad')),
   reason TEXT NOT NULL,
+  occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -522,6 +523,18 @@ CREATE TABLE IF NOT EXISTS announcement_messages (
 
 CREATE INDEX IF NOT EXISTS idx_announcement_messages_announcement ON announcement_messages(announcement_id);
 
+CREATE TABLE IF NOT EXISTS evo_send_message_user_state (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  message_id UUID NOT NULL REFERENCES announcement_messages(id) ON DELETE CASCADE,
+  institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  trashed_at TIMESTAMPTZ,
+  starred_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, message_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_evo_send_msg_state_inst_user ON evo_send_message_user_state(institution_id, user_id);
+
 CREATE TABLE IF NOT EXISTS announcement_reads (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   announcement_id UUID NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
@@ -533,6 +546,10 @@ CREATE TABLE IF NOT EXISTS announcement_reads (
 CREATE INDEX IF NOT EXISTS idx_ann_reads ON announcement_reads(announcement_id);
 CREATE INDEX IF NOT EXISTS idx_ann_institution_type ON announcements(institution_id, type, created_at DESC);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_announcements_evo_chat_section_director_group
+  ON announcements (institution_id, group_id)
+  WHERE type = 'evo_chat_section_director' AND group_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
@@ -542,11 +559,13 @@ CREATE TABLE IF NOT EXISTS events (
   "type" VARCHAR(20) NOT NULL CHECK ("type" IN ('curso', 'colegio')),
   group_id UUID REFERENCES groups(id) ON DELETE SET NULL,
   created_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  source_announcement_id UUID REFERENCES announcements(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_institution ON events(institution_id);
 CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
+CREATE INDEX IF NOT EXISTS idx_events_source_announcement ON events(source_announcement_id) WHERE source_announcement_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS roles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -136,7 +136,23 @@ export interface AuthResponse {
   _id?: string;
   nombre: string;
   email: string;
-  rol: 'estudiante' | 'profesor' | 'directivo' | 'padre' | 'administrador-general' | 'admin-general-colegio' | 'transporte' | 'tesoreria' | 'nutricion' | 'cafeteria' | 'asistente' | 'school_admin' | 'super_admin' | 'rector';
+  rol:
+    | 'estudiante'
+    | 'profesor'
+    | 'directivo'
+    | 'directora-academica'
+    | 'padre'
+    | 'administrador-general'
+    | 'admin-general-colegio'
+    | 'transporte'
+    | 'tesoreria'
+    | 'nutricion'
+    | 'cafeteria'
+    | 'asistente'
+    | 'asistente-academica'
+    | 'school_admin'
+    | 'super_admin'
+    | 'rector';
   curso?: string;
   materias?: string[];
   colegioId: string;

@@ -35,6 +35,48 @@ export interface CalendarAssignment {
   type?: string;
 }
 
+/** Textos del resumen por día y leyenda mensual (p. ej. eventos institucionales vs tareas). */
+export interface CalendarSummaryLabels {
+  itemSingular: string;
+  itemPlural: string;
+  studentGroupSingular: string;
+  studentGroupPlural: string;
+  teacherGroupSingular: string;
+  teacherGroupPlural: string;
+  /** Texto tras «+N » en celdas teacher con varias claves de color (p. ej. «cursos»). */
+  teacherMultiKeyBadge: string;
+  footerWithBubbleHint: string;
+  footerDefaultHint: string;
+  monthLegendOne: string;
+  monthLegendMany: string;
+}
+
+export const DEFAULT_CALENDAR_SUMMARY_LABELS: CalendarSummaryLabels = {
+  itemSingular: 'tarea',
+  itemPlural: 'tareas',
+  studentGroupSingular: 'materia',
+  studentGroupPlural: 'materias',
+  teacherGroupSingular: 'curso',
+  teacherGroupPlural: 'cursos',
+  teacherMultiKeyBadge: 'cursos',
+  footerWithBubbleHint:
+    'Clic en el día: nueva tarea con esa fecha · Clic en una tarea: ver detalle',
+  footerDefaultHint: 'Clic para ver detalles',
+  monthLegendOne: 'tarea asignada',
+  monthLegendMany: 'tareas asignadas',
+};
+
+/** Copy para calendarios de eventos (EvoSend / comunidad), sin afectar calendario de tareas. */
+export const CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS: Partial<CalendarSummaryLabels> = {
+  itemSingular: 'evento',
+  itemPlural: 'eventos',
+  teacherMultiKeyBadge: 'tipos',
+  footerWithBubbleHint: 'Clic en el día: ver resumen · Clic en un evento: detalle',
+  footerDefaultHint: 'Clic para ver detalles',
+  monthLegendOne: 'evento programado',
+  monthLegendMany: 'eventos programados',
+};
+
 interface CalendarProps {
   assignments: CalendarAssignment[];
   /** Si se pasa (variant student), se deriva `estado` desde entregas para colorear celdas. */
@@ -45,6 +87,10 @@ interface CalendarProps {
   variant?: CalendarVariant;
   currentDate?: Date;
   onCurrentDateChange?: (d: Date) => void;
+  /** Sustituye el texto bajo el mes (por defecto: tareas asignadas este mes). */
+  monthLegendOverride?: string;
+  /** Sustituye «tarea»/«curso»/pies de hover; por defecto tareas académicas. */
+  summaryLabels?: Partial<CalendarSummaryLabels>;
 }
 
 type DeliveryBucket =
@@ -148,9 +194,16 @@ export function Calendar({
   variant = 'student',
   currentDate: controlledDate,
   onCurrentDateChange,
+  monthLegendOverride,
+  summaryLabels: summaryLabelsProp,
 }: CalendarProps) {
   const [internalDate, setInternalDate] = useState(() => new Date());
   const currentDate = controlledDate ?? internalDate;
+
+  const L = useMemo(
+    () => ({ ...DEFAULT_CALENDAR_SUMMARY_LABELS, ...summaryLabelsProp }),
+    [summaryLabelsProp]
+  );
 
   const setMonth = useCallback(
     (next: Date) => {
@@ -314,8 +367,14 @@ export function Calendar({
       <>
         <div className="pb-2 border-b border-white/10">
           <p className="text-sm font-semibold text-white">
-            {total} {total === 1 ? 'tarea' : 'tareas'} • {keyCount}{' '}
-            {isStudent ? (keyCount === 1 ? 'materia' : 'materias') : keyCount === 1 ? 'curso' : 'cursos'}
+            {total} {total === 1 ? L.itemSingular : L.itemPlural} • {keyCount}{' '}
+            {isStudent
+              ? keyCount === 1
+                ? L.studentGroupSingular
+                : L.studentGroupPlural
+              : keyCount === 1
+                ? L.teacherGroupSingular
+                : L.teacherGroupPlural}
           </p>
           <p className="text-xs text-white/60 mt-1">
             {day} de {monthNames[month]} {year}
@@ -363,9 +422,7 @@ export function Calendar({
         })}
         <div className="pt-2 border-t border-white/10">
           <p className="text-xs text-white/50 text-center">
-            {onDayBubbleClick
-              ? 'Clic en el día: nueva tarea con esa fecha · Clic en una tarea: ver detalle'
-              : 'Clic para ver detalles'}
+            {onDayBubbleClick ? L.footerWithBubbleHint : L.footerDefaultHint}
           </p>
         </div>
       </>
@@ -406,7 +463,7 @@ export function Calendar({
         const onlyKey = Array.from(assignmentsByKey.keys())[0];
         const courseColor = colorMap.get(onlyKey) || getGroupSubjectColor({ fallbackId: onlyKey });
         const label = keyToLabel.get(onlyKey) || onlyKey;
-        const totalLabel = total === 1 ? label : `+${total} tareas`;
+        const totalLabel = total === 1 ? label : `+${total} ${L.itemPlural}`;
 
         pushDay(
           <>
@@ -434,7 +491,7 @@ export function Calendar({
             <span className="text-lg font-bold text-white/95 leading-none">{day}</span>
           </div>
           <span className="text-[10px] sm:text-[11px] font-semibold text-white/80 leading-tight z-10">
-            +{keyCount} cursos
+            +{keyCount} {L.teacherMultiKeyBadge}
           </span>
           <div className="flex flex-wrap gap-1 z-10 mt-auto pt-1 justify-center">
             {courseDots.map((c, i) => (
@@ -549,7 +606,7 @@ export function Calendar({
               <span className="w-2 h-2 rounded-full shrink-0 mt-0.5 bg-white/90" />
             </div>
             <span className="text-[10px] sm:text-[11px] font-semibold text-white leading-tight line-clamp-2 z-10">
-              +{total} tareas
+              +{total} {L.itemPlural}
             </span>
             <div className="absolute inset-0 z-0" style={{ background: subjectColor }} />
           </>,
@@ -570,7 +627,9 @@ export function Calendar({
             <div className="flex justify-between items-start z-10">
               <span className="text-lg font-bold text-white leading-none">{day}</span>
             </div>
-            <span className="text-[10px] sm:text-[11px] font-semibold text-white/90 leading-tight z-10">+{total} tareas</span>
+            <span className="text-[10px] sm:text-[11px] font-semibold text-white/90 leading-tight z-10">
+              +{total} {L.itemPlural}
+            </span>
             <div className="flex flex-wrap gap-1 z-10 mt-auto pt-1 justify-center">
               {dots.map((c, i) => (
                 <span key={i} className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c }} />
@@ -594,7 +653,7 @@ export function Calendar({
               <span className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: NO_DELIVERY_STYLE.dot }} />
             </div>
             <span className="text-[10px] sm:text-[11px] font-semibold leading-tight line-clamp-2 z-10 text-white/90">
-              +{total} tareas
+              +{total} {L.itemPlural}
             </span>
             <div className="absolute inset-0 z-0" style={{ background: NO_DELIVERY_STYLE.bg }} />
           </>,
@@ -616,7 +675,7 @@ export function Calendar({
               <span className="w-2 h-2 rounded-full shrink-0 mt-0.5" style={{ backgroundColor: st.dot }} />
             </div>
             <span className="text-[10px] sm:text-[11px] font-semibold leading-tight line-clamp-2 z-10" style={{ color: st.text }}>
-              +{total} tareas
+              +{total} {L.itemPlural}
             </span>
             <div className="absolute inset-0 z-0" style={{ background: st.bg }} />
           </>,
@@ -642,7 +701,9 @@ export function Calendar({
           <div className="flex justify-between items-start z-10">
             <span className="text-lg font-bold text-white leading-none">{day}</span>
           </div>
-          <span className="text-[10px] sm:text-[11px] font-semibold text-white/90 leading-tight z-10">+{keyCount} materias</span>
+          <span className="text-[10px] sm:text-[11px] font-semibold text-white/90 leading-tight z-10">
+            +{keyCount} {L.studentGroupPlural}
+          </span>
           <div className="flex flex-wrap gap-1 z-10 mt-auto pt-1 justify-center">
             {subjectDots.map((c, i) => (
               <span key={i} className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c }} />
@@ -686,7 +747,9 @@ export function Calendar({
         <div className="flex justify-between items-start z-10">
           <span className="text-lg font-bold text-white/95 leading-none">{day}</span>
         </div>
-        <span className="text-[10px] sm:text-[11px] font-semibold text-white/80 leading-tight z-10">+{keyCount} materias</span>
+        <span className="text-[10px] sm:text-[11px] font-semibold text-white/80 leading-tight z-10">
+          +{keyCount} {L.studentGroupPlural}
+        </span>
         <div className="flex flex-wrap gap-1 z-10 mt-auto pt-1 justify-center">
           {statusDots.map((c, i) => (
             <span key={i} className="w-2 h-2 rounded-full shrink-0 ring-1 ring-white/20" style={{ backgroundColor: c }} />
@@ -729,7 +792,8 @@ export function Calendar({
       </div>
 
       <p className="text-sm text-white/60 mb-5">
-        {tasksThisMonth} {tasksThisMonth === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes
+        {monthLegendOverride ??
+          `${tasksThisMonth} ${tasksThisMonth === 1 ? L.monthLegendOne : L.monthLegendMany} este mes`}
       </p>
 
       <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2">

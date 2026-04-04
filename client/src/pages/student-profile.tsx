@@ -104,6 +104,8 @@ interface Amonestacion {
   gravedad: 'leve' | 'grave' | 'suma gravedad';
   razon: string;
   fecha: string;
+  /** Fecha/hora del hecho disciplinario (si difiere del registro). */
+  fechaHecho?: string;
   registradoPor?: string;
 }
 
@@ -303,12 +305,16 @@ export default function StudentProfilePage() {
   const search = typeof window !== 'undefined' ? window.location.search : '';
   const searchParams = new URLSearchParams(search);
   
-  // Rutas dinámicas
-  const [, params] = useRoute('/profesor/cursos/:cursoId/estudiantes/:estudianteId');
-  
-  const cursoId = params?.cursoId || '';
-  const estudianteId = params?.estudianteId || '';
-  const returnTo = searchParams.get('returnTo') || `/course-detail/${cursoId}`;
+  const [, profParams] = useRoute('/profesor/cursos/:cursoId/estudiantes/:estudianteId');
+  const [, dirParams] = useRoute('/directivo/cursos/:grupoId/estudiantes/:estudianteId');
+
+  const cursoId = profParams?.cursoId || dirParams?.grupoId || '';
+  const estudianteId = profParams?.estudianteId || dirParams?.estudianteId || '';
+  const returnTo =
+    searchParams.get('returnTo') ||
+    (dirParams
+      ? `/directivo/cursos/${encodeURIComponent(cursoId)}/estudiantes`
+      : `/course-detail/${cursoId}`);
   
   // Obtener información personal del estudiante desde el backend
   const { data: studentDetail, isLoading: isLoadingStudent, error: studentError } = useQuery<StudentDetail>({
@@ -848,14 +854,26 @@ export default function StudentProfilePage() {
                           </Badge>
                         </div>
                         <p className="text-red-200 font-medium mb-2">{amonestacion.razon}</p>
-                        <div className="flex items-center gap-4 text-sm text-red-200/70">
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-red-200/70">
+                          {amonestacion.fechaHecho ? (
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-4 h-4" />
+                              <span>
+                                Hecho:{' '}
+                                {new Date(amonestacion.fechaHecho).toLocaleString('es-CO', {
+                                  dateStyle: 'medium',
+                                  timeStyle: 'short',
+                                })}
+                              </span>
+                            </div>
+                          ) : null}
                           <div className="flex items-center gap-1">
                             <Calendar className="w-4 h-4" />
                             <span>
-                              {new Date(amonestacion.fecha).toLocaleDateString('es-CO', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
+                              {amonestacion.fechaHecho ? 'Registro: ' : ''}
+                              {new Date(amonestacion.fecha).toLocaleString('es-CO', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
                               })}
                             </span>
                           </div>

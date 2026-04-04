@@ -55,6 +55,9 @@ import {
   ensureComunicacionModule,
   ensureKiwiSchema,
   ensureUsersSectionId,
+  ensureCommunicationLegacyCleanup,
+  ensureEventsSourceAnnouncementId,
+  ensureDisciplinaryActionsOccurredAt,
 } from "./db/pgSchemaPatches.js";
 import institucionalComunicadosRoutes from "./routes/institucionalComunicados.js";
 import kiwiRoutes from "./routes/kiwi.js";
@@ -130,6 +133,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await ensureUsersSectionId();
     } catch (e) {
       console.warn("[schema] Parche users.section_id:", (e as Error).message);
+    }
+    try {
+      await ensureCommunicationLegacyCleanup();
+    } catch (e) {
+      console.warn("[schema] Limpieza legacy comunicación:", (e as Error).message);
+    }
+    try {
+      await ensureEventsSourceAnnouncementId();
+    } catch (e) {
+      console.warn("[schema] Parche events.source_announcement_id:", (e as Error).message);
+    }
+    try {
+      await ensureDisciplinaryActionsOccurredAt();
+    } catch (e) {
+      console.warn("[schema] Parche disciplinary_actions.occurred_at:", (e as Error).message);
     }
   }
 

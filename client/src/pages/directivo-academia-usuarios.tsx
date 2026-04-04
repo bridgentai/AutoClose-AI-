@@ -25,7 +25,7 @@ export default function DirectivoAcademiaUsuariosPage() {
   return (
     <DirectivoGuard strictDirectivoOnly>
     <div className="p-6" data-testid="directivo-academia-usuarios">
-      <NavBackButton to="/directivo/academia" label="Academia" />
+      <NavBackButton to="/directivo/gestion" label="Gestión" />
       <h1 className="text-2xl font-bold mb-2 text-white font-['Poppins']">
         Usuarios
       </h1>
