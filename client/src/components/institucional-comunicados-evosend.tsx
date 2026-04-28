@@ -18,19 +18,22 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/lib/authContext';
 import {
   Building2,
   Cloud,
   Eye,
+  FileSpreadsheet,
+  FileText,
   Loader2,
   Link2,
   Megaphone,
   Pencil,
+  Presentation,
   Send,
   Inbox,
-  SendHorizontal,
   Star,
   Trash2,
   RotateCcw,
@@ -47,6 +50,7 @@ import { EvoComposeAttachmentBar } from '@/components/evo-compose-attachment-bar
 import { EvoComposeAddMenu } from '@/components/evo-compose-add-menu';
 import { apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { getGroupSubjectColor } from '@/lib/courseColor';
 import {
   Calendar,
   CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS,
@@ -55,6 +59,13 @@ import {
 import { getAssignmentCalendarLocalParts } from '@/lib/assignmentUtils';
 
 type CategoryKey = 'all' | 'general' | 'circular' | 'evento' | 'calendario' | 'aviso';
+
+/** Adjunto de circular institucional: se guarda en `attachments_json` y aparece en Evo Drive de cada padre destinatario. */
+export type CircularPublicationAttachment = {
+  name: string;
+  url: string | null;
+  fileId?: string;
+};
 
 interface CategoryCounts {
   all: number;
@@ -201,6 +212,7 @@ interface ApiInstitucionalEventRow {
   tipo: string;
   cursoId: { _id: string; nombre: string } | null;
   creadoPor?: { _id: string; nombre: string } | null;
+  sourceAnnouncementId?: string | null;
 }
 
 function mapApiEventsToCalendarAssignments(events: ApiInstitucionalEventRow[]): CalendarAssignment[] {
@@ -219,6 +231,7 @@ function mapApiEventsToCalendarAssignments(events: ApiInstitucionalEventRow[]): 
       groupId: groupKey,
       requiresSubmission: false,
       type: 'reminder',
+      sourceAnnouncementId: e.sourceAnnouncementId ?? null,
     };
   });
 }
@@ -256,6 +269,9 @@ function useInstitucionalEvosendData() {
   const [pubCategory, setPubCategory] = useState('general');
   const [pubEventoFecha, setPubEventoFecha] = useState('');
   const [pubAudience, setPubAudience] = useState<'all' | 'parents' | 'teachers' | 'staff'>('parents');
+  const [pubCircularAttachments, setPubCircularAttachments] = useState<CircularPublicationAttachment[]>([]);
+  /** Adjuntos Drive/enlace para categorías distintas de circular (se guardan en attachments_json como la circular). */
+  const [pubGeneralAttachments, setPubGeneralAttachments] = useState<CircularPublicationAttachment[]>([]);
   const [readsFor, setReadsFor] = useState<string | null>(null);
   const [readsRows, setReadsRows] = useState<{ user_id: string; full_name: string; read_at: string | null }[]>([]);
   const [corr, setCorr] = useState<InstItem | null>(null);
@@ -263,9 +279,9 @@ function useInstitucionalEvosendData() {
   const [corrBody, setCorrBody] = useState('');
   const [markedRead, setMarkedRead] = useState<Set<string>>(() => new Set());
   const [institutionalMailbox, setInstitutionalMailbox] = useState<
-    'feed' | 'in' | 'out' | 'trash' | 'starred'
+    'feed' | 'threads' | 'trash' | 'starred'
   >('feed');
-  /** Solo en true al pulsar «Redactar». «Bandeja de salida» muestra la lista aunque sea box=out. */
+  /** Solo en true al pulsar «Redactar». Lista de hilos se muestra mientras no esté en compose. */
   const [mailboxComposeMode, setMailboxComposeMode] = useState(false);
   const [mailboxThreadId, setMailboxThreadId] = useState<string | null>(null);
   const [composePrefillRecipient, setComposePrefillRecipient] = useState<{
@@ -273,6 +289,8 @@ function useInstitucionalEvosendData() {
     nombre: string;
     rol: string;
   } | null>(null);
+  /** Navegación desde calendario escolar → ítem en categoría Eventos. */
+  const [pendingComunicadoFocusId, setPendingComunicadoFocusId] = useState<string | null>(null);
 
   const canPublish =
     !!user?.rol &&
@@ -365,6 +383,14 @@ function useInstitucionalEvosendData() {
     [queryClient]
   );
 
+  useEffect(() => {
+    if (pubCategory !== 'circular') setPubCircularAttachments([]);
+  }, [pubCategory]);
+
+  useEffect(() => {
+    if (pubCategory === 'circular') setPubGeneralAttachments([]);
+  }, [pubCategory]);
+
   const cancelMut = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/institucional/comunicado/${id}/cancel`, {
@@ -394,6 +420,15 @@ function useInstitucionalEvosendData() {
       if (pubCategory === 'evento') {
         body.eventoFecha = serializeEventoFechaForApi(pubEventoFecha);
       }
+      const attachmentSource =
+        pubCategory === 'circular' ? pubCircularAttachments : pubGeneralAttachments;
+      if (attachmentSource.length > 0) {
+        body.attachments = attachmentSource.map((a) => ({
+          name: a.name,
+          url: a.url || undefined,
+          fileId: a.fileId,
+        }));
+      }
       const res = await fetch('/api/institucional/comunicado', {
         method: 'POST',
         headers: authHeaders(),
@@ -410,9 +445,13 @@ function useInstitucionalEvosendData() {
       queryClient.invalidateQueries({ queryKey: ['institucional-events-year'] });
       queryClient.invalidateQueries({ queryKey: ['directivoEvents'] });
       queryClient.invalidateQueries({ queryKey: ['/api/events'] });
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'padre-circulares'] });
+      queryClient.invalidateQueries({ queryKey: ['evo-drive', 'recientes'] });
       setPubTitle('');
       setPubBody('');
       setPubEventoFecha('');
+      setPubCircularAttachments([]);
+      setPubGeneralAttachments([]);
       setPreviewOpen(false);
       setPublishComposeMode(false);
     },
@@ -451,6 +490,15 @@ function useInstitucionalEvosendData() {
     return counts[k as keyof CategoryCounts] ?? 0;
   };
 
+  const openComunicadoInEventosFeed = useCallback((announcementId: string) => {
+    setInstitutionalMailbox('feed');
+    setMailboxComposeMode(false);
+    setMailboxThreadId(null);
+    setPublishComposeMode(false);
+    setActiveCat('evento');
+    setPendingComunicadoFocusId(announcementId);
+  }, []);
+
   const canCorrect = (c: InstItem): boolean => {
     if (!c.sent_at || c.correction_of || c.has_correction) return false;
     if (c.created_by_id !== user?.id) return false;
@@ -485,6 +533,10 @@ function useInstitucionalEvosendData() {
     setPubEventoFecha,
     pubAudience,
     setPubAudience,
+    pubCircularAttachments,
+    setPubCircularAttachments,
+    pubGeneralAttachments,
+    setPubGeneralAttachments,
     readsFor,
     setReadsFor,
     readsRows,
@@ -518,18 +570,21 @@ function useInstitucionalEvosendData() {
     openInstitutionalCompose: () => {
       setPublishComposeMode(false);
       setComposePrefillRecipient(null);
-      setInstitutionalMailbox('out');
+      setInstitutionalMailbox('threads');
       setMailboxComposeMode(true);
       setMailboxThreadId(null);
     },
     openInstitutionalComposeToPerson: (p: { id: string; nombre: string; rol: string }) => {
       setPublishComposeMode(false);
       setComposePrefillRecipient(p);
-      setInstitutionalMailbox('out');
+      setInstitutionalMailbox('threads');
       setMailboxComposeMode(true);
       setMailboxThreadId(null);
     },
     mailboxFolderMeta,
+    pendingComunicadoFocusId,
+    setPendingComunicadoFocusId,
+    openComunicadoInEventosFeed,
   };
 }
 
@@ -579,6 +634,19 @@ export function InstitutoCategoriesSidebarNav() {
       'asistente-academica',
       'school_admin',
     ].includes(user.rol);
+
+  const { data: institutionalInboxUnread = 0 } = useQuery({
+    queryKey: ['director-mailbox-unread-count', user?.id],
+    queryFn: async (): Promise<number> => {
+      const res = await fetch('/api/evo-send/director-mailbox', { headers: authHeaders() });
+      if (!res.ok) return 0;
+      const j = (await res.json()) as { threads?: { unreadCount?: number }[] };
+      return (j.threads ?? []).reduce((acc, t) => acc + (t.unreadCount ?? 0), 0);
+    },
+    enabled: canMailbox && !!user?.id,
+    refetchInterval: 25_000,
+    staleTime: 8_000,
+  });
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-3 shrink-0">
@@ -637,7 +705,7 @@ export function InstitutoCategoriesSidebarNav() {
               type="button"
               size="sm"
               className={`h-7 text-[11px] shrink-0 px-2 text-white ${
-                institutionalMailbox === 'out' && mailboxComposeMode
+                institutionalMailbox === 'threads' && mailboxComposeMode
                   ? 'bg-[#5b21b6] ring-2 ring-[#a78bfa]/50'
                   : 'bg-[#7c3aed] hover:bg-[#6d28d9]'
               }`}
@@ -649,36 +717,29 @@ export function InstitutoCategoriesSidebarNav() {
           <button
             type="button"
             onClick={() => {
-              setInstitutionalMailbox('in');
+              setInstitutionalMailbox('threads');
               setMailboxComposeMode(false);
               setPublishComposeMode(false);
               setMailboxThreadId(null);
             }}
-            className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-left border-l-2 transition-colors ${
-              institutionalMailbox === 'in'
+            className={`w-full flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-[12px] text-left border-l-2 transition-colors ${
+              institutionalMailbox === 'threads' && !mailboxComposeMode
                 ? 'border-[#7c3aed] bg-[rgba(124,58,237,0.12)] text-white'
                 : 'border-transparent text-white/75 hover:bg-white/5'
             }`}
           >
-            <Inbox className="w-3.5 h-3.5 shrink-0 opacity-80" />
-            Bandeja de entrada
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setInstitutionalMailbox('out');
-              setMailboxComposeMode(false);
-              setPublishComposeMode(false);
-              setMailboxThreadId(null);
-            }}
-            className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] text-left border-l-2 transition-colors ${
-              institutionalMailbox === 'out' && !mailboxComposeMode
-                ? 'border-[#7c3aed] bg-[rgba(124,58,237,0.12)] text-white'
-                : 'border-transparent text-white/75 hover:bg-white/5'
-            }`}
-          >
-            <SendHorizontal className="w-3.5 h-3.5 shrink-0 opacity-80" />
-            Bandeja de salida
+            <span className="flex items-center gap-2 min-w-0">
+              <Inbox className="w-3.5 h-3.5 shrink-0 opacity-80" />
+              Comunicados 1:1
+            </span>
+            {institutionalInboxUnread > 0 ? (
+              <span
+                className="min-w-[1.25rem] h-5 px-1 rounded-full bg-[hsl(var(--primary))] text-white text-[10px] font-bold tabular-nums flex items-center justify-center shrink-0"
+                aria-label={`${institutionalInboxUnread} sin leer`}
+              >
+                {institutionalInboxUnread > 99 ? '99+' : institutionalInboxUnread}
+              </span>
+            ) : null}
           </button>
           <button
             type="button"
@@ -735,6 +796,8 @@ type MailboxThreadRow = {
   asunto: string;
   tipo?: string;
   unreadCount?: number;
+  peerName?: string;
+  peerRole?: string;
   ultimoMensaje?: { contenido: string; fecha: string } | null;
 };
 
@@ -806,6 +869,7 @@ function InstMailboxMessageBody({ m }: { m: MailboxMsg }) {
 
 function DirectorMailboxPanel() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const {
     institutionalMailbox,
     mailboxComposeMode,
@@ -816,13 +880,12 @@ function DirectorMailboxPanel() {
     setComposePrefillRecipient,
   } = useInstitutoCtx();
   const queryClient = useQueryClient();
-  const box = institutionalMailbox === 'in' ? 'in' : 'out';
   const mailboxThreadIdRef = useRef<string | null>(null);
   useEffect(() => {
     mailboxThreadIdRef.current = mailboxThreadId;
   }, [mailboxThreadId]);
 
-  const showComposeNew = institutionalMailbox === 'out' && mailboxComposeMode && !mailboxThreadId;
+  const showComposeNew = institutionalMailbox === 'threads' && mailboxComposeMode && !mailboxThreadId;
 
   const [threadRevealTrash, setThreadRevealTrash] = useState(false);
 
@@ -839,6 +902,27 @@ function DirectorMailboxPanel() {
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
+  const [composeDriveQueue, setComposeDriveQueue] = useState<{ name: string; url: string }[]>([]);
+  const composeDriveQueueRef = useRef<{ name: string; url: string }[]>([]);
+  useEffect(() => {
+    composeDriveQueueRef.current = composeDriveQueue;
+  }, [composeDriveQueue]);
+  const [mailboxGCreateOpen, setMailboxGCreateOpen] = useState(false);
+  const [mailboxGCreateKind, setMailboxGCreateKind] = useState<'doc' | 'sheet' | 'slide' | null>(null);
+  const [mailboxGCreateNombre, setMailboxGCreateNombre] = useState('');
+
+  const { data: mailboxGoogleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
+    queryKey: ['evo-drive', 'google-status'],
+    queryFn: () => apiRequest<{ connected: boolean }>('GET', '/api/evo-drive/google/status'),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!showComposeNew) {
+      setComposeDriveQueue([]);
+      composeDriveQueueRef.current = [];
+    }
+  }, [showComposeNew]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedRecipientSearch(recipientSearch.trim()), 320);
@@ -859,15 +943,15 @@ function DirectorMailboxPanel() {
   }, []);
 
   const { data: mailboxData, isLoading: loadingMailbox } = useQuery({
-    queryKey: ['director-mailbox', box],
+    queryKey: ['director-mailbox'],
     queryFn: async (): Promise<{ threads: MailboxThreadRow[] }> => {
-      const res = await fetch(`/api/evo-send/director-mailbox?box=${encodeURIComponent(box)}`, {
+      const res = await fetch('/api/evo-send/director-mailbox', {
         headers: authHeaders(),
       });
       if (!res.ok) throw new Error('mailbox');
       return res.json();
     },
-    enabled: institutionalMailbox === 'in' || institutionalMailbox === 'out',
+    enabled: institutionalMailbox === 'threads',
   });
 
   const folderParam = institutionalMailbox === 'trash' ? 'trash' : 'starred';
@@ -919,6 +1003,27 @@ function DirectorMailboxPanel() {
     enabled: !!mailboxThreadId,
   });
 
+  const viewerId = useMemo(() => {
+    const raw = user?.id ?? user?.userId ?? user?._id;
+    return raw != null && raw !== '' ? String(raw) : '';
+  }, [user?._id, user?.id, user?.userId]);
+
+  const canReplyInThread = useMemo(() => {
+    const msgs = threadDetail?.messages ?? [];
+    if (!viewerId || msgs.length === 0) return false;
+    return msgs.some((m) => {
+      const sid = m.remitenteId?._id != null ? String(m.remitenteId._id) : '';
+      return sid !== '' && sid !== viewerId;
+    });
+  }, [threadDetail?.messages, viewerId]);
+
+  useEffect(() => {
+    if (!canReplyInThread && replyDialogOpen) {
+      setReplyDialogOpen(false);
+      setReplyDraft('');
+    }
+  }, [canReplyInThread, replyDialogOpen]);
+
   const flagMut = useMutation({
     mutationFn: async (p: { messageId: string; trash?: boolean; star?: boolean }) => {
       const body: { trash?: boolean; star?: boolean } = {};
@@ -937,6 +1042,7 @@ function DirectorMailboxPanel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads'] });
       queryClient.invalidateQueries({ queryKey: ['director-mailbox'] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox-unread-count'] });
       queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-meta'] });
       queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-folder'] });
     },
@@ -964,6 +1070,7 @@ function DirectorMailboxPanel() {
       setReplyDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads'] });
       queryClient.invalidateQueries({ queryKey: ['director-mailbox'] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox-unread-count'] });
       queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-meta'] });
       queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-folder'] });
     },
@@ -971,12 +1078,22 @@ function DirectorMailboxPanel() {
 
   const createDirectMut = useMutation({
     mutationFn: async () => {
+      const queue = [...composeDriveQueueRef.current];
+      const hasQueue = queue.length > 0;
+      const bodyText = composeBody.trim() || (hasQueue ? 'Adjunto(s) en este mensaje.' : '');
+      if (!composeRecipientId?.trim() || !composeSubject.trim()) {
+        throw new Error('Faltan destinatario o asunto.');
+      }
+      if (!bodyText.trim()) {
+        throw new Error('Escribe el mensaje o adjunta al menos un archivo desde Google Drive.');
+      }
+
       const res = await fetch('/api/evo-send/threads', {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({
           asunto: composeSubject.trim(),
-          contenido: composeBody.trim(),
+          contenido: bodyText,
           tipo: 'evo_chat_direct',
           targetUserId: composeRecipientId,
           prioridad: 'normal',
@@ -990,9 +1107,31 @@ function DirectorMailboxPanel() {
             : 'No se pudo enviar el mensaje.';
         throw new Error(msg);
       }
-      return j as { _id?: string; existing?: boolean };
+      const parsed = j as { _id?: string };
+      const threadId = parsed._id != null ? String(parsed._id) : null;
+      if (!threadId) throw new Error('Respuesta inválida del servidor.');
+
+      for (const att of queue) {
+        const r2 = await fetch(`/api/evo-send/threads/${threadId}/messages`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            contenido: '',
+            contentType: 'evo_drive',
+            meta: { name: att.name, url: att.url },
+          }),
+        });
+        if (!r2.ok) {
+          throw new Error(
+            'El mensaje se envió, pero no se pudo adjuntar un documento. Abre el hilo y vuelve a adjuntar si hace falta.'
+          );
+        }
+      }
+      return parsed;
     },
     onSuccess: (data) => {
+      composeDriveQueueRef.current = [];
+      setComposeDriveQueue([]);
       if (data._id) setMailboxThreadId(String(data._id));
       setMailboxComposeMode(false);
       setComposeSubject('');
@@ -1001,30 +1140,42 @@ function DirectorMailboxPanel() {
       setComposeRecipientLabel('');
       setRecipientSearch('');
       queryClient.invalidateQueries({ queryKey: ['director-mailbox'] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox-unread-count'] });
       queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads'] });
       queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-meta'] });
       queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-folder'] });
     },
+    onError: (e: Error) => {
+      toast({
+        title: 'No se pudo enviar el mensaje',
+        description: e.message || 'Intenta de nuevo o verifica tu conexión.',
+        variant: 'destructive',
+      });
+    },
   });
 
-  const googleCreateMut = useMutation({
-    mutationFn: async (kind: 'doc' | 'sheet' | 'slide') => {
-      const titleBase = composeSubject.trim() || 'EvoSend';
-      const nombre =
-        kind === 'doc' ? `Documento · ${titleBase}` : kind === 'sheet' ? `Hoja · ${titleBase}` : `Presentación · ${titleBase}`;
-      return googleCreatePersonalFile(kind, nombre);
+  const mailboxGoogleCreateMut = useMutation({
+    mutationFn: async (vars: { kind: 'doc' | 'sheet' | 'slide'; nombre: string }) => {
+      return googleCreatePersonalFile(vars.kind, vars.nombre.trim() || 'Sin título');
     },
-    onSuccess: (data, kind) => {
+    onSuccess: (data, vars) => {
       const url = data.googleWebViewLink;
       if (!url) return;
-      const name =
-        data.nombre ?? (kind === 'doc' ? 'Google Doc' : kind === 'sheet' ? 'Hoja de cálculo' : 'Presentación');
+      const name = (data.nombre ?? vars.nombre).trim() || 'Documento';
       const tid = mailboxThreadIdRef.current;
       if (tid) {
         sendMut.mutate({ contentType: 'evo_drive', meta: { name, url } });
       } else {
-        appendComposeLine(`[${name}](${url})`);
+        setComposeDriveQueue((q) => {
+          const n = [...q, { name, url }];
+          composeDriveQueueRef.current = n;
+          return n;
+        });
+        toast({ title: 'Documento listo', description: 'Se adjuntará al enviar el mensaje como archivo de Drive.' });
       }
+      setMailboxGCreateOpen(false);
+      setMailboxGCreateNombre('');
+      setMailboxGCreateKind(null);
     },
     onError: (e: Error) => {
       toast({
@@ -1036,17 +1187,53 @@ function DirectorMailboxPanel() {
     },
   });
 
-  const threads = mailboxData?.threads ?? [];
+  const openMailboxGoogleCreate = (kind: 'doc' | 'sheet' | 'slide') => {
+    if (!mailboxGoogleStatus.connected) {
+      toast({
+        title: 'Conecta Google Drive',
+        description: 'Abre Evo Drive y conecta tu cuenta para crear documentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setMailboxGCreateKind(kind);
+    setMailboxGCreateNombre('');
+    setMailboxGCreateOpen(true);
+  };
+
+  const allThreads = mailboxData?.threads ?? [];
+  const [threadSearch, setThreadSearch] = useState('');
+
+  const threads = useMemo(() => {
+    const q = threadSearch.trim().toLowerCase();
+    if (!q) return allThreads;
+    return allThreads.filter((t) => {
+      const asunto = (t.asunto ?? '').toLowerCase();
+      const peer = (t.peerName ?? '').toLowerCase();
+      const preview = (t.ultimoMensaje?.contenido ?? '').toLowerCase();
+      return asunto.includes(q) || peer.includes(q) || preview.includes(q);
+    });
+  }, [allThreads, threadSearch]);
 
   const applyDriveFile = (meta: Record<string, unknown>) => {
     const tid = mailboxThreadIdRef.current;
     if (tid) {
       sendMut.mutate({ contentType: 'evo_drive', meta });
     } else {
-      const name = String(meta.name ?? 'Archivo');
-      const u = typeof meta.url === 'string' ? meta.url : '';
-      const line = u ? `[${name}](${u})` : name;
-      appendComposeLine(line);
+      const name = String(meta.name ?? 'Archivo').trim() || 'Archivo';
+      const u = typeof meta.url === 'string' ? meta.url.trim() : '';
+      const fileId = typeof meta.fileId === 'string' ? meta.fileId.trim() : '';
+      const url = u || (fileId ? `https://drive.google.com/file/d/${fileId}/view` : '');
+      if (!url) {
+        setShowDrivePicker(false);
+        return;
+      }
+      setComposeDriveQueue((q) => {
+        const n = [...q, { name, url }];
+        composeDriveQueueRef.current = n;
+        return n;
+      });
+      toast({ title: 'Archivo en cola', description: 'Se enviará como documento de Drive al pulsar Enviar.' });
     }
     setShowDrivePicker(false);
   };
@@ -1066,9 +1253,13 @@ function DirectorMailboxPanel() {
     setLinkTitle('');
   };
 
-  const addMenuDisabled = sendMut.isPending || createDirectMut.isPending;
+  const addMenuDisabled =
+    sendMut.isPending || createDirectMut.isPending || mailboxGoogleCreateMut.isPending;
   const composeSendDisabled =
-    !composeRecipientId || !composeSubject.trim() || !composeBody.trim() || createDirectMut.isPending;
+    !composeRecipientId ||
+    !composeSubject.trim() ||
+    (!composeBody.trim() && composeDriveQueue.length === 0) ||
+    createDirectMut.isPending;
 
   const openThread = (threadId: string, opts?: { fromTrash?: boolean }) => {
     setMailboxComposeMode(false);
@@ -1079,6 +1270,7 @@ function DirectorMailboxPanel() {
       headers: authHeaders(),
     }).then(() => {
       queryClient.invalidateQueries({ queryKey: ['director-mailbox'] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox-unread-count'] });
     });
   };
 
@@ -1103,8 +1295,7 @@ function DirectorMailboxPanel() {
                 Redactar mensaje
               </h2>
               <p className="mt-1 text-[12px] text-white/55">
-                Mensaje institucional tipo correo: destinatario, asunto y cuerpo. Tras enviar, verás el hilo en tu bandeja
-                de salida y el destinatario lo recibirá en su bandeja de entrada.
+                Comunicado institucional: destinatario, asunto y cuerpo. Cada nuevo asunto crea un hilo independiente.
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
@@ -1199,6 +1390,35 @@ function DirectorMailboxPanel() {
                     placeholder="Escribe el cuerpo del mensaje…"
                     className="min-h-[280px] flex-1 resize-y border-white/[0.12] bg-white/[0.05] text-[13px] leading-relaxed text-white placeholder:text-white/35"
                   />
+                  {composeDriveQueue.length > 0 ? (
+                    <ul className="flex flex-col gap-2 pt-1">
+                      {composeDriveQueue.map((f, idx) => (
+                        <li
+                          key={`${f.url}-${idx}`}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-[13px]"
+                        >
+                          <span className="text-white/90 truncate min-w-0" title={f.name}>
+                            {f.name}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 shrink-0 text-white/55 hover:text-white"
+                            onClick={() => {
+                              setComposeDriveQueue((prev) => {
+                                const n = prev.filter((_, i) => i !== idx);
+                                composeDriveQueueRef.current = n;
+                                return n;
+                              });
+                            }}
+                          >
+                            Quitar
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -1206,12 +1426,23 @@ function DirectorMailboxPanel() {
               <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4">
                 <EvoComposeAddMenu
                   disabled={addMenuDisabled}
-                  createPending={googleCreateMut.isPending}
-                  onEvoDrive={() => setShowDrivePicker(true)}
+                  createPending={mailboxGoogleCreateMut.isPending}
+                  googleConnected={mailboxGoogleStatus.connected}
+                  onGoogleDrive={() => {
+                    if (!mailboxGoogleStatus.connected) {
+                      toast({
+                        title: 'Conecta Google Drive',
+                        description: 'Abre Evo Drive y conecta tu cuenta.',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    setShowDrivePicker(true);
+                  }}
                   onAttachLink={() => setShowLinkDialog(true)}
-                  onCreateDoc={() => googleCreateMut.mutate('doc')}
-                  onCreateSlide={() => googleCreateMut.mutate('slide')}
-                  onCreateSheet={() => googleCreateMut.mutate('sheet')}
+                  onCreateDoc={() => openMailboxGoogleCreate('doc')}
+                  onCreateSlide={() => openMailboxGoogleCreate('slide')}
+                  onCreateSheet={() => openMailboxGoogleCreate('sheet')}
                 />
                 <Button type="button" className="min-w-[120px]" disabled={composeSendDisabled} onClick={() => createDirectMut.mutate()}>
                   {createDirectMut.isPending ? (
@@ -1306,20 +1537,25 @@ function DirectorMailboxPanel() {
           </div>
         ) : !mailboxThreadId ? (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b border-white/10 bg-white/[0.04] px-4 py-4 sm:px-5">
-              <h2
-                className={`text-lg font-semibold tracking-tight text-[var(--text-primary,#E2E8F0)] pl-3 py-0.5 ${
-                  institutionalMailbox === 'in' ? 'border-l-[3px]' : ''
-                }`}
-                style={institutionalMailbox === 'in' ? { borderLeftColor: MAILBOX_VIOLET } : undefined}
-              >
-                {institutionalMailbox === 'in' ? 'Bandeja de entrada' : 'Bandeja de salida'}
-              </h2>
-              <p className="mt-2 text-[12px] text-white/55">
-                {institutionalMailbox === 'in'
-                  ? 'Solo mensajes con familias, estudiantes y equipo GLC. Los avisos entre colegas docentes están en la pestaña Académico.'
-                  : 'Mensajes institucionales que enviaste. Abre un asunto para ver el historial; para contestar usa «Redactar respuesta».'}
-              </p>
+            <div className="shrink-0 border-b border-white/10 bg-white/[0.04] px-4 py-4 sm:px-5 space-y-3">
+              <div>
+                <h2
+                  className="text-lg font-semibold tracking-tight text-[var(--text-primary,#E2E8F0)] pl-3 py-0.5 border-l-[3px]"
+                  style={{ borderLeftColor: MAILBOX_VIOLET }}
+                >
+                  Comunicados 1:1
+                </h2>
+                <p className="mt-2 text-[12px] text-white/55">
+                  Cada asunto con un destinatario crea un hilo independiente. Para hablar de otro tema con la misma persona, redacta un nuevo comunicado.
+                </p>
+              </div>
+              <Input
+                type="text"
+                placeholder="Buscar por asunto, destinatario o contenido…"
+                value={threadSearch}
+                onChange={(e) => setThreadSearch(e.target.value)}
+                className="h-9 bg-white/[0.05] border-white/[0.1] text-[13px] text-white placeholder:text-white/35"
+              />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable] px-3 pb-3 pt-3 sm:px-4">
               {loadingMailbox ? (
@@ -1328,9 +1564,9 @@ function DirectorMailboxPanel() {
                 </div>
               ) : threads.length === 0 ? (
                 <p className="text-white/50 text-sm text-center py-16 px-4">
-                  {institutionalMailbox === 'in'
-                    ? 'No hay comunicados en tu bandeja de entrada.'
-                    : 'No hay envíos en tu bandeja de salida. Usa «Redactar» en el panel izquierdo para redactar un comunicado.'}
+                  {threadSearch.trim()
+                    ? 'No se encontraron comunicados con ese criterio.'
+                    : 'No hay comunicados. Usa «Redactar» en el panel izquierdo para iniciar un nuevo hilo.'}
                 </p>
               ) : (
                 <ul className="flex flex-col gap-2.5">
@@ -1344,13 +1580,20 @@ function DirectorMailboxPanel() {
                       >
                         <div className="min-w-0 flex-1 w-full">
                           <div className="flex items-start justify-between gap-3">
-                            <span className="font-semibold text-[var(--text-primary,#E2E8F0)] line-clamp-2 text-[15px] leading-snug">
-                              {t.asunto}
-                            </span>
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-[var(--text-primary,#E2E8F0)] line-clamp-1 text-[14px] leading-snug">
+                                {t.asunto}
+                              </span>
+                              {t.peerName ? (
+                                <span className="text-[11px] text-white/50 mt-0.5 block">
+                                  {t.peerName}{t.peerRole ? ` · ${t.peerRole}` : ''}
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="shrink-0 flex flex-col items-end gap-0.5">
                               {t.unreadCount ? (
-                                <span className="text-[11px] font-medium tabular-nums text-[hsl(var(--primary))]">
-                                  {t.unreadCount}
+                                <span className="min-w-[1.25rem] h-5 px-1 rounded-full bg-[hsl(var(--primary))] text-white text-[10px] font-bold tabular-nums flex items-center justify-center">
+                                  {t.unreadCount > 99 ? '99+' : t.unreadCount}
                                 </span>
                               ) : null}
                               {t.ultimoMensaje?.fecha ? (
@@ -1366,7 +1609,7 @@ function DirectorMailboxPanel() {
                             </div>
                           </div>
                           {t.ultimoMensaje?.contenido ? (
-                            <p className="mt-1.5 text-[13px] text-white/55 line-clamp-3 leading-snug">
+                            <p className="mt-1.5 text-[13px] text-white/55 line-clamp-2 leading-snug">
                               {mailboxPreviewContent(t.ultimoMensaje.contenido)}
                             </p>
                           ) : null}
@@ -1410,18 +1653,20 @@ function DirectorMailboxPanel() {
                       setReplyDraft('');
                     }}
                   >
-                    Volver a la bandeja
+                    Volver a hilos
                   </Button>
-                  <Button
-                    type="button"
-                    className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white"
-                    onClick={() => {
-                      setReplyDraft('');
-                      setReplyDialogOpen(true);
-                    }}
-                  >
-                    Redactar respuesta
-                  </Button>
+                  {canReplyInThread ? (
+                    <Button
+                      type="button"
+                      className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white"
+                      onClick={() => {
+                        setReplyDraft('');
+                        setReplyDialogOpen((prev) => !prev);
+                      }}
+                    >
+                      {replyDialogOpen ? 'Cancelar respuesta' : 'Redactar respuesta'}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -1491,53 +1736,65 @@ function DirectorMailboxPanel() {
                     </ContextMenuContent>
                   </ContextMenu>
                 ))}
+                {replyDialogOpen ? (
+                  <div
+                    className="w-full rounded-lg border border-[#7c3aed]/40 bg-white/[0.04] p-4 sm:p-5 flex flex-col gap-3"
+                    style={{ borderLeftWidth: 4, borderLeftColor: MAILBOX_VIOLET }}
+                  >
+                    <p className="text-[11px] text-white/50 font-medium">
+                      Re: {threadDetail?.thread?.asunto ?? '…'}
+                    </p>
+                    <Textarea
+                      autoFocus
+                      value={replyDraft}
+                      onChange={(e) => setReplyDraft(e.target.value)}
+                      placeholder="Escribe tu respuesta…"
+                      className="min-h-[140px] w-full resize-y border-white/[0.12] bg-white/[0.05] text-[13px] text-[var(--text-primary,#E2E8F0)] placeholder:text-white/35"
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <EvoComposeAddMenu
+                        disabled={addMenuDisabled}
+                        createPending={mailboxGoogleCreateMut.isPending}
+                        googleConnected={mailboxGoogleStatus.connected}
+                        onGoogleDrive={() => {
+                          if (!mailboxGoogleStatus.connected) {
+                            toast({
+                              title: 'Conecta Google Drive',
+                              description: 'Abre Evo Drive y conecta tu cuenta.',
+                              variant: 'destructive',
+                            });
+                            return;
+                          }
+                          setShowDrivePicker(true);
+                        }}
+                        onAttachLink={() => setShowLinkDialog(true)}
+                        onCreateDoc={() => openMailboxGoogleCreate('doc')}
+                        onCreateSlide={() => openMailboxGoogleCreate('slide')}
+                        onCreateSheet={() => openMailboxGoogleCreate('sheet')}
+                      />
+                      <Button
+                        type="button"
+                        disabled={!replyDraft.trim() || sendMut.isPending || !mailboxThreadId}
+                        className="bg-[#7c3aed] hover:bg-[#6d28d9]"
+                        onClick={() => sendMut.mutate({ contenido: replyDraft.trim() })}
+                      >
+                        {sendMut.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 mr-2" />
+                            Enviar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
         )}
       </div>
-      <Dialog
-        open={replyDialogOpen}
-        onOpenChange={(o) => {
-          setReplyDialogOpen(o);
-          if (!o) setReplyDraft('');
-        }}
-      >
-        <DialogContent className="bg-[var(--mid-dark,#0f172a)] border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Redactar respuesta</DialogTitle>
-            <p className="text-[12px] text-white/55 pt-1">
-              Re: {threadDetail?.thread?.asunto ?? '…'} — se envía como mensaje en este mismo hilo (bandeja de salida /
-              entrada según corresponda).
-            </p>
-          </DialogHeader>
-          <Textarea
-            value={replyDraft}
-            onChange={(e) => setReplyDraft(e.target.value)}
-            placeholder="Escribe tu respuesta…"
-            className="min-h-[200px] w-full resize-y border-white/[0.12] bg-white/[0.05] text-[13px] text-[var(--text-primary,#E2E8F0)] placeholder:text-white/35"
-          />
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <EvoComposeAddMenu
-              disabled={addMenuDisabled}
-              createPending={googleCreateMut.isPending}
-              onEvoDrive={() => setShowDrivePicker(true)}
-              onAttachLink={() => setShowLinkDialog(true)}
-              onCreateDoc={() => googleCreateMut.mutate('doc')}
-              onCreateSlide={() => googleCreateMut.mutate('slide')}
-              onCreateSheet={() => googleCreateMut.mutate('sheet')}
-            />
-            <Button
-              type="button"
-              disabled={!replyDraft.trim() || sendMut.isPending || !mailboxThreadId}
-              className="bg-[#7c3aed] hover:bg-[#6d28d9]"
-              onClick={() => sendMut.mutate({ contenido: replyDraft.trim() })}
-            >
-              {sendMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
       <Dialog open={showDrivePicker} onOpenChange={setShowDrivePicker}>
         <DialogContent className="bg-[var(--mid-dark,#0f172a)] border-white/10 text-white max-w-lg">
           <DialogHeader>
@@ -1571,6 +1828,91 @@ function DirectorMailboxPanel() {
             </Button>
             <Button disabled={!linkUrl.trim()} onClick={applyLink}>
               Adjuntar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={mailboxGCreateOpen && !!mailboxGCreateKind}
+        onOpenChange={(o) => {
+          if (!o) {
+            setMailboxGCreateOpen(false);
+            setMailboxGCreateNombre('');
+            setMailboxGCreateKind(null);
+          }
+        }}
+      >
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${
+                  mailboxGCreateKind === 'doc'
+                    ? 'bg-[#1a56d6]'
+                    : mailboxGCreateKind === 'slide'
+                      ? 'bg-[#d97706]'
+                      : 'bg-[#16a34a]'
+                }`}
+              >
+                {mailboxGCreateKind === 'doc' && <FileText className="w-5 h-5 text-white" />}
+                {mailboxGCreateKind === 'slide' && <Presentation className="w-5 h-5 text-white" />}
+                {mailboxGCreateKind === 'sheet' && <FileSpreadsheet className="w-5 h-5 text-white" />}
+              </div>
+              <div>
+                <span className="text-base font-semibold text-white block">
+                  {mailboxGCreateKind === 'doc' && 'Nuevo documento'}
+                  {mailboxGCreateKind === 'slide' && 'Nueva presentación'}
+                  {mailboxGCreateKind === 'sheet' && 'Nueva hoja de cálculo'}
+                </span>
+                <span className="text-xs text-white/60 mt-0.5 block">
+                  Se creará en tu Google Drive y se adjuntará como tarjeta de archivo en el hilo (no como texto con
+                  enlace).
+                </span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-white/60">Nombre del archivo</Label>
+              <Input
+                value={mailboxGCreateNombre}
+                onChange={(e) => setMailboxGCreateNombre(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && mailboxGCreateKind) {
+                    e.preventDefault();
+                    if (!mailboxGCreateNombre.trim() || mailboxGoogleCreateMut.isPending) return;
+                    mailboxGoogleCreateMut.mutate({ kind: mailboxGCreateKind, nombre: mailboxGCreateNombre });
+                  }
+                }}
+                placeholder="Ej: Informe marzo"
+                className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => {
+                setMailboxGCreateOpen(false);
+                setMailboxGCreateNombre('');
+                setMailboxGCreateKind(null);
+              }}
+              className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!mailboxGCreateNombre.trim() || !mailboxGCreateKind || mailboxGoogleCreateMut.isPending}
+              className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[13px] font-medium"
+              onClick={() => {
+                if (!mailboxGCreateKind) return;
+                mailboxGoogleCreateMut.mutate({ kind: mailboxGCreateKind, nombre: mailboxGCreateNombre });
+              }}
+            >
+              {mailboxGoogleCreateMut.isPending ? 'Creando…' : 'Crear'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1639,6 +1981,10 @@ function InstitutionalPublishComposePanel() {
     setPubEventoFecha,
     pubAudience,
     setPubAudience,
+    pubCircularAttachments,
+    setPubCircularAttachments,
+    pubGeneralAttachments,
+    setPubGeneralAttachments,
     setPreviewOpen,
     publishMut,
     setPublishComposeMode,
@@ -1649,6 +1995,15 @@ function InstitutionalPublishComposePanel() {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [composeCalDate, setComposeCalDate] = useState(() => new Date());
+  const [pubGCreateOpen, setPubGCreateOpen] = useState(false);
+  const [pubGCreateKind, setPubGCreateKind] = useState<'doc' | 'sheet' | 'slide' | null>(null);
+  const [pubGCreateNombre, setPubGCreateNombre] = useState('');
+
+  const { data: pubGoogleStatus = { connected: false } } = useQuery<{ connected: boolean }>({
+    queryKey: ['evo-drive', 'google-status'],
+    queryFn: () => apiRequest<{ connected: boolean }>('GET', '/api/evo-drive/google/status'),
+    staleTime: 60_000,
+  });
 
   const composeInstId = user?.colegioId;
   const composeY = composeCalDate.getFullYear();
@@ -1704,25 +2059,23 @@ function InstitutionalPublishComposePanel() {
     return n;
   }, [composeCalendarAssignments, composeCalDate]);
 
-  const appendPubLine = useCallback(
-    (line: string) => {
-      setPubBody((b) => (b.trim() ? `${b.trim()}\n\n${line}` : line));
-    },
-    [setPubBody]
-  );
-
-  const googleCreateMut = useMutation({
-    mutationFn: async (kind: 'doc' | 'sheet' | 'slide') => {
-      const base = pubTitle.trim() || 'Comunicado institucional';
-      const nombre =
-        kind === 'doc' ? `Documento · ${base}` : kind === 'sheet' ? `Hoja · ${base}` : `Presentación · ${base}`;
-      return googleCreatePersonalFile(kind, nombre);
+  const pubGoogleCreateMut = useMutation({
+    mutationFn: async (vars: { kind: 'doc' | 'sheet' | 'slide'; nombre: string }) => {
+      return googleCreatePersonalFile(vars.kind, vars.nombre.trim() || 'Sin título');
     },
     onSuccess: (data) => {
       const url = data.googleWebViewLink;
       if (!url) return;
-      const name = data.nombre ?? 'Documento';
-      appendPubLine(`[${name}](${url})`);
+      const name = (data.nombre ?? 'Documento').trim() || 'Documento';
+      if (pubCategory === 'circular') {
+        setPubCircularAttachments((prev) => [...prev, { name, url, fileId: undefined }]);
+      } else {
+        setPubGeneralAttachments((prev) => [...prev, { name, url, fileId: undefined }]);
+        toast({ title: 'Archivo agregado', description: 'Se publicará como adjunto del comunicado.' });
+      }
+      setPubGCreateOpen(false);
+      setPubGCreateNombre('');
+      setPubGCreateKind(null);
     },
     onError: (e: Error) => {
       toast({
@@ -1734,13 +2087,40 @@ function InstitutionalPublishComposePanel() {
     },
   });
 
-  const addMenuDisabled = publishMut.isPending || googleCreateMut.isPending;
+  const openPubGoogleCreate = (kind: 'doc' | 'sheet' | 'slide') => {
+    if (!pubGoogleStatus.connected) {
+      toast({
+        title: 'Conecta Google Drive',
+        description: 'Abre Evo Drive y conecta tu cuenta para crear documentos.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setPubGCreateKind(kind);
+    setPubGCreateNombre('');
+    setPubGCreateOpen(true);
+  };
+
+  const addMenuDisabled = publishMut.isPending || pubGoogleCreateMut.isPending;
 
   const applyDriveFile = (meta: Record<string, unknown>) => {
     const name = String(meta.name ?? 'Archivo');
     const u = typeof meta.url === 'string' ? meta.url : '';
-    const line = u ? `[${name}](${u})` : name;
-    appendPubLine(line);
+    const fileId = typeof meta.fileId === 'string' ? meta.fileId : undefined;
+    if (pubCategory === 'circular') {
+      if (!u && !fileId) {
+        setShowDrivePicker(false);
+        return;
+      }
+      setPubCircularAttachments((prev) => [...prev, { name, url: u || null, fileId }]);
+    } else {
+      if (!u && !fileId) {
+        setShowDrivePicker(false);
+        return;
+      }
+      setPubGeneralAttachments((prev) => [...prev, { name, url: u || null, fileId }]);
+      toast({ title: 'Archivo agregado', description: 'Se publicará como adjunto del comunicado.' });
+    }
     setShowDrivePicker(false);
   };
 
@@ -1748,7 +2128,12 @@ function InstitutionalPublishComposePanel() {
     const u = linkUrl.trim();
     if (!u) return;
     const t = linkTitle.trim() || u;
-    appendPubLine(`[${t}](${u})`);
+    if (pubCategory === 'circular') {
+      setPubCircularAttachments((prev) => [...prev, { name: t, url: u, fileId: undefined }]);
+    } else {
+      setPubGeneralAttachments((prev) => [...prev, { name: t, url: u, fileId: undefined }]);
+      toast({ title: 'Enlace agregado', description: 'Se publicará como adjunto del comunicado.' });
+    }
     setShowLinkDialog(false);
     setLinkUrl('');
     setLinkTitle('');
@@ -1764,10 +2149,10 @@ function InstitutionalPublishComposePanel() {
           >
             Publicar comunicado institucional
           </h2>
-          <p className="mt-1 text-[12px] text-white/55">
-            Comunicado oficial para la comunidad ({instConfig?.nombre ?? '…'} · {monthYear}). Define título, audiencia y
-            cuerpo; puedes enlazar archivos de Evo Drive o crear documentos en tu Google Drive, igual que al redactar un
-            mensaje 1:1.
+            <p className="mt-1 text-[12px] text-white/55">
+            Comunicado oficial para la comunidad ({instConfig?.nombre ?? '…'} · {monthYear}). Si la categoría es
+            Circular, adjunta el archivo oficial: se guardará automáticamente en la carpeta Circulares del Evo Drive de
+            cada acudiente destinatario.
           </p>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-5">
@@ -1796,6 +2181,32 @@ function InstitutionalPublishComposePanel() {
                 className="min-h-[240px] flex-1 resize-y border-white/[0.12] bg-white/[0.05] text-[13px] leading-relaxed text-white placeholder:text-white/35"
               />
             </div>
+            {pubCategory !== 'circular' && pubGeneralAttachments.length > 0 ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2">
+                <p className="text-[11px] uppercase tracking-wide text-white/45">Adjuntos (se publican con el comunicado)</p>
+                <ul className="space-y-2 max-h-40 overflow-y-auto">
+                  {pubGeneralAttachments.map((a, idx) => (
+                    <li
+                      key={`${a.url ?? ''}-${a.fileId ?? ''}-${idx}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-[13px]"
+                    >
+                      <span className="text-white truncate min-w-0" title={a.name}>
+                        {a.name}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 shrink-0 text-white/60 hover:text-white"
+                        onClick={() => setPubGeneralAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                      >
+                        Quitar
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label htmlFor="inst-pub-cat" className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
@@ -1837,6 +2248,64 @@ function InstitutionalPublishComposePanel() {
                 </select>
               </div>
             </div>
+            {pubCategory === 'circular' ? (
+              <div className="rounded-xl border border-[#00c8ff]/30 bg-[#00c8ff]/10 p-4 space-y-3">
+                <p className="text-[12px] text-white/85 font-medium">Circular: archivo para Evo Drive de los padres</p>
+                <p className="text-[12px] text-white/65">
+                  Debes adjuntar al menos un archivo (desde Evo Drive / Google o un enlace). No se publicará la circular
+                  sin adjunto. El mensaje puede describir la circular en el cuerpo del comunicado.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <EvoComposeAddMenu
+                    disabled={addMenuDisabled}
+                    createPending={pubGoogleCreateMut.isPending}
+                    googleConnected={pubGoogleStatus.connected}
+                    onGoogleDrive={() => {
+                      if (!pubGoogleStatus.connected) {
+                        toast({
+                          title: 'Conecta Google Drive',
+                          description: 'Abre Evo Drive y conecta tu cuenta.',
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+                      setShowDrivePicker(true);
+                    }}
+                    onAttachLink={() => setShowLinkDialog(true)}
+                    onCreateDoc={() => openPubGoogleCreate('doc')}
+                    onCreateSlide={() => openPubGoogleCreate('slide')}
+                    onCreateSheet={() => openPubGoogleCreate('sheet')}
+                  />
+                </div>
+                {pubCircularAttachments.length === 0 ? (
+                  <p className="text-[12px] text-amber-200/90">Aún no hay archivo adjunto para esta circular.</p>
+                ) : (
+                  <ul className="space-y-2 max-h-48 overflow-y-auto">
+                    {pubCircularAttachments.map((a, idx) => (
+                      <li
+                        key={`${a.url ?? ''}-${a.fileId ?? ''}-${idx}`}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-[13px]"
+                      >
+                        <span className="text-white truncate min-w-0" title={a.name}>
+                          {a.name}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 shrink-0 text-white/60 hover:text-white"
+                          onClick={() =>
+                            setPubCircularAttachments((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                        >
+                          Quitar
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
             {pubCategory === 'evento' ? (
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
                 <p className="text-[12px] text-white/70">
@@ -1875,15 +2344,28 @@ function InstitutionalPublishComposePanel() {
         <div className="shrink-0 border-t border-white/10 bg-white/[0.03] px-4 py-4 sm:px-5">
           <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <EvoComposeAddMenu
-                disabled={addMenuDisabled}
-                createPending={googleCreateMut.isPending}
-                onEvoDrive={() => setShowDrivePicker(true)}
-                onAttachLink={() => setShowLinkDialog(true)}
-                onCreateDoc={() => googleCreateMut.mutate('doc')}
-                onCreateSlide={() => googleCreateMut.mutate('slide')}
-                onCreateSheet={() => googleCreateMut.mutate('sheet')}
-              />
+              {pubCategory !== 'circular' ? (
+                <EvoComposeAddMenu
+                  disabled={addMenuDisabled}
+                  createPending={pubGoogleCreateMut.isPending}
+                  googleConnected={pubGoogleStatus.connected}
+                  onGoogleDrive={() => {
+                    if (!pubGoogleStatus.connected) {
+                      toast({
+                        title: 'Conecta Google Drive',
+                        description: 'Abre Evo Drive y conecta tu cuenta.',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    setShowDrivePicker(true);
+                  }}
+                  onAttachLink={() => setShowLinkDialog(true)}
+                  onCreateDoc={() => openPubGoogleCreate('doc')}
+                  onCreateSlide={() => openPubGoogleCreate('slide')}
+                  onCreateSheet={() => openPubGoogleCreate('sheet')}
+                />
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -1900,7 +2382,8 @@ function InstitutionalPublishComposePanel() {
               disabled={
                 !pubTitle.trim() ||
                 publishMut.isPending ||
-                (pubCategory === 'evento' && !isValidPubEventoDate(pubEventoFecha))
+                (pubCategory === 'evento' && !isValidPubEventoDate(pubEventoFecha)) ||
+                (pubCategory === 'circular' && pubCircularAttachments.length === 0)
               }
               onClick={() => setPreviewOpen(true)}
             >
@@ -1946,16 +2429,104 @@ function InstitutionalPublishComposePanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={pubGCreateOpen && !!pubGCreateKind}
+        onOpenChange={(o) => {
+          if (!o) {
+            setPubGCreateOpen(false);
+            setPubGCreateNombre('');
+            setPubGCreateKind(null);
+          }
+        }}
+      >
+        <DialogContent className="bg-[#0f172a] border border-white/10 max-w-[380px] rounded-2xl p-6 shadow-xl overflow-hidden text-white">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-[11px] flex items-center justify-center shrink-0 ${
+                  pubGCreateKind === 'doc'
+                    ? 'bg-[#1a56d6]'
+                    : pubGCreateKind === 'slide'
+                      ? 'bg-[#d97706]'
+                      : 'bg-[#16a34a]'
+                }`}
+              >
+                {pubGCreateKind === 'doc' && <FileText className="w-5 h-5 text-white" />}
+                {pubGCreateKind === 'slide' && <Presentation className="w-5 h-5 text-white" />}
+                {pubGCreateKind === 'sheet' && <FileSpreadsheet className="w-5 h-5 text-white" />}
+              </div>
+              <div>
+                <span className="text-base font-semibold text-white block">
+                  {pubGCreateKind === 'doc' && 'Nuevo documento'}
+                  {pubGCreateKind === 'slide' && 'Nueva presentación'}
+                  {pubGCreateKind === 'sheet' && 'Nueva hoja de cálculo'}
+                </span>
+                <span className="text-xs text-white/60 mt-0.5 block">
+                  Se creará en Google Drive y quedará como adjunto oficial del comunicado.
+                </span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-white/60">Nombre del archivo</Label>
+              <Input
+                value={pubGCreateNombre}
+                onChange={(e) => setPubGCreateNombre(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && pubGCreateKind) {
+                    e.preventDefault();
+                    if (!pubGCreateNombre.trim() || pubGoogleCreateMut.isPending) return;
+                    pubGoogleCreateMut.mutate({ kind: pubGCreateKind, nombre: pubGCreateNombre });
+                  }
+                }}
+                placeholder="Ej: Circular marzo"
+                className="bg-white/5 border border-white/10 rounded-md py-2.5 px-3 text-sm text-white placeholder:text-white/50"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 mt-6 grid grid-cols-[1fr_2fr]">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => {
+                setPubGCreateOpen(false);
+                setPubGCreateNombre('');
+                setPubGCreateKind(null);
+              }}
+              className="border border-white/10 bg-transparent text-[13px] font-medium text-white/60 hover:bg-white/10"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={!pubGCreateNombre.trim() || !pubGCreateKind || pubGoogleCreateMut.isPending}
+              className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[13px] font-medium"
+              onClick={() => {
+                if (!pubGCreateKind) return;
+                pubGoogleCreateMut.mutate({ kind: pubGCreateKind, nombre: pubGCreateNombre });
+              }}
+            >
+              {pubGoogleCreateMut.isPending ? 'Creando…' : 'Crear'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function InstitutionalCommunityCalendarPanel() {
   const { user } = useAuth();
-  const { instConfig, monthYear } = useInstitutoCtx();
+  const { instConfig, monthYear, openComunicadoInEventosFeed } = useInstitutoCtx();
+  const { toast } = useToast();
   const [calendarViewDate, setCalendarViewDate] = useState(() => new Date());
-  const [detail, setDetail] = useState<CalendarAssignment | null>(null);
   const instId = user?.colegioId;
+  const eventoEscolarSwatch = useMemo(
+    () => getGroupSubjectColor({ fallbackId: '__institucional__' }),
+    []
+  );
   const y = calendarViewDate.getFullYear();
   const desde = useMemo(() => `${y}-01-01`, [y]);
   const hasta = useMemo(() => `${y}-12-31`, [y]);
@@ -1997,7 +2568,7 @@ function InstitutionalCommunityCalendarPanel() {
         </p>
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5 [scrollbar-gutter:stable]"
+        className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 md:p-5 [scrollbar-gutter:stable]"
         style={{
           scrollbarWidth: 'thin',
           scrollbarColor: 'rgba(124,58,237,0.45) rgba(255,255,255,0.06)',
@@ -2008,42 +2579,42 @@ function InstitutionalCommunityCalendarPanel() {
             <Loader2 className="w-7 h-7 animate-spin" />
           </div>
         ) : (
-          <div className="max-w-5xl mx-auto">
+          <div className="w-full max-w-none mx-auto flex flex-col min-h-[min(60dvh,44rem)]">
             <Calendar
               assignments={assignments}
               variant="teacher"
               currentDate={calendarViewDate}
               onCurrentDateChange={setCalendarViewDate}
-              onDayClick={(a) => setDetail(a)}
+              largeDayCells
+              onDayClick={(a) => {
+                const cid = a.sourceAnnouncementId?.trim();
+                if (cid) {
+                  openComunicadoInEventosFeed(cid);
+                } else {
+                  toast({
+                    title: 'Sin comunicado vinculado',
+                    description:
+                      'Este evento no está enlazado a un comunicado en Eventos. Los creados desde «Publicar» como evento sí abren su aviso.',
+                  });
+                }
+              }}
               summaryLabels={CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS}
               monthLegendOverride={`${eventsThisMonth} ${eventsThisMonth === 1 ? 'evento' : 'eventos'} programados este mes`}
             />
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-white/60 border-t border-white/[0.06] pt-4">
+              <span
+                className="w-4 h-4 rounded-md shrink-0 border border-white/15"
+                style={{ background: eventoEscolarSwatch }}
+                aria-hidden
+              />
+              <span>
+                El relleno de este color en el calendario indica un{' '}
+                <span className="text-white/80 font-medium">evento escolar</span> programado.
+              </span>
+            </div>
           </div>
         )}
       </div>
-      <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
-        <DialogContent className="bg-[var(--mid-dark,#0f172a)] border-white/10 text-white max-w-md">
-          <DialogHeader>
-            <DialogTitle>{detail?.titulo ?? 'Evento'}</DialogTitle>
-          </DialogHeader>
-          {detail ? (
-            <div className="space-y-2 text-sm border-t border-white/10 pt-4">
-              <p className="text-white/55">
-                {new Date(
-                  detail.fechaEntrega.includes('T') ? detail.fechaEntrega : `${detail.fechaEntrega}T12:00:00`
-                ).toLocaleString('es-CO')}
-              </p>
-              <p className="text-white/85 whitespace-pre-wrap">{detail.descripcion || 'Sin descripción.'}</p>
-              <p className="text-white/45 text-xs">{detail.curso}</p>
-            </div>
-          ) : null}
-          <DialogFooter>
-            <Button variant="outline" className="border-white/20" onClick={() => setDetail(null)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -2071,7 +2642,46 @@ export function InstitutoComunicadosFeedPanel() {
     setCorrTitle,
     setCorrBody,
     openReads,
+    pendingComunicadoFocusId,
+    setPendingComunicadoFocusId,
   } = useInstitutoCtx();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const id = pendingComunicadoFocusId;
+    if (!id || isLoading) return;
+    const found = list.some((c) => c.id === id);
+    const t = window.setTimeout(() => {
+      if (found) {
+        const el = document.getElementById(`instit-comunicado-${id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add(
+            'ring-2',
+            'ring-[hsl(var(--primary))]',
+            'ring-offset-2',
+            'ring-offset-[var(--background,#07090f)]'
+          );
+          window.setTimeout(() => {
+            el.classList.remove(
+              'ring-2',
+              'ring-[hsl(var(--primary))]',
+              'ring-offset-2',
+              'ring-offset-[var(--background,#07090f)]'
+            );
+          }, 2200);
+        }
+      } else {
+        toast({
+          title: 'Comunicado no visible',
+          description: 'Este aviso no aparece en la lista de Eventos (puede estar en otra categoría o ya no existir).',
+          variant: 'destructive',
+        });
+      }
+      setPendingComunicadoFocusId(null);
+    }, 100);
+    return () => window.clearTimeout(t);
+  }, [pendingComunicadoFocusId, isLoading, list, setPendingComunicadoFocusId, toast]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md">
@@ -2106,7 +2716,8 @@ export function InstitutoComunicadosFeedPanel() {
             list.map((c) => (
               <article
                 key={c.id}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-3 md:p-4"
+                id={`instit-comunicado-${c.id}`}
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-3 md:p-4 scroll-mt-24"
                 onClick={() => markRead(c.id)}
                 role="presentation"
               >
@@ -2209,6 +2820,8 @@ export function InstitutoComunicadosDialogs() {
     pubCategory,
     pubEventoFecha,
     pubAudience,
+    pubCircularAttachments,
+    pubGeneralAttachments,
     publishMut,
     readsFor,
     setReadsFor,
@@ -2331,6 +2944,30 @@ export function InstitutoComunicadosDialogs() {
               </p>
             ) : null}
             <p className="text-white font-semibold">{pubTitle}</p>
+            {pubCategory === 'circular' && pubCircularAttachments.length > 0 ? (
+              <div className="rounded-lg border border-[#00c8ff]/25 bg-[#00c8ff]/10 p-3 space-y-1.5">
+                <p className="text-[11px] uppercase tracking-wide text-[#7dd3fc]">Archivo en Evo Drive de los padres</p>
+                <ul className="text-sm text-white/90 space-y-1">
+                  {pubCircularAttachments.map((a, i) => (
+                    <li key={i} className="truncate" title={a.url ?? a.fileId}>
+                      {a.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {pubCategory !== 'circular' && pubGeneralAttachments.length > 0 ? (
+              <div className="rounded-lg border border-white/15 bg-white/[0.06] p-3 space-y-1.5">
+                <p className="text-[11px] uppercase tracking-wide text-white/50">Adjuntos</p>
+                <ul className="text-sm text-white/90 space-y-1">
+                  {pubGeneralAttachments.map((a, i) => (
+                    <li key={i} className="truncate" title={a.url ?? a.fileId}>
+                      {a.name}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <p className="text-white/85 whitespace-pre-wrap">{pubBody || '—'}</p>
           </div>
           <DialogFooter className="gap-2">

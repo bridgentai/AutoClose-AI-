@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useState, useMemo } from "react";
+import { forwardRef, useEffect, useState, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/authContext";
 import { useQuery } from "@tanstack/react-query";
@@ -18,31 +18,23 @@ import {
   Command,
   Send,
   Loader2,
-  Mail,
   FileCheck,
   Bell,
   Cloud,
   BarChart3,
   Settings2,
-  Building2,
   ChevronRight,
   Inbox,
-  Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
+import { EvoDocCard } from "@/components/evo-doc-card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCommandPalette } from "./command-palette";
-
-interface Message {
-  emisor: 'user' | 'ai';
-  contenido: string;
-  timestamp: Date;
-  type?: string;
-  structuredData?: Record<string, unknown>;
-}
+import logoCaobosBlanco from "@/assets/logo-caobos-blanco.png";
+import { useKiwiChatStream } from "@/hooks/useKiwiChatStream";
 
 interface AIDockProps {
   onOpenCommandPalette?: () => void;
@@ -119,7 +111,6 @@ function isParentAprendizajeSection(loc: string): boolean {
     '/parent/materiales',
     '/parent/cursos',
     '/parent/horario',
-    '/parent/calendario',
     '/parent/tareas',
   ];
   for (const r of roots) {
@@ -138,12 +129,10 @@ function getDockLocationLabel(location: string): string {
     { match: (s) => s.startsWith('/evo-drive'), label: 'Evo Drive' },
     { match: (s) => s.startsWith('/evo-send'), label: 'Evo Send' },
     { match: (s) => s.startsWith('/notificaciones'), label: 'Notificaciones' },
-    { match: (s) => s.startsWith('/comunicacion/academico'), label: 'Academia (comunicación)' },
-    { match: (s) => s.startsWith('/comunidad/noticias') || s.startsWith('/comunidad'), label: 'GLC' },
+    { match: (s) => s.startsWith('/comunidad'), label: 'Comunidad' },
     { match: (s) => isParentAprendizajeSection(s), label: 'Aprendizaje del hijo/a' },
     { match: (s) => s.startsWith('/mi-aprendizaje'), label: 'Mi Aprendizaje' },
     { match: (s) => s.startsWith('/profesor/academia'), label: 'Academia' },
-    { match: (s) => s.startsWith('/profesor/comunicacion'), label: 'Comunicación' },
     {
       match: (s) =>
         s.startsWith('/directivo/gestion') ||
@@ -162,8 +151,6 @@ function getDockLocationLabel(location: string): string {
       label: 'Analítica',
     },
     { match: (s) => s.startsWith('/directivo/academia'), label: 'Academia' },
-    { match: (s) => s.startsWith('/directivo/comunicacion'), label: 'Comunicación' },
-    { match: (s) => s.startsWith('/comunicacion'), label: 'Comunicación' },
     { match: (s) => s.startsWith('/calendar') || s.startsWith('/teacher-calendar'), label: 'Calendario' },
     { match: (s) => s.startsWith('/plataformas'), label: 'Plataformas' },
     { match: (s) => s.startsWith('/mi-perfil'), label: 'Mi perfil' },
@@ -311,12 +298,17 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     }
   };
 
-  // Chat state
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const {
+    messages,
+    input,
+    setInput,
+    loading,
+    isStreaming,
+    activeToolStep,
+    messagesEndRef,
+    sendMessage,
+    handleSendFromInput,
+  } = useKiwiChatStream();
 
   const isChatPage = location === "/chat";
   const isDashboardPage = location === "/dashboard";
@@ -327,7 +319,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
 
   // Navigation items based on role
   const getNavigationItems = () => {
-    // Vista directivo: Dashboard, Comunicación, Gestión, Analítica, Evo Drive
+    // Vista directivo: Dashboard, Chat AI, Evo Send, Evo Drive, Gestión, Analítica
     if (user?.rol === "directivo") {
       return [
         { icon: Home, label: "Dashboard", description: "Resumen y métricas del colegio", path: "/dashboard", roles: ["directivo"], accentHex: "#1e3cff" },
@@ -342,6 +334,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           iconShellClassName:
             "bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30 border-0",
         },
+        { icon: Cloud, label: "Evo Drive", description: "Acceder al drive de la plataforma", path: "/evo-drive", roles: ["directivo"], accentHex: "#00c8ff" },
         {
           icon: Settings2,
           label: "Gestión",
@@ -360,7 +353,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           accentHex: "#1e3cff",
           pathActive: directivoAnaliticaDockActive,
         },
-        { icon: Cloud, label: "Evo Drive", description: "Acceder al drive de la plataforma", path: "/evo-drive", roles: ["directivo"], accentHex: "#00c8ff" },
       ];
     }
 
@@ -420,7 +412,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
         accentHex: "#00c8ff",
       },
       { icon: BookOpen, label: "Academia", description: "Planeación, cursos y recursos", path: "/profesor/academia", roles: ["profesor"], accentHex: "#1e3cff" },
-      { icon: Mail, label: "Comunicación", description: "Mensajes y comunicados", path: "/comunicacion", roles: ["profesor"], accentHex: "#1e3cff" },
       { icon: FileCheck, label: "Permisos", description: "Solicitudes y autorizaciones", path: "/permisos", roles: ["padre"], accentHex: "#1e3cff" },
       {
         icon: Send,
@@ -431,6 +422,14 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
         accentHex: "#f43f5e",
         iconShellClassName:
           "bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30 border-0",
+      },
+      {
+        icon: Cloud,
+        label: "Evo Drive",
+        description: "Mi carpeta y circulares institucionales",
+        path: "/evo-drive",
+        roles: ["padre"],
+        accentHex: "#00c8ff",
       },
     ];
 
@@ -477,6 +476,8 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   });
   const academiaUnread = dockComSummary?.academico?.mensajesSinLeer ?? 0;
   const glcUnread = dockComSummary?.institucional?.mensajesSinLeer ?? 0;
+  /** Padre: un solo contador en Evo Send (avisos académicos + institucionales sin ver). */
+  const padreEvoSendUnreadTotal = academiaUnread + glcUnread;
 
   const handleNavClick = (path: string, action?: string) => {
     if (action === "chat") {
@@ -496,35 +497,6 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
   const handleLogout = () => {
     logout();
     setLocation("/login");
-  };
-
-  // Chat functions
-  const scrollToBottom = () => {
-    // Usar requestAnimationFrame para asegurar que el DOM se haya actualizado
-    requestAnimationFrame(() => {
-      const chatContainer = document.getElementById('chat-messages');
-      if (chatContainer) {
-        chatContainer.scrollTo({
-          top: chatContainer.scrollHeight,
-          behavior: 'smooth'
-        });
-      }
-    });
-  };
-
-  const isKiwiConfirmPayload = (text: string) => typeof text === 'string' && text.startsWith('__CONFIRM__:');
-
-  const parseKiwiConfirmPayload = (text: string): Record<string, unknown> | null => {
-    if (!isKiwiConfirmPayload(text)) return null;
-    const raw = text.slice('__CONFIRM__:'.length).trim();
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
-      return null;
-    } catch {
-      return null;
-    }
   };
 
   type ParsedCourseItem = { subject: string; group: string };
@@ -554,136 +526,50 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
     if (!m) return null;
     const subject = (m[1] ?? '').trim();
     if (!subject) return null;
-    const groupMatches = [...t.matchAll(/\b(\d{1,2}[A-Za-z])\b/g)]
-      .map((x) => (x[1] ?? '').toUpperCase())
-      .filter(Boolean);
+    const groupMatches = Array.from(t.matchAll(/\b(\d{1,2}[A-Za-z])\b/g), (x) =>
+      (x[1] ?? '').toUpperCase(),
+    ).filter(Boolean);
     const groups = Array.from(new Set(groupMatches));
     return groups.length > 0 ? { subject, groups } : null;
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || loading || isStreaming) return;
-
-    const userMessage: Message = {
-      emisor: 'user',
-      contenido: input,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    const currentInput = input;
-    setInput('');
-    setLoading(true);
-
-    // Placeholder vacío para el streaming
-    setMessages(prev => [...prev, { emisor: 'ai', contenido: '', timestamp: new Date() }]);
-
-    try {
-      const token = localStorage.getItem('autoclose_token');
-      const res = await fetch('/api/kiwi/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: currentInput,
-          ...(currentSessionId ? { sessionId: currentSessionId } : {}),
-        }),
-      });
-
-      if (!res.ok || !res.body) {
-        let errMsg = 'Error al conectar con Kiwi';
-        try { const b = await res.json(); errMsg = b.error || errMsg; } catch { /* ignore */ }
-        setMessages(prev => {
-          const next = [...prev];
-          next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
-          return next;
-        });
-        setLoading(false);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      setLoading(false);
-      setIsStreaming(true);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
-
-          let parsed: { type: string; text?: string; sessionId?: string; message?: string };
-          try { parsed = JSON.parse(raw); } catch { continue; }
-
-          if (parsed.type === 'chunk' && parsed.text) {
-            const chunk = parsed.text;
-
-            // Confirmación estructurada: reemplaza el placeholder por una card
-            if (isKiwiConfirmPayload(chunk)) {
-              const payload = parseKiwiConfirmPayload(chunk);
-              setMessages((prev) => {
-                const next = [...prev];
-                next[next.length - 1] = {
-                  emisor: 'ai',
-                  contenido: '',
-                  timestamp: new Date(),
-                  type: 'kiwi_confirm',
-                  structuredData: payload ?? undefined,
-                };
-                return next;
-              });
-              setIsStreaming(false);
-              setTimeout(() => scrollToBottom(), 50);
-              continue;
-            }
-            setMessages(prev => {
-              const next = [...prev];
-              const last = next[next.length - 1];
-              if (last?.emisor === 'ai') {
-                next[next.length - 1] = { ...last, contenido: last.contenido + chunk };
-              }
-              return next;
-            });
-            setTimeout(() => scrollToBottom(), 50);
-          } else if (parsed.type === 'done') {
-            if (parsed.sessionId) setCurrentSessionId(parsed.sessionId);
-            setIsStreaming(false);
-            setTimeout(() => scrollToBottom(), 150);
-          } else if (parsed.type === 'error') {
-            setMessages(prev => {
-              const next = [...prev];
-              next[next.length - 1] = { emisor: 'ai', contenido: parsed.message ?? 'Ocurrió un error.', timestamp: new Date() };
-              return next;
-            });
-            setIsStreaming(false);
-          }
-        }
-      }
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : 'Lo siento, ocurrió un error al procesar tu mensaje.';
-      setMessages(prev => {
-        const next = [...prev];
-        next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
-        return next;
-      });
-      setTimeout(() => scrollToBottom(), 150);
-    } finally {
-      setLoading(false);
-      setIsStreaming(false);
+  const handleSend = (messageOverride?: string) => {
+    if (messageOverride !== undefined) {
+      const t = messageOverride.trim();
+      if (!t || loading || isStreaming) return;
+      setInput('');
+      void sendMessage(t);
+      return;
     }
+    handleSendFromInput();
   };
+
+  const sendMessageRef = useRef(sendMessage);
+  sendMessageRef.current = sendMessage;
+
+  useEffect(() => {
+    const onKiwiOpen = (ev: Event) => {
+      const e = ev as CustomEvent<{
+        message?: string;
+        autoSend?: boolean;
+        bodyExtras?: Record<string, unknown>;
+      }>;
+      const message = typeof e.detail?.message === 'string' ? e.detail.message.trim() : '';
+      if (!message) return;
+      setIsExpanded(true);
+      setIsChatOpen(true);
+      setInput(message);
+      const autoSend = e.detail?.autoSend !== false;
+      if (autoSend) {
+        window.setTimeout(() => {
+          setInput('');
+          void sendMessageRef.current(message, { bodyExtras: e.detail?.bodyExtras });
+        }, 0);
+      }
+    };
+    window.addEventListener('evos:kiwi-open', onKiwiOpen);
+    return () => window.removeEventListener('evos:kiwi-open', onKiwiOpen);
+  }, []);
 
   return (
     <TooltipProvider>
@@ -705,9 +591,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
           className="fixed inset-0 z-20 bg-transparent transition-opacity duration-300"
           onClick={() => {
             setIsChatOpen(false);
-            if (!isExpanded) {
-              setIsExpanded(false);
-            }
+            setIsExpanded(false);
           }}
           aria-hidden="true"
         />
@@ -841,7 +725,17 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                               msg.emisor === 'user' ? 'justify-end' : 'justify-start'
                             )}
                           >
-                            {msg.emisor === 'ai' && msg.type === 'kiwi_confirm' && msg.structuredData ? (
+                            {msg.emisor === 'ai' && msg.type === 'evo_doc' && msg.structuredData ? (
+                              <div className="max-w-[92%] w-full">
+                                <EvoDocCard
+                                  title={String(msg.structuredData.title ?? 'Documento')}
+                                  description={String(msg.structuredData.description ?? '')}
+                                  period={String(msg.structuredData.period ?? '')}
+                                  docId={String(msg.structuredData.docId ?? '')}
+                                  compact
+                                />
+                              </div>
+                            ) : msg.emisor === 'ai' && msg.type === 'kiwi_confirm' && msg.structuredData ? (
                               <div className="max-w-[92%] w-full bg-white/10 text-white rounded-xl rounded-bl-sm border border-white/20 p-3">
                                 <div className="text-xs text-white/60">Confirmación requerida</div>
                                 <div className="text-sm font-semibold text-white mt-1">Crear tarea</div>
@@ -870,8 +764,7 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                                     className="h-8 bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8] hover:from-[#2563EB] hover:to-[#1e3cff] border border-white/10"
                                     onClick={() => {
                                       const payload = msg.structuredData ?? {};
-                                      setInput(`KIWI_CONFIRM ${JSON.stringify(payload)}`);
-                                      setTimeout(() => handleSend(), 0);
+                                      void sendMessage(`KIWI_CONFIRM ${JSON.stringify(payload)}`);
                                     }}
                                   >
                                     Confirmar
@@ -982,14 +875,17 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                             )}
                           </div>
                         ))}
-                        {loading && (
+                        {(loading || isStreaming || activeToolStep) && (
                           <div className="flex justify-start">
                             <div className="bg-white/10 px-4 py-2 rounded-xl rounded-bl-sm border border-white/20 flex items-center gap-2">
                               <Loader2 className="w-4 h-4 animate-spin text-white/70" />
-                              <span className="text-sm text-white/70 italic">Escribiendo...</span>
+                              <span className="text-sm text-white/70 italic">
+                                {activeToolStep ? `${activeToolStep.replace(/_/g, ' ')}...` : 'Escribiendo...'}
+                              </span>
                             </div>
                           </div>
                         )}
+                        <div ref={messagesEndRef} className="h-px w-full shrink-0" aria-hidden />
                       </div>
                     )}
                   </div>
@@ -1009,7 +905,9 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       disabled={loading || isStreaming}
                     />
                     <Button
-                      onClick={handleSend}
+                      onClick={() => {
+                        void handleSend();
+                      }}
                       disabled={loading || isStreaming || !input.trim()}
                       className="h-10 w-10 rounded-lg flex-shrink-0 bg-gradient-to-br from-[#1e3cff] to-[#1D4ED8] hover:from-[#2563EB] hover:to-[#1e3cff] border border-white/10"
                     >
@@ -1022,8 +920,9 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                   </div>
                 </div>
               ) : (
-                /* Navigation Panel */
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                /* Navigation Panel: scroll + usuario; logo fijado al borde inferior del dock */
+                <div className="relative flex-1 flex flex-col min-h-0 p-4">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-4">
                   {/* Chat Button - Hidden on chat page and dashboard */}
                   {!isChatPage && !isDashboardPage && (
                     <DockCard
@@ -1078,118 +977,25 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       );
                     })}
 
-                  {user?.rol === 'estudiante' && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
-                        Institución
-                      </p>
-                      <DockCard
-                        icon={Building2}
-                        title="GLC"
-                        description="Circulares y comunicados institucionales"
-                        accentHex="#1e3cff"
-                        isActive={dockPathActive(location, '/comunidad/noticias')}
-                        onClick={() => setLocation('/comunidad/noticias')}
-                        rightSlot={
-                          glcUnread > 0 ? (
-                            <span
-                              className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#fde047]"
-                              style={{
-                                background: rgbaFromHex('#ffd700', 0.16),
-                                border: `1px solid ${rgbaFromHex('#ffd700', 0.35)}`,
-                              }}
-                            >
-                              {glcUnread > 99 ? '99+' : glcUnread}
-                            </span>
-                          ) : (
-                            <Megaphone className="w-4 h-4 text-white/35 group-hover:text-[#ffd700] transition-colors" />
-                          )
-                        }
-                      />
-                    </div>
-                  )}
 
                   {user?.rol === 'padre' && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
-                        Aprendizaje
-                      </p>
-                      <DockCard
-                        icon={BookOpen}
-                        title="Aprendizaje"
-                        description="Cursos, notas, tareas, materiales, horario y calendario"
-                        accentHex="#1e3cff"
-                        isActive={isParentAprendizajeSection(location)}
-                        onClick={() => setLocation('/parent/aprendizaje')}
-                      />
-                    </div>
-                  )}
-
-                  {user?.rol === 'padre' && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
-                        Comunicación
-                      </p>
-                      <div className="grid grid-cols-1 gap-2">
-                        <DockCard
-                          icon={GraduationCap}
-                          title="Academia"
-                          description="Comunicados de tus docentes y avisos del aula"
-                          accentHex="#1e3cff"
-                          isActive={dockPathActive(location, '/comunicacion/academico')}
-                          onClick={() => setLocation('/comunicacion/academico')}
-                          rightSlot={
-                            academiaUnread > 0 ? (
-                              <span
-                                className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#7dd3fc]"
-                                style={{
-                                  background: rgbaFromHex('#00c8ff', 0.18),
-                                  border: `1px solid ${rgbaFromHex('#00c8ff', 0.35)}`,
-                                }}
-                              >
-                                {academiaUnread > 99 ? '99+' : academiaUnread}
-                              </span>
-                            ) : (
-                              <Inbox className="w-4 h-4 text-white/35 group-hover:text-[#00c8ff] transition-colors" />
-                            )
-                          }
-                        />
-
-                        <DockCard
-                          icon={Building2}
-                          title="GLC"
-                          description="Circulares y comunicados institucionales"
-                          accentHex="#1e3cff"
-                          isActive={dockPathActive(location, '/comunidad/noticias')}
-                          onClick={() => setLocation('/comunidad/noticias')}
-                          rightSlot={
-                            glcUnread > 0 ? (
-                              <span
-                                className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#fde047]"
-                                style={{
-                                  background: rgbaFromHex('#ffd700', 0.16),
-                                  border: `1px solid ${rgbaFromHex('#ffd700', 0.35)}`,
-                                }}
-                              >
-                                {glcUnread > 99 ? '99+' : glcUnread}
-                              </span>
-                            ) : (
-                              <Megaphone className="w-4 h-4 text-white/35 group-hover:text-[#ffd700] transition-colors" />
-                            )
-                          }
-                        />
-                      </div>
-                    </div>
+                    <DockCard
+                      icon={BookOpen}
+                      title="Aprendizaje"
+                      description="Cursos, notas, tareas, materiales, horario y calendario"
+                      accentHex="#1e3cff"
+                      isActive={isParentAprendizajeSection(location)}
+                      onClick={() => setLocation('/parent/aprendizaje')}
+                    />
                   )}
 
                   {/* Navigation Items */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
-                      Navegación
-                    </p>
-                    {dockNavigationItems.map((item) => {
+                  {user?.rol === 'padre' ? (
+                    dockNavigationItems.map((item) => {
                       const Icon = item.icon;
                       const isActive = dockNavItemActive(location, item);
+                      const isPadreEvoSend =
+                        item.path === '/evo-send?open=family' || item.path.startsWith('/evo-send');
                       return (
                         <Tooltip key={item.path}>
                           <TooltipTrigger asChild>
@@ -1215,6 +1021,25 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                                   ? (item as { iconShellClassName: string }).iconShellClassName
                                   : undefined
                               }
+                              rightSlot={
+                                isPadreEvoSend
+                                  ? padreEvoSendUnreadTotal > 0
+                                    ? (
+                                        <span
+                                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-[#7dd3fc]"
+                                          style={{
+                                            background: rgbaFromHex('#00c8ff', 0.18),
+                                            border: `1px solid ${rgbaFromHex('#00c8ff', 0.35)}`,
+                                          }}
+                                        >
+                                          {padreEvoSendUnreadTotal > 99 ? '99+' : padreEvoSendUnreadTotal}
+                                        </span>
+                                      )
+                                    : (
+                                        <Inbox className="w-4 h-4 text-white/35 group-hover:text-[#00c8ff] transition-colors" />
+                                      )
+                                  : undefined
+                              }
                             />
                           </TooltipTrigger>
                           <TooltipContent side="left">
@@ -1222,11 +1047,55 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                           </TooltipContent>
                         </Tooltip>
                       );
-                    })}
+                    })
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-white/50 uppercase tracking-wider px-2">
+                        Navegación
+                      </p>
+                      {dockNavigationItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = dockNavItemActive(location, item);
+                        return (
+                          <Tooltip key={item.path}>
+                            <TooltipTrigger asChild>
+                              <DockCard
+                                icon={Icon}
+                                title={item.label}
+                                description={
+                                  'description' in item && typeof item.description === 'string'
+                                    ? item.description
+                                    : 'Acceso directo'
+                                }
+                                accentHex={
+                                  'accentHex' in item && typeof item.accentHex === 'string'
+                                    ? item.accentHex
+                                    : '#1e3cff'
+                                }
+                                isActive={isActive}
+                                onClick={() => handleNavClick(item.path, item.action)}
+                                iconShellClassName={
+                                  'iconShellClassName' in item &&
+                                    typeof (item as { iconShellClassName?: string }).iconShellClassName ===
+                                    'string'
+                                    ? (item as { iconShellClassName: string }).iconShellClassName
+                                    : undefined
+                                }
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent side="left">
+                              <p>{item.label}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   </div>
 
-                  {/* User Info & Logout */}
-                  <div className="mt-auto pt-4 border-t border-white/10 space-y-2">
+                  {/* User Info & Logout — pb reserva hueco del logo (position absolute abajo) */}
+                  <div className="relative z-[1] shrink-0 border-t border-white/10 pt-4 mt-4 space-y-2 pb-14">
                     <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                       <p className="text-xs text-white/90 font-medium truncate">{user?.nombre}</p>
                       <p className="text-xs text-white/50 truncate">{user?.email}</p>
@@ -1246,6 +1115,13 @@ export function AIDock({ onOpenCommandPalette, onChatStateChange }: AIDockProps)
                       <LogOut className="w-4 h-4" />
                       <span className="text-sm">Cerrar sesión</span>
                     </button>
+                  </div>
+                  <div className="pointer-events-none absolute bottom-3 left-4 right-4 z-[2] flex justify-center">
+                    <img
+                      src={logoCaobosBlanco}
+                      alt="Gimnasio Los Caobos"
+                      className="pointer-events-none h-8 w-auto max-w-[min(100%,11rem)] object-contain opacity-90"
+                    />
                   </div>
                 </div>
               )}

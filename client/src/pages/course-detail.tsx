@@ -175,11 +175,25 @@ interface MateriaConNotasStudent {
     ultimaNota: number | null;
     estado: string;
 }
+
+/** Escala 0–100 en UI y promedios (evita datos anómalos >100 en pantalla). */
+function clampPercent0to100(n: number | null | undefined): number | null {
+    if (n == null || Number.isNaN(Number(n))) return null;
+    return Math.min(100, Math.max(0, Number(n)));
+}
+
+function weightedGradeWithinLogroClamped(slots: { categoryWeightPct?: number | null }[], scores: (number | null | undefined)[]) {
+    const raw = weightedGradeWithinLogro(slots, scores);
+    return clampPercent0to100(raw);
+}
+
 function dedupeNotasStudent(notas: NotaRealStudent[]) {
     const m = new Map<string, NotaRealStudent>();
     for (const n of notas) {
-        const id = n.assignmentId || n.tareaTitulo || JSON.stringify(n);
-        if (!m.has(id)) m.set(id, n);
+        const aid = n.assignmentId != null && String(n.assignmentId).trim() !== '' ? String(n.assignmentId).trim() : '';
+        const tit = n.tareaTitulo != null && String(n.tareaTitulo).trim() !== '' ? String(n.tareaTitulo).trim() : '';
+        const key = aid || tit || `__${m.size}:${n.fecha ?? ''}:${String(n.nota)}`;
+        if (!m.has(key)) m.set(key, n);
     }
     return Array.from(m.values());
 }
@@ -198,9 +212,9 @@ function computeWeightedPromedioAndUltima(
     const getCat = (lid: string) => {
         const arr = dedupeNotasStudent(grouped.get(lid) ?? []);
         if (!arr.length) return null;
-        return weightedGradeWithinLogro(
+        return weightedGradeWithinLogroClamped(
             arr.map((n) => ({ categoryWeightPct: n.categoryWeightPct })),
-            arr.map((n) => (hasRecordedScore(n.nota) ? Number(n.nota) : null))
+            arr.map((n) => (hasRecordedScore(n.nota) ? clampPercent0to100(Number(n.nota)) : null))
         );
     };
     const outcomes: OutcomeGradeNode[] = (nestedLogros ?? []).map((L) => ({
@@ -211,11 +225,17 @@ function computeWeightedPromedioAndUltima(
     let promedioFinal: number | null =
         outcomes.length > 0 ? courseGradeFromOutcomes(outcomes, getCat) : null;
     if (promedioFinal == null) {
-        const scored = notas.filter((n) => hasRecordedScore(n.nota)).map((n) => Number(n.nota));
+        const scored = notas
+            .filter((n) => hasRecordedScore(n.nota))
+            .map((n) => clampPercent0to100(Number(n.nota)))
+            .filter((v): v is number => v != null);
         if (scored.length) promedioFinal = scored.reduce((a, b) => a + b, 0) / scored.length;
     }
     if (promedioFinal == null && materia.promedio != null) promedioFinal = materia.promedio;
-    if (promedioFinal != null) promedioFinal = Math.round(promedioFinal * 10) / 10;
+    if (promedioFinal != null) {
+        const c = clampPercent0to100(promedioFinal);
+        promedioFinal = c != null ? Math.round(c * 10) / 10 : null;
+    }
     let ultimaNota: number | null = null;
     let ultimaMs = 0;
     for (const n of notas) {
@@ -223,7 +243,7 @@ function computeWeightedPromedioAndUltima(
         const ms = new Date(n.fecha).getTime();
         if (!Number.isNaN(ms) && ms >= ultimaMs) {
             ultimaMs = ms;
-            ultimaNota = Number(n.nota);
+            ultimaNota = clampPercent0to100(Number(n.nota));
         }
     }
     return { promedioFinal, ultimaNota };
@@ -1916,62 +1936,67 @@ export default function CourseDetailPage() {
         const hasWeightedLogros = logrosOrdenados.length > 0;
         type CategoriaNota = {
             categoria: string;
+            indicadorId?: string;
             promedio: number | null;
             notas: { actividad: string; nota: number | null; fecha: string; comentario?: string | null }[];
-        };
-        const dedupeN = (arr: NotaRealStudent[]) => {
-            const m = new Map<string, NotaRealStudent>();
-            for (const n of arr) {
-                const id = n.assignmentId || n.tareaTitulo || '';
-                if (!m.has(id)) m.set(id, n);
-            }
-            return Array.from(m.values());
         };
         const categoriasNotas: CategoriaNota[] = [];
         if (hasWeightedLogros && logrosOrdenados.length > 0) {
             for (const logro of logrosOrdenados) {
-                const notasEnCat = dedupeN(
+                const notasEnCat = dedupeNotasStudent(
                     notasList.filter((n) => String(n.gradingCategoryId ?? '') === String(logro._id))
                 );
-                const promCat = weightedGradeWithinLogro(
+                const promCat = weightedGradeWithinLogroClamped(
                     notasEnCat.map((n) => ({ categoryWeightPct: n.categoryWeightPct })),
-                    notasEnCat.map((n) => (hasRecordedScore(n.nota) ? Number(n.nota) : null))
+                    notasEnCat.map((n) => (hasRecordedScore(n.nota) ? clampPercent0to100(Number(n.nota)) : null))
                 );
+                const promRounded = promCat != null ? Math.round(promCat * 10) / 10 : null;
                 categoriasNotas.push({
                     categoria: `${logro.nombre} (${logro.porcentaje ?? 0}%)`,
-                    promedio: promCat != null ? Math.round(promCat * 10) / 10 : null,
+                    indicadorId: String(logro._id),
+                    promedio: promRounded,
                     notas: notasEnCat.map((n) => ({
                         actividad: n.tareaTitulo ?? 'Sin título',
-                        nota: hasRecordedScore(n.nota) ? Number(n.nota) : null,
+                        nota: hasRecordedScore(n.nota) ? clampPercent0to100(Number(n.nota)) : null,
                         fecha: n.fecha ?? '',
                         comentario: n.comentario ?? null,
                     })),
                 });
             }
-            const sinCat = dedupeN(notasList.filter((n) => !n.gradingCategoryId));
+            const sinCat = dedupeNotasStudent(notasList.filter((n) => !n.gradingCategoryId));
             if (sinCat.length > 0) {
-                const sc = sinCat.filter((n) => hasRecordedScore(n.nota)).map((n) => Number(n.nota));
+                const sc = sinCat
+                    .filter((n) => hasRecordedScore(n.nota))
+                    .map((n) => clampPercent0to100(Number(n.nota)))
+                    .filter((v): v is number => v != null);
                 const promSin = sc.length ? sc.reduce((a, b) => a + b, 0) / sc.length : null;
+                const promSinR = promSin != null ? Math.round(clampPercent0to100(promSin)! * 10) / 10 : null;
                 categoriasNotas.push({
                     categoria: 'Sin categoría',
-                    promedio: promSin != null ? Math.round(promSin * 10) / 10 : null,
+                    indicadorId: undefined,
+                    promedio: promSinR,
                     notas: sinCat.map((n) => ({
                         actividad: n.tareaTitulo ?? 'Sin título',
-                        nota: hasRecordedScore(n.nota) ? Number(n.nota) : null,
+                        nota: hasRecordedScore(n.nota) ? clampPercent0to100(Number(n.nota)) : null,
                         fecha: n.fecha ?? '',
                         comentario: n.comentario ?? null,
                     })),
                 });
             }
         } else if (notasList.length > 0) {
-            const d = dedupeN(notasList);
-            const sc = d.filter((n) => hasRecordedScore(n.nota)).map((n) => Number(n.nota));
+            const d = dedupeNotasStudent(notasList);
+            const sc = d
+                .filter((n) => hasRecordedScore(n.nota))
+                .map((n) => clampPercent0to100(Number(n.nota)))
+                .filter((v): v is number => v != null);
+            const promFlat = sc.length ? Math.round((sc.reduce((a, b) => a + b, 0) / sc.length) * 10) / 10 : null;
             categoriasNotas.push({
                 categoria: 'Notas',
-                promedio: sc.length ? Math.round((sc.reduce((a, b) => a + b, 0) / sc.length) * 10) / 10 : null,
+                indicadorId: undefined,
+                promedio: promFlat,
                 notas: d.map((n) => ({
                     actividad: n.tareaTitulo ?? 'Sin título',
-                    nota: hasRecordedScore(n.nota) ? Number(n.nota) : null,
+                    nota: hasRecordedScore(n.nota) ? clampPercent0to100(Number(n.nota)) : null,
                     fecha: n.fecha ?? '',
                     comentario: n.comentario ?? null,
                 })),
@@ -2140,7 +2165,7 @@ export default function CourseDetailPage() {
                                 }
                                 const params = new URLSearchParams();
                                 if (evoSendThreadId) params.set('thread', evoSendThreadId);
-                                params.set('context', activeSubjectNombre || 'actividad del curso');
+                                params.set('context', details.nombre || 'actividad del curso');
                                 setLocation(params.toString() ? `/evo-send?${params.toString()}` : '/evo-send');
                             }}
                         >
@@ -2284,65 +2309,248 @@ export default function CourseDetailPage() {
                             </CardHeader>
                             <CardContent>
                                 {categoriasNotas.length > 0 ? (
-                                    <div className="space-y-6">
-                                        {categoriasNotas.map((categoria, idx) => (
-                                            <div key={idx} className="space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <h4 className="font-semibold text-[#E2E8F0]">{categoria.categoria}</h4>
-                                                    <span className="text-lg font-bold text-[#E2E8F0]">
-                                                        {categoria.promedio != null ? (
-                                                            <>
-                                                                {Math.round(categoria.promedio)}{' '}
-                                                                <span className="text-white/50">/ 100</span>
-                                                            </>
-                                                        ) : (
-                                                            <span className="text-white/50">—</span>
-                                                        )}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm text-white/60 mb-3">
-                                                    Promedio de {categoria.notas.length} {categoria.notas.length === 1 ? 'actividad' : 'actividades'}
-                                                </p>
-                                                <div className="space-y-3">
-                                                    {categoria.notas.map((nota, notaIdx) => (
+                                    logrosStudentNested.length > 0 ? (
+                                        <div className="space-y-6">
+                                            {[...logrosStudentNested]
+                                                .sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999))
+                                                .map((logro) => {
+                                                    const indicadoresSorted = [...(logro.indicadores ?? [])].sort(
+                                                        (a, b) => (a.orden ?? 999) - (b.orden ?? 999)
+                                                    );
+                                                    let weightedSum = 0;
+                                                    let totalPct = 0;
+                                                    for (const ind of indicadoresSorted) {
+                                                        const cat =
+                                                            categoriasNotas.find((c) => c.indicadorId === String(ind._id)) ??
+                                                            categoriasNotas.find(
+                                                                (c) => c.categoria === `${ind.nombre} (${ind.porcentaje}%)`
+                                                            );
+                                                        if (cat?.promedio != null) {
+                                                            weightedSum += cat.promedio * ind.porcentaje;
+                                                            totalPct += ind.porcentaje;
+                                                        }
+                                                    }
+                                                    const promedioLogro =
+                                                        totalPct > 0
+                                                            ? Math.round(clampPercent0to100(weightedSum / totalPct)! * 10) / 10
+                                                            : null;
+                                                    return (
                                                         <div
-                                                            key={notaIdx}
-                                                            className="p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/10 transition-all duration-200"
+                                                            key={logro._id}
+                                                            className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden backdrop-blur-sm"
                                                         >
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <div className="flex-1">
-                                                                    <h4 className="font-semibold text-[#E2E8F0] mb-1">{nota.actividad}</h4>
-                                                                    <p className="text-sm text-white/60">
-                                                                        {new Date(nota.fecha).toLocaleDateString('es-CO', {
-                                                                            year: 'numeric',
-                                                                            month: 'long',
-                                                                            day: 'numeric',
-                                                                        })}
+                                                            <div className="px-4 py-3 bg-[#002366]/35 border-b border-white/10">
+                                                                <p className="text-sm sm:text-[15px] text-white/95 leading-relaxed">
+                                                                    {logro.descripcion}
+                                                                </p>
+                                                                {logro.pesoEnCurso > 0 ? (
+                                                                    <p className="text-xs text-[#00c8ff] mt-2 font-medium">
+                                                                        Peso respecto a la nota del curso: {logro.pesoEnCurso}%
                                                                     </p>
-                                                                </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-2xl font-bold text-[#E2E8F0]">
-                                                                        {nota.nota != null ? Math.round(nota.nota) : '—'}
-                                                                    </span>
-                                                                    {nota.nota != null && (
-                                                                        <span className="text-white/50">/ 100</span>
-                                                                    )}
-                                                                </div>
+                                                                ) : null}
+                                                                {promedioLogro != null ? (
+                                                                    <p className="text-xs text-white/60 mt-2">
+                                                                        Promedio en este logro:{' '}
+                                                                        <span className="text-white font-semibold tabular-nums">
+                                                                            {promedioLogro.toFixed(1)}/100
+                                                                        </span>
+                                                                    </p>
+                                                                ) : null}
                                                             </div>
-                                                            {nota.comentario && (
-                                                                <div className="mt-3 p-3 rounded-lg border border-white/10 bg-white/[0.03]">
-                                                                    <div className="flex items-start gap-2">
-                                                                        <MessageSquare className="w-4 h-4 text-[#3B82F6] mt-0.5 flex-shrink-0" />
-                                                                        <p className="text-sm text-white/80">{nota.comentario}</p>
+                                                            <div className="p-4 sm:p-5 space-y-6">
+                                                                {indicadoresSorted.map((ind) => {
+                                                                    const cat =
+                                                                        categoriasNotas.find((c) => c.indicadorId === String(ind._id)) ??
+                                                                        categoriasNotas.find(
+                                                                            (c) => c.categoria === `${ind.nombre} (${ind.porcentaje}%)`
+                                                                        );
+                                                                    const filas = cat?.notas ?? [];
+                                                                    return (
+                                                                        <div key={ind._id} className="space-y-2">
+                                                                            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                                                                <h4 className="text-sm font-semibold text-white">
+                                                                                    {ind.nombre}
+                                                                                </h4>
+                                                                                <span className="text-xs text-white/50 tabular-nums">
+                                                                                    {ind.porcentaje}% dentro de este logro
+                                                                                </span>
+                                                                            </div>
+                                                                            {filas.length > 0 ? (
+                                                                                <ul className="rounded-lg border border-white/[0.07] bg-white/[0.02] divide-y divide-white/[0.06]">
+                                                                                    {filas.map((f, fi) => (
+                                                                                        <li
+                                                                                            key={`${ind._id}-${fi}-${f.actividad}`}
+                                                                                            className="flex items-center justify-between gap-4 px-3 py-3 sm:px-4"
+                                                                                        >
+                                                                                            <div className="min-w-0 flex-1">
+                                                                                                <p className="text-sm font-medium text-white leading-snug">
+                                                                                                    {f.actividad}
+                                                                                                </p>
+                                                                                                <p className="text-xs text-white/45 mt-1">
+                                                                                                    {new Date(f.fecha).toLocaleDateString(
+                                                                                                        'es-CO',
+                                                                                                        {
+                                                                                                            year: 'numeric',
+                                                                                                            month: 'long',
+                                                                                                            day: 'numeric',
+                                                                                                        }
+                                                                                                    )}
+                                                                                                </p>
+                                                                                                {f.comentario ? (
+                                                                                                    <p className="text-xs text-white/55 mt-2 flex items-start gap-1.5">
+                                                                                                        <MessageSquare className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#1e3cff]" />
+                                                                                                        {f.comentario}
+                                                                                                    </p>
+                                                                                                ) : null}
+                                                                                            </div>
+                                                                                            <div className="flex items-baseline gap-1 shrink-0 tabular-nums">
+                                                                                                {f.nota == null ? (
+                                                                                                    <span className="text-sm text-white/40">
+                                                                                                        Sin calificar
+                                                                                                    </span>
+                                                                                                ) : (
+                                                                                                    <>
+                                                                                                        <span className="text-xl font-bold text-white">
+                                                                                                            {Math.round(f.nota)}
+                                                                                                        </span>
+                                                                                                        <span className="text-white/40 text-sm">
+                                                                                                            /100
+                                                                                                        </span>
+                                                                                                    </>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            ) : (
+                                                                                <p className="text-xs text-white/40 italic pl-1">
+                                                                                    El profesor aún no ha calificado actividades de este
+                                                                                    indicador
+                                                                                </p>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            {(() => {
+                                                const sin = categoriasNotas.find((c) => c.categoria === 'Sin categoría');
+                                                if (!sin || sin.notas.length === 0) return null;
+                                                return (
+                                                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
+                                                        <h4 className="text-sm font-semibold text-white/90 mb-3">
+                                                            Sin indicador asignado
+                                                        </h4>
+                                                        <p className="text-xs text-white/45 mb-3">
+                                                            Actividades calificadas que aún no están vinculadas a un indicador del esquema.
+                                                        </p>
+                                                        <ul className="rounded-lg border border-white/[0.07] divide-y divide-white/[0.06]">
+                                                            {sin.notas.map((f, fi) => (
+                                                                <li
+                                                                    key={`sin-${fi}-${f.actividad}`}
+                                                                    className="flex items-center justify-between gap-4 px-3 py-3 sm:px-4"
+                                                                >
+                                                                    <div className="min-w-0 flex-1">
+                                                                        <p className="text-sm font-medium text-white">{f.actividad}</p>
+                                                                        <p className="text-xs text-white/45 mt-1">
+                                                                            {new Date(f.fecha).toLocaleDateString('es-CO', {
+                                                                                year: 'numeric',
+                                                                                month: 'long',
+                                                                                day: 'numeric',
+                                                                            })}
+                                                                        </p>
+                                                                        {f.comentario ? (
+                                                                            <p className="text-xs text-white/55 mt-2 flex items-start gap-1.5">
+                                                                                <MessageSquare className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#1e3cff]" />
+                                                                                {f.comentario}
+                                                                            </p>
+                                                                        ) : null}
+                                                                    </div>
+                                                                    <div className="flex items-baseline gap-1 shrink-0 tabular-nums">
+                                                                        {f.nota == null ? (
+                                                                            <span className="text-sm text-white/40">Sin calificar</span>
+                                                                        ) : (
+                                                                            <>
+                                                                                <span className="text-xl font-bold text-white">
+                                                                                    {Math.round(f.nota)}
+                                                                                </span>
+                                                                                <span className="text-white/40 text-sm">/100</span>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            {categoriasNotas.map((categoria, idx) => (
+                                                <div key={idx} className="space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="font-semibold text-[#E2E8F0]">{categoria.categoria}</h4>
+                                                        <span className="text-lg font-bold text-[#E2E8F0] tabular-nums">
+                                                            {categoria.promedio != null ? (
+                                                                <>
+                                                                    {(Math.round(categoria.promedio * 10) / 10).toFixed(1)}{' '}
+                                                                    <span className="text-white/50">/ 100</span>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-white/50">—</span>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-white/60 mb-3">
+                                                        Promedio de {categoria.notas.length}{' '}
+                                                        {categoria.notas.length === 1 ? 'actividad' : 'actividades'}
+                                                    </p>
+                                                    <div className="space-y-3">
+                                                        {categoria.notas.map((nota, notaIdx) => (
+                                                            <div
+                                                                key={notaIdx}
+                                                                className="p-4 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/10 transition-all duration-200"
+                                                            >
+                                                                <div className="flex items-start justify-between mb-2">
+                                                                    <div className="flex-1">
+                                                                        <h4 className="font-semibold text-[#E2E8F0] mb-1">
+                                                                            {nota.actividad}
+                                                                        </h4>
+                                                                        <p className="text-sm text-white/60">
+                                                                            {new Date(nota.fecha).toLocaleDateString('es-CO', {
+                                                                                year: 'numeric',
+                                                                                month: 'long',
+                                                                                day: 'numeric',
+                                                                            })}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-2xl font-bold text-[#E2E8F0] tabular-nums">
+                                                                            {nota.nota != null ? Math.round(nota.nota) : '—'}
+                                                                        </span>
+                                                                        {nota.nota != null && (
+                                                                            <span className="text-white/50">/ 100</span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
+                                                                {nota.comentario && (
+                                                                    <div className="mt-3 p-3 rounded-lg border border-white/10 bg-white/[0.03]">
+                                                                        <div className="flex items-start gap-2">
+                                                                            <MessageSquare className="w-4 h-4 text-[#3B82F6] mt-0.5 flex-shrink-0" />
+                                                                            <p className="text-sm text-white/80">{nota.comentario}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                            ))}
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="text-center py-12">
                                         <Award className="w-16 h-16 text-[#3B82F6]/50 mx-auto mb-4 transition-transform duration-200 hover:scale-110" />

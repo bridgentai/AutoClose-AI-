@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { DashboardWelcomeBanner } from '@/components/dashboard-welcome-banner';
 
 const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md hover-elevate';
 
@@ -108,7 +109,7 @@ export default function AsistenteAcademicaDashboard() {
 
   return (
     <div data-testid="asistente-academica-page">
-      <div className="mb-8">
+      <DashboardWelcomeBanner logoHeightClass="h-9" reveal>
         <h1 className="text-3xl font-bold text-white mb-2 font-['Poppins']">
           Bienvenida, {user?.nombre?.split(' ')[0] || 'Asistente'}
         </h1>
@@ -120,7 +121,7 @@ export default function AsistenteAcademicaDashboard() {
             day: 'numeric',
           })}
         </p>
-      </div>
+      </DashboardWelcomeBanner>
 
       <Card className={`${CARD_STYLE} mb-8`}>
         <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">

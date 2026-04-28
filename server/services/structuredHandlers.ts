@@ -1,4 +1,4 @@
-import * as dataQuery from './dataQuery';
+import * as dataQuery from './legacy/dataQuery';
 import { handleTopStudentInGroup } from './academicIntentService';
 
 export type StructuredMessageType = 'text' | 'top_student_card' | 'tasks_overview' | 'grade_trend_analysis' | 'notes_overview';

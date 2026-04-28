@@ -20,17 +20,32 @@ import {
 /** Hilo grupal institucional: todos los docentes + directores de sección (directivo con section_id). */
 export const EVO_SEND_STAFF_GLC_TITLE = 'Profesores GLC';
 
-const EVO_SEND_STAFF_HS_BASE = 'Profesores Highschool';
+/** Un solo chat staff por institución (evita duplicados por sección en la bandeja). */
+export const EVO_SEND_STAFF_HS_TITLE = 'Profesores Highschool';
 const STAFF_ROLES = ['profesor', 'directivo'] as const;
 const SUPPORT_STAFF_ROLES = ['profesor', 'directivo', 'asistente'];
 
-/** Título del chat grupal por sección: docentes que imparten ahí + directivo(s) de la sección. */
+/** Títulos antiguos por sección (API/filtros hasta que corra el bootstrap y limpie la DB). */
 export function evoSendProfesoresHighschoolTitle(sectionName: string, sectionCount: number): string {
-  return sectionCount <= 1 ? EVO_SEND_STAFF_HS_BASE : `${EVO_SEND_STAFF_HS_BASE} · ${sectionName}`;
+  return sectionCount <= 1 ? EVO_SEND_STAFF_HS_TITLE : `${EVO_SEND_STAFF_HS_TITLE} · ${sectionName}`;
 }
 
-function legacySectionStaffTitle(sectionName: string): string {
-  return `Profesores · ${sectionName}`;
+/**
+ * Elimina hilos evo_chat_staff redundantes por sección (y legado `Profesores · …`).
+ * Mantiene solo `Profesores Highschool` y `Profesores GLC`. CASCADE borra mensajes y recipients.
+ */
+async function deleteLegacyPerSectionEvoChatStaffThreads(institutionId: string): Promise<void> {
+  await queryPg(
+    `DELETE FROM announcements
+     WHERE institution_id = $1
+       AND type = 'evo_chat_staff'
+       AND title NOT IN ($2, $3)
+       AND (
+         title LIKE 'Profesores Highschool · %'
+         OR title LIKE 'Profesores · %'
+       )`,
+    [institutionId, EVO_SEND_STAFF_HS_TITLE, EVO_SEND_STAFF_GLC_TITLE]
+  );
 }
 
 /**
@@ -111,99 +126,41 @@ async function ensureSupportOneToOneForInstitution(institutionId: string): Promi
 }
 
 export async function ensureStaffGroupsForInstitution(institutionId: string): Promise<void> {
-  const sections = await findSectionsByInstitution(institutionId);
   const allStaff = await findUsersByInstitutionAndRoles(institutionId, [...STAFF_ROLES]);
   if (allStaff.length === 0) return;
   const createdById = allStaff[0].id;
 
-  if (sections.length === 0) {
-    for (const title of [EVO_SEND_STAFF_HS_BASE, EVO_SEND_STAFF_GLC_TITLE] as const) {
-      const existing = await findAnnouncementByInstitutionTitleAndType(institutionId, title, 'evo_chat_staff');
-      const memberIds = allStaff.map((u) => u.id);
-      if (existing) {
-        await addAnnouncementRecipients(existing.id, memberIds);
-        continue;
-      }
-      const a = await createAnnouncement({
-        institution_id: institutionId,
-        title,
-        body: null,
-        type: 'evo_chat_staff',
-        group_id: null,
-        group_subject_id: null,
-        created_by_id: createdById,
-      });
-      await addAnnouncementRecipients(a.id, memberIds);
-    }
-    return;
-  }
+  await deleteLegacyPerSectionEvoChatStaffThreads(institutionId);
 
-  const tutores = await queryPg<{ teacher_id: string; section_id: string }>(
-    `SELECT DISTINCT gs.teacher_id, g.section_id
-     FROM group_subjects gs
-     INNER JOIN groups g ON g.id = gs.group_id AND g.institution_id = gs.institution_id
-     WHERE gs.institution_id = $1 AND gs.teacher_id IS NOT NULL`,
-    [institutionId]
+  const sections = await findSectionsByInstitution(institutionId);
+
+  const hs = await findAnnouncementByInstitutionTitleAndType(
+    institutionId,
+    EVO_SEND_STAFF_HS_TITLE,
+    'evo_chat_staff'
   );
-
-  const teachersBySection = new Map<string, Set<string>>();
-  for (const row of tutores.rows) {
-    if (!teachersBySection.has(row.section_id)) teachersBySection.set(row.section_id, new Set());
-    teachersBySection.get(row.section_id)!.add(row.teacher_id);
-  }
-
-  const directoresPorSeccion = await queryPg<{ id: string; section_id: string }>(
-    `SELECT id, section_id FROM users
-     WHERE institution_id = $1 AND role = 'directivo' AND section_id IS NOT NULL`,
-    [institutionId]
-  );
-  const directorsBySection = new Map<string, string[]>();
-  for (const d of directoresPorSeccion.rows) {
-    if (!directorsBySection.has(d.section_id)) directorsBySection.set(d.section_id, []);
-    directorsBySection.get(d.section_id)!.push(d.id);
-  }
-
-  for (const sec of sections) {
-    const title = evoSendProfesoresHighschoolTitle(sec.name, sections.length);
-    const memberSet = new Set<string>();
-    const teach = teachersBySection.get(sec.id);
-    if (teach) for (const id of Array.from(teach)) memberSet.add(id);
-    const dirs = directorsBySection.get(sec.id);
-    if (dirs) for (const id of dirs) memberSet.add(id);
-    const memberIds = Array.from(memberSet);
-    if (memberIds.length === 0) continue;
-
-    let ann = await findAnnouncementByInstitutionTitleAndType(institutionId, title, 'evo_chat_staff');
-    if (!ann) {
-      const oldTitle = legacySectionStaffTitle(sec.name);
-      const oldAnn = await findAnnouncementByInstitutionTitleAndType(institutionId, oldTitle, 'evo_chat_staff');
-      if (oldAnn) {
-        await queryPg(
-          `UPDATE announcements SET title = $1, updated_at = now() WHERE id = $2 AND institution_id = $3`,
-          [title, oldAnn.id, institutionId]
-        );
-        ann = { ...oldAnn, title };
-      }
-    }
-    if (!ann) {
-      ann = await createAnnouncement({
-        institution_id: institutionId,
-        title,
-        body: null,
-        type: 'evo_chat_staff',
-        group_id: null,
-        group_subject_id: null,
-        created_by_id: createdById,
-      });
-    }
-    await addAnnouncementRecipients(ann.id, memberIds);
+  const hsMemberIds = allStaff.map((u) => u.id);
+  if (hs) {
+    await addAnnouncementRecipients(hs.id, hsMemberIds);
+  } else {
+    const a = await createAnnouncement({
+      institution_id: institutionId,
+      title: EVO_SEND_STAFF_HS_TITLE,
+      body: null,
+      type: 'evo_chat_staff',
+      group_id: null,
+      group_subject_id: null,
+      created_by_id: createdById,
+    });
+    await addAnnouncementRecipients(a.id, hsMemberIds);
   }
 
   const allTeachers = await findUsersByInstitutionAndRoles(institutionId, ['profesor']);
   const sectionDirectorUsers = await queryPlainDirectorsWithSection(institutionId);
-  const glcMemberIds = Array.from(
-    new Set([...allTeachers.map((t) => t.id), ...sectionDirectorUsers.map((d) => d.id)])
-  );
+  const glcMemberIds =
+    sections.length === 0
+      ? allStaff.map((u) => u.id)
+      : Array.from(new Set([...allTeachers.map((t) => t.id), ...sectionDirectorUsers.map((d) => d.id)]));
   if (glcMemberIds.length === 0) return;
 
   let glc = await findAnnouncementByInstitutionTitleAndType(institutionId, EVO_SEND_STAFF_GLC_TITLE, 'evo_chat_staff');

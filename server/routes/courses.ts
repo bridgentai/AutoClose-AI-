@@ -95,6 +95,7 @@ import { findGradingSchemaByGroupSubject } from '../repositories/gradingSchemaRe
 import { findGradingCategoriesBySchema } from '../repositories/gradingCategoryRepository.js';
 import { queryPg } from '../config/db-pg.js';
 import { generateAcademicInsightsSummary, type AcademicInsightsContext, type AcademicInsightRole } from '../services/openai.js';
+import { buildDetailedSingleSubjectPerformance } from '../services/studentAcademicSnapshot.js';
 
 const router = express.Router();
 
@@ -1302,38 +1303,35 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
   const gsId = await resolveGroupSubjectId(courseId ?? '', institutionId ?? '');
   if (!gsId) return res.json({ weightedAverage: null, byCategory: [], aiSummary: '', insights: [] });
 
-  const data = await getAnalyticsData(gsId, studentId, institutionId ?? '');
-  if (!data) return res.json({ weightedAverage: null, byCategory: [], aiSummary: '', insights: [] });
+  const performance = await buildDetailedSingleSubjectPerformance(studentId, institutionId ?? '', gsId);
+  if (!performance) return res.json({ weightedAverage: null, byCategory: [], aiSummary: '', insights: [] });
 
-  const { categories, studentGrades } = data;
+  const byCategory = performance.logros.map((logro) => ({
+    categoryName: logro.nombre,
+    percentage: logro.peso ?? 0,
+    average: logro.promedio ?? 0,
+    count: logro.actividades,
+  }));
 
-  const byCategory: Array<{ categoryName: string; percentage: number; average: number; count: number }> = [];
-
-  for (const cat of categories) {
-    const catGrades = studentGrades.filter((g) => g.grading_category_id === cat.id);
-    const avg = catGrades.length
-      ? catGrades.reduce((s, g) => s + Number(g.score), 0) / catGrades.length
-      : 0;
-    byCategory.push({
-      categoryName: cat.name,
-      percentage: Number(cat.weight),
-      average: Math.round(avg * 10) / 10,
-      count: catGrades.length,
-    });
-  }
-
-  const weightedAverage = Math.round(normalizedWeightedGradeAverage(categories, studentGrades) * 10) / 10;
-  const estado = weightedAverage >= 85 ? 'excelente' : weightedAverage >= 75 ? 'bueno' : weightedAverage >= 60 ? 'en riesgo' : 'crítico';
+  const weightedAverage = performance.promedio;
+  const estado =
+    weightedAverage == null
+      ? 'sin datos'
+      : weightedAverage >= 85
+        ? 'excelente'
+        : weightedAverage >= 75
+          ? 'bueno'
+          : weightedAverage >= 65
+            ? 'aprobado'
+            : 'en riesgo';
 
   let aiSummary = `Promedio ponderado: ${weightedAverage}/100. Estado: ${estado}.`;
 
   try {
     const student = await findUserById(studentId);
-    const subject = data.gs ? await findSubjectById(data.gs.subject_id) : null;
-    const courseDisplayName = (data.gs?.display_name?.trim() || subject?.name) ?? 'Materia';
     const context: AcademicInsightsContext = {
       studentName: student?.full_name ?? 'Estudiante',
-      courseName: courseDisplayName,
+      courseName: performance.subjectName,
       weightedAverage,
       byCategory,
       role: (req.user?.rol as AcademicInsightRole) ?? 'profesor',
@@ -1354,7 +1352,7 @@ router.get('/:id/analytics-summary', protect, async (req: AuthRequest, res) => {
     risk: null,
     aiSummary,
     insights: byCategory
-      .filter((c) => c.average < 75 && c.percentage >= 20)
+      .filter((c) => c.average < 75 && c.count > 0)
       .map((c) => `${c.categoryName} (${c.percentage}%): promedio ${c.average}`),
   });
 });

@@ -1,5 +1,24 @@
 import { queryPg } from '../config/db-pg.js';
 
+/** COALESCE(DB link, heurística: mismo título que un comunicado institucional categoría evento). */
+const SELECT_EVENT_SOURCE_ANNOUNCEMENT_COALESCE = `COALESCE(
+  e.source_announcement_id,
+  (
+    SELECT a.id
+    FROM announcements a
+    WHERE a.institution_id = e.institution_id
+      AND a.type = 'comunicado_institucional'
+      AND a.category = 'evento'
+      AND lower(btrim(a.title)) = lower(btrim(e.title))
+    ORDER BY a.created_at DESC
+    LIMIT 1
+  )
+) AS source_announcement_id`;
+
+const SELECT_EVENT_ROW_WITH_RESOLVED_SOURCE = `e.id, e.institution_id, e.title, e.description, e.date, e."type", e.group_id, e.created_by_id,
+  ${SELECT_EVENT_SOURCE_ANNOUNCEMENT_COALESCE},
+  e.created_at`;
+
 export interface EventRow {
   id: string;
   institution_id: string;
@@ -28,7 +47,7 @@ export async function findEventById(id: string): Promise<EventRow | null> {
 
 export async function findEventByIdWithDetails(id: string): Promise<EventWithDetails | null> {
   const r = await queryPg<EventWithDetails>(
-    `SELECT e.*, g.name AS group_name, u.full_name AS created_by_name
+    `SELECT ${SELECT_EVENT_ROW_WITH_RESOLVED_SOURCE}, g.name AS group_name, u.full_name AS created_by_name
      FROM events e
      LEFT JOIN groups g ON e.group_id = g.id
      LEFT JOIN users u ON e.created_by_id = u.id
@@ -42,7 +61,7 @@ export async function findEventsByInstitutionWithDetails(
   institutionId: string,
   options?: { fromDate?: string; toDate?: string; type?: string; groupId?: string }
 ): Promise<EventWithDetails[]> {
-  let q = `SELECT e.*, g.name AS group_name, u.full_name AS created_by_name
+  let q = `SELECT ${SELECT_EVENT_ROW_WITH_RESOLVED_SOURCE}, g.name AS group_name, u.full_name AS created_by_name
      FROM events e
      LEFT JOIN groups g ON e.group_id = g.id
      LEFT JOIN users u ON e.created_by_id = u.id
@@ -65,7 +84,7 @@ export async function findEventsByInstitutionWithDetails(
     params.push(options.groupId);
     q += ` AND e.group_id = $${idx++}`;
   }
-  q += ' ORDER BY e.date';
+  q += ' ORDER BY e.date, lower(e.title)';
   const r = await queryPg<EventWithDetails>(q, params);
   return r.rows;
 }

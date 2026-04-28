@@ -1,13 +1,13 @@
 import { Types } from 'mongoose';
-import { Assignment, Nota, Notificacion, User, Course, Boletin, Group, GroupStudent, LogroCalificacion } from '../models';
-import { normalizeIdForQuery } from '../utils/idGenerator';
+import { Assignment, Nota, Notificacion, User, Course, Boletin, Group, GroupStudent, LogroCalificacion } from '../../models';
+import { normalizeIdForQuery } from '../../utils/idGenerator';
 import * as permissionValidator from './permissionValidator';
 import * as dataQuery from './dataQuery';
 import * as syncService from './syncService';
-import { logAIAction } from './auditLogger';
-import type { ISubmission, IAttachment } from '../models/Assignment';
+import { logAIAction } from '../auditLogger';
+import type { ISubmission, IAttachment } from '../../models/Assignment';
 import { createAssignment as createAssignmentService } from './assignmentService';
-import { queryPg } from '../config/db-pg.js';
+import { queryPg } from '../../config/db-pg.js';
 
 /**
  * Servicio que ejecuta acciones propuestas por el AI

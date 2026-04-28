@@ -4,20 +4,48 @@ import { requireStudentAccess } from '../middleware/studentAccessGuard.js';
 import { queryPg } from '../config/db-pg.js';
 import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
 import { getBoletinDataForStudent } from '../services/boletinService.js';
+import {
+  insertAcademicBoletinBatch,
+  listAcademicBoletinBatches,
+  getAcademicBoletinBatchById,
+} from '../repositories/academicBoletinBatchRepository.js';
+import { renderAcademicBoletinBatchPrintHtml } from '../services/boletinBatchPrintHtml.js';
 
 const router = express.Router();
 
-// ─── GET /api/boletin — Lista boletines (directivo/admin) ───────────────────
+const REPORTES_ROLES = [
+  'directivo',
+  'admin-general-colegio',
+  'asistente-academica',
+  'school_admin',
+] as const;
+
+function canListReportesBoletines(rol: string | undefined): boolean {
+  return REPORTES_ROLES.includes(rol as (typeof REPORTES_ROLES)[number]);
+}
+
+// ─── GET /api/boletin — Lista lotes de boletines guardados (directivo/admin) ─
 router.get('/', protect, async (req: AuthRequest, res) => {
   try {
     const rol = req.user?.rol;
-    if (
-      !['directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin'].includes(rol ?? '')
-    ) {
+    if (!canListReportesBoletines(rol)) {
       return res.status(403).json({ message: 'No autorizado.' });
     }
-    // Por ahora devuelve lista vacía — se puede implementar persistencia después
-    return res.json([]);
+    const institutionId =
+      req.user?.institutionId ?? req.user?.colegioId ?? '';
+    if (!institutionId) {
+      return res.status(400).json({ message: 'Institución no disponible.' });
+    }
+    const rows = await listAcademicBoletinBatches(institutionId);
+    return res.json(
+      rows.map((r) => ({
+        _id: r.id,
+        periodo: r.periodo,
+        grupoNombre: r.group_name,
+        fecha: r.created_at,
+        estudiantesCount: r.estudiantes_count,
+      }))
+    );
   } catch (e) {
     console.error('[boletin] GET /', e);
     return res.status(500).json({ message: 'Error al listar boletines.' });
@@ -71,13 +99,6 @@ router.get(
       );
       if (!data)
         return res.status(404).json({ message: 'Estudiante no encontrado.' });
-
-      const groupRes = await queryPg<{ name: string }>(
-        'SELECT name FROM groups WHERE id = $1',
-        [groupId]
-      );
-      const grupoNombre = groupRes.rows[0]?.name ?? '';
-
       // Profesor: filtrar solo su materia (usar display_name para coincidir con data.materias.materia)
       if (rol === 'profesor') {
         const teacherDisplayNamesRes = await queryPg<{ subject_name: string }>(
@@ -93,7 +114,7 @@ router.get(
         );
       }
 
-      return res.json({ ...data, grupo: grupoNombre });
+      return res.json(data);
     } catch (e) {
       console.error('[boletin] GET /inteligente/:estudianteId', e);
       return res.status(500).json({ message: 'Error al generar boletín.' });
@@ -109,13 +130,14 @@ router.post('/generar-por-curso', protect, async (req: AuthRequest, res) => {
     const institutionId =
       req.user?.institutionId ?? req.user?.colegioId ?? '';
 
-    if (
-      !['directivo', 'admin-general-colegio', 'asistente-academica', 'school_admin'].includes(rol ?? '')
-    ) {
+    if (!canListReportesBoletines(rol)) {
       return res.status(403).json({ message: 'No autorizado.' });
     }
 
-    const { grupoNombre } = req.body as { grupoNombre?: string };
+    const { grupoNombre, periodo: periodoBody } = req.body as {
+      grupoNombre?: string;
+      periodo?: string;
+    };
     if (!grupoNombre?.trim()) {
       return res.status(400).json({ message: 'grupoNombre es requerido.' });
     }
@@ -124,6 +146,10 @@ router.post('/generar-por-curso', protect, async (req: AuthRequest, res) => {
     if (!resolved) {
       return res.status(404).json({ message: 'Grupo no encontrado.' });
     }
+
+    const periodoStored =
+      periodoBody?.trim() ||
+      `Sin período · ${new Date().toISOString().slice(0, 10)}`;
 
     // Obtener todos los estudiantes del grupo
     const studentsRes = await queryPg<{
@@ -145,13 +171,26 @@ router.post('/generar-por-curso', protect, async (req: AuthRequest, res) => {
         resolved.id,
         institutionId
       );
-      if (data) boletines.push(data);
+      if (data) boletines.push({ ...data, grupo: resolved.name });
+    }
+
+    let batchId: string | null = null;
+    if (boletines.length > 0) {
+      batchId = await insertAcademicBoletinBatch(
+        institutionId,
+        resolved.id,
+        resolved.name,
+        periodoStored,
+        req.user?.id ?? null,
+        boletines
+      );
     }
 
     return res.json({
       grupo: resolved.name,
       totalEstudiantes: boletines.length,
       boletines,
+      batchId,
     });
   } catch (e) {
     console.error('[boletin] POST /generar-por-curso', e);
@@ -159,9 +198,37 @@ router.post('/generar-por-curso', protect, async (req: AuthRequest, res) => {
   }
 });
 
-// ─── GET /api/boletin/:id/pdf ────────────────────────────────────────────────
-router.get('/:id/pdf', protect, async (_req, res) => {
-  return res.status(404).json({ message: 'PDF no implementado aún.' });
+// ─── GET /api/boletin/:id/pdf — HTML imprimible del lote guardado ────────────
+router.get('/:id/pdf', protect, async (req: AuthRequest, res) => {
+  try {
+    if (!canListReportesBoletines(req.user?.rol)) {
+      return res.status(403).json({ message: 'No autorizado.' });
+    }
+    const institutionId =
+      req.user?.institutionId ?? req.user?.colegioId ?? '';
+    if (!institutionId) {
+      return res.status(400).json({ message: 'Institución no disponible.' });
+    }
+    const { id } = req.params;
+    const batch = await getAcademicBoletinBatchById(id, institutionId);
+    if (!batch) {
+      return res.status(404).json({ message: 'Lote de boletines no encontrado.' });
+    }
+    const html = renderAcademicBoletinBatchPrintHtml({
+      groupName: batch.group_name,
+      periodo: batch.periodo,
+      createdAt: new Date(batch.created_at).toLocaleString('es-CO', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+      boletines: batch.boletines_json,
+    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (e) {
+    console.error('[boletin] GET /:id/pdf', e);
+    return res.status(500).json({ message: 'Error al generar vista del boletín.' });
+  }
 });
 
 export default router;

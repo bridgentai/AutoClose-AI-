@@ -130,7 +130,7 @@ export default function HorariosProfesorPage() {
 
   return (
     <div
-      className="min-h-[calc(100vh-8rem)] w-full overflow-x-auto"
+      className="min-h-0 w-full overflow-x-auto"
       style={{ fontFamily: "Inter, system-ui, sans-serif" }}
     >
       <div className="relative z-10 w-full flex flex-col min-h-0 p-6 md:p-10">

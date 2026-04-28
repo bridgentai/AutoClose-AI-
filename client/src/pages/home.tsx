@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import kiwiMascot from '@/assets/Kiwi.png';
 import kiwiChill from '@/assets/kiwi chill.png';
 import evoLogo from '@/assets/Screenshot_2026-04-01_at_8.05.11_PM-removebg-preview.png';
+import logoCaobosBlanco from '@/assets/logo-caobos-blanco.png';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -490,9 +491,23 @@ export default function Home() {
                   </h1>
 
                   {/* Institution */}
-                  <p className="home-fadein-d2" style={{ fontSize: 22, fontWeight: 700, color: PALETTE.accent, marginBottom: 16, letterSpacing: '-0.3px' }}>
-                    Gimnasio Los Caobos
-                  </p>
+                  <img
+                    src={logoCaobosBlanco}
+                    alt="Gimnasio Los Caobos"
+                    className="home-fadein-d2"
+                    width={240}
+                    height={30}
+                    style={{
+                      height: 30,
+                      width: 'auto',
+                      maxWidth: 'min(100%, 320px)',
+                      objectFit: 'contain',
+                      objectPosition: 'left center',
+                      marginBottom: 16,
+                      display: 'block',
+                    }}
+                    decoding="async"
+                  />
 
                   {/* Description */}
                   <p className="home-fadein-d2" style={{ fontSize: 19, color: PALETTE.textSub, lineHeight: 1.65, maxWidth: 580, marginBottom: 0 }}>

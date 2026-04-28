@@ -69,7 +69,7 @@ export function NavBackButton({ to, label, className, hideIcon, breadcrumbVarian
 
       // Casos especiales
       if (pathParts[0] === "comunicacion") {
-        return "/comunicacion";
+        return "/evo-send";
       }
       if (pathParts[0] === "mi-aprendizaje") {
         return "/mi-aprendizaje";
@@ -78,7 +78,7 @@ export function NavBackButton({ to, label, className, hideIcon, breadcrumbVarian
         return "/mi-perfil";
       }
       if (pathParts[0] === "comunidad") {
-        return "/comunicacion";
+        return "/comunidad";
       }
 
       return parentPath;
@@ -105,13 +105,12 @@ export function NavBackButton({ to, label, className, hideIcon, breadcrumbVarian
       if (pathParts[0] === "mi-aprendizaje" || pathParts[0] === "mi-perfil") {
         return "/" + pathParts[0];
       }
-      // Si es comunicación, volver a comunicación (página principal)
+      // Si es comunicación (ruta heredada), ir a Evo Send
       if (pathParts[0] === "comunicacion") {
-        return "/comunicacion";
+        return "/evo-send";
       }
-      // Rutas bajo /comunidad (calendario, noticias): el hub es Comunicación
       if (pathParts[0] === "comunidad") {
-        return "/comunicacion";
+        return "/comunidad";
       }
       return "/dashboard";
     }
@@ -163,31 +162,31 @@ export function NavBackButton({ to, label, className, hideIcon, breadcrumbVarian
       "/profesor/academia": "Academia",
       "/profesor/academia/cursos": "Cursos",
       "/profesor/academia/tareas": "Asignaciones",
-      "/profesor/comunicacion": "Comunicación",
+      "/profesor/comunicacion": "Evo Send",
       "/directivo/gestion": "Gestión",
       "/directivo/analitica": "Analítica",
       "/directivo/academia": "Gestión",
-      "/directivo/comunicacion": "Comunicación",
+      "/directivo/comunicacion": "Evo Send",
       "/directivo/comunidad": "Comunidad",
       "/administrador-general": "Administrador General",
       "/administrador-general/academia": "Academia",
-      "/administrador-general/comunicacion": "Comunicación",
+      "/administrador-general/comunicacion": "Evo Send",
       "/administrador-general/comunidad": "Comunidad",
       "/transporte": "Transporte",
       "/transporte/academia": "Academia",
-      "/transporte/comunicacion": "Comunicación",
+      "/transporte/comunicacion": "Evo Send",
       "/transporte/comunidad": "Comunidad",
       "/tesoreria": "Tesoría",
       "/tesoreria/academia": "Academia",
-      "/tesoreria/comunicacion": "Comunicación",
+      "/tesoreria/comunicacion": "Evo Send",
       "/tesoreria/comunidad": "Comunidad",
       "/nutricion": "Nutrición",
       "/nutricion/academia": "Academia",
-      "/nutricion/comunicacion": "Comunicación",
+      "/nutricion/comunicacion": "Evo Send",
       "/nutricion/comunidad": "Comunidad",
       "/cafeteria": "Cafetería",
       "/cafeteria/academia": "Academia",
-      "/cafeteria/comunicacion": "Comunicación",
+      "/cafeteria/comunicacion": "Evo Send",
       "/cafeteria/comunidad": "Comunidad",
       "/mi-aprendizaje": "Mi Aprendizaje",
       "/mi-aprendizaje/tareas": "Asignaciones",
@@ -198,9 +197,10 @@ export function NavBackButton({ to, label, className, hideIcon, breadcrumbVarian
       "/mi-aprendizaje/horario": "Horario",
       "/mi-aprendizaje/calendario": "Calendario",
       "/mi-perfil": "Mi Perfil",
-      "/comunidad": "Comunicación",
-      "/comunicacion": "Comunicación",
-      "/comunicacion/academico": "Comunicación Académica",
+      "/comunidad": "Comunidad",
+      "/evo-send": "Evo Send",
+      "/comunicacion": "Evo Send",
+      "/comunicacion/academico": "Evo Send",
       "/courses": "Cursos",
       "/materials": "Materiales",
       "/calendar": "Calendario",

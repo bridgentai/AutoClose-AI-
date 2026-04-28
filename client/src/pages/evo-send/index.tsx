@@ -50,6 +50,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateCourseColor } from '@/lib/courseColor';
 import kiwiChatImg from '@/assets/Kiwi-chat.png';
+import { useToast } from '@/hooks/use-toast';
 
 const EVO_BLUE = '#3B82F6';
 const EVO_AMBER = '#F59E0B';
@@ -74,7 +75,26 @@ function threadInboxCategory(t: EvoThreadItem): 'academico' | 'institucional' {
   return 'academico';
 }
 
+/** Hilos chat familia vs resto — para sidebar con sección colapsable «Familia». */
+function partitionFamilyThreads(list: EvoThreadItem[]): { family: EvoThreadItem[]; rest: EvoThreadItem[] } {
+  const family: EvoThreadItem[] = [];
+  const rest: EvoThreadItem[] = [];
+  for (const t of list) {
+    if (t.tipo === 'evo_chat_family') family.push(t);
+    else rest.push(t);
+  }
+  return { family, rest };
+}
+
+function nonFamilyInboxSectionLabel(rol: string | undefined): string {
+  if (rol === 'estudiante' || rol === 'padre') return 'Materias';
+  return 'Mensajes';
+}
+
 function threadAccent(t: EvoThreadItem): string {
+  if (t.tipo === 'evo_chat_parent_subject' && t.groupSubjectId) {
+    return generateCourseColor(t.groupSubjectId);
+  }
   if (t.tipo === 'evo_chat' && t.cursoId?._id) return generateCourseColor(t.cursoId._id);
   if (t.is_support || t.tipo === 'evo_chat_support') return '#059669';
   if (t.tipo === 'evo_chat_staff') return '#7c3aed';
@@ -96,13 +116,16 @@ type ThreadType =
   | 'evo_chat_direct'
   | 'evo_chat_family'
   | 'evo_chat_support'
-  | 'evo_chat_section_director';
+  | 'evo_chat_section_director'
+  | 'evo_chat_parent_subject';
 
 interface EvoThreadItem {
   _id: string;
   asunto: string;
   displayTitle?: string;
   tipo: ThreadType;
+  /** Presente en hilos padre–materia (API GET threads). */
+  groupSubjectId?: string;
   /** Cuando viene del API: clasificación Académico vs Institucional */
   inbox_category?: 'academico' | 'institucional';
   creadoPor?: { _id: string; nombre: string; rol: string };
@@ -183,6 +206,7 @@ const tipoLabels: Record<string, string> = {
   evo_chat_family: 'Chat familia',
   evo_chat_support: 'Soporte GLC',
   evo_chat_section_director: 'Curso con director',
+  evo_chat_parent_subject: 'Materia (padres)',
 };
 
 /** Chats de grupo Evo Send con horario restringido para estudiantes (alineado con el servidor). */
@@ -206,6 +230,7 @@ const tipoIcons: Record<string, React.ReactNode> = {
   evo_chat_family: <Users className="w-4 h-4" />,
   evo_chat_support: <Shield className="w-4 h-4" />,
   evo_chat_section_director: <BookOpen className="w-4 h-4" />,
+  evo_chat_parent_subject: <BookOpen className="w-4 h-4" />,
 };
 
 export default function EvoSendPage() {
@@ -219,6 +244,7 @@ export default function EvoSendPage() {
 function EvoSendPageInner() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { toast } = useToast();
   const institutoMailbox = useInstitutoCtx();
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem('autoclose_token') : null;
@@ -231,7 +257,7 @@ function EvoSendPageInner() {
   const [debouncedSidebarPeopleQ, setDebouncedSidebarPeopleQ] = useState('');
   const [inboxTab, setInboxTab] = useState<'academico' | 'institucional'>('academico');
 
-  const [back, setBack] = useState<{ to: string; label: string }>({ to: '/comunicacion', label: 'Comunicación' });
+  const [back, setBack] = useState<{ to: string; label: string }>({ to: '/dashboard', label: 'Dashboard' });
 
   useEffect(() => {
     try {
@@ -297,9 +323,13 @@ function EvoSendPageInner() {
         'GET',
         `/api/evo-send/people-finder?q=${encodeURIComponent(debouncedSidebarPeopleQ)}`
       ),
-    enabled: debouncedSidebarPeopleQ.length >= 2,
+    enabled: inboxTab === 'institucional' && debouncedSidebarPeopleQ.length >= 2,
     staleTime: 15_000,
   });
+
+  useEffect(() => {
+    setSidebarPeopleQ('');
+  }, [inboxTab]);
 
   const { data: writeWindow } = useQuery({
     queryKey: ['/api/evo-send/write-window'],
@@ -357,20 +387,42 @@ function EvoSendPageInner() {
         unread_by_category?: UnreadByCategory;
       };
       const support = thPayload.support_thread;
+      const unreadCat = thPayload.unread_by_category ?? { academico: 0, institucional: 0 };
       if (support) {
+        const { family, rest } = partitionFamilyThreads(list);
+        const sectionRows: { label: string; threads: EvoThreadItem[] }[] = [
+          { label: 'Soporte', threads: [support] },
+        ];
+        if (family.length > 0) {
+          sectionRows.push({ label: 'Familia', threads: family });
+          if (rest.length > 0) sectionRows.push({ label: 'Mensajes', threads: rest });
+        } else {
+          sectionRows.push({ label: 'Mensajes', threads: list });
+        }
         return {
           threads: [support, ...list],
-          sections: [
-            { label: 'Soporte', threads: [support] },
-            { label: 'Mensajes', threads: list },
-          ],
-          unreadByCategory: thPayload.unread_by_category ?? { academico: 0, institucional: 0 },
+          sections: sectionRows,
+          unreadByCategory: unreadCat,
+        };
+      }
+      const { family, rest } = partitionFamilyThreads(list);
+      if (family.length > 0) {
+        const sectionRows: { label: string; threads: EvoThreadItem[] }[] = [
+          { label: 'Familia', threads: family },
+        ];
+        if (rest.length > 0) {
+          sectionRows.push({ label: nonFamilyInboxSectionLabel(user?.rol), threads: rest });
+        }
+        return {
+          threads: list,
+          sections: sectionRows,
+          unreadByCategory: unreadCat,
         };
       }
       return {
         threads: list,
         sections: null,
-        unreadByCategory: thPayload.unread_by_category ?? { academico: 0, institucional: 0 },
+        unreadByCategory: unreadCat,
       };
     }
 
@@ -494,6 +546,8 @@ function EvoSendPageInner() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads'] });
       queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads', id] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox'] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox-unread-count'] });
     },
   });
 
@@ -510,6 +564,8 @@ function EvoSendPageInner() {
       setReplyText('');
       queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads', selectedId!] });
       queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads'] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox'] });
+      queryClient.invalidateQueries({ queryKey: ['director-mailbox-unread-count'] });
     },
   });
 
@@ -633,6 +689,36 @@ function EvoSendPageInner() {
     }
 
     queryClient.invalidateQueries({ queryKey: ['/api/evo-send/threads'] });
+    queryClient.invalidateQueries({ queryKey: ['director-mailbox'] });
+    queryClient.invalidateQueries({ queryKey: ['director-mailbox-unread-count'] });
+    queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-meta'] });
+    queryClient.invalidateQueries({ queryKey: ['institutional-mailbox-folder'] });
+
+    const midStr = m.remitenteId?._id != null ? String(m.remitenteId._id) : '';
+    const myIds = [user?.id, user?.userId, (user as { _id?: string } | null)?._id].filter(Boolean).map(String);
+    if (midStr && myIds.length && !myIds.includes(midStr)) {
+      const who = m.remitenteId?.nombre?.trim() || 'EvoSend';
+      toast({
+        title: 'Nuevo mensaje (EvoSend institucional)',
+        description: `De ${who}`,
+      });
+      try {
+        if (
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted' &&
+          typeof document !== 'undefined' &&
+          document.visibilityState === 'hidden'
+        ) {
+          const prev = String(m.contenido ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+          new Notification(`EvoSend · ${who}`, {
+            body: prev || 'Tienes un mensaje nuevo',
+            tag: m.threadId ? `evo-${m.threadId}` : `evo-${mid}`,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
 
     if (m.threadId && selectedId && m.threadId === selectedId && mid) {
       queryClient.setQueryData(['/api/evo-send/threads', selectedId], (old: ThreadDetail | undefined) => {
@@ -652,7 +738,7 @@ function EvoSendPageInner() {
     }
 
     clearLastMessage();
-  }, [lastMessage, selectedId, queryClient, clearLastMessage]);
+  }, [lastMessage, selectedId, queryClient, clearLastMessage, user, toast]);
 
   useEffect(() => {
     if (!lastRead?.threadId || !selectedId) return;
@@ -705,6 +791,9 @@ function EvoSendPageInner() {
     !!selectedThread &&
     STUDENT_TIMED_EVO_THREAD_TYPES.has(selectedThread.tipo);
 
+  const parentSubjectComposerBlocked =
+    user?.rol === 'padre' && selectedThread?.tipo === 'evo_chat_parent_subject';
+
   const threadsEmptyHint =
     user?.rol === 'padre'
       ? 'Sin chats: vincula a tu hijo o hija en Mi perfil. Si ya está vinculado, confirma que figuras como acudiente en el colegio.'
@@ -713,7 +802,7 @@ function EvoSendPageInner() {
         : undefined;
 
   const handleSendReply = () => {
-    if (!replyText.trim() || !selectedId || studentComposerBlocked) return;
+    if (!replyText.trim() || !selectedId || studentComposerBlocked || parentSubjectComposerBlocked) return;
     sendReplyMutation.mutate({ contentType: 'texto', contenido: replyText.trim() });
   };
 
@@ -730,7 +819,7 @@ function EvoSendPageInner() {
       back.label === 'Volver al curso'
         ? { label: 'Curso', href: back.to }
         : { label: back.label, href: back.to };
-    return [prev, { label: 'EvoSend' }];
+    return [prev, { label: 'Evo Send' }];
   }, [back]);
 
   const evoLayoutShared = {
@@ -759,6 +848,7 @@ function EvoSendPageInner() {
     selectedIdForTyping: selectedId,
     sections: sectionsForInboxTab,
     studentComposerBlocked,
+    parentSubjectComposerBlocked,
     writeWindowTimezone: writeWindow?.timezone,
     threadsEmptyHint,
     inboxTab,
@@ -916,6 +1006,8 @@ interface EvoLayoutProps {
   onToggleChatsGlc?: () => void;
   /** Solo estudiantes: fuera de 7:00–19:00 en chats de grupo */
   studentComposerBlocked?: boolean;
+  /** Padres: hilo informativo por materia sin respuesta */
+  parentSubjectComposerBlocked?: boolean;
   writeWindowTimezone?: string;
   threadsEmptyHint?: string;
   inboxTab: 'academico' | 'institucional';
@@ -1125,6 +1217,7 @@ function EvoLayout({
   chatsGlcCollapsed,
   onToggleChatsGlc,
   studentComposerBlocked = false,
+  parentSubjectComposerBlocked = false,
   writeWindowTimezone,
   threadsEmptyHint,
   inboxTab,
@@ -1150,6 +1243,10 @@ function EvoLayout({
   const [collapsedBySection, setCollapsedBySection] = useState<Record<string, boolean>>({});
   const [readsExpanded, setReadsExpanded] = useState(false);
   const cursoIdForThread = selectedThread?.cursoId?._id as string | undefined;
+
+  useEffect(() => {
+    if (inboxTab === 'academico') setSidebarDirectoryOpen(false);
+  }, [inboxTab]);
 
   const googleCreateMutation = useMutation({
     mutationFn: async (kind: 'doc' | 'sheet' | 'slide') => {
@@ -1256,7 +1353,11 @@ function EvoLayout({
 
   const messagingBlocked = threadAccessBlocked || threadDetailQueryError;
   const composerDisabled =
-    messagingBlocked || loadingThread || !threadDetail?.thread || studentComposerBlocked;
+    messagingBlocked ||
+    loadingThread ||
+    !threadDetail?.thread ||
+    studentComposerBlocked ||
+    parentSubjectComposerBlocked;
 
   const evoSidebarChrome = (
     <>
@@ -1323,20 +1424,28 @@ function EvoLayout({
               placeholder={
                 inboxTab === 'institucional'
                   ? 'Buscar destinatario (mensaje institucional)…'
-                  : 'Buscar persona para chatear…'
+                  : 'Buscar en tus hilos…'
               }
               value={sidebarPeopleQ}
               onChange={(e) => {
-                setSidebarPeopleQ(e.target.value);
-                setSidebarDirectoryOpen(true);
+                const v = e.target.value;
+                setSidebarPeopleQ(v);
+                if (inboxTab === 'institucional') setSidebarDirectoryOpen(true);
               }}
-              onFocus={() => setSidebarDirectoryOpen(true)}
+              onFocus={() => {
+                if (inboxTab === 'institucional') setSidebarDirectoryOpen(true);
+              }}
               className="flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 text-[13px] text-[#E2E8F0] placeholder:text-white/35 h-8 px-0"
               autoComplete="off"
             />
-            {sidebarPeopleLoading ? <Loader2 className="w-4 h-4 animate-spin text-white/40 shrink-0" /> : null}
+            {inboxTab === 'institucional' && sidebarPeopleLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-white/40 shrink-0" />
+            ) : null}
           </div>
-          {sidebarDirectoryOpen && sidebarPeopleQ.trim().length >= 2 && sidebarPeopleResults.length > 0 ? (
+          {inboxTab === 'institucional' &&
+          sidebarDirectoryOpen &&
+          sidebarPeopleQ.trim().length >= 2 &&
+          sidebarPeopleResults.length > 0 ? (
             <div
               className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-[10px] border border-white/10 py-1 shadow-lg"
               style={{ background: 'rgba(15,23,42,0.97)' }}
@@ -1388,8 +1497,8 @@ function EvoLayout({
               }}
             >
               <p>
-                Comunicados oficiales (GLC) en el panel derecho. El buscador abre un nuevo mensaje institucional con esa
-                persona (bandeja entrada/salida); el académico sigue en la pestaña «Académico» con hilos tipo chat.
+                Comunicados oficiales (GLC) en el panel derecho. El buscador de esta pestaña sirve para elegir
+                destinatario del mensaje institucional. En «Académico», el mismo campo filtra tus hilos de conversación.
               </p>
             </div>
           </div>
@@ -1430,7 +1539,7 @@ function EvoLayout({
                 threads,
                 selectedId,
                 setSelectedId,
-                '',
+                sidebarPeopleQ,
                 sections,
                 sections && sections.length > 0 ? getSectionCollapsed : undefined,
                 sections && sections.length > 0 ? handleToggleSection : undefined,
@@ -1469,6 +1578,10 @@ function EvoLayout({
                     </h3>
                     {selectedThread.tipo === 'evo_chat_family' ? (
                       <p className="text-[12px] text-white/50 truncate">Chat familia (acudientes y estudiante)</p>
+                    ) : selectedThread.tipo === 'evo_chat_direct' ? (
+                      <p className="text-[12px] text-white/50 truncate">
+                        {tipoLabels[selectedThread.tipo] ?? selectedThread.tipo}
+                      </p>
                     ) : (
                       <p className="text-[12px] text-white/50 truncate">
                         {tipoLabels[selectedThread.tipo] ?? selectedThread.tipo}
@@ -1928,75 +2041,91 @@ function EvoLayout({
               </div>
               {!messagingBlocked ? (
               <div className="flex-shrink-0 flex flex-col gap-0">
-                {studentComposerBlocked ? (
-                  <div className="px-4 pt-2 pb-1 shrink-0 max-h-[30vh] overflow-y-auto">
-                    <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-100 [&>svg]:text-amber-200">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle className="text-sm font-semibold text-amber-50">
-                        Horario de chat para estudiantes
+                {parentSubjectComposerBlocked ? (
+                  <div className="px-4 pt-2 pb-2 shrink-0">
+                    <Alert className="border-white/20 bg-white/[0.06] text-white/90 [&>svg]:text-white/70">
+                      <Pin className="h-4 w-4" />
+                      <AlertTitle className="text-sm font-semibold text-white">
+                        Canal informativo
                       </AlertTitle>
-                      <AlertDescription className="text-xs text-amber-100/90">
-                        Solo puedes enviar mensajes en los chats de grupo entre las 7:00 y las 18:59
-                        {writeWindowTimezone ? ` (${writeWindowTimezone})` : ''}. Fuera de ese horario el envío no está disponible.
+                      <AlertDescription className="text-xs text-white/70">
+                        Este hilo muestra avisos y tareas del docente. No se pueden enviar respuestas aquí.
                       </AlertDescription>
                     </Alert>
                   </div>
-                ) : null}
-                <div className="min-h-[72px] px-4 sm:px-5 flex flex-wrap items-center gap-2 shrink-0 py-2" style={chatComposerBarStyle}>
-                <EvoComposeAttachmentBar
-                  disabled={composerDisabled}
-                  onOpenDrive={() => setShowDrivePicker(true)}
-                  showReminder={!!cursoIdForThread}
-                  onOpenReminder={() => setShowReminderPicker(true)}
-                  onCreateDoc={() => googleCreateMutation.mutate('doc')}
-                  onCreateSheet={() => googleCreateMutation.mutate('sheet')}
-                  onCreateSlide={() => googleCreateMutation.mutate('slide')}
-                  onAttachLink={() => setShowLinkDialog(true)}
-                  createPending={googleCreateMutation.isPending}
-                />
-                <div
-                  className="flex-1 relative h-11 rounded-[10px] flex items-center px-4 transition-all min-w-0"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: composerFocused
-                      ? `1px solid color-mix(in srgb, ${accent} 50%, transparent)`
-                      : '1px solid rgba(255,255,255,0.1)',
-                    boxShadow: composerFocused ? `0 0 12px color-mix(in srgb, ${accent} 18%, transparent)` : 'none',
-                  }}
-                >
-                  <Textarea
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    onFocus={() => {
-                      setComposerFocused(true);
-                      if (selectedIdForTyping && !composerDisabled) {
-                        emitTyping(selectedIdForTyping, user?.nombre);
-                      }
-                    }}
-                    onBlur={() => setComposerFocused(false)}
-                    placeholder="Escribe un mensaje o usa @ para mencionar..."
-                    disabled={composerDisabled}
-                    rows={1}
-                    className="flex-1 bg-transparent border-0 shadow-none focus-visible:ring-0 text-[14px] text-[#E2E8F0] placeholder:text-white/35 min-h-[36px] max-h-28 resize-none py-2 disabled:opacity-50"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  onClick={onSendReply}
-                  disabled={!replyText.trim() || sendReplyMutation.isPending || composerDisabled}
-                  style={{
-                    background: accent,
-                    boxShadow: `0 0 16px color-mix(in srgb, ${accent} 35%, transparent)`,
-                  }}
-                  className="w-10 h-10 shrink-0 rounded-full text-white border-0 p-0 hover:opacity-95"
-                >
-                  {sendReplyMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </Button>
-                </div>
+                ) : (
+                  <>
+                    {studentComposerBlocked ? (
+                      <div className="px-4 pt-2 pb-1 shrink-0 max-h-[30vh] overflow-y-auto">
+                        <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-100 [&>svg]:text-amber-200">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle className="text-sm font-semibold text-amber-50">
+                            Horario de chat para estudiantes
+                          </AlertTitle>
+                          <AlertDescription className="text-xs text-amber-100/90">
+                            Solo puedes enviar mensajes en los chats de grupo entre las 7:00 y las 18:59
+                            {writeWindowTimezone ? ` (${writeWindowTimezone})` : ''}. Fuera de ese horario el envío no está disponible.
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    ) : null}
+                    <div className="min-h-[72px] px-4 sm:px-5 flex flex-wrap items-center gap-2 shrink-0 py-2" style={chatComposerBarStyle}>
+                    <EvoComposeAttachmentBar
+                      disabled={composerDisabled}
+                      onOpenDrive={() => setShowDrivePicker(true)}
+                      showReminder={!!cursoIdForThread}
+                      onOpenReminder={() => setShowReminderPicker(true)}
+                      onCreateDoc={() => googleCreateMutation.mutate('doc')}
+                      onCreateSheet={() => googleCreateMutation.mutate('sheet')}
+                      onCreateSlide={() => googleCreateMutation.mutate('slide')}
+                      onAttachLink={() => setShowLinkDialog(true)}
+                      createPending={googleCreateMutation.isPending}
+                    />
+                    <div
+                      className="flex-1 relative h-11 rounded-[10px] flex items-center px-4 transition-all min-w-0"
+                      style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: composerFocused
+                          ? `1px solid color-mix(in srgb, ${accent} 50%, transparent)`
+                          : '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: composerFocused ? `0 0 12px color-mix(in srgb, ${accent} 18%, transparent)` : 'none',
+                      }}
+                    >
+                      <Textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        onFocus={() => {
+                          setComposerFocused(true);
+                          if (selectedIdForTyping && !composerDisabled) {
+                            emitTyping(selectedIdForTyping, user?.nombre);
+                          }
+                        }}
+                        onBlur={() => setComposerFocused(false)}
+                        placeholder="Escribe un mensaje o usa @ para mencionar..."
+                        disabled={composerDisabled}
+                        rows={1}
+                        className="flex-1 bg-transparent border-0 shadow-none focus-visible:ring-0 text-[14px] text-[#E2E8F0] placeholder:text-white/35 min-h-[36px] max-h-28 resize-none py-2 disabled:opacity-50"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={onSendReply}
+                      disabled={!replyText.trim() || sendReplyMutation.isPending || composerDisabled}
+                      style={{
+                        background: accent,
+                        boxShadow: `0 0 16px color-mix(in srgb, ${accent} 35%, transparent)`,
+                      }}
+                      className="w-10 h-10 shrink-0 rounded-full text-white border-0 p-0 hover:opacity-95"
+                    >
+                      {sendReplyMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </Button>
+                    </div>
+                  </>
+                )}
               </div>
               ) : null}
             </>
@@ -2126,10 +2255,24 @@ function filteredThreadsList(
 
     return raw;
   };
-  const filterBySearch = (list: EvoThreadItem[]) =>
-    !searchQ?.trim()
-      ? list
-      : list.filter((t) => (t.asunto ?? t.displayTitle ?? '').toLowerCase().includes(searchQ.trim().toLowerCase()));
+  const filterBySearch = (list: EvoThreadItem[]) => {
+    const needle = (searchQ ?? '').trim().toLowerCase();
+    if (!needle) return list;
+    return list.filter((t) => {
+      const tipoLabel = (tipoLabels[t.tipo] ?? '').toLowerCase();
+      const rem = (t.ultimoMensaje?.remitente ?? '').toLowerCase();
+      const hay = [
+        t.asunto ?? '',
+        t.displayTitle ?? '',
+        preview(t),
+        tipoLabel,
+        rem,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  };
   const sortByDate = (list: EvoThreadItem[]) =>
     [...list].sort((a, b) => {
       const dateA = a.ultimoMensaje?.fecha ? new Date(a.ultimoMensaje.fecha).getTime() : new Date(a.updatedAt).getTime();
@@ -2257,9 +2400,11 @@ function filteredThreadsList(
     );
   }
 
+  const filteredFlat = sortByDate(filterBySearch(threads));
+
   return (
     <>
-      {threads.map((t) => renderThread(t))}
+      {filteredFlat.map((t) => renderThread(t))}
       {threads.length === 0 && (
         <p className="p-4 text-white/50 text-center text-sm">
           {threadsEmptyHint?.trim()
@@ -2267,6 +2412,9 @@ function filteredThreadsList(
             : 'No hay chats. Tus grupos son tus cursos (profesor) o materias (estudiante).'}
         </p>
       )}
+      {threads.length > 0 && filteredFlat.length === 0 && (searchQ ?? '').trim() ? (
+        <p className="p-4 text-white/45 text-center text-sm">Ningún hilo coincide con tu búsqueda.</p>
+      ) : null}
     </>
   );
 }

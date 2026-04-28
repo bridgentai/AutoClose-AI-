@@ -1,4 +1,4 @@
-import * as dataQuery from './dataQuery';
+import * as dataQuery from './legacy/dataQuery';
 
 export type StructuredResponseType = 'text' | 'top_student_card';
 

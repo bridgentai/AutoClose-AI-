@@ -59,7 +59,7 @@ export default function ParentPage() {
             <Button
               variant="ghost"
               className="text-[#3B82F6] hover:text-[#60a5fa] hover:bg-white/5 text-sm"
-              onClick={() => setLocation('/comunicacion/academico')}
+              onClick={() => setLocation('/evo-send')}
             >
               Ver todos
             </Button>
@@ -73,9 +73,9 @@ export default function ParentPage() {
                   <li
                     key={c.id}
                     className="rounded-lg border border-white/10 bg-white/[0.03] p-3 cursor-pointer hover:bg-white/[0.06]"
-                    onClick={() => setLocation('/comunicacion/academico')}
+                    onClick={() => setLocation('/evo-send')}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') setLocation('/comunicacion/academico');
+                      if (e.key === 'Enter' || e.key === ' ') setLocation('/evo-send');
                     }}
                     role="button"
                     tabIndex={0}

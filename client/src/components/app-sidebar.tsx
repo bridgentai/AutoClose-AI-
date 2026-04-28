@@ -12,10 +12,9 @@ import {
   Calendar,
   Users,
   Globe,
-  Mail,
+
   FileCheck,
   Cloud,
-  Building2,
   Megaphone,
   Shield,
   Bot,
@@ -48,8 +47,6 @@ export function AppSidebar() {
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
-    { icon: Building2, label: "GLC", path: "/comunidad/noticias", roles: ["estudiante"] },
-    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["profesor", "directivo", "padre"] },
     {
       icon: Send,
       label: "Evo Send",
@@ -72,7 +69,6 @@ export function AppSidebar() {
       ]
     },
 
-    { icon: Mail, label: "Comunicación padres", path: "/asistente/comunicacion", roles: ["asistente"] },
     { icon: FileCheck, label: "Permisos de salida", path: "/permisos", roles: ["asistente"] },
 
     { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
@@ -97,7 +93,6 @@ export function AppSidebar() {
         "super_admin",
       ],
     },
-
     { icon: Settings2, label: "Gestión", path: "/directivo/gestion", roles: ["directivo"] },
     { icon: BarChart3, label: "Analítica", path: "/directivo/analitica", roles: ["directivo"] },
     { icon: Settings, label: "Configuración", path: "/settings", roles: ["directivo"] },

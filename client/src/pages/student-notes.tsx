@@ -11,6 +11,7 @@ import {
   BarChart3,
   ChevronDown,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -229,6 +230,21 @@ function computeWeightedPromedioAndUltima(
     }
   }
   return { promedioFinal, ultimaNota };
+}
+
+function openKiwiAssistWithPrompt(
+  message: string,
+  autoSend = true,
+  options?: { bodyExtras?: Record<string, unknown> },
+) {
+  window.dispatchEvent(
+    new CustomEvent<{ message: string; autoSend?: boolean; bodyExtras?: Record<string, unknown> }>(
+      'evos:kiwi-open',
+      {
+        detail: { message, autoSend, bodyExtras: options?.bodyExtras },
+      },
+    ),
+  );
 }
 
 // =========================================================
@@ -616,13 +632,31 @@ export default function StudentNotesPage() {
                 <p className="text-white/60 mb-6">
                   {emptyMessage}
                 </p>
-                <Button
-                  variant="outline"
-                  className="border-white/20 text-white hover:bg-white/10"
-                  onClick={() => refetch()}
-                >
-                  Refrescar
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                  <Button
+                    variant="outline"
+                    className="border-white/20 text-white hover:bg-white/10"
+                    onClick={() => refetch()}
+                  >
+                    Refrescar
+                  </Button>
+                  {isPadre && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-[#00c8ff]/45 text-[#00c8ff] hover:bg-[#00c8ff]/10"
+                      onClick={() =>
+                        openKiwiAssistWithPrompt(
+                          `Soy acudiente de ${nombreHijo}. En evoOS aún no aparecen notas de ${nombreHijo}. Quiero orientación general: cómo puedo acompañar el año académico, qué hábitos conviene reforzar en casa y qué puedo preguntarle al colegio o a las materias, sin asumir calificaciones que aún no están cargadas.`,
+                          true
+                        )
+                      }
+                    >
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Consultar a Kiwi Assist
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -650,12 +684,37 @@ export default function StudentNotesPage() {
                   {pageSubtitle}
                 </p>
               </div>
-              <Button
-                onClick={() => setLocation(historialPath)}
-                className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 whitespace-nowrap"
-              >
-                Historial de notas
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:shrink-0">
+                {isPadre && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-[#00c8ff]/45 text-[#00c8ff] hover:bg-[#00c8ff]/10 whitespace-nowrap"
+                    onClick={() =>
+                      openKiwiAssistWithPrompt(
+                        `Genera un Evo Doc de análisis académico para ${nombreHijo}. Usa los datos del sistema; no pidas más información al usuario.`,
+                        true,
+                        {
+                          bodyExtras: {
+                            intent: 'parent_notes_evo_doc',
+                            generateEvoDoc: true,
+                            ...(primerHijoId ? { studentId: primerHijoId } : {}),
+                          },
+                        },
+                      )
+                    }
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Análisis con Kiwi Assist
+                  </Button>
+                )}
+                <Button
+                  onClick={() => setLocation(historialPath)}
+                  className="bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 whitespace-nowrap"
+                >
+                  Historial de notas
+                </Button>
+              </div>
             </div>
           </div>
 

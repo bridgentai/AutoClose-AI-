@@ -53,6 +53,7 @@ router.post('/comunicado', protect, requireRole(...PUBLISH_ROLES), async (req: A
       category?: string;
       priority?: string;
       eventoFecha?: string;
+      attachments?: unknown;
     };
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     const text = typeof body.body === 'string' ? body.body.trim() : '';
@@ -70,6 +71,44 @@ router.post('/comunicado', protect, requireRole(...PUBLISH_ROLES), async (req: A
         return res.status(400).json({ message: 'La categoría Evento requiere una fecha válida (eventoFecha).' });
       }
     }
+
+    function normalizeCircularAttachments(raw: unknown): { name: string; url?: string; fileId?: string }[] {
+      if (raw == null) return [];
+      let arr: unknown = raw;
+      if (typeof raw === 'string') {
+        try {
+          arr = JSON.parse(raw);
+        } catch {
+          return [];
+        }
+      }
+      if (!Array.isArray(arr)) return [];
+      const out: { name: string; url?: string; fileId?: string }[] = [];
+      for (const item of arr) {
+        if (!item || typeof item !== 'object') continue;
+        const o = item as Record<string, unknown>;
+        const nameRaw =
+          typeof o.name === 'string' ? o.name : typeof o.nombre === 'string' ? o.nombre : '';
+        const name = nameRaw.trim() || 'Archivo';
+        const url = typeof o.url === 'string' ? o.url.trim() : '';
+        const fileId = typeof o.fileId === 'string' ? o.fileId.trim() : '';
+        if (!url && !fileId) continue;
+        out.push({
+          name,
+          url: url || undefined,
+          fileId: fileId || undefined,
+        });
+      }
+      return out;
+    }
+
+    const attachmentsNormalized = normalizeCircularAttachments(body.attachments);
+    if (category === 'circular' && attachmentsNormalized.length === 0) {
+      return res.status(400).json({
+        message: 'Las circulares deben incluir al menos un archivo adjunto (Evo Drive o enlace).',
+      });
+    }
+
     const recipientIds = await resolveInstitutionalRecipientIds(instId, audience);
     const scheduled = new Date(Date.now() + 30_000).toISOString();
     const created = await createComunicacionAnnouncement({
@@ -86,6 +125,8 @@ router.post('/comunicado', protect, requireRole(...PUBLISH_ROLES), async (req: A
       audience,
       category: category || 'general',
       priority,
+      attachments_json:
+        attachmentsNormalized.length > 0 ? JSON.stringify(attachmentsNormalized) : '[]',
     });
     const { addAnnouncementRecipients } = await import('../repositories/announcementRepository.js');
     await addAnnouncementRecipients(created.id, recipientIds);

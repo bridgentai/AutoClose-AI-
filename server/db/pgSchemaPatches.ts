@@ -107,6 +107,18 @@ export async function ensureEvoChatGroupTeacherUniqueIndex(): Promise<void> {
   evoChatGroupTeacherIndexEnsured = true;
 }
 
+let evoChatParentSubjectIndexEnsured = false;
+
+/** Un hilo Evo Send padre–materia por (institución, group_subject). */
+export async function ensureEvoChatParentSubjectUniqueIndex(): Promise<void> {
+  if (evoChatParentSubjectIndexEnsured) return;
+  await queryPg(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_announcements_evo_chat_parent_subject_gs
+    ON announcements (institution_id, group_subject_id)
+    WHERE type = 'evo_chat_parent_subject' AND group_subject_id IS NOT NULL`);
+  evoChatParentSubjectIndexEnsured = true;
+}
+
 let evoFilesStaffOnlyEnsured = false;
 
 /** Materiales de curso solo para docentes (no visibles para estudiantes/padres). */
@@ -526,6 +538,17 @@ export async function ensureDisciplinaryActionsOccurredAt(): Promise<void> {
   console.log('[schema] disciplinary_actions.occurred_at OK');
 }
 
+let notificationExtraColumnsEnsured = false;
+
+export async function ensureNotificationExtraColumns(): Promise<void> {
+  if (notificationExtraColumnsEnsured) return;
+  await queryPg(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type VARCHAR(50)`);
+  await queryPg(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS entity_type VARCHAR(100)`);
+  await queryPg(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS entity_id UUID`);
+  await queryPg(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS action_url TEXT`);
+  notificationExtraColumnsEnsured = true;
+}
+
 let communicationLegacyCleanupEnsured = false;
 
 /** Limpieza de artefactos legacy de comunicación ya no usados por el modelo actual. */
@@ -539,4 +562,122 @@ export async function ensureCommunicationLegacyCleanup(): Promise<void> {
   await queryPg(`DROP TABLE IF EXISTS playing_with_neon`);
   communicationLegacyCleanupEnsured = true;
   console.log('[schema] communication legacy cleanup OK');
+}
+
+// ─── RAG: pgvector + knowledge_documents ─────────────────────────────────────
+
+let ragSchemaEnsured = false;
+
+/**
+ * Enables pgvector extension and creates the knowledge_documents table
+ * for RAG (Retrieval-Augmented Generation) in Kiwi Assist.
+ * Neon supports pgvector natively — no extra infra needed.
+ */
+export async function ensureRagSchema(): Promise<void> {
+  if (ragSchemaEnsured) return;
+  try {
+    await queryPg(`CREATE EXTENSION IF NOT EXISTS vector`);
+  } catch (err) {
+    console.warn('[schema] pgvector extension not available — RAG disabled:', (err as Error).message);
+    ragSchemaEnsured = true;
+    return;
+  }
+
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS knowledge_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      chunk_index INT NOT NULL DEFAULT 0,
+      parent_doc_id UUID,
+      embedding vector(1536),
+      metadata JSONB DEFAULT '{}',
+      created_by_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await queryPg(`CREATE INDEX IF NOT EXISTS idx_knowledge_docs_institution ON knowledge_documents(institution_id)`);
+  await queryPg(`CREATE INDEX IF NOT EXISTS idx_knowledge_docs_parent ON knowledge_documents(parent_doc_id)`);
+
+  try {
+    await queryPg(`
+      CREATE INDEX IF NOT EXISTS idx_knowledge_docs_embedding
+      ON knowledge_documents USING ivfflat (embedding vector_cosine_ops)
+      WITH (lists = 20)
+    `);
+  } catch {
+    try {
+      await queryPg(`
+        CREATE INDEX IF NOT EXISTS idx_knowledge_docs_embedding_hnsw
+        ON knowledge_documents USING hnsw (embedding vector_cosine_ops)
+      `);
+    } catch {
+      console.warn('[schema] Could not create vector index — will use sequential scan');
+    }
+  }
+
+  ragSchemaEnsured = true;
+  console.log('[schema] RAG knowledge_documents + pgvector OK');
+}
+
+// ─── Evo Docs ──────────────────────────────────────────────────────────────────
+
+let evoDocsSchemaEnsured = false;
+
+export async function ensureEvoDocsSchema(): Promise<void> {
+  if (evoDocsSchemaEnsured) return;
+
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS evo_docs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      created_by_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      description TEXT,
+      doc_type TEXT NOT NULL DEFAULT 'academic_analysis',
+      subject_name TEXT,
+      subject_id UUID,
+      period TEXT,
+      metadata JSONB DEFAULT '{}',
+      pdf_path TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'generated',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await queryPg(`CREATE INDEX IF NOT EXISTS idx_evo_docs_institution ON evo_docs(institution_id)`);
+  await queryPg(`CREATE INDEX IF NOT EXISTS idx_evo_docs_user ON evo_docs(created_by_id)`);
+
+  evoDocsSchemaEnsured = true;
+  console.log('[schema] evo_docs table OK');
+}
+
+/** Lotes de boletines generados por curso (Reportes académicos / directivo). */
+let academicBoletinBatchesEnsured = false;
+
+export async function ensureAcademicBoletinBatchesTable(): Promise<void> {
+  if (academicBoletinBatchesEnsured) return;
+
+  await queryPg(`
+    CREATE TABLE IF NOT EXISTS academic_boletin_batches (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+      group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      group_name TEXT NOT NULL,
+      periodo TEXT NOT NULL,
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      boletines_json JSONB NOT NULL DEFAULT '[]'::jsonb
+    )
+  `);
+  await queryPg(`
+    CREATE INDEX IF NOT EXISTS idx_academic_boletin_batches_inst_created
+    ON academic_boletin_batches(institution_id, created_at DESC)
+  `);
+
+  academicBoletinBatchesEnsured = true;
+  console.log('[schema] academic_boletin_batches OK');
 }

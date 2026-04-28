@@ -16,9 +16,9 @@ export function getPgPool(): pg.Pool {
     }
     pgPool = new pg.Pool({
       connectionString: ENV.DATABASE_URL,
-      max: 10,
+      max: ENV.PG_POOL_MAX,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
     });
     pgPool.on('error', (err) => {
       console.error('PostgreSQL pool error:', err);

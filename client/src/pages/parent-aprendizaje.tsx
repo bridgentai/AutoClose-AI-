@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { BookOpen, Calendar, GraduationCap, CheckSquare, Clock } from "lucide-react";
+import { BookOpen, GraduationCap, CheckSquare, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
@@ -11,7 +11,6 @@ const navigationItems = [
   { title: "Notas", path: "/parent/notas", icon: GraduationCap },
   { title: "Asignaciones", path: "/parent/tareas", icon: CheckSquare },
   { title: "Horario", path: "/parent/horario", icon: Clock },
-  { title: "Calendario", path: "/parent/calendario", icon: Calendar },
 ];
 
 export default function ParentAprendizajePage() {

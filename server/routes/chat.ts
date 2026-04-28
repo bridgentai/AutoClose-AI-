@@ -99,10 +99,11 @@ router.put('/:sessionId/title', protect, async (req: AuthRequest, res) => {
   }
 });
 
-// POST /api/chat/:sessionId/message - Legacy: enviar mensaje (mantener compatibilidad; flujo principal es POST /api/ai/chat)
+// POST /api/chat/:sessionId/message — Deprecado: el asistente usa POST /api/kiwi/chat (streaming SSE).
 router.post('/:sessionId/message', protect, async (req: AuthRequest, res) => {
   return res.status(410).json({
-    message: 'Use POST /api/ai/chat con sessionId para enviar mensajes. Este endpoint está deprecado.',
+    message:
+      'Este endpoint está deprecado. Para el asistente Kiwi usa POST /api/kiwi/chat. El sidebar sigue usando /api/chat para listados/historial.',
   });
 });
 

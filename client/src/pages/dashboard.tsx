@@ -1,12 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/authContext';
-import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, FolderOpen, Mail, FileText, ArrowUp, ArrowDown, Bell, FileCheck, ChevronRight } from 'lucide-react';
+import { BookOpen, GraduationCap, MessageSquare, TrendingUp, AlertTriangle, Trophy, Send, Loader2, Bot, ClipboardList, Building2, Plus, UserPlus, Users, CheckCircle2, XCircle, Mail, FileText, ArrowUp, ArrowDown, Bell, FileCheck, ChevronRight, Eye, Cloud } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import kiwiImg from '@/assets/kiwi sentado.png';
 import {
   Dialog,
@@ -33,6 +32,9 @@ import {
 } from '@shared/weightedGrades';
 import { AdminGeneralColegioDashboard } from './admin-general-colegio-dashboard';
 import { getAssignmentCalendarLocalParts } from '@/lib/assignmentUtils';
+import { DashboardWelcomeBanner } from '@/components/dashboard-welcome-banner';
+import { EvoDocCard } from '@/components/evo-doc-card';
+import { useKiwiChatStream } from '@/hooks/useKiwiChatStream';
 
 interface Assignment {
   _id: string;
@@ -48,12 +50,6 @@ interface ProfessorGroupAssignment {
   groupName?: string;
   subjects?: unknown[];
   totalStudents?: number;
-}
-
-interface Message {
-  emisor: 'user' | 'ai';
-  contenido: string;
-  timestamp: Date;
 }
 
 const CARD_STYLE = `panel-grades border border-white/10 rounded-2xl hover-elevate`;
@@ -74,17 +70,25 @@ function readPermisosSalidaCount(userId: string | undefined): number {
 interface AIChatBoxProps {
   rol: string;
   footer?: React.ReactNode;
+  /** Vista reducida (p. ej. mitad inferior del dashboard padre junto al calendario). */
+  compact?: boolean;
+  endHeader?: React.ReactNode;
 }
 
-function AIChatBox({ rol, footer }: AIChatBoxProps) {
+function AIChatBox({ rol, footer, compact, endHeader }: AIChatBoxProps) {
   const [, setLocation] = useLocation();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const {
+    messages,
+    input,
+    setInput,
+    loading,
+    isStreaming,
+    activeToolStep,
+    messagesEndRef,
+    sendMessage,
+    handleSendFromInput,
+  } = useKiwiChatStream();
   const { colorPrimario, colorSecundario } = useInstitutionColors();
-  const [loading, setLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const emptySubtitle =
     rol === 'estudiante'
@@ -95,226 +99,225 @@ function AIChatBox({ rol, footer }: AIChatBoxProps) {
           ? '¿Qué tareas tiene pendientes? ¿Cómo va en Matemáticas?'
           : 'Consulta reportes, estadísticas o gestiona el colegio';
 
-  const scrollToBottom = () => {
-    // Usar requestAnimationFrame para asegurar que el DOM se haya actualizado
-    requestAnimationFrame(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }
-    });
-  };
+  const mascotSize = compact ? 120 : 220;
+  const mascotWrap = compact ? 120 : 220;
+  const compactHero = Boolean(
+    compact && (rol === 'padre' || rol === 'directivo') && messages.length === 0
+  );
+  const directivoCompactHero = compactHero && rol === 'directivo';
 
-  useEffect(() => {
-    // Scroll suave cuando se agregan nuevos mensajes
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages]);
-
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || loading || isStreaming) return;
-
-    const userMessage: Message = { emisor: 'user', contenido: input, timestamp: new Date() };
-    setMessages(prev => [...prev, userMessage]);
-    const currentInput = input;
-    setInput('');
-    setLoading(true);
-
-    try {
-      const token = localStorage.getItem('autoclose_token');
-      const response = await fetch('/api/kiwi/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ message: currentInput, sessionId: sessionId ?? undefined }),
-      });
-
-      if (!response.ok) {
-        let errMsg = 'Error al conectar con Kiwi';
-        try { const b = await response.json(); errMsg = b.error || errMsg; } catch { /* ignore */ }
-        throw new Error(errMsg);
-      }
-
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let firstChunk = true;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const jsonStr = line.slice(6).trim();
-          if (!jsonStr) continue;
-          let event: { type: string; text?: string; sessionId?: string; message?: string };
-          try { event = JSON.parse(jsonStr); } catch { continue; }
-
-          if (event.type === 'chunk' && event.text) {
-            if (firstChunk) {
-              setLoading(false);
-              setIsStreaming(true);
-              setMessages(prev => [...prev, { emisor: 'ai', contenido: event.text!, timestamp: new Date() }]);
-              firstChunk = false;
-            } else {
-              setMessages(prev => {
-                const updated = [...prev];
-                const last = updated[updated.length - 1];
-                updated[updated.length - 1] = { ...last, contenido: last.contenido + event.text };
-                return updated;
-              });
-            }
-            scrollToBottom();
-          } else if (event.type === 'done') {
-            if (event.sessionId) setSessionId(event.sessionId);
-            setIsStreaming(false);
-            setTimeout(() => scrollToBottom(), 100);
-          } else if (event.type === 'error') {
-            const errMsg = event.message || 'Lo siento, ocurrió un error. Intenta de nuevo.';
-            setLoading(false);
-            setIsStreaming(false);
-            if (firstChunk) {
-              setMessages(prev => [...prev, { emisor: 'ai', contenido: errMsg, timestamp: new Date() }]);
-            } else {
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { ...updated[updated.length - 1], contenido: errMsg };
-                return updated;
-              });
-            }
-            setTimeout(() => scrollToBottom(), 100);
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error('Error en chat:', error);
-      const errorText = error.message || 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.';
-      setMessages(prev => [...prev, { emisor: 'ai', contenido: errorText, timestamp: new Date() }]);
-      setTimeout(() => scrollToBottom(), 100);
-    } finally {
-      setLoading(false);
-      setIsStreaming(false);
-    }
-  }, [input, loading, isStreaming, sessionId]);
+  const compactHeroTagline =
+    rol === 'padre'
+      ? 'Pide tareas, revisa pendientes o crea materiales.'
+      : 'Consulta métricas del colegio, redacta ideas para comunicados o prioriza fechas institucionales.';
 
   return (
     <Card
-      className={`${CARD_STYLE} cursor-pointer flex flex-col gradient-overlay-blue hover-glow ${rol === 'padre'
-        ? 'bg-gradient-to-br from-[rgba(37,99,235,0.08)] to-[rgba(255,215,0,0.04)] backdrop-blur-lg border border-[rgba(255,215,0,0.12)]'
-        : ''
-        }`}
+      className={`cursor-pointer flex flex-col hover-glow ${compactHero
+        ? directivoCompactHero
+          ? 'relative overflow-hidden rounded-2xl border border-[rgba(59,130,246,0.18)] bg-gradient-to-br from-[#0a1018] via-[#0c1626] to-[#101e32] backdrop-blur-md shadow-[0_0_40px_rgba(37,99,235,0.14),inset_0_1px_0_rgba(255,255,255,0.06)]'
+          : 'relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0a0e1c] via-[#0f1628] to-[#141e38] backdrop-blur-md shadow-[0_0_40px_rgba(37,99,235,0.12),inset_0_1px_0_rgba(255,255,255,0.06)]'
+        : `${CARD_STYLE} gradient-overlay-blue ${rol === 'padre'
+          ? 'bg-gradient-to-br from-[rgba(37,99,235,0.08)] to-[rgba(255,215,0,0.04)] backdrop-blur-lg border border-[rgba(255,215,0,0.12)]'
+          : ''
+        } ${compact ? 'min-h-0' : ''}`}`}
       onClick={() => setLocation('/chat')}
     >
-      <CardHeader className="pb-3 flex-shrink-0">
-        {rol === 'padre' && (
-          <div className="w-8 h-0.5 rounded-full bg-gradient-to-r from-[var(--evo-blue)] to-[var(--evo-gold)] mb-3" />
-        )}
-        <CardTitle className="text-white flex items-center gap-2 text-lg text-expressive">
-          <Bot className="w-5 h-5 text-[var(--evo-gold)] animate-pulse-glow" />
-          Kiwi Assist
-        </CardTitle>
-        <CardDescription className="text-white/60 text-sm text-expressive-subtitle">
-          Pide tareas, revisa pendientes o crea materiales.
-        </CardDescription>
+      {compactHero ? (
+        <div
+          className="pointer-events-none absolute inset-0 opacity-90"
+          aria-hidden
+          style={{
+            background:
+              directivoCompactHero
+                ? 'radial-gradient(ellipse 80% 65% at 95% 95%, rgba(0,200,255,0.12) 0%, rgba(15,23,42,0) 55%)'
+                : 'radial-gradient(ellipse 85% 70% at 100% 100%, rgba(59,130,246,0.18) 0%, rgba(15,23,42,0) 55%)',
+          }}
+        />
+      ) : null}
+
+      <CardHeader className={`relative flex-shrink-0 z-[1] ${compactHero ? 'pb-1.5 pt-3.5 px-4' : compact ? 'pb-2 pt-4 px-4' : 'pb-3'}`}>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className={`text-white flex items-center gap-2 font-semibold text-expressive ${compactHero ? 'text-base' : compact ? 'text-base' : 'text-lg'}`}>
+            <Bot
+              className={`${directivoCompactHero ? 'text-[var(--color-primario)]' : 'text-[var(--evo-gold)]'} shrink-0 ${compactHero ? 'w-[18px] h-[18px]' : compact ? 'w-4 h-4 animate-pulse-glow' : 'w-5 h-5 animate-pulse-glow'}`}
+            />
+            Kiwi Assist
+          </CardTitle>
+          {endHeader ? (
+            <div className="shrink-0 text-sm text-white/50 hover:text-white/75 transition-colors">
+              {endHeader}
+            </div>
+          ) : null}
+        </div>
+        {!compactHero ? (
+          <CardDescription className={`text-white/60 text-expressive-subtitle mt-2 ${compact ? 'text-xs line-clamp-2' : 'text-sm'}`}>
+            {emptySubtitle}
+          </CardDescription>
+        ) : null}
       </CardHeader>
 
-      <CardContent onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col p-4 pt-4 min-h-0">
-        <div className="flex-1 space-y-3 overflow-y-auto pr-2">
+      <CardContent onClick={(e) => e.stopPropagation()} className={`relative z-[1] ${compactHero ? 'flex flex-col px-4 pb-3 pt-0 overflow-hidden' : compact ? 'flex flex-col p-3 pt-2' : 'flex-1 flex flex-col min-h-0 p-4 pt-4'}`}>
+        <div className={compactHero ? '' : compact ? 'space-y-3 pr-2' : 'flex-1 space-y-3 overflow-y-auto pr-2 min-h-0'}>
           {messages.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="flex flex-col items-center">
-                  <div
-                    className="relative"
-                    style={{
-                      width: 220,
-                      height: 220,
-                    }}
-                  >
-                    <div
-                      className="absolute inset-0 -z-10"
-                      style={{
-                        background:
-                          'radial-gradient(60% 60% at 50% 45%, rgba(59,130,246,0.22) 0%, rgba(29,78,216,0.10) 35%, rgba(2,6,23,0) 70%)',
-                        filter: 'blur(10px)',
-                        transform: 'scale(1.08)',
-                      }}
-                    />
-                    {/* Capa blur del koala para suavizar bordes (sin máscaras/recortes) */}
-                    <img
-                      src={kiwiImg}
-                      alt=""
-                      aria-hidden="true"
-                      className="select-none absolute left-1/2 top-1/2"
-                      style={{
-                        width: 220,
-                        height: 'auto',
-                        transform: 'translate(-50%, -50%) scale(1.03)',
-                        filter:
-                          'blur(14px) drop-shadow(0 0 44px rgba(59,130,246,0.28))',
-                        opacity: 0.72,
-                        pointerEvents: 'none',
-                      }}
-                      draggable={false}
-                    />
-                    <img
-                      src={kiwiImg}
-                      alt="Kiwi"
-                      className="select-none"
-                      style={{
-                        width: 220,
-                        height: 'auto',
-                        filter:
-                          'drop-shadow(0 10px 22px rgba(2,6,23,0.55)) drop-shadow(0 0 18px rgba(59,130,246,0.18))',
-                      }}
-                      draggable={false}
-                    />
-                  </div>
-                  <div
-                    className="mt-2"
-                    style={{
-                      width: 170,
-                      height: 16,
-                      borderRadius: 999,
-                      background: 'rgba(37,99,235,0.30)',
-                      filter: 'blur(12px)',
-                      opacity: 0.35,
-                    }}
-                  />
-                </div>
-                <h2 className="mt-5 text-[20px] font-bold text-white text-expressive">
-                  Hola, soy Kiwi
-                </h2>
-                <p className="text-white/60 text-sm mt-2 text-expressive-subtitle">
-                  {emptySubtitle}
+            compactHero ? (
+              <div
+                className={`relative ${directivoCompactHero ? 'min-h-[102px] h-[108px] sm:h-[118px]' : 'min-h-[88px] h-[92px] sm:h-[100px]'}`}
+              >
+                <p className="text-left text-xs leading-snug text-white/55 max-w-[56%] sm:max-w-[52%] pr-1 pt-0.5 line-clamp-3">
+                  {compactHeroTagline}
                 </p>
-                {rol === 'padre' && (
-                  <div className="flex flex-wrap gap-2 mt-3 justify-center">
+                {directivoCompactHero ? (
+                  <div className="relative z-[1] flex flex-wrap gap-1 mt-1.5 max-w-[95%]">
                     {[
-                      '¿Qué tareas tiene pendientes?',
-                      '¿Cómo va en sus notas?',
-                      'Crear un permiso de salida',
+                      'Resumen de indicadores',
+                      'Circular a padres',
+                      'Eventos del mes',
                     ].map((prompt) => (
                       <button
                         key={prompt}
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); setInput(prompt); }}
-                        className="text-xs px-3 py-1.5 rounded-full border border-white/15 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/90 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInput(prompt);
+                        }}
+                        className="rounded-full border border-white/12 bg-white/[0.06] text-white/55 hover:bg-white/10 hover:text-white/90 transition-colors text-[9px] px-1.5 py-0.5"
                       >
                         {prompt}
                       </button>
                     ))}
                   </div>
-                )}
+                ) : null}
+                <div
+                  className="pointer-events-none absolute right-[-6px] bottom-0 w-[102px] sm:w-[118px]"
+                  aria-hidden
+                >
+                  <div
+                    className="absolute -inset-4 opacity-60"
+                    style={{
+                      background:
+                        'radial-gradient(50% 50% at 55% 50%, rgba(59,130,246,0.32) 0%, transparent 70%)',
+                      filter: 'blur(12px)',
+                    }}
+                  />
+                  <img
+                    src={kiwiImg}
+                    alt=""
+                    className="relative w-full h-auto max-h-[96px] sm:max-h-[108px] object-contain object-bottom select-none"
+                    style={{
+                      filter:
+                        'drop-shadow(0 10px 20px rgba(2,6,23,0.55)) drop-shadow(0 0 16px rgba(59,130,246,0.22))',
+                    }}
+                    draggable={false}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className={`flex items-center justify-center py-1 ${compact ? '' : 'h-full min-h-0'}`}>
+                <div className={`text-center ${compact ? 'max-w-full px-1' : ''}`}>
+                  <div className="flex flex-col items-center">
+                    <div
+                      className="relative"
+                      style={{
+                        width: mascotWrap,
+                        height: mascotWrap,
+                      }}
+                    >
+                      <div
+                        className="absolute inset-0 -z-10"
+                        style={{
+                          background:
+                            'radial-gradient(60% 60% at 50% 45%, rgba(59,130,246,0.22) 0%, rgba(29,78,216,0.10) 35%, rgba(2,6,23,0) 70%)',
+                          filter: 'blur(10px)',
+                          transform: 'scale(1.08)',
+                        }}
+                      />
+                      <img
+                        src={kiwiImg}
+                        alt=""
+                        aria-hidden="true"
+                        className="select-none absolute left-1/2 top-1/2"
+                        style={{
+                          width: mascotSize,
+                          height: 'auto',
+                          transform: 'translate(-50%, -50%) scale(1.03)',
+                          filter:
+                            'blur(14px) drop-shadow(0 0 44px rgba(59,130,246,0.28))',
+                          opacity: 0.72,
+                          pointerEvents: 'none',
+                        }}
+                        draggable={false}
+                      />
+                      <img
+                        src={kiwiImg}
+                        alt="Kiwi"
+                        className="select-none"
+                        style={{
+                          width: mascotSize,
+                          height: 'auto',
+                          filter:
+                            'drop-shadow(0 10px 22px rgba(2,6,23,0.55)) drop-shadow(0 0 18px rgba(59,130,246,0.18))',
+                        }}
+                        draggable={false}
+                      />
+                    </div>
+                    <div
+                      className={compact ? 'mt-1' : 'mt-2'}
+                      style={{
+                        width: compact ? 100 : 170,
+                        height: compact ? 10 : 16,
+                        borderRadius: 999,
+                        background: 'rgba(37,99,235,0.30)',
+                        filter: 'blur(12px)',
+                        opacity: 0.35,
+                      }}
+                    />
+                  </div>
+                  <h2 className={`font-bold text-white text-expressive ${compact ? 'mt-2 text-sm' : 'mt-5 text-[20px]'}`}>
+                    Hola, soy Kiwi
+                  </h2>
+                  <p className={`text-white/60 text-expressive-subtitle ${compact ? 'text-[11px] mt-1 line-clamp-2' : 'text-sm mt-2'}`}>
+                    {emptySubtitle}
+                  </p>
+                  {rol === 'padre' && (
+                    <div className={`flex flex-wrap gap-1.5 justify-center ${compact ? 'mt-2' : 'mt-3'}`}>
+                      {[
+                        '¿Qué tareas tiene pendientes?',
+                        '¿Cómo va en sus notas?',
+                        'Crear un permiso de salida',
+                      ].map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setInput(prompt); }}
+                          className={`rounded-full border border-white/15 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/90 transition-colors ${compact ? 'text-[10px] px-2 py-1' : 'text-xs px-3 py-1.5'}`}
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {rol === 'directivo' && !compact && (
+                    <div className="flex flex-wrap gap-1.5 justify-center mt-3">
+                      {[
+                        'Resumen de indicadores de la sección',
+                        'Ideas para un comunicado a padres',
+                        '¿Qué eventos institucionales hay este mes?',
+                      ].map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setInput(prompt); }}
+                          className="rounded-full border border-white/15 bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/90 transition-colors text-xs px-3 py-1.5"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
           ) : (
             <div className="space-y-4 py-2">
               {messages.map((msg, idx) => (
@@ -325,13 +328,100 @@ function AIChatBox({ rol, footer }: AIChatBoxProps) {
                   style={{ animationDelay: `${idx * 0.1}s` }}
                 >
                   {msg.emisor === 'user' ? (
-                    <div
-                      className="max-w-[85%] px-3 py-2 rounded-lg rounded-br-sm text-sm text-white hover-glow"
-                      style={{
-                        background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`
-                      }}
-                    >
-                      <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
+                    msg.contextLabel === 'parent_notes' ? (
+                      <details className="max-w-[85%] rounded-lg rounded-br-sm border border-white/15 bg-white/5 text-white open:bg-white/[0.07]">
+                        <summary className="cursor-pointer list-none px-3 py-2 text-xs text-[#00c8ff]/90 font-medium [&::-webkit-details-marker]:hidden">
+                          Contexto desde Notas (toca para expandir)
+                        </summary>
+                        <p className="px-3 pb-3 pt-0 text-[13px] leading-relaxed whitespace-pre-wrap text-white/85 border-t border-white/10">
+                          {msg.contenido}
+                        </p>
+                      </details>
+                    ) : (
+                      <div
+                        className="max-w-[85%] px-3 py-2 rounded-lg rounded-br-sm text-sm text-white hover-glow"
+                        style={{
+                          background: `linear-gradient(to right, ${colorPrimario}, ${colorSecundario})`,
+                        }}
+                      >
+                        <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
+                      </div>
+                    )
+                  ) : msg.type === 'evo_doc' && msg.structuredData ? (
+                    <div className="w-full flex items-start gap-2">
+                      <img
+                        src={kiwiImg}
+                        alt="Kiwi"
+                        className="shrink-0"
+                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                        draggable={false}
+                      />
+                      <div className="min-w-0 max-w-[85%]">
+                        <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                        <EvoDocCard
+                          title={String(msg.structuredData.title ?? 'Documento')}
+                          description={String(msg.structuredData.description ?? '')}
+                          period={String(msg.structuredData.period ?? '')}
+                          docId={String(msg.structuredData.docId ?? '')}
+                          compact
+                        />
+                      </div>
+                    </div>
+                  ) : msg.type === 'kiwi_confirm' && msg.structuredData ? (
+                    <div className="w-full flex items-start gap-2">
+                      <img
+                        src={kiwiImg}
+                        alt="Kiwi"
+                        className="shrink-0"
+                        style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                        draggable={false}
+                      />
+                      <div className="min-w-0 max-w-[85%]">
+                        <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                        <div
+                          className="px-3 py-3 text-white/90 space-y-2"
+                          style={{
+                            background: 'rgba(37,99,235,0.10)',
+                            border: '1px solid rgba(37,99,235,0.18)',
+                            borderRadius: '16px 16px 16px 4px',
+                          }}
+                        >
+                          <div className="text-xs font-semibold text-white">Confirmación requerida</div>
+                          <div className="rounded-lg border border-white/10 bg-white/5 p-2 text-xs">
+                            <div className="text-white/60">Título</div>
+                            <div className="text-sm text-white">
+                              {String((msg.structuredData.params as { title?: string })?.title ?? '')}
+                            </div>
+                            <div className="text-white/60 mt-1">Entrega</div>
+                            <div className="text-sm text-white">
+                              {String((msg.structuredData.params as { dueDate?: string })?.dueDate ?? '')}
+                            </div>
+                          </div>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="border-white/20 text-white/80"
+                              onClick={() => {
+                                setInput(`KIWI_CONFIRM ${JSON.stringify(msg.structuredData ?? {})}`);
+                              }}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-gradient-to-r from-[#002366] to-[#1e3cff]"
+                              onClick={() => {
+                                void sendMessage(`KIWI_CONFIRM ${JSON.stringify(msg.structuredData ?? {})}`);
+                              }}
+                            >
+                              Confirmar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="w-full flex items-start gap-2">
@@ -359,7 +449,7 @@ function AIChatBox({ rol, footer }: AIChatBoxProps) {
                   )}
                 </div>
               ))}
-              {(loading || isStreaming) && (
+              {(loading || isStreaming || activeToolStep) && (
                 <div className="w-full flex items-start gap-2">
                   <img
                     src={kiwiImg}
@@ -379,9 +469,18 @@ function AIChatBox({ rol, footer }: AIChatBoxProps) {
                       }}
                       aria-label="Kiwi está pensando"
                     >
-                      <span className="kiwi-dot" />
-                      <span className="kiwi-dot" style={{ animationDelay: '0.12s', marginLeft: 6 }} />
-                      <span className="kiwi-dot" style={{ animationDelay: '0.24s', marginLeft: 6 }} />
+                      {activeToolStep ? (
+                        <span className="text-xs text-blue-400 flex items-center gap-1.5">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          {activeToolStep.replace(/_/g, ' ')}...
+                        </span>
+                      ) : (
+                        <>
+                          <span className="kiwi-dot" />
+                          <span className="kiwi-dot" style={{ animationDelay: '0.12s', marginLeft: 6 }} />
+                          <span className="kiwi-dot" style={{ animationDelay: '0.24s', marginLeft: 6 }} />
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -390,33 +489,33 @@ function AIChatBox({ rol, footer }: AIChatBoxProps) {
             </div>
           )}
         </div>
-        <div className="border-t border-white/10 pt-3 mt-3 flex-shrink-0">
-          <div className="relative flex items-end gap-2 bg-white/5 border border-white/10 rounded-[12px] px-3 py-2 backdrop-blur-sm hover:border-white/20 transition-colors">
+        <div className={`border-t border-white/10 flex-shrink-0 ${compactHero ? 'pt-2 mt-2' : compact ? 'pt-2 mt-2' : 'pt-3 mt-3'}`}>
+          <div className={`relative flex items-end gap-2 bg-white/5 border border-white/10 rounded-[12px] backdrop-blur-sm hover:border-white/20 transition-colors ${compactHero ? 'px-2 py-1' : compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSend();
+                  handleSendFromInput();
                 }
               }}
               placeholder="Escríbele a Kiwi..."
-              className="flex-1 border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm py-1"
+              className={`flex-1 border-0 bg-transparent text-white placeholder:text-white/40 focus-visible:ring-0 focus-visible:ring-offset-0 ${compactHero ? 'text-sm py-0.5 min-h-[36px]' : 'text-sm py-1'}`}
               disabled={loading || isStreaming}
               data-testid="input-dashboard-chat"
             />
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                handleSend();
+                handleSendFromInput();
               }}
               disabled={loading || isStreaming || !input.trim()}
               size="icon"
-              className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className={`rounded-lg bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${compactHero ? 'w-7 h-7' : 'w-8 h-8'}`}
               data-testid="button-dashboard-send"
             >
-              {(loading || isStreaming) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              {(loading || isStreaming) ? <Loader2 className={`${compactHero ? 'w-3 h-3' : 'w-3.5 h-3.5'} animate-spin`} /> : <Send className={compactHero ? 'w-3 h-3' : 'w-3.5 h-3.5'} />}
             </Button>
           </div>
         </div>
@@ -519,6 +618,14 @@ function EstudianteDashboard() {
     staleTime: 60 * 1000,
   });
 
+  const { data: estudianteNotifData } = useQuery({
+    queryKey: ['notifications-dashboard-estudiante', user?.id],
+    queryFn: () => apiRequest<{ list: DashboardNotifItem[]; unreadCount: number }>('GET', '/api/notifications?limit=3'),
+    enabled: !!user?.colegioId && user?.rol === 'estudiante',
+    staleTime: 30 * 1000,
+  });
+  const estudianteNotifications = estudianteNotifData?.list ?? [];
+
   const groupSubjectIds = useMemo(
     () => Array.from(new Set((notesData?.materias ?? []).map((m) => m.groupSubjectId).filter(Boolean))) as string[],
     [notesData?.materias]
@@ -599,7 +706,10 @@ function EstudianteDashboard() {
               {isLoadingCourses ? '—' : courses.length}
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
+              <Badge
+                variant="outline"
+                className="border-transparent bg-transparent shadow-none text-[#93C5FD] text-xs font-semibold px-0 py-0 hover:bg-transparent"
+              >
                 {courses.length} activas
               </Badge>
             </div>
@@ -624,9 +734,14 @@ function EstudianteDashboard() {
               {isLoadingAssignments ? '—' : tareasCompletadas.length + tareasPorEntregar.length}
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className={tareasPorEntregar.length === 0
-                ? 'bg-emerald-500/20 text-emerald-300 border-0 text-xs'
-                : 'bg-amber-500/20 text-amber-300 border-0 text-xs'}>
+              <Badge
+                variant="outline"
+                className={
+                  tareasPorEntregar.length === 0
+                    ? 'border-transparent bg-transparent shadow-none text-emerald-300 text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                    : 'border-transparent bg-transparent shadow-none text-amber-300 text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                }
+              >
                 {tareasPorEntregar.length === 0 ? 'Al día' : `${tareasPorEntregar.length} pendientes`}
               </Badge>
             </div>
@@ -661,9 +776,14 @@ function EstudianteDashboard() {
               {notesData === undefined ? '—' : materiasPerdidas}
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className={materiasPerdidas === 0 && notesData !== undefined
-                ? 'bg-emerald-500/20 text-emerald-300 border-0 text-xs'
-                : 'bg-red-500/20 text-red-300 border-0 text-xs'}>
+              <Badge
+                variant="outline"
+                className={
+                  materiasPerdidas === 0 && notesData !== undefined
+                    ? 'border-transparent bg-transparent shadow-none text-emerald-300 text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                    : 'border-transparent bg-transparent shadow-none text-red-300 text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                }
+              >
                 {materiasPerdidas === 0 && notesData !== undefined ? 'Al día' : 'Requiere atención'}
               </Badge>
             </div>
@@ -700,13 +820,16 @@ function EstudianteDashboard() {
               <>
                 <div className="text-3xl font-bold text-[#facc15] font-['Poppins']">#{rankingData.puesto}</div>
                 <div className="flex items-center gap-2 mt-2">
-                  <Badge className={
-                    rankingData.puesto === 1
-                      ? 'bg-[#facc15]/20 text-[#facc15] border-0 text-xs'
-                      : rankingData.puesto <= 3
-                        ? 'bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs'
-                        : 'bg-white/10 text-white/60 border-0 text-xs'
-                  }>
+                  <Badge
+                    variant="outline"
+                    className={
+                      rankingData.puesto === 1
+                        ? 'border-transparent bg-transparent shadow-none text-[#facc15] text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                        : rankingData.puesto <= 3
+                          ? 'border-transparent bg-transparent shadow-none text-[#93C5FD] text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                          : 'border-transparent bg-transparent shadow-none text-white/60 text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                    }
+                  >
                     {rankingData.puesto === 1 ? 'Primer puesto' : rankingData.puesto <= 3 ? 'Top 3' : `Top ${Math.round(rankingData.puesto / rankingData.total * 100)}%`}
                   </Badge>
                 </div>
@@ -717,84 +840,125 @@ function EstudianteDashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <Card
-          className={`${CARD_STYLE} lg:col-span-3 reveal-slide`}
-          style={{ animationDelay: '0.5s' }}
-        >
-          <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Calendario de Tareas</CardTitle>
-            <CardDescription className="text-white/50 text-sm">
-              {isLoadingAssignments
-                ? 'Cargando tareas...'
-                : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes`
-              }
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingAssignments ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-white/60">Cargando calendario...</p>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
+        <div className="lg:col-span-5 flex flex-col gap-4 order-2 lg:order-1">
+          <Card className={`${CARD_STYLE} rounded-2xl shrink-0 reveal-slide`} style={{ animationDelay: '0.5s' }}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-5 pt-5 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[rgba(139,92,246,0.12)]">
+                  <MessageSquare className="w-4 h-4 text-[var(--color-primario)]" />
+                </div>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm font-semibold text-white leading-tight">
+                    Actividad reciente: EvoSend
+                  </CardTitle>
+                  <CardDescription className="text-[11px] text-white/45 mt-0.5">
+                    Últimas 3 notificaciones del colegio
+                  </CardDescription>
+                </div>
               </div>
-            ) : (
-              <div className="pulse-blue">
-                <Calendar
-                  assignments={assignments}
-                  viewingStudentId={user?.id}
-                  onDayClick={handleDayClick}
-                  variant="student"
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="lg:col-span-2 flex flex-col gap-4" style={{ minHeight: '560px' }}>
-          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.6s' }}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-white text-sm">Acceso rápido</CardTitle>
+              <button
+                type="button"
+                onClick={() => setLocation('/notificaciones')}
+                className="text-xs font-medium text-[var(--color-primario)] hover:text-white/90 whitespace-nowrap shrink-0 flex items-center gap-0.5 transition-colors"
+              >
+                Ver todos
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setLocation('/evo-send')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-                >
-                  <Mail className="w-6 h-6 text-[#3B82F6] mb-2" />
-                  <span className="text-xs text-white">Evo Send</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLocation('/evo-drive')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-                >
-                  <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" />
-                  <span className="text-xs text-white">Evo Drive</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLocation('/mi-aprendizaje/tareas')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-                >
-                  <ClipboardList className="w-6 h-6 text-[#3B82F6] mb-2" />
-                  <span className="text-xs text-white">Tareas</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLocation('/mi-aprendizaje/notas')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-                >
-                  <GraduationCap className="w-6 h-6 text-[#3B82F6] mb-2" />
-                  <span className="text-xs text-white">Notas</span>
-                </button>
-              </div>
+            <CardContent className="px-5 pb-5 pt-0 space-y-2">
+              {estudianteNotifications.length === 0 ? (
+                <p className="text-xs text-white/50 py-3 text-center leading-relaxed">
+                  No hay notificaciones recientes.
+                </p>
+              ) : (
+                estudianteNotifications.map((n) => {
+                  const bodyText = n.cuerpo ?? n.body ?? '';
+                  const plain = bodyText ? stripHtmlLite(bodyText) : '';
+                  const snippet = plain.slice(0, 72);
+                  const when = formatRelativeTimeEs(n.fecha);
+                  return (
+                    <button
+                      key={n._id}
+                      type="button"
+                      onClick={() => n.actionUrl ? setLocation(n.actionUrl) : setLocation('/notificaciones')}
+                      className={[
+                        'w-full text-left rounded-xl border p-3 transition-colors',
+                        n.leido
+                          ? 'border-white/10 bg-white/[0.04] hover:bg-white/[0.07]'
+                          : 'border-white/10 border-l-2 border-l-[#3b82f6] bg-[#2563eb]/[0.04] hover:bg-[#2563eb]/[0.07]',
+                      ].join(' ')}
+                    >
+                      <div className="flex gap-2.5">
+                        <div
+                          className="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center border-0 bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30"
+                          aria-hidden
+                        >
+                          <Send className="w-4 h-4 text-white" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-sm font-semibold leading-snug line-clamp-2 ${n.leido ? 'text-white/60' : 'text-white'}`}>
+                              {n.titulo}
+                            </span>
+                            <span className="text-[10px] text-white/40 shrink-0 tabular-nums">{when}</span>
+                          </div>
+                          {snippet ? (
+                            <p className="text-[11px] text-white/45 mt-1 line-clamp-1">
+                              {plain.length > 72 ? `${snippet}…` : snippet}
+                            </p>
+                          ) : null}
+                          <div className="flex items-center gap-3 mt-2 pt-2 border-t border-white/[0.06]">
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-medium"
+                              style={{ color: notifTypeColor(n.type) }}
+                            >
+                              <Send className="w-2.5 h-2.5" aria-hidden />
+                              {notifTypeLabel(n.type)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </CardContent>
           </Card>
 
-          <div className="flex-1 flex flex-col min-h-[320px] reveal-slide" style={{ animationDelay: '0.7s' }}>
-            <AIChatBox rol="estudiante" />
+          <div className="shrink-0 reveal-slide mb-1 sm:mb-2" style={{ animationDelay: '0.6s' }}>
+            <AIChatBox rol="estudiante" compact />
           </div>
+        </div>
+
+        <div className="lg:col-span-7 order-1 lg:order-2">
+          <Card className={`${CARD_STYLE} reveal-slide rounded-2xl`} style={{ animationDelay: '0.5s' }}>
+            <CardHeader className="pb-2 px-5 pt-5">
+              <CardTitle className="text-white text-base font-semibold">Calendario de Tareas</CardTitle>
+              <CardDescription className="text-white/50 text-sm mt-1">
+                {isLoadingAssignments
+                  ? 'Cargando tareas...'
+                  : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes. Toca un día para ver la asignación.`
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-5 pt-0">
+              {isLoadingAssignments ? (
+                <div className="h-48 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-white/50" />
+                </div>
+              ) : (
+                <div className="overflow-auto rounded-xl pulse-blue">
+                  <Calendar
+                    assignments={assignments}
+                    viewingStudentId={user?.id}
+                    onDayClick={handleDayClick}
+                    variant="student"
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
@@ -841,19 +1005,28 @@ function ProfesorDashboard() {
     staleTime: 0,
   });
 
-  const { data: misAsignaciones = [] } = useQuery<{
-    _id: string;
-    titulo: string;
-    fechaEntrega: string;
-    curso: string;
-    courseId: string;
-    pendientesCalificar?: number;
-  }[]>({
-    queryKey: ['teacherMisAsignaciones', user?.id],
-    queryFn: () => apiRequest('GET', `/api/assignments/profesor/${user?.id}/mis-asignaciones`),
-    enabled: !!user?.id && user?.rol === 'profesor',
-    staleTime: 60 * 1000,
+  const { data: profesorNotifData } = useQuery({
+    queryKey: ['notifications-dashboard-profesor', user?.id],
+    queryFn: () => apiRequest<{ list: DashboardNotifItem[]; unreadCount: number }>('GET', '/api/notifications?limit=3'),
+    enabled: !!user?.colegioId && user?.rol === 'profesor',
+    staleTime: 30 * 1000,
   });
+  const profesorNotifications = profesorNotifData?.list ?? [];
+
+  type EvoDriveRecienteItem = {
+    id: string;
+    nombre: string;
+    cursoNombre?: string | null;
+  };
+
+  const { data: evoDriveRecientes = [], isLoading: evoRecientesLoading } = useQuery<EvoDriveRecienteItem[]>({
+    queryKey: ['evo-drive', 'recientes', user?.id],
+    queryFn: () => apiRequest<EvoDriveRecienteItem[]>('GET', '/api/evo-drive/recientes'),
+    enabled: !!user?.id && user?.rol === 'profesor',
+    staleTime: 25_000,
+    refetchOnWindowFocus: true,
+  });
+  const ultimoArchivoEvoDrive = evoDriveRecientes[0];
 
   const { data: scheduleData } = useQuery<{ slots: Record<string, string> }>({
     queryKey: ['/api/schedule/my-professor', user?.id],
@@ -861,20 +1034,6 @@ function ProfesorDashboard() {
     enabled: !!user?.id && user?.rol === 'profesor',
     staleTime: 5 * 60 * 1000,
   });
-
-  const siguientesPorGrupo = useMemo(() => {
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
-    const futuras = misAsignaciones.filter(a => new Date(a.fechaEntrega) >= hoy);
-    const porGrupo = new Map<string, typeof futuras[0]>();
-    futuras
-      .sort((a, b) => new Date(a.fechaEntrega).getTime() - new Date(b.fechaEntrega).getTime())
-      .forEach(a => {
-        const grupo = (a.curso ?? '').trim();
-        if (grupo && !porGrupo.has(grupo)) porGrupo.set(grupo, a);
-      });
-    return Array.from(porGrupo.entries()).map(([grupo, asignacion]) => ({ grupo, asignacion }));
-  }, [misAsignaciones]);
 
   const PERIODOS_HORARIO: Record<number, { inicio: string; fin: string }> = {
     1: { inicio: '7:30', fin: '8:25' },
@@ -958,84 +1117,134 @@ function ProfesorDashboard() {
   return (
     <div className="space-y-6">
 
-      {/* SECCIÓN 1 — 4 KPIs uniformes */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* SECCIÓN 1 — 4 KPIs misma altura (como otros roles) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:items-stretch">
 
         {/* KPI 1 — Mis Cursos */}
-        <Card className={`${CARD_STYLE} cursor-pointer reveal-scale`} style={{ animationDelay: '0.1s' }} onClick={() => setLocation('/courses')}>
-          <CardHeader className="pb-2">
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale h-full flex flex-col`}
+          style={{ animationDelay: '0.1s' }}
+          onClick={() => setLocation('/courses')}
+        >
+          <CardHeader className="pb-2 shrink-0">
             <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
               <BookOpen className="w-4 h-4 text-[#3B82F6]" />
               Mis Cursos
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 flex flex-col pt-0">
             <div className="text-3xl font-bold text-white font-['Poppins']">
               {isLoadingCourses ? '—' : professorGroups.length}
             </div>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">
+              <Badge
+                variant="outline"
+                className="border-transparent bg-transparent shadow-none text-[#93C5FD] text-xs font-semibold px-0 py-0 hover:bg-transparent"
+              >
                 {professorGroups.reduce((s, g) => s + (g.totalStudents ?? 0), 0)} estudiantes
               </Badge>
             </div>
-            <p className="text-xs text-white/50 mt-1">Cursos a cargo</p>
+            <p className="text-xs text-white/50 mt-auto pt-3">Cursos a cargo</p>
           </CardContent>
         </Card>
 
-        {/* KPI 2 — Tareas este mes */}
-        <Card className={`${CARD_STYLE} cursor-pointer reveal-scale`} style={{ animationDelay: '0.15s' }} onClick={() => setLocation('/profesor/academia/tareas')}>
-          <CardHeader className="pb-2">
+        {/* KPI 2 — Evo Drive (último archivo + mismo icono que AI Dock) */}
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale h-full flex flex-col`}
+          style={{ animationDelay: '0.15s' }}
+          onClick={() => setLocation('/evo-drive')}
+          role="link"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setLocation('/evo-drive');
+            }
+          }}
+        >
+          <CardHeader className="pb-2 shrink-0">
             <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
-              <ClipboardList className="w-4 h-4 text-[#3B82F6]" />
-              Tareas este mes
+              <div
+                className="rounded-lg flex h-9 w-9 shrink-0 items-center justify-center shadow-inner border border-white/10"
+                style={{ background: 'rgba(0, 200, 255, 0.22)' }}
+                aria-hidden
+              >
+                <Cloud className="w-[18px] h-[18px] text-white/95" strokeWidth={1.75} />
+              </div>
+              Evo Drive
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white font-['Poppins']">
-              {isLoadingAssignments ? '—' : assignmentsThisMonth.length}
-            </div>
-            <div className="flex items-center gap-2 mt-2">
-              <Badge className="bg-white/10 text-white/60 border-0 text-xs">
-                {assignments.length} total
-              </Badge>
-            </div>
-            <p className="text-xs text-white/50 mt-1">Tareas asignadas</p>
+          <CardContent className="flex-1 flex flex-col pt-0 min-h-0">
+            {evoRecientesLoading ? (
+              <p className="text-xs text-white/40 mt-auto">Cargando…</p>
+            ) : !ultimoArchivoEvoDrive ? (
+              <p className="text-xs text-white/45 leading-snug mt-auto">
+                Sin archivos recientes en tus cursos ni en Mi carpeta.
+              </p>
+            ) : (
+              <div className="mt-auto flex flex-col gap-1.5 pt-2">
+                {ultimoArchivoEvoDrive.cursoNombre ? (
+                  <p
+                    className="text-[11px] text-white/50 font-medium leading-snug truncate"
+                    title={ultimoArchivoEvoDrive.cursoNombre ?? undefined}
+                  >
+                    {ultimoArchivoEvoDrive.cursoNombre}
+                  </p>
+                ) : null}
+                <p
+                  className="text-sm font-semibold text-white leading-snug line-clamp-2"
+                  title={ultimoArchivoEvoDrive.nombre}
+                >
+                  {ultimoArchivoEvoDrive.nombre}
+                </p>
+                <p className="text-[10px] text-white/35 uppercase tracking-wide">Último agregado</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* KPI 3 — Por revisar */}
-        <Card className={`${CARD_STYLE} cursor-pointer reveal-scale`} style={{ animationDelay: '0.2s' }} onClick={() => setLocation('/profesor/academia/tareas/revision')}>
-          <CardHeader className="pb-2">
+        <Card
+          className={`${CARD_STYLE} cursor-pointer reveal-scale h-full flex flex-col`}
+          style={{ animationDelay: '0.2s' }}
+          onClick={() => setLocation('/profesor/academia/tareas/revision')}
+        >
+          <CardHeader className="pb-2 shrink-0">
             <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
               <FileCheck className="w-4 h-4 text-[#3B82F6]" />
               Por revisar
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex-1 flex flex-col pt-0">
             <div className="text-3xl font-bold text-white font-['Poppins']">
               {isLoadingPending ? '—' : pendingReview.length}
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <Badge className={pendingReview.length > 0
-                ? 'bg-amber-500/20 text-amber-300 border-0 text-xs'
-                : 'bg-emerald-500/20 text-emerald-300 border-0 text-xs'}>
+              <Badge
+                variant="outline"
+                className={
+                  pendingReview.length > 0
+                    ? 'border-transparent bg-transparent shadow-none text-amber-300 text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                    : 'border-transparent bg-transparent shadow-none text-emerald-300 text-xs font-semibold px-0 py-0 hover:bg-transparent'
+                }
+              >
                 {pendingReview.length > 0 ? 'Requiere atención' : 'Al día'}
               </Badge>
             </div>
-            <p className="text-xs text-white/50 mt-1">Entregas pendientes</p>
+            <p className="text-xs text-white/50 mt-auto pt-3">Entregas pendientes</p>
           </CardContent>
         </Card>
 
         {/* KPI 4 — Hoy */}
-        <Card className={`${CARD_STYLE} reveal-scale`} style={{ animationDelay: '0.25s' }}>
-          <CardHeader className="pb-2">
+        <Card className={`${CARD_STYLE} reveal-scale h-full flex flex-col`} style={{ animationDelay: '0.25s' }}>
+          <CardHeader className="pb-2 shrink-0">
             <CardTitle className="flex items-center gap-2 text-white/70 text-xs font-medium uppercase tracking-wider">
               <Users className="w-4 h-4 text-[#3B82F6]" />
               Hoy
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-1.5">
+          <CardContent className="flex-1 flex flex-col pt-0 min-h-0">
+            <div className="space-y-1.5 flex-1 max-h-[5.75rem] overflow-y-auto pr-0.5">
               {now.getDay() === 0 ? (
                 <p className="text-xs text-white/40">No hay clases hoy</p>
               ) : clasesHoy.length === 0 ? (
@@ -1047,130 +1256,142 @@ function ProfesorDashboard() {
                   onClick={() => setLocation(`/course-detail/${clase.groupId}`)}
                   className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
                 >
-                  <span className="text-xs text-white/80 font-medium">{clase.groupName}</span>
-                  <Badge className={
-                    clase.enCurso
-                      ? 'bg-emerald-500/20 text-emerald-300 border-0 text-[10px]'
-                      : clase.destacar
-                        ? 'bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-[10px]'
-                        : 'bg-white/5 text-white/50 border-0 text-[10px]'
-                  }>
+                  <span className="text-xs text-white/80 font-medium truncate pr-2">{clase.groupName}</span>
+                  <Badge
+                    variant="outline"
+                    className={
+                      clase.enCurso
+                        ? 'border-transparent bg-transparent shadow-none text-emerald-300 text-[10px] font-semibold px-0 py-0 shrink-0 hover:bg-transparent'
+                        : clase.destacar
+                          ? 'border-transparent bg-transparent shadow-none text-[#93C5FD] text-[10px] font-semibold px-0 py-0 shrink-0 hover:bg-transparent'
+                          : 'border-transparent bg-transparent shadow-none text-white/50 text-[10px] font-semibold px-0 py-0 shrink-0 hover:bg-transparent'
+                    }
+                  >
                     {clase.enCurso ? 'En curso' : clase.destacar ? 'Siguiente' : `${clase.inicio}–${clase.fin}`}
                   </Badge>
                 </button>
               ))}
             </div>
+            <p className="text-xs text-white/50 mt-auto pt-3">Horario del día</p>
           </CardContent>
         </Card>
 
       </div>
 
-      {/* SECCIÓN 2 — Grid principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-
-        {/* Columna izquierda — Calendario */}
-        <Card className={`${CARD_STYLE} lg:col-span-3 reveal-slide`} style={{ animationDelay: '0.3s' }}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Calendario de Tareas</CardTitle>
-            <CardDescription className="text-white/50 text-sm">
-              {isLoadingAssignments
-                ? 'Cargando tareas...'
-                : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes (${assignments.length} en total)`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingAssignments ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-white/60">Cargando calendario...</p>
-              </div>
-            ) : (
-              <div onClick={(e) => e.stopPropagation()} className="pulse-blue">
-                <Calendar assignments={assignments} onDayClick={handleDayClick} variant="teacher" />
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Columna derecha — Stack de cards */}
-        <div className="lg:col-span-2 flex flex-col gap-4 min-h-0">
-
-          {/* Card — Siguiente asignación por curso */}
-          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.35s' }}>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-white text-sm">
-                <GraduationCap className="w-4 h-4 text-[#ffd700]" />
-                Asignaciones por curso
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {siguientesPorGrupo.length === 0 ? (
-                <p className="text-xs text-white/40 py-2">Sin asignaciones futuras</p>
-              ) : (
-                <div className="space-y-3">
-                  {siguientesPorGrupo.map(({ grupo, asignacion }) => {
-                    const pendientes = asignacion.pendientesCalificar ?? 0;
-                    const totalEstudiantes = professorGroups.find(g => (g.groupName ?? '') === grupo)?.totalStudents ?? 0;
-                    const entregadasCount = Math.max(0, totalEstudiantes - pendientes);
-                    return (
-                      <button
-                        key={asignacion._id}
-                        type="button"
-                        onClick={() => setLocation(`/assignment/${asignacion._id}`)}
-                        className="w-full text-left"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-semibold text-white/80">{grupo}</span>
-                          <Badge className="bg-white/5 text-white/50 border-0 text-[10px]">
-                            {new Date(asignacion.fechaEntrega).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
-                          </Badge>
-                        </div>
-                        <p className="text-[11px] text-white/60 truncate mb-1">{asignacion.titulo}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-emerald-400">{entregadasCount}/{totalEstudiantes}</span>
-                          <span className="text-[10px] text-white/30">entregas</span>
-                          {pendientes > 0 && (
-                            <Badge className="bg-amber-500/20 text-amber-300 border-0 text-[10px] ml-auto">
-                              {pendientes} por calificar
-                            </Badge>
-                          )}
-                        </div>
-                        <Separator className="mt-2 bg-white/5" />
-                      </button>
-                    );
-                  })}
+      {/* SECCIÓN 2 — Mismo patrón que estudiante: notificaciones + Kiwi | calendario */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 lg:items-start">
+        <div className="lg:col-span-5 flex flex-col gap-3 order-2 lg:order-1">
+          <Card className={`${CARD_STYLE} rounded-2xl shrink-0 reveal-slide`} style={{ animationDelay: '0.3s' }}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 sm:px-5 pt-4 sm:pt-5 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[rgba(139,92,246,0.12)]">
+                  <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[var(--color-primario)]" />
                 </div>
+                <div className="min-w-0">
+                  <CardTitle className="text-[13px] sm:text-sm font-semibold text-white leading-tight">
+                    Actividad reciente: EvoSend
+                  </CardTitle>
+                  <CardDescription className="text-[10px] sm:text-[11px] text-white/45 mt-0.5">
+                    Últimas 3 notificaciones del colegio
+                  </CardDescription>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocation('/notificaciones')}
+                className="text-[11px] sm:text-xs font-medium text-[var(--color-primario)] hover:text-white/90 whitespace-nowrap shrink-0 flex items-center gap-0.5 transition-colors"
+              >
+                Ver todos
+                <ChevronRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              </button>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 pt-0 space-y-2">
+              {profesorNotifications.length === 0 ? (
+                <p className="text-[11px] text-white/50 py-2.5 text-center leading-relaxed">
+                  No hay notificaciones recientes.
+                </p>
+              ) : (
+                profesorNotifications.map((n) => {
+                  const bodyText = n.cuerpo ?? n.body ?? '';
+                  const plain = bodyText ? stripHtmlLite(bodyText) : '';
+                  const snippet = plain.slice(0, 64);
+                  const when = formatRelativeTimeEs(n.fecha);
+                  return (
+                    <button
+                      key={n._id}
+                      type="button"
+                      onClick={() => n.actionUrl ? setLocation(n.actionUrl) : setLocation('/notificaciones')}
+                      className={[
+                        'w-full text-left rounded-xl border p-2.5 sm:p-3 transition-colors',
+                        n.leido
+                          ? 'border-white/10 bg-white/[0.04] hover:bg-white/[0.07]'
+                          : 'border-white/10 border-l-2 border-l-[#3b82f6] bg-[#2563eb]/[0.04] hover:bg-[#2563eb]/[0.07]',
+                      ].join(' ')}
+                    >
+                      <div className="flex gap-2">
+                        <div
+                          className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-lg flex items-center justify-center border-0 bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/25"
+                          aria-hidden
+                        >
+                          <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-xs sm:text-sm font-semibold leading-snug line-clamp-2 ${n.leido ? 'text-white/60' : 'text-white'}`}>
+                              {n.titulo}
+                            </span>
+                            <span className="text-[9px] sm:text-[10px] text-white/40 shrink-0 tabular-nums">{when}</span>
+                          </div>
+                          {snippet ? (
+                            <p className="text-[10px] sm:text-[11px] text-white/45 mt-0.5 line-clamp-1">
+                              {plain.length > 64 ? `${snippet}…` : snippet}
+                            </p>
+                          ) : null}
+                          <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-white/[0.06]">
+                            <span
+                              className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-medium"
+                              style={{ color: notifTypeColor(n.type) }}
+                            >
+                              <Send className="w-2.5 h-2.5" aria-hidden />
+                              {notifTypeLabel(n.type)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </CardContent>
           </Card>
 
-          {/* Card — Acceso rápido */}
-          <Card className={`${CARD_STYLE} reveal-slide`} style={{ animationDelay: '0.4s' }}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-white text-sm">Acceso rápido</CardTitle>
+          <div className="shrink-0 reveal-slide mb-0.5 sm:mb-1" style={{ animationDelay: '0.35s' }}>
+            <AIChatBox rol="profesor" compact />
+          </div>
+        </div>
+
+        <div className="lg:col-span-7 order-1 lg:order-2">
+          <Card className={`${CARD_STYLE} reveal-slide rounded-2xl`} style={{ animationDelay: '0.3s' }}>
+            <CardHeader className="pb-2 px-4 sm:px-5 pt-4 sm:pt-5">
+              <CardTitle className="text-white text-sm sm:text-base font-semibold">Calendario de Tareas</CardTitle>
+              <CardDescription className="text-white/50 text-xs sm:text-sm mt-1">
+                {isLoadingAssignments
+                  ? 'Cargando tareas...'
+                  : `${assignmentsThisMonth.length} ${assignmentsThisMonth.length === 1 ? 'tarea asignada' : 'tareas asignadas'} este mes. Toca un día para ver la asignación.`}
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setLocation('/evo-send')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                  <Mail className="w-6 h-6 text-[#3B82F6] mb-2" />
-                  <span className="text-xs text-white">Evo Send</span>
-                </button>
-                <button type="button" onClick={() => setLocation('/evo-drive')}
-                  className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                  <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" />
-                  <span className="text-xs text-white">Evo Drive</span>
-                </button>
-              </div>
+            <CardContent className="px-3 sm:px-4 pb-4 sm:pb-5 pt-0">
+              {isLoadingAssignments ? (
+                <div className="h-40 sm:h-48 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-white/50" />
+                </div>
+              ) : (
+                <div className="overflow-auto rounded-xl pulse-blue" onClick={(e) => e.stopPropagation()}>
+                  <Calendar assignments={assignments} onDayClick={handleDayClick} variant="teacher" />
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          {/* Card — Kiwi Assist como flex-1 para absorber espacio restante */}
-          <Card className={`${CARD_STYLE} reveal-slide flex-1 min-h-[300px]`} style={{ animationDelay: '0.45s' }}>
-            <CardContent className="p-0 h-full">
-              <AIChatBox rol="profesor" />
-            </CardContent>
-          </Card>
-
         </div>
       </div>
 
@@ -1252,6 +1473,14 @@ function DirectivoDashboard() {
     [calendarEvents]
   );
 
+  const { data: notificationsData } = useQuery({
+    queryKey: ['notifications-dashboard-directivo', user?.id],
+    queryFn: () => apiRequest<{ list: DashboardNotifItem[]; unreadCount: number }>('GET', '/api/notifications?limit=3'),
+    enabled: !!user?.colegioId && user?.rol === 'directivo',
+    staleTime: 30 * 1000,
+  });
+  const latestNotifications = notificationsData?.list ?? [];
+
   const eventsThisMonth = useMemo(() => {
     const y = calendarViewDate.getFullYear();
     const m = calendarViewDate.getMonth();
@@ -1278,12 +1507,9 @@ function DirectivoDashboard() {
   return (
     <div className="space-y-6">
       {mySection && (
-        <div className="flex items-center gap-3">
-          <Badge className="bg-[var(--section-primary,#2563eb)]/20 text-[var(--section-accent,#00C8FF)] border border-[var(--section-primary,#2563eb)]/30 text-sm px-3 py-1">
-            Director de {mySection.nombre}
-          </Badge>
-          <span className="text-white/40 text-sm">{mySection.totalGrupos} grupos &middot; {mySection.totalEstudiantes} estudiantes</span>
-        </div>
+        <Badge className="bg-[var(--section-primary,#2563eb)]/20 text-[var(--section-accent,#00C8FF)] border border-[var(--section-primary,#2563eb)]/30 text-sm px-3 py-1">
+          Director de {mySection.nombre}
+        </Badge>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1293,8 +1519,8 @@ function DirectivoDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingMySection ? '—' : (mySection?.totalGrupos ?? 0)}</div>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge className="bg-[#3B82F6]/20 text-[#93C5FD] border-0 text-xs">Grupos</Badge>
+            <div className="flex flex-col gap-0.5 mt-1">
+              <span className="text-[#93C5FD] text-sm font-medium">Grupos</span>
               <span className="text-white/50 text-sm">{mySection?.totalEstudiantes ?? 0} estudiantes</span>
             </div>
           </CardContent>
@@ -1335,73 +1561,135 @@ function DirectivoDashboard() {
             <CardTitle className="text-white/80 text-xs font-medium uppercase tracking-wider">Amonestaciones</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
-              <span className="text-3xl font-bold text-white font-['Poppins']">{isLoadingMySection ? '—' : (mySection?.totalAmonestaciones ?? 0)}</span>
-              <Button size="sm" className="bg-red-500/80 hover:bg-red-500 text-white text-xs rounded-full" onClick={(e) => { e.stopPropagation(); setLocation('/directivo/estudiantes'); }}>Revisar</Button>
-            </div>
-            <p className="text-white/50 text-sm mt-1">Ver en perfiles de estudiantes</p>
+            <div className="text-3xl font-bold text-white font-['Poppins']">{isLoadingMySection ? '—' : (mySection?.totalAmonestaciones ?? 0)}</div>
+            <p className="text-red-400 text-sm mt-1">Revisar</p>
+            <p className="text-white/40 text-xs mt-2">Ver en perfiles de estudiantes</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Fila: Chat IA | Calendario */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className={`${CARD_STYLE} reveal-slide flex-1 min-h-[300px]`}>
-          <CardContent className="p-0 h-full">
-            <AIChatBox
-              rol="directivo"
-              footer={(
-                <div>
-                  <p className="text-white text-sm font-medium mb-3">Acceso rápido</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button type="button" onClick={() => setLocation('/evo-drive')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                      <FolderOpen className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Drive</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
+        <div className="lg:col-span-5 flex flex-col gap-4 order-2 lg:order-1">
+          <Card className={`${CARD_STYLE} rounded-2xl shrink-0 reveal-slide`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-5 pt-5 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[rgba(139,92,246,0.12)]">
+                  <MessageSquare className="w-4 h-4 text-[var(--color-primario)]" />
+                </div>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm font-semibold text-white leading-tight">
+                    Actividad reciente: EvoSend
+                  </CardTitle>
+                  <CardDescription className="text-[11px] text-white/45 mt-0.5">
+                    Últimas 3 notificaciones del colegio
+                  </CardDescription>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocation('/notificaciones')}
+                className="text-xs font-medium text-[var(--color-primario)] hover:text-white/90 whitespace-nowrap shrink-0 flex items-center gap-0.5 transition-colors"
+              >
+                Ver todos
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-0 space-y-2">
+              {latestNotifications.length === 0 ? (
+                <p className="text-xs text-white/50 py-3 text-center leading-relaxed">
+                  No hay notificaciones recientes.
+                </p>
+              ) : (
+                latestNotifications.map((n) => {
+                  const bodyText = n.cuerpo ?? n.body ?? '';
+                  const plain = bodyText ? stripHtmlLite(bodyText) : '';
+                  const snippet = plain.slice(0, 72);
+                  const when = formatRelativeTimeEs(n.fecha);
+                  return (
+                    <button
+                      key={n._id}
+                      type="button"
+                      onClick={() => n.actionUrl ? setLocation(n.actionUrl) : setLocation('/notificaciones')}
+                      className={[
+                        'w-full text-left rounded-xl border p-3 transition-colors',
+                        n.leido
+                          ? 'border-white/10 bg-white/[0.04] hover:bg-white/[0.07]'
+                          : 'border-white/10 border-l-2 border-l-[#3b82f6] bg-[#2563eb]/[0.04] hover:bg-[#2563eb]/[0.07]',
+                      ].join(' ')}
+                    >
+                      <div className="flex gap-2.5">
+                        <div
+                          className="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center border-0 bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30"
+                          aria-hidden
+                        >
+                          <Send className="w-4 h-4 text-white" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-sm font-semibold leading-snug line-clamp-2 ${n.leido ? 'text-white/60' : 'text-white'}`}>
+                              {n.titulo}
+                            </span>
+                            <span className="text-[10px] text-white/40 shrink-0 tabular-nums">{when}</span>
+                          </div>
+                          {snippet ? (
+                            <p className="text-[11px] text-white/45 mt-1 line-clamp-1">
+                              {plain.length > 72 ? `${snippet}…` : snippet}
+                            </p>
+                          ) : null}
+                          <div className="flex items-center gap-3 mt-2 pt-2 border-t border-white/[0.06]">
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-medium"
+                              style={{ color: notifTypeColor(n.type) }}
+                            >
+                              <Send className="w-2.5 h-2.5" aria-hidden />
+                              {notifTypeLabel(n.type)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </button>
-                    <button type="button" onClick={() => setLocation('/evo-send')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                      <Mail className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Evo Send</span>
-                    </button>
-                    <button type="button" onClick={() => setLocation('/directivo/cursos')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                      <FileText className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Calificaciones</span>
-                    </button>
-                    <button type="button" onClick={() => setLocation('/directivo/estudiantes')} className="flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors">
-                      <Users className="w-6 h-6 text-[#3B82F6] mb-2" /><span className="text-xs text-white">Estudiantes</span>
-                    </button>
-                  </div>
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="shrink-0 reveal-slide mb-1 sm:mb-2">
+            <AIChatBox rol="directivo" compact />
+          </div>
+        </div>
+
+        <div className="lg:col-span-7 order-1 lg:order-2">
+          <Card className={`${CARD_STYLE} reveal-slide rounded-2xl`}>
+            <CardHeader className="pb-2 px-5 pt-5">
+              <CardTitle className="text-white text-base font-semibold">Calendario del colegio</CardTitle>
+              <CardDescription className="text-white/50 text-sm mt-1">
+                {isLoadingEvents
+                  ? 'Cargando eventos...'
+                  : `Eventos institucionales y fechas clave. ${eventsThisMonth} ${eventsThisMonth === 1 ? 'evento este mes' : 'eventos este mes'}. Toca un día para ver el calendario completo.`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-5 pt-0">
+              {isLoadingEvents ? (
+                <div className="h-48 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-white/50" /></div>
+              ) : (
+                <div className="overflow-auto rounded-xl pulse-blue">
+                  <Calendar
+                    assignments={calendarAssignments}
+                    variant="teacher"
+                    currentDate={calendarViewDate}
+                    onCurrentDateChange={setCalendarViewDate}
+                    onDayClick={() => handleEventClick()}
+                    summaryLabels={CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS}
+                    monthLegendOverride={
+                      `${eventsThisMonth} ${eventsThisMonth === 1 ? 'evento' : 'eventos'} programados este mes`
+                    }
+                  />
                 </div>
               )}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className={`${CARD_STYLE} reveal-slide`}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Calendario del mes</CardTitle>
-            <CardDescription className="text-white/50 text-sm">
-              {isLoadingEvents
-                ? 'Cargando eventos...'
-                : `${eventsThisMonth} ${eventsThisMonth === 1 ? 'evento este mes' : 'eventos este mes'} (${calendarAssignments.length} ${calendarAssignments.length === 1 ? 'evento' : 'eventos'} en ${calendarFetchYear})`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoadingEvents ? (
-              <div className="h-48 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-white/50" /></div>
-            ) : (
-              <div className="pulse-blue">
-                <Calendar
-                  assignments={calendarAssignments}
-                  variant="teacher"
-                  currentDate={calendarViewDate}
-                  onCurrentDateChange={setCalendarViewDate}
-                  onDayClick={() => handleEventClick()}
-                  summaryLabels={CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS}
-                  monthLegendOverride={
-                    `${eventsThisMonth} ${eventsThisMonth === 1 ? 'evento' : 'eventos'} programados este mes`
-                  }
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -1936,6 +2224,117 @@ function SuperAdminDashboard() {
   );
 }
 
+interface ComunicadoPadresResumenItem {
+  id: string;
+  title: string;
+  body: string | null;
+  author_name: string | null;
+  author_role: string | null;
+  created_at: string;
+  reads_count?: number;
+  total_recipients?: number;
+}
+
+function stripHtmlLite(raw: string): string {
+  return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function formatRelativeTimeEs(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return 'hace un momento';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `hace ${d} d`;
+  return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+}
+
+function authorRoleLabelEs(role: string | null | undefined): string {
+  if (!role) return 'Colegio';
+  const r = role.toLowerCase();
+  if (r === 'directivo') return 'Directivo';
+  if (r === 'profesor') return 'Docente';
+  if (r === 'admin-general-colegio' || r === 'school_admin') return 'Administración';
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function initialsFromFullName(name: string | null | undefined): string {
+  if (!name?.trim()) return '?';
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0].slice(0, 2).toUpperCase();
+}
+
+interface DirectivoInstitucionalDashItem {
+  id: string;
+  title: string;
+  body: string | null;
+  audience: string | null;
+  created_at: string;
+  created_by_id: string;
+  reads_count: number;
+  total_recipients: number;
+  author_name: string | null;
+  author_role: string | null;
+}
+
+interface DashboardNotifItem {
+  _id: string;
+  titulo: string;
+  cuerpo?: string;
+  body?: string;
+  type?: string;
+  entityType?: string | null;
+  actionUrl?: string | null;
+  leido: boolean;
+  fecha: string;
+}
+
+function institutionalAudienceLabelEs(audience: string | null | undefined): string {
+  const a = (audience ?? 'all').toLowerCase();
+  if (a === 'all') return 'toda la comunidad';
+  if (a === 'parents') return 'padres';
+  if (a === 'teachers') return 'docentes';
+  if (a === 'staff') return 'personal';
+  return 'destinatarios';
+}
+
+function notifTypeLabel(type: string | undefined): string {
+  switch (type) {
+    case 'comunicado_institucional': return 'Institucional';
+    case 'comunicado_padres': return 'Comunicado';
+    case 'mensaje': return 'EvoSend';
+    case 'nueva_tarea':
+    case 'nueva_asignacion': return 'Tarea';
+    case 'tarea_calificada': return 'Calificación';
+    case 'entrega_recibida': return 'Entrega';
+    case 'tarea_vence': return 'Vencimiento';
+    case 'ausencia': return 'Asistencia';
+    case 'amonestacion': return 'Amonestación';
+    default: return 'Notificación';
+  }
+}
+
+function notifTypeColor(type: string | undefined): string {
+  switch (type) {
+    case 'comunicado_institucional': return 'rgba(255,215,0,0.8)';
+    case 'comunicado_padres': return 'rgba(147,197,253,0.8)';
+    case 'mensaje': return 'rgba(103,232,249,0.8)';
+    case 'nueva_tarea':
+    case 'nueva_asignacion': return 'rgba(96,165,250,0.8)';
+    case 'tarea_calificada': return 'rgba(74,222,128,0.8)';
+    case 'ausencia': return 'rgba(251,191,36,0.8)';
+    case 'amonestacion': return 'rgba(248,113,113,0.8)';
+    default: return 'rgba(255,255,255,0.5)';
+  }
+}
+
 function PadreDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -1988,34 +2387,6 @@ function PadreDashboard() {
   });
 
   const materias = notasData?.materias ?? [];
-  const materiasConEstado = useMemo(() => {
-    const conNota = materias.map(m => ({ ...m, tieneNota: true }));
-    const idsConNota = new Set(
-      materias.flatMap((m) => [
-        m._id ? String(m._id) : null,
-        m.nombre ? String(m.nombre).toLowerCase().trim() : null,
-      ]).filter(Boolean) as string[]
-    );
-
-    const sinNota = cursosHijo
-      .filter((c) => {
-        const id = c._id ? String(c._id) : '';
-        const name = c.nombre ? String(c.nombre).toLowerCase().trim() : '';
-        return !(idsConNota.has(id) || idsConNota.has(name));
-      })
-      .map((c) => ({
-        nombre: c.nombre,
-        promedio: null,
-        ultimaNota: null,
-        tieneNota: false,
-        _id: c._id,
-      }));
-
-    return [
-      ...conNota.sort((a, b) => (b.promedio ?? 0) - (a.promedio ?? 0)),
-      ...sinNota.sort((a, b) => a.nombre.localeCompare(b.nombre)),
-    ];
-  }, [materias, cursosHijo]);
 
   const promedioGeneral = materias.length
     ? materias.reduce((s, m) => s + (m.promedio ?? 0), 0) / materias.length
@@ -2023,11 +2394,13 @@ function PadreDashboard() {
   const promedioDisplay = promedioGeneral.toFixed(1);
   const nombreHijo = hijos[0]?.nombre || 'tu hijo/a';
 
-  const getBarGradient = (score: number): string => {
-    if (score >= 80) return 'linear-gradient(90deg, var(--color-primario), var(--evo-success))';
-    if (score >= 60) return 'linear-gradient(90deg, var(--color-primario), var(--evo-warning))';
-    return 'linear-gradient(90deg, var(--color-primario), var(--evo-danger))';
-  };
+  const { data: padreNotificationsData } = useQuery({
+    queryKey: ['notifications-dashboard-padre', user?.id],
+    queryFn: () => apiRequest<{ list: DashboardNotifItem[]; unreadCount: number }>('GET', '/api/notifications?limit=3'),
+    enabled: !!user?.colegioId && user?.rol === 'padre',
+    staleTime: 30 * 1000,
+  });
+  const padreLatestNotifications = padreNotificationsData?.list ?? [];
 
   /** Tareas con entrega hoy o después; las vencidas no entran en el resumen ni en el total grande. */
   const submissionsHijo = (assignment: Assignment) =>
@@ -2069,47 +2442,26 @@ function PadreDashboard() {
     [assignmentsActivasHijo, primerHijoId]
   );
 
-  const handleDayClick = (assignment: Assignment) => {
-    setLocation(`/assignment/${assignment._id}?from=parent`);
+  const goParentTareas = () => setLocation('/parent/tareas');
+
+  const handleDayClick = (_assignment: Assignment) => {
+    goParentTareas();
   };
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-white/60 leading-relaxed max-w-3xl">
-        Aquí podrás visualizar la información de tu hijo en tiempo real
-      </p>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[1.5px] text-white/40 mb-1">
-            Panel familiar
-          </p>
-          <h2 className="text-lg font-bold text-white font-['Poppins']">
-            {nombreHijo ? `Seguimiento de ${nombreHijo.split(' ')[0]}` : 'Mi panel'}
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setLocation('/evo-send?open=family')}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.07] border border-white/[0.12] text-white/80 text-sm font-medium hover:bg-white/[0.12] hover:text-white transition-all"
-          >
-            <Mail className="w-4 h-4 text-[var(--color-primario)]" />
-            Evo Send
-          </button>
-          <button
-            type="button"
-            onClick={() => setLocation('/parent/aprendizaje')}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.07] border border-white/[0.12] text-white/80 text-sm font-medium hover:bg-white/[0.12] hover:text-white transition-all"
-          >
-            <GraduationCap className="w-4 h-4 text-[var(--color-primario)]" />
-            Aprendizaje
-          </button>
-        </div>
+      <div className="mb-6">
+        <p className="text-[11px] font-semibold uppercase tracking-[1.5px] text-white/40 mb-1">
+          Panel familiar
+        </p>
+        <h2 className="text-lg font-bold text-white font-['Poppins']">
+          {nombreHijo ? `Seguimiento de ${nombreHijo.split(' ')[0]}` : 'Mi panel'}
+        </h2>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-start mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 items-stretch mb-6">
         <Card
-          className={`${CARD_STYLE} col-span-2 lg:col-span-1 cursor-pointer reveal-scale gradient-overlay-blue`}
+          className={`${CARD_STYLE} col-span-2 lg:col-span-1 cursor-pointer reveal-scale gradient-overlay-blue h-full flex flex-col`}
           style={{ animationDelay: '0.1s' }}
           onClick={() => setLocation('/parent/notas')}
         >
@@ -2117,7 +2469,7 @@ function PadreDashboard() {
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Promedio</CardTitle>
             <TrendingUp className="w-5 h-5 text-[var(--evo-gold)] animate-float" />
           </CardHeader>
-          <CardContent className="p-5">
+          <CardContent className="p-5 flex-1 flex flex-col">
             <div className="flex items-end gap-1">
               <span className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">
                 {primerHijoId ? promedioDisplay : '—'}
@@ -2131,44 +2483,48 @@ function PadreDashboard() {
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue h-full flex flex-col`}
           style={{ animationDelay: '0.2s' }}
-          onClick={() => setLocation('/calendar')}
+          onClick={goParentTareas}
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Asignaciones</CardTitle>
             <GraduationCap className="w-5 h-5 text-[var(--evo-gold)] animate-pulse-glow" />
           </CardHeader>
-          <CardContent className="p-5">
+          <CardContent className="p-5 flex-1 flex flex-col justify-center">
             {!primerHijoId ? (
               <p className="text-sm text-white/50">Vincula un estudiante para ver tareas.</p>
             ) : (
-              <>
-                <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">
-                  {assignmentsActivasHijo.length}
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums leading-none">
+                    {assignmentsActivasHijo.length}
+                  </div>
+                  <p className="text-[10px] text-white/40 mt-1.5 uppercase tracking-wider leading-snug max-w-[9rem]">
+                    Solo con entrega hoy o futura
+                  </p>
                 </div>
-                <p className="text-xs text-white/50 mt-1 mb-2">Solo con entrega hoy o futura</p>
-                <div className="space-y-2 pt-1 border-t border-white/10">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-white/60">Entregadas</span>
-                    <span className="text-lg font-bold text-green-400 font-['Poppins'] tabular-nums">
+                <div className="shrink-0 flex flex-col gap-2 pl-3 border-l border-white/10 text-right">
+                  <div>
+                    <p className="text-[10px] text-white/45 uppercase tracking-wide">Entregadas</p>
+                    <p className="text-base font-bold text-green-400 font-['Poppins'] tabular-nums leading-tight">
                       {asignacionesHijoEntregadas}
-                    </span>
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-white/60">Pendientes</span>
-                    <span className="text-lg font-bold text-yellow-400 font-['Poppins'] tabular-nums">
+                  <div>
+                    <p className="text-[10px] text-white/45 uppercase tracking-wide">Pendientes</p>
+                    <p className="text-base font-bold text-yellow-400 font-['Poppins'] tabular-nums leading-tight">
                       {asignacionesHijoPendientes}
-                    </span>
+                    </p>
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </CardContent>
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue h-full flex flex-col`}
           style={{ animationDelay: '0.3s' }}
           onClick={() => setLocation('/parent/materias')}
         >
@@ -2176,14 +2532,14 @@ function PadreDashboard() {
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Materias</CardTitle>
             <BookOpen className="w-5 h-5 text-[var(--evo-gold)] animate-float" style={{ animationDelay: '0.5s' }} />
           </CardHeader>
-          <CardContent className="p-5">
+          <CardContent className="p-5 flex-1 flex flex-col">
             <div className="text-3xl font-bold text-white font-['Poppins']">{cursosHijo.length || materias.length}</div>
             <p className="text-xs text-white/50 mt-2 leading-snug">Cursos matriculados este año.</p>
           </CardContent>
         </Card>
 
         <Card
-          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue ${permisosActualesCount > 0 ? 'badge-glow' : ''}`}
+          className={`${CARD_STYLE} cursor-pointer reveal-scale gradient-overlay-blue h-full flex flex-col ${permisosActualesCount > 0 ? 'badge-glow' : ''}`}
           style={{ animationDelay: '0.4s' }}
           onClick={() => setLocation('/permisos')}
           role="link"
@@ -2199,157 +2555,126 @@ function PadreDashboard() {
             <CardTitle className="text-sm font-medium text-white text-expressive-subtitle">Permisos actuales</CardTitle>
             <FileCheck className="w-5 h-5 text-[var(--evo-gold)] animate-float" />
           </CardHeader>
-          <CardContent className="p-5">
+          <CardContent className="p-5 flex-1 flex flex-col">
             <div className="text-3xl font-bold text-white font-['Poppins'] tabular-nums">{permisosActualesCount}</div>
             <p className="text-xs text-white/50 mt-2 leading-snug">Autorizaciones de salida vigentes.</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-white/[0.04] backdrop-blur-md border border-white/[0.09] rounded-2xl">
-          <CardHeader>
-            <CardTitle className="text-white text-base font-semibold">
-              <span className="block text-[10px] font-medium text-white/35 uppercase tracking-[1.5px] mb-1">
-                Rendimiento académico
-              </span>
-              {nombreHijo}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {materiasConEstado.length === 0 ? (
-                <p className="text-white/60 py-4">No hay notas cargadas aún. {!primerHijoId && 'Vincula un estudiante en tu perfil.'}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
+        <div className="lg:col-span-5 flex flex-col gap-4 order-2 lg:order-1">
+          <Card className={`${CARD_STYLE} rounded-2xl shrink-0`}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-5 pt-5 gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-[rgba(139,92,246,0.12)]">
+                  <MessageSquare className="w-4 h-4 text-[var(--color-primario)]" />
+                </div>
+                <div className="min-w-0">
+                  <CardTitle className="text-sm font-semibold text-white leading-tight">
+                    Actividad reciente: EvoSend
+                  </CardTitle>
+                  <CardDescription className="text-[11px] text-white/45 mt-0.5">
+                    Últimas 3 notificaciones del colegio
+                  </CardDescription>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLocation('/notificaciones')}
+                className="text-xs font-medium text-[var(--color-primario)] hover:text-white/90 whitespace-nowrap shrink-0 flex items-center gap-0.5 transition-colors"
+              >
+                Ver todos
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-0 space-y-2">
+              {padreLatestNotifications.length === 0 ? (
+                <p className="text-xs text-white/50 py-3 text-center leading-relaxed">
+                  No hay notificaciones recientes.
+                </p>
               ) : (
-                materiasConEstado.map((materia, index) => {
-                  const esPrimeraSinNota = !materia.tieneNota &&
-                    (index === 0 || materiasConEstado[index - 1]?.tieneNota);
-                  const nombreLimpio = materia.nombre
-                    ? materia.nombre.replace(/(\b\w+\b)\s+\1$/i, '$1').trim()
-                    : materia.nombre;
-                  const raw = materia.ultimaNota ?? materia.promedio;
-                  const hasRecorded =
-                    typeof raw === 'number' && !Number.isNaN(raw);
-                  const scoreNum = hasRecorded ? raw : 0;
-                  const widthPercent = Math.min(100, Math.max(0, scoreNum));
-                  const accentColor =
-                    materia.tieneNota && (materia.promedio ?? 0) >= 80 ? 'var(--evo-success)' :
-                      materia.tieneNota && (materia.promedio ?? 0) >= 60 ? 'var(--evo-warning)' :
-                        materia.tieneNota ? 'var(--evo-danger)' :
-                          'rgba(255,255,255,0.1)';
+                padreLatestNotifications.map((n) => {
+                  const bodyText = n.cuerpo ?? n.body ?? '';
+                  const plain = bodyText ? stripHtmlLite(bodyText) : '';
+                  const snippet = plain.slice(0, 72);
+                  const when = formatRelativeTimeEs(n.fecha);
                   return (
-                    <React.Fragment key={materia._id || materia.nombre}>
-                      {esPrimeraSinNota && materiasConEstado.some(m => m.tieneNota) && (
-                        <div className="flex items-center gap-2 my-1">
-                          <div className="flex-1 h-px bg-white/[0.06]" />
-                          <span className="text-[10px] text-white/30 uppercase tracking-wider">
-                            Sin calificaciones
-                          </span>
-                          <div className="flex-1 h-px bg-white/[0.06]" />
+                    <button
+                      key={n._id}
+                      type="button"
+                      onClick={() => n.actionUrl ? setLocation(n.actionUrl) : setLocation('/notificaciones')}
+                      className={[
+                        'w-full text-left rounded-xl border p-3 transition-colors',
+                        n.leido
+                          ? 'border-white/10 bg-white/[0.04] hover:bg-white/[0.07]'
+                          : 'border-white/10 border-l-2 border-l-[#3b82f6] bg-[#2563eb]/[0.04] hover:bg-[#2563eb]/[0.07]',
+                      ].join(' ')}
+                    >
+                      <div className="flex gap-2.5">
+                        <div
+                          className="h-9 w-9 shrink-0 rounded-lg flex items-center justify-center border-0 bg-gradient-to-br from-red-500 via-red-600 to-rose-500 shadow-md shadow-red-500/30"
+                          aria-hidden
+                        >
+                          <Send className="w-4 h-4 text-white" />
                         </div>
-                      )}
-                      <div
-                        className={`group p-4 bg-white/5 rounded-xl hover-lift reveal-scale gradient-overlay-blue cursor-pointer ${!materia.tieneNota ? 'opacity-50' : ''}`}
-                        style={{
-                          animationDelay: `${0.7 + index * 0.1}s`,
-                          borderLeft: `3px solid ${accentColor}`,
-                          paddingLeft: '12px',
-                        }}
-                        onClick={() => {
-                          const materiaId =
-                            materia._id ||
-                            cursosHijo.find((c) => String(c.nombre).toLowerCase().trim() === String(materia.nombre).toLowerCase().trim())?._id;
-                          setLocation(materiaId ? `/parent/notas?subjectId=${encodeURIComponent(String(materiaId))}` : '/parent/notas');
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key !== 'Enter') return;
-                          const materiaId =
-                            materia._id ||
-                            cursosHijo.find((c) => String(c.nombre).toLowerCase().trim() === String(materia.nombre).toLowerCase().trim())?._id;
-                          setLocation(materiaId ? `/parent/notas?subjectId=${encodeURIComponent(String(materiaId))}` : '/parent/notas');
-                        }}
-                      >
-                        <div className="flex items-center justify-between mb-2 gap-2">
-                          <span className="text-sm font-medium text-white/90 min-w-0 truncate">
-                            {nombreLimpio}
-                          </span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span
-                              className={`text-sm font-bold font-['Poppins'] tabular-nums ${hasRecorded ? 'text-[var(--evo-gold)]' : 'text-white/30'
-                                }`}
-                            >
-                              {hasRecorded ? `${Math.round(scoreNum)}/100` : '—'}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`text-sm font-semibold leading-snug line-clamp-2 ${n.leido ? 'text-white/60' : 'text-white'}`}>
+                              {n.titulo}
                             </span>
-                            <ChevronRight className="w-3.5 h-3.5 text-white/25 group-hover:text-white/60 transition-colors" />
+                            <span className="text-[10px] text-white/40 shrink-0 tabular-nums">{when}</span>
+                          </div>
+                          {snippet ? (
+                            <p className="text-[11px] text-white/45 mt-1 line-clamp-1">
+                              {plain.length > 72 ? `${snippet}…` : snippet}
+                            </p>
+                          ) : null}
+                          <div className="flex items-center gap-3 mt-2 pt-2 border-t border-white/[0.06]">
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-medium"
+                              style={{ color: notifTypeColor(n.type) }}
+                            >
+                              <Send className="w-2.5 h-2.5" aria-hidden />
+                              {notifTypeLabel(n.type)}
+                            </span>
                           </div>
                         </div>
-                        {!materia.tieneNota ? (
-                          <p className="text-xs text-white/35 italic mt-1">
-                            Sin calificaciones este período
-                          </p>
-                        ) : (
-                          <div className="w-full bg-white/10 rounded-sm h-2 overflow-hidden progress-bar relative">
-                            <div
-                              className="h-2 rounded-sm transition-all duration-1000 ease-out"
-                              style={{
-                                width: `${widthPercent}%`,
-                                background: getBarGradient(scoreNum),
-                              }}
-                            />
-                            <div
-                              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border border-white/30 bg-white/15 backdrop-blur-sm shadow-[0_0_18px_rgba(255,255,255,0.12)] transition-transform duration-700 ease-out"
-                              style={{
-                                left: `calc(${Math.min(100, Math.max(0, widthPercent))}% - 6px)`,
-                              }}
-                              aria-hidden="true"
-                            />
-                            <div
-                              className="pointer-events-none absolute -top-7 text-[10px] px-2 py-1 rounded-md bg-black/60 border border-white/10 text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                              style={{
-                                left: `calc(${Math.min(100, Math.max(0, widthPercent))}% - 20px)`,
-                              }}
-                              aria-hidden="true"
-                            >
-                              {Math.round(scoreNum)}/100
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    </React.Fragment>
+                    </button>
                   );
                 })
               )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card className={`${CARD_STYLE} reveal-slide`}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-white text-base">Calendario de Tareas</CardTitle>
-            <CardDescription className="text-white/50 text-sm">
-              Tareas de {nombreHijo}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="pulse-blue">
-              <Calendar
-                assignments={assignments}
-                viewingStudentId={primerHijoId}
-                onDayClick={handleDayClick}
-                variant="student"
-              />
-            </div>
-          </CardContent>
-        </Card>
+          <div className="shrink-0 reveal-slide mb-1 sm:mb-2">
+            <AIChatBox rol="padre" compact />
+          </div>
+        </div>
+
+        <div className="lg:col-span-7 order-1 lg:order-2">
+          <Card className={`${CARD_STYLE} reveal-slide rounded-2xl`}>
+            <CardHeader className="pb-2 px-5 pt-5">
+              <CardTitle className="text-white text-base font-semibold">Calendario de tareas</CardTitle>
+              <CardDescription className="text-white/50 text-sm mt-1">
+                Tareas de {nombreHijo}. Toca un día para ver asignaciones.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-5 pt-0">
+              <div className="overflow-auto rounded-xl">
+                <Calendar
+                  assignments={assignments}
+                  viewingStudentId={primerHijoId}
+                  onDayClick={handleDayClick}
+                  onEmptyDayClick={goParentTareas}
+                  variant="student"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      <Card className={`${CARD_STYLE} reveal-slide min-h-[300px]`}>
-        <CardContent className="p-0 h-full">
-          <AIChatBox rol="padre" />
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -2408,14 +2733,14 @@ export default function Dashboard() {
 
   return (
     <div data-testid="dashboard-page">
-      <div className="mb-8 reveal-fade">
+      <DashboardWelcomeBanner logoHeightClass="h-10" reveal>
         <h1 className="text-4xl font-bold text-white mb-2 text-expressive">
           Bienvenido, {user?.nombre?.split(' ')[0] || 'Usuario'}
         </h1>
         <p className="text-white/60 text-expressive-subtitle">
           {new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
-      </div>
+      </DashboardWelcomeBanner>
 
       {getDashboardContent()}
     </div>

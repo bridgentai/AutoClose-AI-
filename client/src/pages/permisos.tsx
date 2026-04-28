@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import logoCaobosBlanco from '@/assets/logo-caobos-blanco.png';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +23,8 @@ interface FormularioPermiso {
   tipoPermiso: TipoPermiso | '';
   nombreEstudiante: string;
   fecha: string;
+  horaSalida: string;
+  motivo: string;
   numeroRutaActual: string;
   numeroRutaCambio: string;
   placaCarroSalida: string;
@@ -54,6 +58,8 @@ export default function PermisosPage() {
     tipoPermiso: '',
     nombreEstudiante: '',
     fecha: '',
+    horaSalida: '',
+    motivo: '',
     numeroRutaActual: '',
     numeroRutaCambio: '',
     placaCarroSalida: '',
@@ -243,6 +249,8 @@ export default function PermisosPage() {
       tipoPermiso: '',
       nombreEstudiante: '',
       fecha: '',
+      horaSalida: '',
+      motivo: '',
       numeroRutaActual: '',
       numeroRutaCambio: '',
       placaCarroSalida: '',
@@ -284,14 +292,21 @@ export default function PermisosPage() {
           <div className="mb-6">
             <NavBackButton to="/dashboard" label="Dashboard" />
           </div>
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
-              <FileCheck className="w-10 h-10 text-[#00c8ff]" />
-              Permisos de Salida
-            </h1>
-            <p className="text-white/60 font-['Inter']">
-              Genera permisos de salida para tu hijo/a
-            </p>
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
+                <FileCheck className="w-10 h-10 text-[#00c8ff]" />
+                Permisos de Salida
+              </h1>
+              <p className="text-white/60 font-['Inter']">
+                Genera permisos de salida para tu hijo/a
+              </p>
+            </div>
+            <img
+              src={logoCaobosBlanco}
+              alt="Gimnasio Los Caobos"
+              className="h-10 w-auto shrink-0 object-contain sm:h-11 sm:self-center self-start"
+            />
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -355,19 +370,47 @@ export default function PermisosPage() {
                 />
               </div>
 
-              {/* Fecha */}
+              {/* Fecha y hora de salida */}
               <div className="space-y-3">
                 <Label htmlFor="fecha" className="text-white font-['Inter'] text-base flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-[#00c8ff]" />
                   Fecha *
                 </Label>
-                <Input
-                  id="fecha"
-                  type="date"
-                  value={formData.fecha}
-                  onChange={(e) => handleChange('fecha', e.target.value)}
-                  className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] max-w-md"
-                />
+                <div className="flex flex-wrap gap-3 items-center">
+                  <Input
+                    id="fecha"
+                    type="date"
+                    value={formData.fecha}
+                    onChange={(e) => handleChange('fecha', e.target.value)}
+                    className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] min-w-[180px] max-w-xs flex-1"
+                  />
+                  <input
+                    id="hora-salida-permiso"
+                    type="time"
+                    value={formData.horaSalida}
+                    onChange={(e) => handleChange('horaSalida', e.target.value)}
+                    className="sr-only"
+                    tabIndex={-1}
+                    aria-hidden
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 shrink-0 border-white/20 text-white hover:bg-white/10 font-['Inter']"
+                    onClick={() => {
+                      const el = document.getElementById('hora-salida-permiso') as HTMLInputElement | null;
+                      if (!el) return;
+                      if (typeof el.showPicker === 'function') {
+                        void el.showPicker();
+                      } else {
+                        el.click();
+                      }
+                    }}
+                  >
+                    <Clock className="w-4 h-4 mr-2" />
+                    {formData.horaSalida ? `Salida: ${formData.horaSalida}` : 'Hora de salida'}
+                  </Button>
+                </div>
               </div>
 
               {/* Campos Condicionales */}
@@ -479,6 +522,19 @@ export default function PermisosPage() {
                 </div>
               )}
 
+              <div className="space-y-3">
+                <Label htmlFor="motivo-permiso" className="text-white font-['Inter'] text-base">
+                  Motivo
+                </Label>
+                <Textarea
+                  id="motivo-permiso"
+                  placeholder="Escribe el motivo del permiso de salida"
+                  value={formData.motivo}
+                  onChange={(e) => handleChange('motivo', e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40 font-['Inter'] focus-visible:ring-2 focus-visible:ring-[#00c8ff] min-h-[100px] resize-y"
+                />
+              </div>
+
               {/* Botones */}
               <div className="flex justify-end gap-4 pt-6 border-t border-white/10">
                 <Button
@@ -490,6 +546,8 @@ export default function PermisosPage() {
                       tipoPermiso: '',
                       nombreEstudiante: '',
                       fecha: '',
+                      horaSalida: '',
+                      motivo: '',
                       numeroRutaActual: '',
                       numeroRutaCambio: '',
                       placaCarroSalida: '',
@@ -524,14 +582,21 @@ export default function PermisosPage() {
         <div className="mb-6">
           <NavBackButton to="/dashboard" label="Dashboard" />
         </div>
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
-            <FileCheck className="w-10 h-10 text-[#00c8ff]" />
-            Permisos de Salida
-          </h1>
-          <p className="text-white/60 font-['Inter']">
-            Gestiona los permisos de salida para tu hijo/a
-          </p>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins'] flex items-center gap-3">
+              <FileCheck className="w-10 h-10 text-[#00c8ff]" />
+              Permisos de Salida
+            </h1>
+            <p className="text-white/60 font-['Inter']">
+              Gestiona los permisos de salida para tu hijo/a
+            </p>
+          </div>
+          <img
+            src={logoCaobosBlanco}
+            alt="Gimnasio Los Caobos"
+            className="h-10 w-auto shrink-0 object-contain sm:h-11 sm:self-center self-start"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -594,7 +659,18 @@ export default function PermisosPage() {
                               month: 'long',
                               day: 'numeric'
                             })}
+                            {permiso.horaSalida ? (
+                              <span className="ml-2">
+                                <Clock className="w-3 h-3 inline mr-1" />
+                                {permiso.horaSalida}
+                              </span>
+                            ) : null}
                           </p>
+                          {permiso.motivo ? (
+                            <p className="text-white/50 text-xs font-['Inter'] mt-2 border-t border-white/10 pt-2">
+                              {permiso.motivo}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                       {permiso.numeroRutaActual && (
@@ -702,19 +778,49 @@ export default function PermisosPage() {
                     />
                   </div>
 
-                  {/* Fecha */}
+                  {/* Fecha y hora de salida */}
                   <div className="space-y-3">
                     <Label htmlFor="fecha-modal" className="text-white font-['Inter'] text-base flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-[#00c8ff]" />
                       Fecha *
                     </Label>
-                    <Input
-                      id="fecha-modal"
-                      type="date"
-                      value={formData.fecha}
-                      onChange={(e) => handleChange('fecha', e.target.value)}
-                      className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] max-w-md"
-                    />
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <Input
+                        id="fecha-modal"
+                        type="date"
+                        value={formData.fecha}
+                        onChange={(e) => handleChange('fecha', e.target.value)}
+                        className="bg-white/5 border-white/10 text-white h-12 font-['Inter'] focus:ring-2 focus:ring-[#00c8ff] min-w-[180px] max-w-xs flex-1"
+                      />
+                      <input
+                        id="hora-salida-permiso-modal"
+                        type="time"
+                        value={formData.horaSalida}
+                        onChange={(e) => handleChange('horaSalida', e.target.value)}
+                        className="sr-only"
+                        tabIndex={-1}
+                        aria-hidden
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-12 shrink-0 border-white/20 text-white hover:bg-white/10 font-['Inter']"
+                        onClick={() => {
+                          const el = document.getElementById('hora-salida-permiso-modal') as
+                            | HTMLInputElement
+                            | null;
+                          if (!el) return;
+                          if (typeof el.showPicker === 'function') {
+                            void el.showPicker();
+                          } else {
+                            el.click();
+                          }
+                        }}
+                      >
+                        <Clock className="w-4 h-4 mr-2" />
+                        {formData.horaSalida ? `Salida: ${formData.horaSalida}` : 'Hora de salida'}
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Campos Condicionales */}
@@ -826,6 +932,19 @@ export default function PermisosPage() {
                     </div>
                   )}
 
+                  <div className="space-y-3">
+                    <Label htmlFor="motivo-permiso-modal" className="text-white font-['Inter'] text-base">
+                      Motivo
+                    </Label>
+                    <Textarea
+                      id="motivo-permiso-modal"
+                      placeholder="Escribe el motivo del permiso de salida"
+                      value={formData.motivo}
+                      onChange={(e) => handleChange('motivo', e.target.value)}
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40 font-['Inter'] focus-visible:ring-2 focus-visible:ring-[#00c8ff] min-h-[100px] resize-y"
+                    />
+                  </div>
+
                   {/* Botones */}
                   <div className="flex justify-end gap-4 pt-6 border-t border-white/10">
                     <Button
@@ -837,6 +956,8 @@ export default function PermisosPage() {
                           tipoPermiso: '',
                           nombreEstudiante: '',
                           fecha: '',
+                          horaSalida: '',
+                          motivo: '',
                           numeroRutaActual: '',
                           numeroRutaCambio: '',
                           placaCarroSalida: '',

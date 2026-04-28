@@ -80,6 +80,10 @@ function typeLabel(t?: string) {
     case 'mensaje':
     case 'evo_chat_direct':
       return 'Mensaje';
+    case 'comunicado_institucional':
+      return 'Institucional';
+    case 'comunicado_padres':
+      return 'Comunicado';
     case 'ausencia':
       return 'Asistencia';
     case 'amonestacion':
@@ -105,6 +109,10 @@ function typeMeta(t?: string) {
     case 'mensaje':
     case 'evo_chat_direct':
       return { Icon: MessageCircle, bg: 'rgba(6,182,212,0.1)', fg: '#67e8f9' };
+    case 'comunicado_institucional':
+      return { Icon: Bell, bg: 'rgba(255,215,0,0.1)', fg: '#fbbf24' };
+    case 'comunicado_padres':
+      return { Icon: MessageCircle, bg: 'rgba(37,99,235,0.12)', fg: '#93c5fd' };
     case 'tarea_vence':
       return { Icon: Clock, bg: 'rgba(245,158,11,0.1)', fg: '#fbbf24' };
     default:
@@ -130,7 +138,8 @@ function isTaskNotification(n: NotifItem): boolean {
 function isMessageNotification(n: NotifItem): boolean {
   const t = (n.type ?? '').toLowerCase();
   if (t === 'mensaje' || t === 'evo_chat_direct') return true;
-  if (n.entityType === 'evo_send_thread') return true;
+  if (t === 'comunicado_institucional' || t === 'comunicado_padres') return true;
+  if (n.entityType === 'evo_send_thread' || n.entityType === 'comunicado_institucional') return true;
   return false;
 }
 

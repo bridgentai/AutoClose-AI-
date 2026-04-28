@@ -16,7 +16,7 @@ import {
   Menu,
   X,
   Cloud,
-  Building2,
+  Send,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/authContext";
@@ -39,9 +39,8 @@ export function TopNavigation() {
     { icon: MessageSquare, label: "Chat AI", path: "/chat", roles: ["estudiante", "profesor", "directivo", "padre"] },
 
     { icon: GraduationCap, label: "Mi Aprendizaje", path: "/mi-aprendizaje", roles: ["estudiante"] },
-    { icon: Building2, label: "GLC", path: "/comunidad/noticias", roles: ["estudiante"] },
     { icon: GraduationCap, label: "Aprendizaje (hijo/a)", path: "/parent/aprendizaje", roles: ["padre"] },
-    { icon: MessageSquare, label: "Comunicación", path: "/comunicacion", roles: ["profesor", "directivo", "padre"] },
+    { icon: Send, label: "Evo Send", path: "/evo-send", roles: ["profesor", "directivo", "padre"] },
 
     { icon: Calendar, label: "Calendario", path: "/teacher-calendar", roles: ["profesor"] },
     { icon: Calendar, label: "Calendario", path: "/calendar", roles: ["directivo", "padre"] },
@@ -51,7 +50,7 @@ export function TopNavigation() {
 
     { icon: Globe, label: "Plataformas", path: "/plataformas", roles: ["profesor", "directivo", "padre"] },
     { icon: GraduationCap, label: "Materiales", path: "/materials", roles: ["profesor"] },
-    { icon: Cloud, label: "Evo Drive", path: "/evo-drive", roles: ["profesor", "directivo"] },
+    { icon: Cloud, label: "Evo Drive", path: "/evo-drive", roles: ["profesor", "directivo", "estudiante", "padre"] },
 
     { icon: Settings2, label: "Gestión", path: "/directivo/gestion", roles: ["directivo"] },
     { icon: BarChart3, label: "Analítica", path: "/directivo/analitica", roles: ["directivo"] },
@@ -156,7 +155,7 @@ export function TopNavigation() {
 
       {/* Mobile Menu Dropdown */}
       {mobileMenuOpen && (
-        <div className="lg:hidden absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-white/10 max-h-[calc(100vh-4rem)] overflow-y-auto">
+        <div className="lg:hidden absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-white/10 max-h-[calc(100svh-4rem)] overflow-y-auto">
           <div className="p-4 space-y-2">
             {/* User Info on Mobile */}
             <div className="pb-3 mb-3 border-b border-white/10">

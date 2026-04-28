@@ -28,6 +28,26 @@ export async function findGroupSubjectById(id: string): Promise<GroupSubjectRow 
   return r.rows[0] ?? null;
 }
 
+/** Un group_subject con nombres de grupo, materia y profesor (misma forma que findGroupSubjectsByGroupWithDetails). */
+export async function findGroupSubjectWithDetailsById(
+  id: string,
+  institutionId: string
+): Promise<GroupSubjectWithDetails | null> {
+  const r = await queryPg<GroupSubjectWithDetails>(
+    `SELECT gs.id, gs.institution_id, gs.group_id, gs.subject_id, gs.teacher_id, gs.display_name, gs.icon, gs.created_at,
+            g.name AS group_name,
+            COALESCE(gs.display_name, s.name) AS subject_name, s.description AS subject_description,
+            u.full_name AS teacher_name, u.email AS teacher_email
+     FROM group_subjects gs
+     JOIN groups g ON g.id = gs.group_id
+     JOIN subjects s ON s.id = gs.subject_id
+     JOIN users u ON u.id = gs.teacher_id
+     WHERE gs.id = $1 AND gs.institution_id = $2`,
+    [id, institutionId]
+  );
+  return r.rows[0] ?? null;
+}
+
 export async function findGroupSubjectsByGroup(groupId: string, institutionId?: string): Promise<GroupSubjectRow[]> {
   if (institutionId) {
     const r = await queryPg<GroupSubjectRow>(

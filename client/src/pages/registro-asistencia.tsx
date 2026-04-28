@@ -160,7 +160,7 @@ export default function RegistroAsistenciaPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-8rem)] w-full" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
+    <div className="min-h-0 w-full" style={{ fontFamily: "Inter, system-ui, sans-serif" }}>
       <div className="relative z-10 w-full flex flex-col min-h-0">
         <div className="mb-6">
           <Breadcrumb

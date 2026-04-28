@@ -44,6 +44,12 @@ export interface LogroPct {
   porcentaje: number;
 }
 
+export interface OutcomeGradeNode {
+  id: string;
+  pesoEnCurso: number;
+  indicadores: { id: string; porcentaje: number }[];
+}
+
 export function courseWeightedFromLogros(
   logros: LogroPct[],
   getCategoryGrade: (categoryId: string) => number | null
@@ -60,4 +66,26 @@ export function courseWeightedFromLogros(
   }
   if (den <= 0) return null;
   return num / den;
+}
+
+export function courseGradeFromOutcomes(
+  outcomes: OutcomeGradeNode[],
+  getIndicadorGrade: (indicadorId: string) => number | null
+): number | null {
+  if (!outcomes.length) return null;
+  const getLogroGrade = (outcomeId: string): number | null => {
+    const outcome = outcomes.find((item) => item.id === outcomeId);
+    if (!outcome?.indicadores?.length) return null;
+    return courseWeightedFromLogros(
+      outcome.indicadores.map((indicador) => ({
+        _id: indicador.id,
+        porcentaje: indicador.porcentaje,
+      })),
+      getIndicadorGrade
+    );
+  };
+  return courseWeightedFromLogros(
+    outcomes.map((outcome) => ({ _id: outcome.id, porcentaje: outcome.pesoEnCurso })),
+    getLogroGrade
+  );
 }

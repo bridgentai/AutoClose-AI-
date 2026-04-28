@@ -56,7 +56,7 @@ export default function CalendarioEventos() {
   return (
     <div className="p-4 sm:p-6">
       <NavBackButton
-        to={user?.rol === 'estudiante' ? '/comunidad/noticias' : '/comunicacion'}
+        to={user?.rol === 'estudiante' ? '/comunidad/noticias' : '/evo-send'}
         label={user?.rol === 'estudiante' ? 'GLC' : 'Comunicación'}
       />
       <div className="mb-6">

@@ -28,6 +28,31 @@ export async function findUserById(id: string): Promise<UserRow | null> {
   return r.rows[0] ?? null;
 }
 
+/** Versión de sesión para invalidar JWT tras logout (JSONB config). */
+export function readAuthSessionVersion(config: Record<string, unknown> | null | undefined): number {
+  const v = config?.auth_session_version;
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && /^\d+$/.test(v)) return parseInt(v, 10);
+  return 0;
+}
+
+export async function bumpAuthSessionVersion(userId: string): Promise<number> {
+  const r = await queryPg<{ v: number }>(
+    `UPDATE users SET
+       config = jsonb_set(
+         COALESCE(config, '{}'::jsonb),
+         '{auth_session_version}',
+         to_jsonb(COALESCE((config->>'auth_session_version')::int, 0) + 1),
+         true
+       ),
+       updated_at = now()
+     WHERE id = $1::uuid
+     RETURNING (config->>'auth_session_version')::int AS v`,
+    [userId]
+  );
+  return r.rows[0]?.v ?? 1;
+}
+
 export async function findUserByEmailAndInstitution(
   email: string,
   institutionId: string

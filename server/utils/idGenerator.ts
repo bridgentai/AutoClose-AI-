@@ -44,9 +44,13 @@ export function getPrefixForRole(role: string): UserIdPrefix {
 /**
  * Genera un ID categorizado para un usuario basado en su rol
  */
-export function generateUserId(role: string, internalId?: Types.ObjectId): CategorizedUserId {
-  const objectId = internalId || new Types.ObjectId();
-  const objectIdString = objectId.toString();
+export function generateUserId(role: string, internalId?: Types.ObjectId | string): CategorizedUserId {
+  const objectIdString =
+    internalId !== undefined
+      ? typeof internalId === 'string'
+        ? internalId
+        : internalId.toString()
+      : new Types.ObjectId().toString();
   const prefix = getPrefixForRole(role);
   
   return {

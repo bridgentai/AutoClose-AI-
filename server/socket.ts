@@ -8,14 +8,30 @@ import {
   isWithinStudentEvoSendWriteWindow,
 } from './services/evoSendStudentHours.js';
 import { canAccessEvoThread } from './services/evoSendAccess.js';
+import { socketIoCorsOrigin } from './config/security.js';
+import { isRedisConfigured } from './config/redis.js';
 
 let io: Server | null = null;
 
-export function setupEvoSocket(httpServer: HttpServer): Server {
+export async function setupEvoSocket(httpServer: HttpServer): Promise<Server> {
   io = new Server(httpServer, {
     path: '/api/evo-send-ws',
-    cors: { origin: true, credentials: true },
+    cors: { origin: socketIoCorsOrigin, credentials: true },
   });
+
+  if (isRedisConfigured()) {
+    try {
+      const [{ createAdapter }, { getRedisPubSub }] = await Promise.all([
+        import('@socket.io/redis-adapter'),
+        import('./config/redis.js'),
+      ]);
+      const { pubClient, subClient } = await getRedisPubSub();
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log('[socket] Redis adapter enabled for multi-instance EvoSend');
+    } catch (e) {
+      console.error('[socket] Redis adapter failed:', (e as Error).message);
+    }
+  }
 
   io.on('connection', async (socket: Socket) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -27,7 +43,11 @@ export function setupEvoSocket(httpServer: HttpServer): Server {
         socket.disconnect(true);
         return;
       }
-      const decoded = jwt.verify(token as string, secret) as { id?: string };
+      const decoded = jwt.verify(token as string, secret) as { id?: string; tokenUse?: string };
+      if (decoded.tokenUse === 'refresh') {
+        socket.disconnect(true);
+        return;
+      }
       userId = decoded?.id || null;
     } catch {
       socket.disconnect(true);
@@ -106,16 +126,16 @@ export function getEvoIo(): Server | null {
 export function emitEvoMessageBroadcast(
   threadId: string,
   message: Record<string, unknown>,
-  userIds: string[]
+  userIds: string[],
 ): void {
-  const io = getEvoIo();
-  if (!io) return;
+  const ioServer = getEvoIo();
+  if (!ioServer) return;
   const payload = { ...message, threadId };
   const seen = new Set<string>();
   for (const uid of userIds) {
     if (!uid || seen.has(uid)) continue;
     seen.add(uid);
-    io.to(`user:${uid}`).emit('evo:message', payload);
+    ioServer.to(`user:${uid}`).emit('evo:message', payload);
   }
 }
 

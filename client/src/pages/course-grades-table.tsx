@@ -935,7 +935,7 @@ export default function CourseGradesTablePage() {
 
   return (
     <div
-      className="min-h-[calc(100vh-8rem)] w-full max-w-full overflow-x-auto relative flex flex-col"
+      className="min-h-0 w-full max-w-full overflow-x-auto relative flex flex-col"
       style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
     >
       <div className="relative z-10 w-full flex-1 flex flex-col min-h-0">
@@ -1317,7 +1317,7 @@ export default function CourseGradesTablePage() {
                         }
                         courseId={firstSubjectId || ''}
                         onStudentClick={(studentId) =>
-                          setLocation(`/profesor/cursos/${cursoId}/estudiantes/${studentId}/notas`)
+                          setLocation(`/profesor/cursos/${cursoId}/estudiantes/${studentId}`)
                         }
                       />
                     ))}

@@ -15,6 +15,13 @@ import { findSubjectById } from '../repositories/subjectRepository.js';
 import { findEnrollmentsByGroup } from '../repositories/enrollmentRepository.js';
 import { notify } from '../repositories/notificationRepository.js';
 import { runAfterAssignmentCreatedPg } from './assignmentSideEffectsService.js';
+import { findGuardianStudentsByGuardian } from '../repositories/guardianStudentRepository.js';
+import { findProfessorScheduleByProfessor, findGroupScheduleByGroup } from '../repositories/scheduleRepository.js';
+import { findEnrollmentsByStudent } from '../repositories/enrollmentRepository.js';
+import { searchKnowledge } from './embeddingService.js';
+import { triggerWorkflow, listAvailableWorkflows } from './workflowService.js';
+import { generateEvoDocPDF } from './evoDocsRenderer.js';
+import type { EvoDocData, EvoDocMetric, EvoDocSection, EvoDocChartBar, EvoDocChartLine } from './evoDocTemplate.js';
 
 // ─── Tipos de retorno ─────────────────────────────────────────────────────────
 
@@ -435,12 +442,11 @@ async function getAcademicRiskReport(
        u.id AS student_id,
        g.name AS group_name,
        AVG(gr.normalized_score) AS average,
-       COUNT(DISTINCT gs.subject_id) AS subject_count
+       COUNT(DISTINCT gr.assignment_id) AS subject_count
      FROM grades gr
      JOIN users u ON u.id = gr.user_id
      JOIN groups g ON g.id = gr.group_id
      JOIN enrollments e ON e.student_id = u.id AND e.group_id = g.id
-     JOIN group_subjects gs ON gs.group_id = g.id
      WHERE g.institution_id = $1
        AND u.institution_id = $1
      GROUP BY u.id, u.internal_code, g.name
@@ -529,7 +535,7 @@ async function sendEvoSendMessage(
   const channelId = params.channelId as string;
   const message = params.message as string;
   const userRole = (params.userRole as string | undefined) ?? undefined;
-  const isDirectorLike = userRole === 'directivo' || userRole === 'school_admin';
+  const isDirectorLike = userRole === 'directivo' || userRole === 'admin-general-colegio' || userRole === 'school_admin';
 
   // Step 1: verificar que el thread pertenece a la institución
   const threadRes = await queryPg<{ type: string }>(
@@ -779,6 +785,536 @@ async function generateBoletin(
   }
 }
 
+// ─── Estudiante: get_my_grades ────────────────────────────────────────────────
+
+interface StudentGradeRow {
+  subjectName: string;
+  groupName: string;
+  assignmentTitle: string;
+  score: number | null;
+  maxScore: number;
+  date: string;
+}
+
+async function getMyGrades(
+  institutionId: string,
+  userId: string,
+  _params: Record<string, unknown>
+): Promise<StudentGradeRow[]> {
+  const r = await queryPg<{
+    subject_name: string;
+    group_name: string;
+    assignment_title: string;
+    score: string | null;
+    max_score: string;
+    graded_at: string;
+  }>(
+    `SELECT COALESCE(gs.display_name, s.name) AS subject_name,
+            g.name AS group_name,
+            a.title AS assignment_title,
+            gr.score::text,
+            COALESCE(a.max_score, 100)::text AS max_score,
+            COALESCE(gr.recorded_at, a.due_date)::text AS graded_at
+     FROM grades gr
+     JOIN assignments a ON a.id = gr.assignment_id
+     JOIN group_subjects gs ON gs.id = a.group_subject_id
+     JOIN subjects s ON s.id = gs.subject_id
+     JOIN groups g ON g.id = gs.group_id
+     WHERE gr.user_id = $1
+       AND gs.institution_id = $2
+     ORDER BY gr.recorded_at DESC NULLS LAST
+     LIMIT 50`,
+    [userId, institutionId]
+  );
+
+  return r.rows.map((row: { subject_name: string; group_name: string; assignment_title: string; score: string | null; max_score: string; graded_at: string }) => ({
+    subjectName: row.subject_name,
+    groupName: row.group_name,
+    assignmentTitle: row.assignment_title,
+    score: row.score !== null ? toNumber(row.score) : null,
+    maxScore: toNumber(row.max_score, 100),
+    date: row.graded_at,
+  }));
+}
+
+// ─── Estudiante: get_my_attendance ────────────────────────────────────────────
+
+interface StudentAttendanceRow {
+  date: string;
+  subjectName: string;
+  status: string;
+  periodSlot: string | null;
+}
+
+async function getMyAttendance(
+  institutionId: string,
+  userId: string,
+  _params: Record<string, unknown>
+): Promise<StudentAttendanceRow[]> {
+  const r = await queryPg<{
+    date: string;
+    subject_name: string;
+    status: string;
+    period_slot: string | null;
+  }>(
+    `SELECT a.date::text, COALESCE(gs.display_name, s.name) AS subject_name,
+            a.status, a.period_slot
+     FROM attendance a
+     JOIN group_subjects gs ON gs.id = a.group_subject_id
+     JOIN subjects s ON s.id = gs.subject_id
+     WHERE a.user_id = $1 AND gs.institution_id = $2
+     ORDER BY a.date DESC
+     LIMIT 60`,
+    [userId, institutionId]
+  );
+
+  return r.rows.map((row: { date: string; subject_name: string; status: string; period_slot: string | null }) => ({
+    date: row.date,
+    subjectName: row.subject_name,
+    status: row.status,
+    periodSlot: row.period_slot,
+  }));
+}
+
+// ─── Estudiante: get_pending_tasks ────────────────────────────────────────────
+
+interface StudentTaskRow {
+  assignmentId: string;
+  title: string;
+  subjectName: string;
+  groupName: string;
+  dueDate: string;
+  status: string;
+  score: number | null;
+}
+
+async function getPendingTasks(
+  institutionId: string,
+  userId: string,
+  params: Record<string, unknown>
+): Promise<StudentTaskRow[]> {
+  const statusFilter = typeof params.status === 'string' ? params.status.trim().toLowerCase() : '';
+
+  const r = await queryPg<{
+    id: string;
+    title: string;
+    subject_name: string;
+    group_name: string;
+    due_date: string;
+    submission_id: string | null;
+    score: string | null;
+  }>(
+    `SELECT a.id, a.title,
+            COALESCE(gs.display_name, s.name) AS subject_name,
+            g.name AS group_name,
+            a.due_date::text,
+            sub.id AS submission_id,
+            gr.score::text
+     FROM assignments a
+     JOIN group_subjects gs ON gs.id = a.group_subject_id
+     JOIN subjects s ON s.id = gs.subject_id
+     JOIN groups g ON g.id = gs.group_id
+     JOIN enrollments e ON e.group_id = g.id AND e.student_id = $1
+     LEFT JOIN submissions sub ON sub.assignment_id = a.id AND sub.student_id = $1
+     LEFT JOIN grades gr ON gr.assignment_id = a.id AND gr.user_id = $1
+     WHERE gs.institution_id = $2
+     ORDER BY a.due_date ASC NULLS LAST
+     LIMIT 50`,
+    [userId, institutionId]
+  );
+
+  const tasks = r.rows.map((row: { id: string; title: string; subject_name: string; group_name: string; due_date: string; submission_id: string | null; score: string | null }) => {
+    let status = 'pendiente';
+    if (row.score !== null) status = 'calificada';
+    else if (row.submission_id) status = 'entregada';
+    return {
+      assignmentId: row.id,
+      title: row.title,
+      subjectName: row.subject_name,
+      groupName: row.group_name,
+      dueDate: row.due_date,
+      status,
+      score: row.score !== null ? toNumber(row.score) : null,
+    };
+  });
+
+  if (statusFilter) {
+    return tasks.filter((t: StudentTaskRow) => t.status === statusFilter);
+  }
+  return tasks;
+}
+
+// ─── Shared: get_my_schedule ──────────────────────────────────────────────────
+
+interface ScheduleResult {
+  type: 'professor' | 'student';
+  slots: Record<string, string>;
+}
+
+async function getMySchedule(
+  institutionId: string,
+  userId: string,
+  userRole: string,
+  _params: Record<string, unknown>
+): Promise<ScheduleResult | null> {
+  if (userRole === 'profesor') {
+    const schedule = await findProfessorScheduleByProfessor(institutionId, userId);
+    if (schedule) return { type: 'professor', slots: schedule.slots };
+    return null;
+  }
+
+  // For students: find their enrolled group and get group schedule
+  const enrollments = await findEnrollmentsByStudent(userId);
+  if (enrollments.length === 0) return null;
+
+  const groupId = enrollments[0].group_id;
+  const schedule = await findGroupScheduleByGroup(institutionId, groupId);
+  if (schedule) return { type: 'student', slots: schedule.slots };
+  return null;
+}
+
+// ─── Padre: get_child_grades ──────────────────────────────────────────────────
+
+async function resolveChildId(
+  institutionId: string,
+  guardianId: string,
+  params: Record<string, unknown>
+): Promise<string> {
+  const childId = typeof params.childId === 'string' ? params.childId.trim() : '';
+  if (childId) return childId;
+
+  const links = await findGuardianStudentsByGuardian(guardianId);
+  const filtered = links.filter((l) => l.institution_id === institutionId);
+  if (filtered.length === 0) {
+    throw new Error('No tienes hijos registrados en esta institución.');
+  }
+  if (filtered.length === 1) return filtered[0].student_id;
+  throw new Error(
+    `Tienes ${filtered.length} hijos registrados. Indica cuál quieres consultar.`
+  );
+}
+
+async function getChildGrades(
+  institutionId: string,
+  userId: string,
+  params: Record<string, unknown>
+): Promise<StudentGradeRow[]> {
+  const childId = await resolveChildId(institutionId, userId, params);
+  return getMyGrades(institutionId, childId, params);
+}
+
+// ─── Padre: get_child_attendance ──────────────────────────────────────────────
+
+async function getChildAttendance(
+  institutionId: string,
+  userId: string,
+  params: Record<string, unknown>
+): Promise<StudentAttendanceRow[]> {
+  const childId = await resolveChildId(institutionId, userId, params);
+  return getMyAttendance(institutionId, childId, params);
+}
+
+// ─── Padre: get_comunicados ───────────────────────────────────────────────────
+
+interface ComunicadoRow {
+  id: string;
+  title: string;
+  type: string;
+  publishedAt: string;
+  bodyPreview: string;
+}
+
+async function getComunicados(
+  institutionId: string,
+  userId: string,
+  _params: Record<string, unknown>
+): Promise<ComunicadoRow[]> {
+  const r = await queryPg<{
+    id: string;
+    title: string;
+    type: string;
+    published_at: string;
+    body: string | null;
+  }>(
+    `SELECT a.id, a.title, a.type, a.published_at::text, a.body
+     FROM announcements a
+     JOIN announcement_recipients ar ON ar.announcement_id = a.id
+     WHERE ar.user_id = $1
+       AND a.institution_id = $2
+       AND a.status = 'sent'
+     ORDER BY a.published_at DESC NULLS LAST
+     LIMIT 20`,
+    [userId, institutionId]
+  );
+
+  return r.rows.map((row: { id: string; title: string; type: string; published_at: string; body: string | null }) => ({
+    id: row.id,
+    title: row.title,
+    type: row.type,
+    publishedAt: row.published_at,
+    bodyPreview: (row.body ?? '').slice(0, 200),
+  }));
+}
+
+// ─── Padre: contact_teacher ───────────────────────────────────────────────────
+
+interface ContactTeacherResult {
+  message: string;
+  suggestedChannels: Array<{ channelId: string; teacherName: string; subjectName: string }>;
+}
+
+async function contactTeacher(
+  institutionId: string,
+  userId: string,
+  _params: Record<string, unknown>
+): Promise<ContactTeacherResult> {
+  const links = await findGuardianStudentsByGuardian(userId);
+  const filtered = links.filter((l) => l.institution_id === institutionId);
+  if (filtered.length === 0) {
+    return { message: 'No tienes hijos registrados.', suggestedChannels: [] };
+  }
+
+  const studentIds = filtered.map((l) => l.student_id);
+  const r = await queryPg<{
+    channel_id: string;
+    teacher_name: string;
+    subject_name: string;
+  }>(
+    `SELECT DISTINCT ON (gs.teacher_id)
+            a.id AS channel_id,
+            COALESCE(NULLIF(TRIM(u.full_name), ''), u.email) AS teacher_name,
+            COALESCE(gs.display_name, s.name) AS subject_name
+     FROM enrollments e
+     JOIN group_subjects gs ON gs.group_id = e.group_id AND gs.institution_id = $1
+     JOIN subjects s ON s.id = gs.subject_id
+     JOIN users u ON u.id = gs.teacher_id
+     LEFT JOIN announcements a ON a.group_subject_id = gs.id
+       AND a.institution_id = $1
+       AND a.type IN ('comunicado_padres', 'evo_chat')
+     WHERE e.student_id = ANY($2::uuid[])
+       AND gs.teacher_id IS NOT NULL
+     ORDER BY gs.teacher_id, a.published_at DESC NULLS LAST
+     LIMIT 10`,
+    [institutionId, studentIds]
+  );
+
+  return {
+    message: r.rows.length > 0
+      ? 'Estos son los profesores disponibles. Puedes enviarles un mensaje desde EvoSend.'
+      : 'No se encontraron profesores vinculados a tus hijos.',
+    suggestedChannels: r.rows.map((row: { channel_id: string | null; teacher_name: string; subject_name: string }) => ({
+      channelId: row.channel_id ?? '',
+      teacherName: row.teacher_name,
+      subjectName: row.subject_name,
+    })),
+  };
+}
+
+// ─── Estudiante: list_my_courses (student version) ────────────────────────────
+
+async function listStudentCourses(
+  institutionId: string,
+  userId: string,
+  _params: Record<string, unknown>
+): Promise<Array<{ groupId: string; groupName: string; subjectName: string }>> {
+  const r = await queryPg<{
+    group_id: string;
+    group_name: string;
+    subject_name: string;
+  }>(
+    `SELECT DISTINCT g.id AS group_id, g.name AS group_name,
+            COALESCE(gs.display_name, s.name) AS subject_name
+     FROM enrollments e
+     JOIN groups g ON g.id = e.group_id
+     JOIN group_subjects gs ON gs.group_id = g.id AND gs.institution_id = $1
+     JOIN subjects s ON s.id = gs.subject_id
+     WHERE e.student_id = $2
+     ORDER BY g.name, subject_name`,
+    [institutionId, userId]
+  );
+  return r.rows.map((row: { group_id: string; group_name: string; subject_name: string }) => ({
+    groupId: row.group_id,
+    groupName: row.group_name,
+    subjectName: row.subject_name,
+  }));
+}
+
+// ─── Evo Docs: generate_evo_doc ───────────────────────────────────────────────
+
+async function getInstitutionName(institutionId: string): Promise<string> {
+  try {
+    const r = await queryPg<{ name: string }>('SELECT name FROM institutions WHERE id = $1', [institutionId]);
+    return r.rows[0]?.name ?? 'Colegio EVO';
+  } catch { return 'Colegio EVO'; }
+}
+
+async function generateEvoDoc(
+  institutionId: string,
+  userId: string,
+  userRole: string,
+  params: Record<string, unknown>
+): Promise<{ __type: string; title: string; description: string; period: string; url: string; docId: string }> {
+  const title = String(params.title ?? 'Analisis Academico').trim();
+  const docType = String(params.docType ?? 'student_analysis').trim();
+  const subjectName = String(params.subjectName ?? '').trim();
+  const period = String(params.period ?? new Date().getFullYear().toString()).trim();
+  const subjectId = typeof params.subjectId === 'string' ? params.subjectId.trim() : undefined;
+
+  const institutionName = await getInstitutionName(institutionId);
+  const dateStr = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const metrics: EvoDocMetric[] = [];
+  const sections: EvoDocSection[] = [];
+  const recommendations: string[] = [];
+
+  if (docType === 'student_analysis') {
+    const targetId = subjectId || (userRole === 'padre' ? await resolveChildId(institutionId, userId, params).catch(() => userId) : userId);
+
+    const grades = await getMyGrades(institutionId, targetId, {});
+    const attendance = await getMyAttendance(institutionId, targetId, {});
+    const tasks = await getPendingTasks(institutionId, targetId, {});
+
+    const totalGrades = grades.length;
+    const avgScore = totalGrades > 0 ? grades.reduce((s, g) => s + (g.score ?? 0), 0) / totalGrades : 0;
+    const presentCount = attendance.filter(a => a.status === 'present').length;
+    const attPct = attendance.length > 0 ? Math.round((presentCount / attendance.length) * 100) : 0;
+    const completedTasks = tasks.filter(t => t.status === 'calificada' || t.status === 'entregada').length;
+    const taskPct = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+
+    const subjectMap = new Map<string, { scores: number[]; name: string }>();
+    for (const g of grades) {
+      const entry = subjectMap.get(g.subjectName) ?? { scores: [], name: g.subjectName };
+      if (g.score !== null) entry.scores.push(g.score);
+      subjectMap.set(g.subjectName, entry);
+    }
+    const subjectAvgs = Array.from(subjectMap.entries()).map(([name, d]) => ({
+      name,
+      avg: d.scores.length > 0 ? d.scores.reduce((a, b) => a + b, 0) / d.scores.length : 0,
+    }));
+    const riskSubjects = subjectAvgs.filter(s => s.avg < 3.0).length;
+
+    metrics.push(
+      { label: 'Promedio general', value: avgScore.toFixed(1), status: avgScore >= 4.0 ? 'good' : avgScore >= 3.0 ? 'warning' : 'critical' },
+      { label: 'Asistencia', value: `${attPct}%`, status: attPct >= 90 ? 'good' : attPct >= 75 ? 'warning' : 'critical' },
+      { label: 'Materias en riesgo', value: String(riskSubjects), status: riskSubjects === 0 ? 'good' : riskSubjects <= 2 ? 'warning' : 'critical' },
+      { label: 'Tareas completadas', value: `${taskPct}%`, status: taskPct >= 80 ? 'good' : taskPct >= 60 ? 'warning' : 'critical' },
+    );
+
+    const barData: EvoDocChartBar[] = subjectAvgs.slice(0, 8).map(s => ({
+      label: s.name.length > 6 ? s.name.slice(0, 6) : s.name,
+      value: s.avg,
+      maxValue: 5,
+    }));
+
+    sections.push({
+      title: 'Rendimiento Academico por Materia',
+      narrative: `El estudiante presenta un promedio general de ${avgScore.toFixed(1)} con ${riskSubjects} materia(s) en riesgo. La asistencia es del ${attPct}% y ha completado ${taskPct}% de las tareas asignadas.`,
+      chartType: 'bar',
+      chartData: barData,
+    });
+
+    if (grades.length >= 3) {
+      const sorted = [...grades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const monthMap = new Map<string, number[]>();
+      for (const g of sorted) {
+        if (g.score === null) continue;
+        const month = new Date(g.date).toLocaleString('es-CO', { month: 'short' });
+        const arr = monthMap.get(month) ?? [];
+        arr.push(g.score);
+        monthMap.set(month, arr);
+      }
+      const lineData: EvoDocChartLine[] = Array.from(monthMap.entries()).map(([label, scores]) => ({
+        label,
+        value: scores.reduce((a, b) => a + b, 0) / scores.length,
+      }));
+
+      if (lineData.length >= 2) {
+        sections.push({
+          title: 'Evolucion del Promedio Mensual',
+          narrative: 'La trayectoria academica muestra la evolucion del promedio a lo largo del periodo.',
+          chartType: 'line',
+          chartData: lineData,
+        });
+      }
+    }
+
+    if (riskSubjects > 0) {
+      const riskNames = subjectAvgs.filter(s => s.avg < 3.0).map(s => s.name);
+      recommendations.push(`Implementar sesiones de refuerzo en ${riskNames.join(', ')}.`);
+    }
+    if (attPct < 90) recommendations.push('Mejorar la asistencia para mantener un seguimiento academico continuo.');
+    if (taskPct < 80) recommendations.push('Completar las tareas pendientes para mejorar el promedio.');
+    if (recommendations.length === 0) recommendations.push('Mantener el excelente rendimiento academico actual.');
+
+  } else if (docType === 'group_risk') {
+    const riskData = await getAcademicRiskReport(institutionId, userId, { threshold: params.threshold ?? 60 });
+    metrics.push(
+      { label: 'Estudiantes en riesgo', value: String(riskData.length), status: riskData.length === 0 ? 'good' : riskData.length <= 5 ? 'warning' : 'critical' },
+    );
+    sections.push({
+      title: 'Reporte de Riesgo Academico',
+      narrative: `Se identificaron ${riskData.length} estudiante(s) con promedio por debajo del umbral. ${riskData.length > 0 ? 'Se requiere atencion inmediata.' : 'Todos los estudiantes estan aprobando.'}`,
+    });
+    if (riskData.length > 0) recommendations.push('Programar reuniones con los estudiantes en riesgo y sus acudientes.');
+
+  } else if (docType === 'attendance_report') {
+    const attData = await getAttendanceReport(institutionId, userId, params);
+    const avgAtt = attData.length > 0 ? attData.reduce((s, a) => s + a.percentage, 0) / attData.length : 0;
+    metrics.push(
+      { label: 'Asistencia promedio', value: `${Math.round(avgAtt)}%`, status: avgAtt >= 90 ? 'good' : avgAtt >= 75 ? 'warning' : 'critical' },
+      { label: 'Grupos analizados', value: String(attData.length), status: 'neutral' },
+    );
+
+    const barData: EvoDocChartBar[] = attData.slice(0, 10).map(a => ({
+      label: a.groupName.length > 6 ? a.groupName.slice(0, 6) : a.groupName,
+      value: a.percentage,
+      maxValue: 100,
+    }));
+
+    sections.push({
+      title: 'Asistencia por Grupo',
+      narrative: `La asistencia promedio es del ${Math.round(avgAtt)}% con ${attData.filter(a => a.percentage < 80).length} grupo(s) con asistencia baja.`,
+      chartType: 'bar',
+      chartData: barData,
+    });
+
+    if (avgAtt < 90) recommendations.push('Implementar estrategias para mejorar la asistencia general.');
+  }
+
+  if (sections.length === 0) {
+    sections.push({
+      title: 'Analisis General',
+      narrative: 'Documento generado con la informacion disponible.',
+    });
+  }
+
+  const docData: EvoDocData = {
+    title,
+    subjectName: subjectName || title,
+    institutionName,
+    period,
+    docType,
+    date: dateStr,
+    metrics,
+    sections,
+    recommendations,
+  };
+
+  const result = await generateEvoDocPDF(docData, institutionId, userId, {
+    description: `${title} - ${period}`,
+    subjectId,
+  });
+
+  return {
+    __type: 'evo_doc',
+    title,
+    description: `${title} - ${period}`,
+    period,
+    url: result.url,
+    docId: result.docId,
+  };
+}
+
 // ─── Función principal exportada ─────────────────────────────────────────────
 
 export async function executeKiwiAction(
@@ -790,7 +1326,19 @@ export async function executeKiwiAction(
 ): Promise<KiwiActionResult> {
   try {
     switch (toolName) {
+      // ── Shared ──
+      case 'get_my_schedule': {
+        const data = await getMySchedule(institutionId, userId, userRole, toolParams);
+        if (!data) return { success: true, data: { message: 'No se encontró horario registrado.' } };
+        return { success: true, data };
+      }
+
+      // ── Profesor ──
       case 'list_my_courses': {
+        if (userRole === 'estudiante') {
+          const data = await listStudentCourses(institutionId, userId, toolParams);
+          return { success: true, data };
+        }
         const data = await listMyCourses(institutionId, userId, toolParams);
         return { success: true, data };
       }
@@ -803,6 +1351,44 @@ export async function executeKiwiAction(
         return { success: true, data: result };
       }
 
+      // ── Estudiante ──
+      case 'get_my_grades': {
+        const data = await getMyGrades(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      case 'get_my_attendance': {
+        const data = await getMyAttendance(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      case 'get_pending_tasks': {
+        const data = await getPendingTasks(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      // ── Padre ──
+      case 'get_child_grades': {
+        const data = await getChildGrades(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      case 'get_child_attendance': {
+        const data = await getChildAttendance(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      case 'get_comunicados': {
+        const data = await getComunicados(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      case 'contact_teacher': {
+        const data = await contactTeacher(institutionId, userId, toolParams);
+        return { success: true, data };
+      }
+
+      // ── Directivo ──
       case 'get_institution_analytics': {
         const data = await getInstitutionAnalytics(institutionId, userId, toolParams);
         return { success: true, data };
@@ -845,6 +1431,56 @@ export async function executeKiwiAction(
         }
         return { success: true, data: result };
       }
+
+      // ── Workflows / Automation ──
+      case 'trigger_workflow': {
+        const workflowId = typeof toolParams.workflowId === 'string' ? toolParams.workflowId.trim() : '';
+        if (!workflowId) {
+          const workflows = listAvailableWorkflows();
+          return {
+            success: true,
+            data: {
+              message: 'Indica qué automatización quieres activar.',
+              available: workflows,
+            },
+          };
+        }
+        const wfResult = await triggerWorkflow(workflowId, institutionId, userId, toolParams);
+        return wfResult.success
+          ? { success: true, data: wfResult }
+          : { success: false, error: wfResult.message };
+      }
+
+      // ── RAG ──
+      case 'search_documents': {
+        const query = typeof toolParams.query === 'string' ? toolParams.query.trim() : '';
+        if (!query) return { success: false, error: 'Se requiere una consulta para buscar documentos.' };
+        const results = await searchKnowledge(institutionId, query, 5);
+        if (results.length === 0) {
+          return { success: true, data: { message: 'No se encontraron documentos relevantes para tu consulta.', results: [] } };
+        }
+        return {
+          success: true,
+          data: {
+            message: `Encontré ${results.length} documento(s) relevante(s).`,
+            results: results.map((r) => ({
+              title: r.title,
+              content: r.content,
+              similarity: Math.round(r.similarity * 100),
+            })),
+          },
+        };
+      }
+
+      case 'generate_evo_doc': {
+        const docResult = await generateEvoDoc(institutionId, userId, userRole, toolParams);
+        return { success: true, data: docResult };
+      }
+
+      case 'get_subject_analytics':
+      case 'get_teacher_performance':
+      case 'generate_academic_report':
+        return { success: false, error: 'Esta herramienta estara disponible proximamente.' };
 
       default:
         return { success: false, error: `Tool no disponible: ${toolName}` };

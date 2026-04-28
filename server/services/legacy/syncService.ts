@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
-import { Notificacion, Evento, Assignment, User, Course } from '../models';
-import { normalizeIdForQuery } from '../utils/idGenerator';
+import { Notificacion, Evento, Assignment, User, Course } from '../../models';
+import { normalizeIdForQuery } from '../../utils/idGenerator';
 
 /**
  * Servicio de sincronización entre módulos

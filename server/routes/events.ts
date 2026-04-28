@@ -30,6 +30,7 @@ function toEventResponse(row: {
   created_by_id: string | null;
   group_name?: string | null;
   created_by_name?: string | null;
+  source_announcement_id?: string | null;
 }) {
   return {
     _id: row.id,
@@ -40,6 +41,7 @@ function toEventResponse(row: {
     tipo: row.type,
     cursoId: row.group_id ? { _id: row.group_id, nombre: row.group_name ?? '' } : null,
     creadoPor: row.created_by_id ? { _id: row.created_by_id, nombre: row.created_by_name ?? '' } : null,
+    sourceAnnouncementId: row.source_announcement_id ?? null,
   };
 }
 

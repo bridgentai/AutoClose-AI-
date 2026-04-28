@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
-import { User, Assignment, Course } from '../models';
-import { normalizeIdForQuery } from '../utils/idGenerator';
+import { User, Assignment, Course } from '../../models';
+import { normalizeIdForQuery } from '../../utils/idGenerator';
 
 /**
  * Servicio centralizado para validar permisos de acciones

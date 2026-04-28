@@ -4,7 +4,9 @@ import './config/env';
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import cors from "cors";
+import helmet from "helmet";
 import { ENV } from "./config/env";
+import { buildHttpCorsOptions } from "./config/security.js";
 import { protect, type AuthRequest } from "./middleware/auth.js";
 import { requireRole } from "./middleware/roleAuth.js";
 
@@ -58,9 +60,15 @@ import {
   ensureCommunicationLegacyCleanup,
   ensureEventsSourceAnnouncementId,
   ensureDisciplinaryActionsOccurredAt,
+  ensureRagSchema,
+  ensureEvoDocsSchema,
 } from "./db/pgSchemaPatches.js";
 import institucionalComunicadosRoutes from "./routes/institucionalComunicados.js";
 import kiwiRoutes from "./routes/kiwi.js";
+import knowledgeDocumentsRoutes from "./routes/knowledgeDocuments.js";
+import webhooksRoutes from "./routes/webhooks.js";
+import evoDocsRoutes from "./routes/evoDocs.js";
+import evoAgentRoutes from "./routes/evoAgent.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   if (ENV.DATABASE_URL) {
@@ -149,21 +157,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (e) {
       console.warn("[schema] Parche disciplinary_actions.occurred_at:", (e as Error).message);
     }
+    try {
+      await ensureRagSchema();
+    } catch (e) {
+      console.warn("[schema] Parche RAG pgvector:", (e as Error).message);
+    }
+    try {
+      await ensureEvoDocsSchema();
+    } catch (e) {
+      console.warn("[schema] Parche evo_docs:", (e as Error).message);
+    }
   }
 
-  // CORS - Configuración explícita para permitir todas las solicitudes
-  app.use(cors({
-    origin: true, // Permitir cualquier origen
-    credentials: true, // Permitir credenciales (cookies, headers de autorización)
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  }));
+  if (ENV.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+  }
+
+  app.use(
+    helmet({
+      contentSecurityPolicy:
+        ENV.NODE_ENV === "production"
+          ? {
+              directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", "data:", "https:", "blob:"],
+                connectSrc: ["'self'", "https:", "wss:"],
+                fontSrc: ["'self'", "https:", "data:"],
+                frameAncestors: ["'none'"],
+              },
+            }
+          : false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  app.use(cors(buildHttpCorsOptions()));
 
   // Rutas de API
   app.use('/api/auth', authRoutes);
   app.use('/api/chat', chatRoutes);
   app.use('/api/ai', aiRoutes);
-  console.log('[Routes] Ruta /api/ai registrada correctamente');
+  console.log('[Routes] /api/ai compat JSON (Kiwi Agent) registrada');
   app.use('/api/courses', coursesRoutes);
   app.use('/api/institucional', institucionalComunicadosRoutes);
   app.use('/api/materials', materialsRoutes);
@@ -198,10 +234,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/uploads', uploadsRoutes);
   app.use('/api/activity', activityRoutes);
   app.use('/api/kiwi', kiwiRoutes);
+  app.use('/api/evo-agent', evoAgentRoutes);
+  app.use('/api/knowledge-documents', knowledgeDocumentsRoutes);
+  app.use('/api/webhooks', webhooksRoutes);
+  app.use('/api/evo-docs', evoDocsRoutes);
   // Ruta explícita para que la consola SQL (Neon) siempre esté disponible con la misma DB de la plataforma
   app.post('/api/admin/sql', protect, requireRole('admin-general-colegio', 'school_admin', 'super_admin'), adminSqlHandler);
 
-  // Ruta de health check (con verificación PG cuando USE_POSTGRES_ONLY)
+  // Ruta de health check (sin conteos públicos; detalle solo con HEALTH_INTERNAL_SECRET)
   app.get('/api/health', async (req, res) => {
     const pgConfigured = !!ENV.DATABASE_URL;
     const postgresOnly = ENV.USE_POSTGRES_ONLY || false;
@@ -211,18 +251,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       postgres: { configured: pgConfigured, postgres_only: postgresOnly },
       timestamp: new Date().toISOString(),
     };
-    if (pgConfigured && postgresOnly) {
+    const deepOk =
+      req.query.deep === '1' &&
+      !!ENV.HEALTH_INTERNAL_SECRET &&
+      req.get('x-health-secret') === ENV.HEALTH_INTERNAL_SECRET;
+    if (pgConfigured && postgresOnly && deepOk) {
       try {
-        const { queryPg } = await import('./config/db-pg.js');
+        const { queryPg, getPgPool } = await import('./config/db-pg.js');
         const [u, i, g] = await Promise.all([
           queryPg<{ c: number }>('SELECT COUNT(*)::int AS c FROM users'),
           queryPg<{ c: number }>('SELECT COUNT(*)::int AS c FROM institutions'),
           queryPg<{ c: number }>('SELECT COUNT(*)::int AS c FROM groups'),
         ]);
+        const pool = getPgPool();
         payload.postgres = {
           configured: true,
           postgres_only: true,
           counts: { users: u.rows[0]?.c ?? 0, institutions: i.rows[0]?.c ?? 0, groups: g.rows[0]?.c ?? 0 },
+          pool: {
+            max: ENV.PG_POOL_MAX,
+            totalCount: pool.totalCount,
+            idleCount: pool.idleCount,
+            waitingCount: pool.waitingCount,
+          },
         };
       } catch (e) {
         payload.postgres = { configured: true, postgres_only: true, error: (e as Error).message };
@@ -233,8 +284,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
 
-  const { setupEvoSocket } = await import('./socket');
-  setupEvoSocket(httpServer);
+  const { setupEvoSocket } = await import('./socket.js');
+  await setupEvoSocket(httpServer);
 
   return httpServer;
 }

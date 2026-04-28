@@ -1,6 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = process.env.BASE_URL || 'http://localhost:3000';
+/** Prioridad: PLAYWRIGHT_BASE_URL (staging) > BASE_URL > dev server Evo.OS (puerto 5000) */
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ||
+  process.env.BASE_URL ||
+  'http://localhost:5000';
 
 /**
  * Configuración mejorada de Playwright para pruebas E2E
@@ -10,6 +14,8 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000';
  * - Timeouts más claros
  * - Verificación del servidor antes de ejecutar tests
  * - Mejor logging de errores
+ *
+ * Base URL: PLAYWRIGHT_BASE_URL (staging) > BASE_URL > http://localhost:5000
  */
 export default defineConfig({
   testDir: './e2e',

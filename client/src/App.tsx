@@ -60,10 +60,6 @@ import PerfilLayout from "@/pages/PerfilLayout";
 import InformacionPersonal from "@/pages/InformacionPersonal";
 import FichaMedica from "@/pages/FichaMedica";
 
-import ComunicacionHome from "@/pages/ComunicacionHome";
-import ComunicacionAcademico from "@/pages/ComunicacionAcademico";
-import ComunicacionAcademicoRespuestas from "@/pages/ComunicacionAcademicoRespuestas";
-import BandejaDeEntrada from "@/pages/BandejaDeEntrada";
 import EvoSendPage from "@/pages/evo-send";
 import EvoDrivePage from "@/pages/evo-drive";
 
@@ -225,7 +221,7 @@ function AppRouter() {
               <AuthGuard><ParentHorarioPage /></AuthGuard>
             </Route>
             <Route path="/parent/calendario">
-              <AuthGuard><CalendarPage /></AuthGuard>
+              <AuthGuard><Redirect to="/parent/tareas" /></AuthGuard>
             </Route>
             <Route path="/parent/tareas">
               <AuthGuard><StudentTasksPage /></AuthGuard>
@@ -358,22 +354,22 @@ function AppRouter() {
               <AuthGuard><Account /></AuthGuard>
             </Route>
 
-            <Route path="/comunicacion">
-              <AuthGuard><ComunicacionHome /></AuthGuard>
-            </Route>
-            <Route path="/comunicacion/bandeja">
-              <AuthGuard><BandejaDeEntrada /></AuthGuard>
-            </Route>
-            <Route path="/comunicacion/academico">
-              <AuthGuard><ComunicacionAcademico /></AuthGuard>
-            </Route>
             <Route path="/comunicacion/academico/:materiaId/respuestas/:comunicadoId">
-              <AuthGuard><ComunicacionAcademicoRespuestas /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/comunicacion/academico/:materiaId">
-              <AuthGuard><ComunicacionAcademico /></AuthGuard>
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
+            </Route>
+            <Route path="/comunicacion/academico">
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
+            </Route>
+            <Route path="/comunicacion/bandeja">
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/comunicacion/redactar">
+              <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
+            </Route>
+            <Route path="/comunicacion">
               <AuthGuard><Redirect to="/evo-send" /></AuthGuard>
             </Route>
             <Route path="/evo-send">
@@ -388,9 +384,6 @@ function AppRouter() {
             </Route>
             <Route path="/comunidad/calendario">
               <AuthGuard><CalendarioEventos /></AuthGuard>
-            </Route>
-            <Route path="/comunidad/noticias">
-              <AuthGuard><ComunicadosInstitucionales /></AuthGuard>
             </Route>
 
             <Route path="/calendar">

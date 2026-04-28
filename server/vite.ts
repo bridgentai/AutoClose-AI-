@@ -5,6 +5,7 @@ import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
+import { ENV } from "./config/env.js";
 
 const viteLogger = createLogger();
 
@@ -89,7 +90,11 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(
+    express.static(distPath, {
+      maxAge: ENV.NODE_ENV === "production" ? ENV.STATIC_ASSET_MAX_AGE_SEC * 1000 : 0,
+    }),
+  );
 
   // fall through to index.html if the file doesn't exist (solo para rutas no-API)
   app.use("*", (req, res, next) => {

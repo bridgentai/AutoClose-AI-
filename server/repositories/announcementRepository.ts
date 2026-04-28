@@ -179,6 +179,23 @@ export async function findDirectThreadBetweenUsers(
   return r.rows[0] ?? null;
 }
 
+/** Participante distinto al viewer en un chat 1:1 (para título en UI). */
+export async function findPeerUserInDirectChat(
+  announcementId: string,
+  viewerUserId: string
+): Promise<{ id: string; full_name: string; role: string } | null> {
+  const r = await queryPg<{ id: string; full_name: string; role: string }>(
+    `SELECT u.id, u.full_name, u.role
+     FROM announcement_recipients ar
+     INNER JOIN users u ON u.id = ar.user_id
+     WHERE ar.announcement_id = $1 AND ar.user_id <> $2::uuid
+     ORDER BY u.full_name ASC
+     LIMIT 1`,
+    [announcementId, viewerUserId]
+  );
+  return r.rows[0] ?? null;
+}
+
 /** Hilo Evo Send familia: estudiante + todos los acudientes vinculados (un hilo por estudiante). */
 export async function findFamilyEvoThreadForStudent(
   studentId: string,
@@ -338,7 +355,10 @@ export async function countUnreadByThreadIds(
   return out;
 }
 
-/** Get or create the Evo Send chat thread for a group_subject (curso + materia). @deprecated usar findOrCreateEvoChatForGroupTeacher para un chat por curso */
+/**
+ * Hilo Evo Send del aula: un chat por group_subject (curso + materia).
+ * Varios group_subjects con el mismo profesor en el mismo grupo = hilos separados.
+ */
 export async function findOrCreateEvoChatForGroupSubject(
   groupSubjectId: string,
   institutionId: string,
@@ -359,7 +379,10 @@ export async function findOrCreateEvoChatForGroupSubject(
   });
 }
 
-/** Un solo chat Evo Send por curso (grupo) y profesor — todas las materias comparten el mismo hilo. */
+/**
+ * Un solo chat Evo Send por curso (grupo) y profesor cuando group_subject_id es null (legado).
+ * Preferir findOrCreateEvoChatForGroupSubject para chats por materia.
+ */
 export async function findOrCreateEvoChatForGroupTeacher(
   groupId: string,
   institutionId: string,
@@ -396,6 +419,67 @@ export async function findOrCreateEvoChatForGroupTeacher(
     );
     if (again.rows[0]) return again.rows[0];
     throw new Error('No se pudo crear u obtener el chat del curso');
+  }
+}
+
+const PARENT_SUBJECT_THREAD_TYPE = 'evo_chat_parent_subject';
+
+/**
+ * Hilo Evo Send informativo por materia (group_subject): padres vinculados + profesor de la materia.
+ * Distinto del evo_chat del aula (estudiantes), para no mezclar conversación de curso con avisos a acudientes.
+ */
+export async function findOrCreateParentSubjectEvoThread(
+  groupSubjectId: string,
+  institutionId: string
+): Promise<AnnouncementRow> {
+  const { ensureEvoChatParentSubjectUniqueIndex } = await import('../db/pgSchemaPatches.js');
+  await ensureEvoChatParentSubjectUniqueIndex();
+  const sel = await queryPg<AnnouncementRow>(
+    `SELECT * FROM announcements
+     WHERE institution_id = $1 AND type = $2 AND group_subject_id = $3
+     LIMIT 1`,
+    [institutionId, PARENT_SUBJECT_THREAD_TYPE, groupSubjectId]
+  );
+  if (sel.rows[0]) return sel.rows[0];
+
+  const meta = await queryPg<{
+    group_id: string;
+    teacher_id: string;
+    subject_label: string;
+    group_name: string;
+  }>(
+    `SELECT gs.group_id, gs.teacher_id,
+            COALESCE(gs.display_name, s.name) AS subject_label,
+            g.name AS group_name
+     FROM group_subjects gs
+     JOIN subjects s ON s.id = gs.subject_id
+     JOIN groups g ON g.id = gs.group_id
+     WHERE gs.id = $1 AND gs.institution_id = $2
+     LIMIT 1`,
+    [groupSubjectId, institutionId]
+  );
+  const m = meta.rows[0];
+  if (!m) throw new Error('group_subject no encontrado');
+  const title = `${m.subject_label} · ${m.group_name}`;
+  try {
+    return await createAnnouncement({
+      institution_id: institutionId,
+      title,
+      body: null,
+      type: PARENT_SUBJECT_THREAD_TYPE,
+      group_id: m.group_id,
+      group_subject_id: groupSubjectId,
+      created_by_id: m.teacher_id,
+    });
+  } catch {
+    const again = await queryPg<AnnouncementRow>(
+      `SELECT * FROM announcements
+       WHERE institution_id = $1 AND type = $2 AND group_subject_id = $3
+       LIMIT 1`,
+      [institutionId, PARENT_SUBJECT_THREAD_TYPE, groupSubjectId]
+    );
+    if (again.rows[0]) return again.rows[0];
+    throw new Error('No se pudo crear u obtener el hilo padre–materia');
   }
 }
 

@@ -12,6 +12,8 @@ import { TasksOverviewCard } from '@/components/chat/TasksOverviewCard';
 import { TrendAnalyticsCard } from '@/components/chat/TrendAnalyticsCard';
 import { NotesOverviewCard } from '@/components/chat/NotesOverviewCard';
 import kiwiImg from '@/assets/kiwi sentado.png';
+import { EvoDocCard } from '@/components/evo-doc-card';
+import { isKiwiConfirmPayload, parseKiwiConfirmPayload, parseKiwiSseLine } from '@/lib/kiwiSse';
 
 interface Message {
   emisor: 'user' | 'ai';
@@ -19,23 +21,6 @@ interface Message {
   timestamp: Date;
   type?: string;
   structuredData?: Record<string, unknown>;
-}
-
-function isKiwiConfirmPayload(text: string): boolean {
-  return typeof text === 'string' && text.startsWith('__CONFIRM__:');
-}
-
-function parseKiwiConfirmPayload(text: string): Record<string, unknown> | null {
-  if (!isKiwiConfirmPayload(text)) return null;
-  const raw = text.slice('__CONFIRM__:'.length).trim();
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 type ParsedCourseItem = { subject: string; group: string };
@@ -72,7 +57,9 @@ function parseSubjectGroupsFromText(text: string): ParsedSubjectGroups | null {
   if (!subject) return null;
 
   // Captura grupos tipo 10C, 11H, 9D... vengan con ** o no.
-  const groupMatches = [...t.matchAll(/\b(\d{1,2}[A-Za-z])\b/g)].map((x) => x[1]?.toUpperCase()).filter(Boolean);
+  const groupMatches = Array.from(t.matchAll(/\b(\d{1,2}[A-Za-z])\b/g), (x) =>
+    (x[1] ?? '').toUpperCase(),
+  ).filter(Boolean);
   const groups = Array.from(new Set(groupMatches));
   return groups.length > 0 ? { subject, groups } : null;
 }
@@ -91,6 +78,7 @@ export default function Chat() {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarRefresh, setSidebarRefresh] = useState(0);
+  const [activeToolStep, setActiveToolStep] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -208,40 +196,74 @@ export default function Chat() {
         buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const jsonStr = line.slice(6).trim();
-          if (!jsonStr) continue;
+          const event = parseKiwiSseLine(line);
+          if (!event) continue;
 
-          let event: { type: string; text?: string; sessionId?: string; message?: string };
-          try {
-            event = JSON.parse(jsonStr);
-          } catch {
+          if (event.type === 'tool_step') {
+            const toolEvt = event as unknown as { tool: string; status: string };
+            setActiveToolStep(toolEvt.status === 'start' ? toolEvt.tool : null);
             continue;
           }
 
           if (event.type === 'chunk' && event.text) {
-            // Confirmación estructurada (Kiwi)
-            if (firstChunk && isKiwiConfirmPayload(event.text)) {
+            if (isKiwiConfirmPayload(event.text)) {
               const payload = parseKiwiConfirmPayload(event.text);
               setLoading(false);
               setIsStreaming(false);
-              setMessages((prev) => [
-                ...prev,
-                {
-                  emisor: 'ai',
-                  contenido: '',
-                  timestamp: new Date(),
-                  type: 'kiwi_confirm',
-                  structuredData: payload ?? undefined,
-                },
-              ]);
+              setActiveToolStep(null);
+              setMessages((prev) => {
+                const next = [...prev];
+                if (firstChunk) {
+                  next.push({
+                    emisor: 'ai',
+                    contenido: '',
+                    timestamp: new Date(),
+                    type: 'kiwi_confirm',
+                    structuredData: payload ?? undefined,
+                  });
+                } else {
+                  next[next.length - 1] = {
+                    emisor: 'ai',
+                    contenido: '',
+                    timestamp: new Date(),
+                    type: 'kiwi_confirm',
+                    structuredData: payload ?? undefined,
+                  };
+                }
+                return next;
+              });
               firstChunk = false;
+              continue;
+            }
+
+            if (event.text.startsWith('__EVO_DOC__:')) {
+              try {
+                const docData = JSON.parse(event.text.slice('__EVO_DOC__:'.length)) as Record<string, unknown>;
+                setLoading(false);
+                setIsStreaming(false);
+                setActiveToolStep(null);
+                setMessages((prev) => {
+                  const next = [...prev];
+                  const docMsg = {
+                    emisor: 'ai' as const,
+                    contenido: '',
+                    timestamp: new Date(),
+                    type: 'evo_doc',
+                    structuredData: docData,
+                  };
+                  if (firstChunk) next.push(docMsg);
+                  else next[next.length - 1] = docMsg;
+                  return next;
+                });
+                firstChunk = false;
+              } catch { /* ignore */ }
               continue;
             }
 
             if (firstChunk) {
               setLoading(false);
               setIsStreaming(true);
+              setActiveToolStep(null);
               setMessages((prev) => [
                 ...prev,
                 { emisor: 'ai', contenido: event.text!, timestamp: new Date() },
@@ -262,9 +284,11 @@ export default function Chat() {
           } else if (event.type === 'done') {
             if (event.sessionId) setCurrentSessionId(event.sessionId);
             setIsStreaming(false);
+            setActiveToolStep(null);
             setSidebarRefresh((prev) => prev + 1);
             setTimeout(() => scrollToBottom(), 100);
           } else if (event.type === 'error') {
+            setActiveToolStep(null);
             const errMsg = event.message || 'Lo siento, ocurrió un error. Intenta de nuevo.';
             setLoading(false);
             setIsStreaming(false);
@@ -344,7 +368,7 @@ export default function Chat() {
         : 'Consulta reportes, estadísticas o gestiona el colegio';
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4 relative" data-testid="chat-page">
+    <div className="flex min-h-0 h-[min(48rem,calc(100svh-7rem))] gap-4 relative" data-testid="chat-page">
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <div className="mb-4 flex items-start justify-between flex-shrink-0">
           <div className="flex-1">
@@ -506,6 +530,25 @@ export default function Chat() {
                           ctaRoute: String(msg.structuredData.ctaRoute ?? '#'),
                         }}
                       />
+                    ) : msg.type === 'evo_doc' && msg.structuredData ? (
+                      <div className="w-full flex items-start gap-2 max-w-[80%]">
+                        <img
+                          src={kiwiImg}
+                          alt="Kiwi"
+                          className="shrink-0"
+                          style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }}
+                          draggable={false}
+                        />
+                        <div className="min-w-0">
+                          <div className="text-[11px] text-white/40 mb-1">Kiwi</div>
+                          <EvoDocCard
+                            title={String(msg.structuredData.title ?? 'Documento')}
+                            description={String(msg.structuredData.description ?? '')}
+                            period={String(msg.structuredData.period ?? '')}
+                            docId={String(msg.structuredData.docId ?? '')}
+                          />
+                        </div>
+                      </div>
                     ) : msg.type === 'kiwi_confirm' && msg.structuredData ? (
                       <div className="w-full flex items-start gap-2 max-w-[80%]">
                         <img
@@ -739,7 +782,7 @@ export default function Chat() {
                     )}
                   </div>
                 ))}
-                {loading && (
+                {(loading || activeToolStep) && (
                   <div className="flex justify-start max-w-[80%]">
                     <div className="flex items-start gap-2">
                       <img
@@ -760,9 +803,18 @@ export default function Chat() {
                           }}
                           aria-label="Kiwi está pensando"
                         >
-                          <span className="kiwi-dot" />
-                          <span className="kiwi-dot" style={{ animationDelay: '0.12s', marginLeft: 6 }} />
-                          <span className="kiwi-dot" style={{ animationDelay: '0.24s', marginLeft: 6 }} />
+                          {activeToolStep ? (
+                            <span className="text-xs text-blue-400 flex items-center gap-1.5">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              {activeToolStep.replace(/_/g, ' ')}...
+                            </span>
+                          ) : (
+                            <>
+                              <span className="kiwi-dot" />
+                              <span className="kiwi-dot" style={{ animationDelay: '0.12s', marginLeft: 6 }} />
+                              <span className="kiwi-dot" style={{ animationDelay: '0.24s', marginLeft: 6 }} />
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

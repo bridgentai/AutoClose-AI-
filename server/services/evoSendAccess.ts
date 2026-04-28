@@ -1,5 +1,8 @@
 import { queryPg } from '../config/db-pg.js';
+import type { AnnouncementRow } from '../repositories/announcementRepository.js';
 import { findAnnouncementById, isUserRecipientOfAnnouncement } from '../repositories/announcementRepository.js';
+import { findParentUserIdsForGroupSubject } from '../repositories/comunicacionRepository.js';
+import { findUsersByIds } from '../repositories/userRepository.js';
 
 export const DIRECTIVO_FULL_INBOX_ROLES = ['directivo', 'asistente-academica', 'school_admin'] as const;
 
@@ -72,12 +75,66 @@ export async function resolveRecipientsForThread(args: {
     return Object.keys(recipientMap);
   }
 
+  if (a.type === 'evo_chat_parent_subject' && a.group_subject_id) {
+    const t = await queryPg<{ teacher_id: string }>(
+      'SELECT teacher_id FROM group_subjects WHERE id = $1 AND institution_id = $2 LIMIT 1',
+      [a.group_subject_id, args.institutionId]
+    );
+    const teacherId = t.rows[0]?.teacher_id;
+    const parents = await findParentUserIdsForGroupSubject(a.group_subject_id, args.institutionId);
+    const recipientMap: Record<string, true> = {};
+    if (teacherId) recipientMap[teacherId] = true;
+    for (const pid of parents) recipientMap[pid] = true;
+    return Object.keys(recipientMap);
+  }
+
   return [];
 }
 
 export function getThreadCategoryByType(type: string): 'academico' | 'institucional' {
   if (type === 'comunicado_institucional') return 'institucional';
   return 'academico';
+}
+
+/** Roles de contacto institucional: hilos 1:1 con ellos van a la bandeja Institucional (misma regla que evoSend). */
+const INSTITUTIONAL_COUNTERPART_ROLES = new Set([
+  'directivo',
+  'asistente-academica',
+  'school_admin',
+  'admin-general-colegio',
+  'rector',
+  'asistente',
+]);
+
+/**
+ * Categoría de bandeja (Académico vs Institucional) para un anuncio/hilo Evo Send.
+ * Exportado para reutilizar en Evo Drive (carpeta Circulares del padre).
+ */
+export async function computeInboxCategory(
+  a: Pick<AnnouncementRow, 'id' | 'type'>,
+  _viewerUserId: string | undefined
+): Promise<'academico' | 'institucional'> {
+  if (a.type === 'comunicado_institucional') return 'institucional';
+  if (a.type === 'evo_chat_support') return 'institucional';
+  if (a.type === 'evo_chat_direct') {
+    const r = await queryPg<{ user_id: string }>(
+      'SELECT user_id FROM announcement_recipients WHERE announcement_id = $1',
+      [a.id]
+    );
+    const ids = r.rows.map((x: { user_id: string }) => x.user_id);
+    if (ids.length !== 2) return 'academico';
+    const users = await findUsersByIds(ids);
+    if (users.length !== 2) return 'academico';
+    const roles = users.map((u) => u.role);
+    if (roles.every((role) => role === 'profesor')) return 'academico';
+    const hasProfesor = roles.some((role) => role === 'profesor');
+    const hasSectionAcademicLead = roles.some((role) => role === 'directivo' || role === 'asistente-academica');
+    if (hasProfesor && hasSectionAcademicLead) return 'academico';
+    if (roles.some((role) => role === 'estudiante' || role === 'padre')) return 'institucional';
+    if (roles.some((role) => INSTITUTIONAL_COUNTERPART_ROLES.has(role))) return 'institucional';
+    return 'academico';
+  }
+  return getThreadCategoryByType(a.type) === 'institucional' ? 'institucional' : 'academico';
 }
 
 export async function canAccessEvoThread(args: {
@@ -99,6 +156,20 @@ export async function canAccessEvoThread(args: {
       a.type === 'evo_chat_section_director');
 
   if (directorReadAll) return true;
+
+  if (a.type === 'evo_chat_parent_subject' && a.group_subject_id) {
+    const allowedIds = await resolveRecipientsForThread({
+      announcement: {
+        id: a.id,
+        type: a.type,
+        group_id: a.group_id,
+        group_subject_id: a.group_subject_id,
+        created_by_id: a.created_by_id,
+      },
+      institutionId,
+    });
+    return allowedIds.includes(userId);
+  }
 
   if (a.type === 'evo_chat' || a.type === 'evo_chat_section_director') {
     const allowedIds = await resolveRecipientsForThread({

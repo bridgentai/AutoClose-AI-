@@ -33,6 +33,8 @@ export interface CalendarAssignment {
   estado?: 'pendiente' | 'entregada' | 'calificada';
   requiresSubmission?: boolean;
   type?: string;
+  /** Comunicado institucional EvoSend que originó el evento (calendar API). */
+  sourceAnnouncementId?: string | null;
 }
 
 /** Textos del resumen por día y leyenda mensual (p. ej. eventos institucionales vs tareas). */
@@ -71,11 +73,14 @@ export const CALENDAR_SUMMARY_LABELS_INSTITUTIONAL_EVENTS: Partial<CalendarSumma
   itemSingular: 'evento',
   itemPlural: 'eventos',
   teacherMultiKeyBadge: 'tipos',
-  footerWithBubbleHint: 'Clic en el día: ver resumen · Clic en un evento: detalle',
-  footerDefaultHint: 'Clic para ver detalles',
+  footerWithBubbleHint: 'Clic en el día: resumen · Clic en un evento: abre el comunicado en Eventos',
+  footerDefaultHint: 'Clic para abrir el comunicado en Eventos',
   monthLegendOne: 'evento programado',
   monthLegendMany: 'eventos programados',
 };
+
+const CAL_DAY_CELL_MIN_DEFAULT = 'min-h-[92px] sm:min-h-[100px]';
+const CAL_DAY_CELL_MIN_LARGE = 'min-h-[clamp(5.75rem,min(18vh,10.5rem),11rem)]';
 
 interface CalendarProps {
   assignments: CalendarAssignment[];
@@ -91,6 +96,8 @@ interface CalendarProps {
   monthLegendOverride?: string;
   /** Sustituye «tarea»/«curso»/pies de hover; por defecto tareas académicas. */
   summaryLabels?: Partial<CalendarSummaryLabels>;
+  /** Celdas más altas (p. ej. calendario institucional EvoSend). */
+  largeDayCells?: boolean;
 }
 
 type DeliveryBucket =
@@ -196,9 +203,11 @@ export function Calendar({
   onCurrentDateChange,
   monthLegendOverride,
   summaryLabels: summaryLabelsProp,
+  largeDayCells = false,
 }: CalendarProps) {
   const [internalDate, setInternalDate] = useState(() => new Date());
   const currentDate = controlledDate ?? internalDate;
+  const dayCellMin = largeDayCells ? CAL_DAY_CELL_MIN_LARGE : CAL_DAY_CELL_MIN_DEFAULT;
 
   const L = useMemo(
     () => ({ ...DEFAULT_CALENDAR_SUMMARY_LABELS, ...summaryLabelsProp }),
@@ -291,6 +300,18 @@ export function Calendar({
     assignmentsByDay[d].push(assignment);
   });
 
+  for (const key of Object.keys(assignmentsByDay)) {
+    const dayNum = Number(key);
+    const arr = assignmentsByDay[dayNum];
+    if (!arr) continue;
+    arr.sort((a, b) => {
+      const sa = a.sourceAnnouncementId?.trim() ? 1 : 0;
+      const sb = b.sourceAnnouncementId?.trim() ? 1 : 0;
+      if (sa !== sb) return sb - sa;
+      return (a.titulo || '').localeCompare(b.titulo || '', 'es', { sensitivity: 'base' });
+    });
+  }
+
   function bucketPriority(b: DeliveryBucket): number {
     switch (b) {
       case 'past_late':
@@ -322,7 +343,7 @@ export function Calendar({
   const calendarDays: ReactElement[] = [];
 
   for (let i = 0; i < startingDayOfWeek; i++) {
-    calendarDays.push(<div key={`empty-${i}`} className="min-h-[92px] sm:min-h-[100px]" />);
+    calendarDays.push(<div key={`empty-${i}`} className={dayCellMin} />);
   }
 
   for (let day = 1; day <= daysInMonth; day++) {
@@ -339,7 +360,7 @@ export function Calendar({
             if (onDayBubbleClick) onDayBubbleClick(dayDate);
             else onEmptyDayClick?.(dayDate);
           }}
-          className="min-h-[92px] sm:min-h-[100px] rounded-xl border border-white/10 bg-white/[0.03] text-white/45 text-sm font-medium hover:bg-white/[0.06] transition-colors flex flex-col items-center justify-center"
+          className={`${dayCellMin} rounded-xl border border-white/10 bg-white/[0.03] text-white/45 text-sm font-medium hover:bg-white/[0.06] transition-colors flex flex-col items-center justify-center`}
           data-testid={`calendar-day-${day}`}
         >
           {day}
@@ -360,7 +381,11 @@ export function Calendar({
 
     const defaultActivate = () => {
       if (onDayBubbleClick) onDayBubbleClick(cellDate);
-      else if (dayAssignments.length > 0) onDayClick?.(dayAssignments[0]);
+      else if (dayAssignments.length > 0) {
+        const chosen =
+          dayAssignments.find((a) => a.sourceAnnouncementId?.trim()) ?? dayAssignments[0];
+        onDayClick?.(chosen);
+      }
     };
 
     const hoverBody = (
@@ -436,7 +461,7 @@ export function Calendar({
               type="button"
               onClick={defaultActivate}
               className={cn(
-                'min-h-[92px] sm:min-h-[100px] rounded-xl flex flex-col items-stretch justify-between p-2 sm:p-2.5 text-left transition-opacity hover:opacity-95 cursor-pointer relative overflow-hidden w-full border',
+                `${dayCellMin} rounded-xl flex flex-col items-stretch justify-between p-2 sm:p-2.5 text-left transition-opacity hover:opacity-95 cursor-pointer relative overflow-hidden w-full border`,
                 buttonClassName
               )}
               style={buttonStyle}

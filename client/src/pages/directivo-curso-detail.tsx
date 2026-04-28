@@ -323,7 +323,7 @@ export default function DirectivoCursoDetailPage() {
 
   return (
     <DirectivoGuard>
-    <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto min-h-[calc(100vh-8rem)]">
+    <div className="p-4 sm:p-6 md:p-10 max-w-5xl mx-auto min-h-0">
       <Breadcrumb
         className="mb-4"
         items={[

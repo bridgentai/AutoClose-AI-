@@ -19,7 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { BoletinContent, type BoletinData } from "@/components/boletin/BoletinContent";
+import { BoletinContent } from "@/components/boletin/BoletinContent";
+import type { BoletinData } from "@/lib/boletin-types";
 
 interface GroupItem {
   _id: string;
@@ -32,6 +33,10 @@ interface BoletinGenerado {
   estado: string;
   materias: BoletinData["materias"];
   resumenIA: string;
+  mejorMateria?: BoletinData["mejorMateria"];
+  peorMateria?: BoletinData["peorMateria"];
+  fechaEmision?: string;
+  grupo?: string;
 }
 
 interface BoletinItem {
@@ -39,7 +44,7 @@ interface BoletinItem {
   periodo: string;
   grupoNombre?: string;
   fecha?: string;
-  resumen?: { length?: number };
+  estudiantesCount?: number;
 }
 
 const CARD_STYLE = "bg-white/[0.03] border border-white/[0.07] backdrop-blur-md rounded-xl";
@@ -252,9 +257,9 @@ export default function DirectivoReportesPage() {
                       <div>
                         <span className="font-medium text-white">{b.periodo}</span>
                         {b.grupoNombre && <span className="ml-2 text-white/60">· {b.grupoNombre}</span>}
-                        {b.resumen && (b.resumen as { length?: number }).length != null && (
+                        {b.estudiantesCount != null && (
                           <span className="ml-2 text-white/50 text-sm">
-                            ({(b.resumen as { length: number }).length} estudiantes)
+                            ({b.estudiantesCount} estudiantes)
                           </span>
                         )}
                       </div>
@@ -325,9 +330,10 @@ export default function DirectivoReportesPage() {
               <ul className="space-y-3">
                 {[
                   "Nombre y datos del estudiante",
-                  "Notas por materia y promedio",
-                  "Porcentaje de asistencia",
-                  "Observaciones del período",
+                  "Promedios reales por materia",
+                  "Notas resumidas por logro",
+                  "Curva de progreso del promedio",
+                  "Análisis IA real por materia",
                   "Formato PDF listo para imprimir",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-white">
@@ -408,6 +414,9 @@ export default function DirectivoReportesPage() {
                   estado: selectedBoletin.estado,
                   materias: selectedBoletin.materias,
                   resumenIA: selectedBoletin.resumenIA,
+                  mejorMateria: selectedBoletin.mejorMateria,
+                  peorMateria: selectedBoletin.peorMateria,
+                  fechaEmision: selectedBoletin.fechaEmision,
                 }}
               />
             )}

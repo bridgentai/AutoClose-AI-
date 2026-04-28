@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React from 'react';
 import { useAuth } from '@/lib/authContext';
 import { Mail, FileCheck, MessageSquare, Calendar, School, Bot, Send, Loader2, Bell, Clock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocation } from 'wouter';
 import { NavBackButton } from '@/components/nav-back-button';
+import { EvoDocCard } from '@/components/evo-doc-card';
+import { useKiwiChatStream } from '@/hooks/useKiwiChatStream';
 
 const SECTION_LABELS: Record<string, string> = {
   'junior-school': 'Junior School',
@@ -19,136 +21,21 @@ const SECTION_COLORS: Record<string, string> = {
   'high-school': 'from-[#002366] to-[#1e3cff]',
 };
 
-interface Message {
-  emisor: 'user' | 'ai';
-  contenido: string;
-  timestamp: Date;
-}
-
 const CARD_STYLE = 'bg-white/5 border-white/10 backdrop-blur-md';
 
 function AIChatBox() {
   const [, setLocation] = useLocation();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const scrollToBottom = () => {
-    requestAnimationFrame(() => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }
-    });
-  };
-
-  useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom();
-    }
-  }, [messages]);
-
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || loading || isStreaming) return;
-
-    const userMessage: Message = { emisor: 'user', contenido: input, timestamp: new Date() };
-    setMessages(prev => [...prev, userMessage]);
-    const currentInput = input;
-    setInput('');
-    setLoading(true);
-
-    // Placeholder vacío para el streaming
-    setMessages(prev => [...prev, { emisor: 'ai', contenido: '', timestamp: new Date() }]);
-
-    try {
-      const token = localStorage.getItem('autoclose_token');
-      const res = await fetch('/api/kiwi/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          message: currentInput,
-          ...(currentSessionId ? { sessionId: currentSessionId } : {}),
-        }),
-      });
-
-      if (!res.ok || !res.body) {
-        let errMsg = 'Error al conectar con Kiwi';
-        try { const b = await res.json(); errMsg = b.error || errMsg; } catch { /* ignore */ }
-        setMessages(prev => {
-          const next = [...prev];
-          next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
-          return next;
-        });
-        setLoading(false);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      setLoading(false);
-      setIsStreaming(true);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
-
-          let parsed: { type: string; text?: string; sessionId?: string; message?: string };
-          try { parsed = JSON.parse(raw); } catch { continue; }
-
-          if (parsed.type === 'chunk' && parsed.text) {
-            const chunk = parsed.text;
-            setMessages(prev => {
-              const next = [...prev];
-              const last = next[next.length - 1];
-              if (last?.emisor === 'ai') {
-                next[next.length - 1] = { ...last, contenido: last.contenido + chunk };
-              }
-              return next;
-            });
-            setTimeout(() => scrollToBottom(), 50);
-          } else if (parsed.type === 'done') {
-            if (parsed.sessionId) setCurrentSessionId(parsed.sessionId);
-            setIsStreaming(false);
-            setTimeout(() => scrollToBottom(), 150);
-          } else if (parsed.type === 'error') {
-            setMessages(prev => {
-              const next = [...prev];
-              next[next.length - 1] = { emisor: 'ai', contenido: parsed.message ?? 'Ocurrió un error.', timestamp: new Date() };
-              return next;
-            });
-            setIsStreaming(false);
-          }
-        }
-      }
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : 'Lo siento, ocurrió un error. Intenta de nuevo.';
-      setMessages(prev => {
-        const next = [...prev];
-        next[next.length - 1] = { emisor: 'ai', contenido: errMsg, timestamp: new Date() };
-        return next;
-      });
-      setTimeout(() => scrollToBottom(), 100);
-    } finally {
-      setLoading(false);
-      setIsStreaming(false);
-    }
-  }, [input, loading, isStreaming, currentSessionId, messages]);
+  const {
+    messages,
+    input,
+    setInput,
+    loading,
+    isStreaming,
+    activeToolStep,
+    messagesEndRef,
+    sendMessage,
+    handleSendFromInput,
+  } = useKiwiChatStream();
 
   return (
     <Card className={`${CARD_STYLE} cursor-pointer flex flex-col h-full`} onClick={() => setLocation('/chat')}>
@@ -178,20 +65,78 @@ function AIChatBox() {
             <div className="space-y-3 py-2">
               {messages.map((msg, idx) => (
                 <div key={idx} className={`flex ${msg.emisor === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] px-3 py-2 rounded-lg text-sm ${
-                    msg.emisor === 'user'
-                      ? 'bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white'
-                      : 'bg-white/10 text-white border border-white/20'
-                  }`}>
-                    <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
-                  </div>
+                  {msg.emisor === 'user' ? (
+                    msg.contextLabel === 'parent_notes' ? (
+                      <details className="max-w-[85%] rounded-lg border border-white/15 bg-white/5 text-white open:bg-white/[0.07]">
+                        <summary className="cursor-pointer list-none px-3 py-2 text-xs text-[#00c8ff]/90 font-medium [&::-webkit-details-marker]:hidden">
+                          Contexto desde Notas (toca para expandir)
+                        </summary>
+                        <p className="px-3 pb-3 pt-0 text-[13px] leading-relaxed whitespace-pre-wrap text-white/85 border-t border-white/10">
+                          {msg.contenido}
+                        </p>
+                      </details>
+                    ) : (
+                      <div className="max-w-[85%] px-3 py-2 rounded-lg text-sm bg-gradient-to-r from-[#002366] to-[#1e3cff] text-white">
+                        <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
+                      </div>
+                    )
+                  ) : msg.type === 'evo_doc' && msg.structuredData ? (
+                    <div className="max-w-[92%] w-full">
+                      <EvoDocCard
+                        title={String(msg.structuredData.title ?? 'Documento')}
+                        description={String(msg.structuredData.description ?? '')}
+                        period={String(msg.structuredData.period ?? '')}
+                        docId={String(msg.structuredData.docId ?? '')}
+                        compact
+                      />
+                    </div>
+                  ) : msg.type === 'kiwi_confirm' && msg.structuredData ? (
+                    <div className="max-w-[92%] px-3 py-3 rounded-lg text-sm bg-white/10 text-white border border-white/20 space-y-2">
+                      <div className="text-xs font-semibold">Confirmación requerida</div>
+                      <div className="rounded-lg border border-white/10 bg-white/5 p-2 text-xs">
+                        <div className="text-white/60">Título</div>
+                        <div className="text-sm text-white">
+                          {String((msg.structuredData.params as { title?: string })?.title ?? '')}
+                        </div>
+                        <div className="text-white/60 mt-1">Entrega</div>
+                        <div className="text-sm text-white">
+                          {String((msg.structuredData.params as { dueDate?: string })?.dueDate ?? '')}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-white/20 text-white/80"
+                          onClick={() => setInput(`KIWI_CONFIRM ${JSON.stringify(msg.structuredData ?? {})}`)}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-gradient-to-r from-[#002366] to-[#1e3cff]"
+                          onClick={() => void sendMessage(`KIWI_CONFIRM ${JSON.stringify(msg.structuredData ?? {})}`)}
+                        >
+                          Confirmar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="max-w-[85%] px-3 py-2 rounded-lg text-sm bg-white/10 text-white border border-white/20">
+                      <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.contenido}</p>
+                    </div>
+                  )}
                 </div>
               ))}
-              {loading && (
+              {(loading || isStreaming || activeToolStep) && (
                 <div className="flex justify-start">
                   <div className="bg-white/10 px-3 py-2 rounded-lg flex items-center gap-2 text-white/70">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span className="text-sm italic">Escribiendo...</span>
+                    <span className="text-sm italic">
+                      {activeToolStep ? `${activeToolStep.replace(/_/g, ' ')}...` : 'Escribiendo...'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -207,7 +152,7 @@ function AIChatBox() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSend();
+                  handleSendFromInput();
                 }
               }}
               placeholder="Escribe tu mensaje..."
@@ -215,7 +160,7 @@ function AIChatBox() {
               disabled={loading || isStreaming}
             />
             <Button
-              onClick={(e) => { e.stopPropagation(); handleSend(); }}
+              onClick={(e) => { e.stopPropagation(); handleSendFromInput(); }}
               disabled={loading || isStreaming || !input.trim()}
               size="icon"
               className="w-10 h-10 bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 text-white"
@@ -492,13 +437,13 @@ export default function AsistentePage() {
               <Button 
                 variant="outline" 
                 className="w-full border-white/10 text-white hover:bg-white/10 mt-2"
-                onClick={() => setLocation('/asistente/comunicacion/bandeja')}
+                onClick={() => setLocation('/evo-send')}
               >
                 Bandeja de entrada
               </Button>
               <Button 
                 className="w-full bg-gradient-to-r from-[#002366] to-[#1e3cff] hover:opacity-90 mt-2"
-                onClick={() => setLocation('/asistente/comunicacion/redactar')}
+                onClick={() => setLocation('/evo-send')}
               >
                 <Send className="w-4 h-4 mr-2 inline" />
                 Escribir a padres

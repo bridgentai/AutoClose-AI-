@@ -1,6 +1,6 @@
-import { Assignment, User, Course, LogroCalificacion } from '../models';
-import { normalizeIdForQuery } from '../utils/idGenerator';
-import type { IAssignment } from '../models/Assignment';
+import { Assignment, User, Course, LogroCalificacion } from '../../models';
+import { normalizeIdForQuery } from '../../utils/idGenerator';
+import type { IAssignment } from '../../models/Assignment';
 import * as syncService from './syncService';
 
 export interface CreateAssignmentParams {

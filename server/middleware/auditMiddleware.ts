@@ -20,6 +20,14 @@ const AUDITED_PATTERNS: Array<{
   { method: 'POST', pathContains: '/api/assignments', action: 'create_assignment', entityType: 'assignment' },
   { method: 'PUT', pathContains: '/api/assignments', action: 'mutate_assignment', entityType: 'assignment' },
   { method: 'POST', pathContains: '/api/uploads', action: 'upload', entityType: 'upload' },
+  { method: 'POST', pathContains: '/api/attendance', action: 'attendance_mutate', entityType: 'attendance' },
+  { method: 'PUT', pathContains: '/api/attendance', action: 'attendance_mutate', entityType: 'attendance' },
+  { method: 'POST', pathContains: '/api/boletin', action: 'boletin_mutate', entityType: 'boletin' },
+  { method: 'POST', pathContains: '/api/logros-calificacion', action: 'grades_mutate', entityType: 'grading' },
+  { method: 'PUT', pathContains: '/api/logros-calificacion', action: 'grades_mutate', entityType: 'grading' },
+  { method: 'POST', pathContains: '/api/grade-events', action: 'grade_events_mutate', entityType: 'grading' },
+  { method: 'PUT', pathContains: '/api/grade-events', action: 'grade_events_mutate', entityType: 'grading' },
+  { method: 'POST', pathContains: '/api/admin/sql', action: 'admin_sql', entityType: 'sql' },
 ];
 
 export function getClientIP(req: Request): string {

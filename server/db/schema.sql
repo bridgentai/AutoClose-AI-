@@ -706,3 +706,16 @@ CREATE TABLE IF NOT EXISTS student_activity (
 CREATE INDEX IF NOT EXISTS idx_student_activity_student ON student_activity(student_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_student_activity_entity ON student_activity(entity_type, entity_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_student_activity_institution ON student_activity(institution_id, created_at DESC);
+
+-- Boletines académicos generados en lote (curso + período), persistidos para Reportes académicos
+CREATE TABLE IF NOT EXISTS academic_boletin_batches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  group_name TEXT NOT NULL,
+  periodo TEXT NOT NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  boletines_json JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_academic_boletin_batches_inst_created ON academic_boletin_batches(institution_id, created_at DESC);

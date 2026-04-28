@@ -35,6 +35,13 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { Breadcrumb } from '@/components/Breadcrumb';
+import {
   FolderOpen,
   FileText,
   ExternalLink,
@@ -57,10 +64,12 @@ import {
   Lock,
   RotateCcw,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useLocation } from 'wouter';
 import { NavBackButton } from '@/components/nav-back-button';
+import { openEvoDocPdfInNewTab } from '@/lib/evoDocPdf';
 
 /** Carpeta por materia para profesor (cada ítem = group_subject). */
 interface TeacherFolder {
@@ -112,6 +121,23 @@ interface MyFolderFile {
   googleWebViewLink?: string;
   origen: string;
 }
+
+/** Documentos PDF generados por Kiwi (tabla evo_docs / misma API que /evo-docs). */
+interface EvoDocListItem {
+  id: string;
+  title: string;
+  description: string | null;
+  doc_type: string;
+  period: string | null;
+  created_at: string;
+}
+
+const EVO_DOCS_DOC_TYPE_LABELS: Record<string, string> = {
+  student_analysis: 'Análisis académico',
+  group_risk: 'Riesgo académico',
+  attendance_report: 'Reporte de asistencia',
+  custom: 'Documento',
+};
 
 interface GoogleDriveFile {
   id: string;
@@ -603,7 +629,8 @@ export default function EvoDrivePage() {
   const [renamePersonalNombre, setRenamePersonalNombre] = useState('');
   const [personalFolderTitle, setPersonalFolderTitle] = useState('Mi carpeta');
 
-  const showPersonalMyFolder = user?.rol === 'estudiante' || user?.rol === 'profesor';
+  const showPersonalMyFolder =
+    user?.rol === 'estudiante' || user?.rol === 'profesor' || user?.rol === 'padre';
 
   useEffect(() => {
     if (!user?.id) return;
@@ -663,7 +690,7 @@ export default function EvoDrivePage() {
   const { data: meCourses = [] } = useQuery<Array<{ _id: string; nombre: string; groupId?: string; groupName?: string; subjectName?: string; icono?: string }>>({
     queryKey: ['users', 'me', 'courses'],
     queryFn: () => apiRequest('GET', '/api/users/me/courses'),
-    enabled: !isTeacher,
+    enabled: !isTeacher && !isPadre,
   });
   const subjectFolders: SubjectFolder[] = meCourses
     .filter((c): c is typeof c & { groupId: string; groupName: string } => !!c.groupId && !!c.groupName)
@@ -680,6 +707,23 @@ export default function EvoDrivePage() {
     queryFn: () => apiRequest('GET', '/api/evo-drive/my-folder'),
     enabled: showPersonalMyFolder,
   });
+
+  const { data: padreCirculares = [], isLoading: padreCircularesLoading } = useQuery<EvoFile[]>({
+    queryKey: ['evo-drive', 'padre-circulares', user?.id],
+    queryFn: () => apiRequest<EvoFile[]>('GET', '/api/evo-drive/padre/circulares-files'),
+    enabled: !!user?.id && isPadre,
+    refetchInterval: 60_000,
+    staleTime: 25_000,
+  });
+
+  const { data: padreEvoDocsPayload, isLoading: padreEvoDocsLoading } = useQuery<{ docs: EvoDocListItem[] }>({
+    queryKey: ['evo-docs'],
+    queryFn: () => apiRequest<{ docs: EvoDocListItem[] }>('GET', '/api/evo-docs'),
+    enabled: !!user?.id && isPadre,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const padreEvoDocs = padreEvoDocsPayload?.docs ?? [];
 
   type EvoDriveAggQuery = {
     queryKey: readonly unknown[];
@@ -1321,8 +1365,30 @@ export default function EvoDrivePage() {
     </div>
   );
 
-  const renderRecentQuickAccess = () => (
-    <div className="flex-1 min-h-0 flex flex-col px-6 py-6 overflow-auto">
+  const renderRecentQuickAccess = (opts?: { compact?: boolean }) => {
+    const compact = opts?.compact === true;
+    return (
+    <div
+      className={
+        compact
+          ? 'pt-1 pb-2'
+          : 'flex-1 min-h-0 flex flex-col px-6 py-6 overflow-auto'
+      }
+    >
+      {compact ? (
+        <>
+          {isPadre ? (
+            <p className="text-sm text-white/50 mb-3 leading-relaxed">
+              Archivos más recientes de tu carpeta personal y de Circulares (hasta 10).
+            </p>
+          ) : null}
+          {dataUpdatedAt ? (
+            <p className="text-[11px] text-white/35 tabular-nums mb-3 text-right">
+              Última actualización: {new Date(dataUpdatedAt).toLocaleString('es')}
+            </p>
+          ) : null}
+        </>
+      ) : (
       <div className="shrink-0 mb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold text-white font-['Poppins'] tracking-tight flex items-center gap-2">
@@ -1330,8 +1396,18 @@ export default function EvoDrivePage() {
             Recientes
           </h2>
           <p className="text-sm text-white/45 mt-1 max-w-2xl leading-relaxed">
-            Los últimos 10 archivos añadidos a Evo Drive (tus materias y Mi carpeta). La lista se actualiza al volver a la
-            pestaña y cada minuto mientras permaneces aquí.
+            {isPadre ? (
+              <>
+                Hasta 10 archivos más recientes entre <span className="text-white/75 font-medium">Mi carpeta</span> y{' '}
+                <span className="text-white/75 font-medium">Circulares</span>. La lista se actualiza al volver aquí y cada
+                minuto.
+              </>
+            ) : (
+              <>
+                Los últimos 10 archivos añadidos a Evo Drive (tus materias y Mi carpeta). La lista se actualiza al volver a
+                la pestaña y cada minuto mientras permaneces aquí.
+              </>
+            )}
           </p>
         </div>
         {dataUpdatedAt ? (
@@ -1340,6 +1416,7 @@ export default function EvoDrivePage() {
           </p>
         ) : null}
       </div>
+      )}
       {recentLoading ? (
         <div className="space-y-3">
           <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
@@ -1366,7 +1443,7 @@ export default function EvoDrivePage() {
               isStarred={starredIds.includes(f.id)}
               onToggleStar={isTeacher ? toggleStar : undefined}
               isInTrash={trashIds.includes(f.id)}
-              allowCourseTrash={f.cursoNombre !== 'Mi carpeta'}
+              allowCourseTrash={f.cursoNombre !== 'Mi carpeta' && f.cursoNombre !== 'Circulares'}
             />
           ))}
         </ul>
@@ -1378,41 +1455,429 @@ export default function EvoDrivePage() {
         </p>
       ) : null}
     </div>
-  );
-
-  if (isPadre) {
-    return (
-      <div className="flex-1 min-h-0 overflow-auto p-6 md:p-10">
-        <div className="max-w-xl mx-auto">
-          <NavBackButton to="/dashboard" label="Dashboard" />
-          <Card className="glass-enhanced mt-8 border border-[#1e3cff]/25 bg-white/[0.04] backdrop-blur-xl">
-            <CardHeader className="text-center pb-2">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-slate-600/80 to-slate-800/90 flex items-center justify-center border border-white/10">
-                <Lock className="w-8 h-8 text-white/90" />
-              </div>
-              <CardTitle className="text-white text-2xl font-['Poppins']">Evo Drive no disponible</CardTitle>
-              <CardDescription className="text-[#E2E8F0]/75 text-base pt-2">
-                Por privacidad del estudiante, el acceso a Evo Drive de la institución no está habilitado para acudientes.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex justify-center pb-8">
-              <Button
-                type="button"
-                className="bg-[#3B82F6] hover:bg-[#2563EB] text-white"
-                onClick={() => setLocation('/dashboard')}
-              >
-                Volver al inicio
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
     );
-  }
+  };
 
   return (
     <>
     <div className="flex-1 min-h-0 flex overflow-hidden min-w-0">
+      {isPadre ? (
+      <EvoDriveTrashContext.Provider value={evoDriveTrashContextValue}>
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden w-full">
+          <header className="shrink-0 px-6 sm:px-8 py-6 border-b border-white/[0.08] bg-[#0a1629]/40 backdrop-blur-sm">
+            <NavBackButton to="/dashboard" label="Dashboard" />
+            <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0 flex-1">
+                <Breadcrumb
+                  className="mb-2"
+                  items={[
+                    { label: "Dashboard", href: "/dashboard" },
+                    { label: "Evo Drive" },
+                  ]}
+                />
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div
+                    className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-400 via-[#00c8ff] to-cyan-300 flex items-center justify-center shrink-0 shadow-lg shadow-sky-500/30 border border-white/20"
+                    aria-hidden
+                  >
+                    <Cloud className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-2xl sm:text-[1.65rem] font-semibold text-white font-['Poppins'] tracking-tight">
+                      Evo Drive
+                    </h1>
+                    <p className="text-sm text-white/55 mt-1 max-w-2xl leading-relaxed">
+                      <span className="font-medium bg-gradient-to-r from-[#3b82f6] to-[#a855f7] bg-clip-text text-transparent">
+                        Evo Docs
+                      </span>{' '}
+                      (informes PDF que Kiwi genera por ti),{' '}
+                      <span className="text-[#E2E8F0] font-medium">{personalFolderTitle}</span> y{' '}
+                      <span className="text-[#E2E8F0] font-medium">Circulares</span>. Despliega cada sección para ver o
+                      gestionar archivos.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="max-w-5xl xl:max-w-6xl mx-auto w-full px-6 sm:px-8 py-8 pb-12">
+              <Accordion
+                type="multiple"
+                defaultValue={['padre-evo-docs', 'padre-personal', 'padre-circulares']}
+                className="space-y-4"
+              >
+                <AccordionItem
+                  id="evo-drive-padre-evo-docs"
+                  value="padre-evo-docs"
+                  className="border-0 rounded-2xl panel-grades border border-white/[0.08] shadow-[0_0_40px_rgba(124,58,237,0.14)] overflow-hidden"
+                >
+                  <AccordionTrigger className="px-5 py-4 sm:px-6 sm:py-5 hover:no-underline text-left items-start gap-4 [&>svg]:shrink-0 [&>svg]:text-white/50 [&>svg]:mt-1.5">
+                    <div className="flex flex-1 items-start gap-4 min-w-0 text-left">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-violet-400/35 bg-gradient-to-br from-[#3b82f6]/25 via-[#6366f1]/20 to-[#a855f7]/25"
+                        aria-hidden
+                      >
+                        <Sparkles className="w-6 h-6 text-[#a855f7]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-white font-['Poppins'] text-base sm:text-lg bg-gradient-to-r from-[#60a5fa] via-[#a78bfa] to-[#c084fc] bg-clip-text text-transparent">
+                            Evo Docs
+                          </span>
+                          <span className="text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-200/90 border border-violet-400/25">
+                            {padreEvoDocs.length} archivo{padreEvoDocs.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-white/50 mt-1 leading-relaxed">
+                          Documentos e informes en PDF creados por Kiwi desde el chat. Toca uno para abrirlo en una pestaña nueva.
+                        </p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 sm:px-6 pb-5 pt-0 border-t border-violet-500/15">
+                    {padreEvoDocsLoading ? (
+                      <div className="space-y-3 pt-4">
+                        <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+                        <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+                      </div>
+                    ) : padreEvoDocs.length === 0 ? (
+                      <div className="rounded-xl border border-violet-500/20 bg-violet-950/20 py-14 text-center px-4 mt-4">
+                        <Sparkles className="w-11 h-11 text-violet-400/50 mx-auto mb-3" />
+                        <p className="text-white/65 font-medium">Aún no hay documentos en Evo Docs</p>
+                        <p className="text-white/45 text-sm mt-1 max-w-md mx-auto">
+                          Pide a Kiwi un análisis o un informe desde el chat; el PDF quedará guardado aquí.
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="space-y-2 pt-4">
+                        {padreEvoDocs.map((doc) => (
+                          <li key={doc.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void openEvoDocPdfInNewTab(doc.id).catch((e: unknown) => {
+                                  toast({
+                                    title: 'No se pudo abrir el documento',
+                                    description: e instanceof Error ? e.message : 'Intenta de nuevo',
+                                    variant: 'destructive',
+                                  });
+                                });
+                              }}
+                              className="group w-full flex items-center justify-between gap-4 py-2.5 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-violet-400/35 hover:bg-violet-500/[0.07] transition-colors text-left"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div
+                                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border border-violet-400/30 bg-gradient-to-br from-[#3b82f6]/30 to-[#7c3aed]/30"
+                                  aria-hidden
+                                >
+                                  <FileText className="w-4 h-4 text-violet-200" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium text-white truncate">{doc.title}</p>
+                                  <p className="text-[11px] text-violet-300/70 mt-0.5">
+                                    {EVO_DOCS_DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}
+                                    {doc.period ? ` · ${doc.period}` : ''}
+                                  </p>
+                                  {doc.description ? (
+                                    <p className="text-[11px] text-white/45 line-clamp-1 mt-0.5">{doc.description}</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <ExternalLink className="w-4 h-4 text-white/35 group-hover:text-violet-300 shrink-0" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem
+                  id="evo-drive-padre-personal"
+                  value="padre-personal"
+                  className="border-0 rounded-2xl panel-grades border border-white/[0.08] shadow-[0_0_40px_rgba(37,99,235,0.12)] overflow-hidden"
+                >
+                  <AccordionTrigger className="px-5 py-4 sm:px-6 sm:py-5 hover:no-underline text-left items-start gap-4 [&>svg]:shrink-0 [&>svg]:text-white/50 [&>svg]:mt-1.5">
+                    <div className="flex flex-1 items-start gap-4 min-w-0 text-left">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-[#ffd700]/35 bg-[#ffd700]/15"
+                        aria-hidden
+                      >
+                        <FolderOpen className="w-6 h-6 text-[#ffd700]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-white font-['Poppins'] text-base sm:text-lg">
+                            {personalFolderTitle}
+                          </span>
+                          <span className="text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full bg-white/10 text-white/70 border border-white/10">
+                            {myFolderFiles.length} archivo{myFolderFiles.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-white/50 mt-1 leading-relaxed">
+                          Archivos que tú añades o creas en tu Google Drive vinculado.
+                        </p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 sm:px-6 pb-5 pt-0 border-t border-white/[0.06]">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 pt-4 mb-4">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 text-[#ffd700] hover:text-white hover:bg-white/10 shrink-0 self-start sm:self-center"
+                        onClick={() => {
+                          setMyFolderTitleDraft(personalFolderTitle);
+                          setMyFolderTitleEditOpen(true);
+                        }}
+                        aria-label="Renombrar carpeta"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      {!googleStatus.connected && (
+                        <Button
+                          onClick={connectGoogle}
+                          variant="outline"
+                          size="sm"
+                          className="h-9 rounded-lg border-amber-500/40 bg-amber-500/10 text-amber-400 text-xs font-medium hover:bg-amber-500/20"
+                        >
+                          Conectar Google Drive
+                        </Button>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            className="h-9 rounded-full bg-[#ffd700]/20 border border-[#ffd700]/50 text-[#ffd700] text-[13px] font-medium hover:bg-[#ffd700]/30 px-4"
+                          >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Añadir o crear
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="start"
+                          sideOffset={8}
+                          className="w-[230px] rounded-[14px] border-amber-500/20 bg-[#0f1c35] shadow-xl p-0 overflow-hidden"
+                        >
+                          <div className="py-2.5">
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                googleStatus.connected && setTimeout(() => setMyFolderAddGoogleOpen(true), 50)
+                              }
+                              disabled={!googleStatus.connected}
+                              className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-amber-500/10 focus:bg-amber-500/10 mx-0 rounded-none"
+                            >
+                              <div className="w-8 h-8 rounded-[9px] bg-amber-500/20 flex items-center justify-center shrink-0">
+                                <Cloud className="w-4 h-4 text-amber-400" />
+                              </div>
+                              Google Drive
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setTimeout(() => setMyFolderAddEvoOpen(true), 50)}
+                              className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-amber-500/10 focus:bg-amber-500/10 mx-0 rounded-none"
+                            >
+                              <div className="w-8 h-8 rounded-[9px] bg-amber-500/20 flex items-center justify-center shrink-0">
+                                <Link2 className="w-4 h-4 text-amber-400" />
+                              </div>
+                              Enlace
+                            </DropdownMenuItem>
+                          </div>
+                          <div className="border-t border-amber-500/10" />
+                          <div className="py-2">
+                            <p className="px-4 pt-1.5 pb-1 text-[11px] uppercase tracking-wider text-amber-500/50">Crear</p>
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setTimeout(() => {
+                                  setMyFolderCreateNewType('doc');
+                                  setMyFolderCreateNewNombre('');
+                                  setMyFolderCreateNewOpen(true);
+                                }, 50)
+                              }
+                              className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-amber-500/10 focus:bg-amber-500/10 mx-0 rounded-none"
+                            >
+                              <div className="w-8 h-8 rounded-[9px] bg-[#1a56d6] flex items-center justify-center shrink-0">
+                                <FileText className="w-4 h-4 text-white" />
+                              </div>
+                              Documentos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setTimeout(() => {
+                                  setMyFolderCreateNewType('slide');
+                                  setMyFolderCreateNewNombre('');
+                                  setMyFolderCreateNewOpen(true);
+                                }, 50)
+                              }
+                              className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-amber-500/10 focus:bg-amber-500/10 mx-0 rounded-none"
+                            >
+                              <div className="w-8 h-8 rounded-[9px] bg-[#d97706] flex items-center justify-center shrink-0">
+                                <Presentation className="w-4 h-4 text-white" />
+                              </div>
+                              Presentaciones
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setTimeout(() => {
+                                  setMyFolderCreateNewType('sheet');
+                                  setMyFolderCreateNewNombre('');
+                                  setMyFolderCreateNewOpen(true);
+                                }, 50)
+                              }
+                              className="flex items-center gap-3 py-2.5 px-4 text-[13px] text-white/90 hover:bg-amber-500/10 focus:bg-amber-500/10 mx-0 rounded-none"
+                            >
+                              <div className="w-8 h-8 rounded-[9px] bg-[#16a34a] flex items-center justify-center shrink-0">
+                                <FileSpreadsheet className="w-4 h-4 text-white" />
+                              </div>
+                              Hojas de cálculo
+                            </DropdownMenuItem>
+                          </div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    {myFolderFiles.length === 0 ? (
+                      <p className="text-white/50 text-sm py-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-4">
+                        Aún no hay archivos. Usa &quot;Añadir o crear&quot; para enlazar o crear en tu Google Drive.
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {myFolderFiles.map((f) => (
+                          <li
+                            key={f.id}
+                            className="group flex items-center justify-between gap-4 py-2.5 px-3 rounded-xl bg-white/[0.04] border border-white/10 hover:border-[#ffd700]/25 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="w-9 h-9 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+                                {f.origen === 'google' ? (
+                                  <FileText className="w-4 h-4 text-amber-400" />
+                                ) : (
+                                  <Link2 className="w-4 h-4 text-amber-400" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-white truncate">{f.nombre}</p>
+                                {(f.url || f.googleWebViewLink) && (
+                                  <a
+                                    href={f.url || f.googleWebViewLink || '#'}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[11px] text-[#3B82F6] hover:underline truncate block mt-0.5"
+                                  >
+                                    Abrir
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-white/60 hover:text-white hover:bg-white/10 h-8 w-8 p-0"
+                                onClick={() => {
+                                  setRenamePersonalFileId(f.id);
+                                  setRenamePersonalNombre(f.nombre);
+                                }}
+                                aria-label="Renombrar"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-white/60 hover:text-white hover:bg-white/10 h-8 w-8 p-0 shrink-0"
+                                onClick={() => deleteFromMyFolderMutation.mutate(f.id)}
+                                disabled={deleteFromMyFolderMutation.isPending}
+                                aria-label="Quitar"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem
+                  id="evo-drive-padre-circulares"
+                  value="padre-circulares"
+                  className="border-0 rounded-2xl panel-grades border border-white/[0.08] shadow-[0_0_40px_rgba(37,99,235,0.12)] overflow-hidden"
+                >
+                  <AccordionTrigger className="px-5 py-4 sm:px-6 sm:py-5 hover:no-underline text-left items-start gap-4 [&>svg]:shrink-0 [&>svg]:text-white/50 [&>svg]:mt-1.5">
+                    <div className="flex flex-1 items-start gap-4 min-w-0 text-left">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-[#00c8ff]/30 bg-[#00c8ff]/10"
+                        aria-hidden
+                      >
+                        <FileText className="w-6 h-6 text-[#00c8ff]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-white font-['Poppins'] text-base sm:text-lg">Circulares</span>
+                          <span className="text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full bg-white/10 text-white/70 border border-white/10">
+                            {padreCirculares.length} archivo{padreCirculares.length === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-white/50 mt-1 leading-relaxed">
+                          Documentos institucionales del colegio (circulares y Evo Send institucional).
+                        </p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 sm:px-6 pb-5 pt-0 border-t border-white/[0.06]">
+                    <p className="text-sm text-white/50 pt-4 mb-4 leading-relaxed">
+                      La lista se actualiza automáticamente cuando el colegio publica nuevos documentos.
+                    </p>
+                    {padreCircularesLoading ? (
+                      <div className="space-y-3">
+                        <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+                        <Skeleton className="h-[72px] w-full rounded-xl bg-[#1E3A8A]/30" />
+                      </div>
+                    ) : padreCirculares.length === 0 ? (
+                      <div className="rounded-xl border border-white/10 bg-white/[0.03] py-14 text-center px-4">
+                        <FileText className="w-11 h-11 text-white/25 mx-auto mb-3" />
+                        <p className="text-white/65 font-medium">Aún no hay circulares con archivo</p>
+                        <p className="text-white/45 text-sm mt-1 max-w-md mx-auto">
+                          Cuando el colegio envíe una circular o un archivo por Evo Send institucional, aparecerá aquí.
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {padreCirculares.map((f) => (
+                          <FileRow key={f.id} file={f} allowCourseTrash={false} />
+                        ))}
+                      </ul>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem
+                  value="padre-recent"
+                  className="border-0 rounded-2xl border border-white/[0.06] bg-white/[0.02] overflow-hidden"
+                >
+                  <AccordionTrigger className="px-5 py-3 sm:px-6 hover:no-underline text-left items-center gap-4 [&>svg]:shrink-0 [&>svg]:text-white/45">
+                    <div className="flex flex-1 items-center gap-3 min-w-0 text-left">
+                      <Clock className="w-5 h-5 text-[#00c8ff] shrink-0" />
+                      <span className="font-medium text-white/90 text-sm sm:text-base">Archivos recientes</span>
+                      <span className="text-[11px] tabular-nums px-2 py-0.5 rounded-full bg-white/10 text-white/60">
+                        {recentVisible.length}
+                      </span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-5 sm:px-6 pb-5 pt-0">
+                    {renderRecentQuickAccess({ compact: true })}
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </div>
+          </div>
+        </main>
+      </EvoDriveTrashContext.Provider>
+      ) : (
       <EvoDriveTrashContext.Provider value={evoDriveTrashContextValue}>
       <aside
         className="w-[220px] shrink-0 self-stretch flex flex-col border-r border-white/[0.08] overflow-y-auto"
@@ -2476,6 +2941,7 @@ export default function EvoDrivePage() {
           )}
         </main>
       </EvoDriveTrashContext.Provider>
+      )}
     </div>
 
     {/* Agregar desde Google Drive */}

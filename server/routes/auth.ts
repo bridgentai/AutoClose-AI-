@@ -1,8 +1,8 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { ENV } from '../config/env.js';
-import { findUserByEmail, findUserById, findUserByInternalCodeAny, createUser, updateUser } from '../repositories/userRepository.js';
+import { findUserByEmail, findUserById, findUserByInternalCodeAny, createUser, updateUser, readAuthSessionVersion, bumpAuthSessionVersion } from '../repositories/userRepository.js';
 import { toAuthResponse } from '../mappers/userMapper.js';
 import { findInstitutionCodeByCode, findInstitutionCodesByInstitution } from '../repositories/institutionCodeRepository.js';
 import { resolveGroupId } from '../utils/resolveLegacyCourse.js';
@@ -13,6 +13,8 @@ import { findInstitutionById, findInstitutionBySlug, findAllInstitutions } from 
 import { generateUserId } from '../utils/idGenerator.js';
 import { getClientIP } from '../middleware/auditMiddleware.js';
 import { createActivityLog } from '../repositories/activityLogRepository.js';
+import rateLimit from 'express-rate-limit';
+import { protect, type AuthRequest, invalidateUserAuthCache } from '../middleware/auth.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function resolveInstitutionId(colegioId: string): Promise<string> {
@@ -28,14 +30,48 @@ async function resolveInstitutionId(colegioId: string): Promise<string> {
 }
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_EXPIRES = process.env.JWT_EXPIRY ?? '8h';
 
-if (!JWT_SECRET) {
+if (!ENV.JWT_SECRET) {
   throw new Error('JWT_SECRET no está configurado');
 }
 
-const generateToken = (id: string) => jwt.sign({ id }, JWT_SECRET!, { expiresIn: TOKEN_EXPIRES });
+const signSecret = ENV.JWT_SECRET as Secret;
+const accessSignOptions: SignOptions = { expiresIn: TOKEN_EXPIRES as SignOptions['expiresIn'] };
+const refreshSignOptions: SignOptions = { expiresIn: ENV.JWT_REFRESH_EXPIRES as SignOptions['expiresIn'] };
+
+const generateAccessToken = (id: string, sv: number) =>
+  jwt.sign({ id, sv }, signSecret, accessSignOptions);
+
+const generateRefreshToken = (id: string, sv: number) =>
+  jwt.sign({ id, sv, tokenUse: 'refresh' }, signSecret, refreshSignOptions);
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => ENV.LOAD_TEST_DISABLE_AUTH_RATE_LIMIT,
+  message: { message: 'Demasiados intentos de inicio de sesión. Espera unos minutos.' },
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => ENV.LOAD_TEST_DISABLE_AUTH_RATE_LIMIT,
+  message: { message: 'Demasiados registros desde esta red. Intenta más tarde.' },
+});
+
+const authRefreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => ENV.LOAD_TEST_DISABLE_AUTH_RATE_LIMIT,
+  message: { message: 'Demasiadas solicitudes de renovación. Espera un momento.' },
+});
 
 async function generarCodigoUnico(): Promise<string> {
   let codigo: string;
@@ -76,6 +112,49 @@ async function syncStudentToGroup(estudianteId: string, grupoId: string | undefi
     console.error('[SYNC] Error syncing student to group:', (err as Error).message);
   }
 }
+
+// POST /api/auth/refresh
+router.post('/refresh', authRefreshLimiter, async (req, res) => {
+  try {
+    const raw = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken.trim() : '';
+    if (!raw) {
+      return res.status(400).json({ message: 'refreshToken requerido.' });
+    }
+    const decoded = jwt.verify(raw, signSecret) as { id: string; sv?: number; tokenUse?: string };
+    if (decoded.tokenUse !== 'refresh') {
+      return res.status(400).json({ message: 'Token no es de renovación.' });
+    }
+    const u = await findUserById(decoded.id);
+    if (!u) {
+      return res.status(401).json({ message: 'Usuario no encontrado.' });
+    }
+    const sv = readAuthSessionVersion(u.config);
+    if ((decoded.sv ?? 0) !== sv) {
+      return res.status(401).json({ message: 'Sesión no válida.' });
+    }
+    const token = generateAccessToken(u.id, sv);
+    const refreshToken = generateRefreshToken(u.id, sv);
+    return res.json({ token, refreshToken });
+  } catch (e: unknown) {
+    const err = e as { name?: string };
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Refresh expirado. Inicia sesión de nuevo.' });
+    }
+    return res.status(401).json({ message: 'Refresh inválido.' });
+  }
+});
+
+// POST /api/auth/logout
+router.post('/logout', protect, async (req: AuthRequest, res) => {
+  try {
+    const uid = req.user!.id;
+    await bumpAuthSessionVersion(uid);
+    invalidateUserAuthCache(uid);
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ message: 'Error al cerrar sesión.' });
+  }
+});
 
 // GET /api/auth/google
 router.get('/google', (req, res) => {
@@ -140,7 +219,9 @@ router.get('/google/callback', async (req, res) => {
       const nuevoCodigo = await generarCodigoUnico();
       await updateUser(user.id, { internal_code: nuevoCodigo });
     }
-    const token = generateToken(user.id);
+    const refreshed = await findUserById(user.id);
+    const sv = readAuthSessionVersion(refreshed?.config ?? user.config);
+    const token = generateAccessToken(user.id, sv);
     const params = new URLSearchParams({
       token,
       rol: user.role,
@@ -149,8 +230,8 @@ router.get('/google/callback', async (req, res) => {
       email: user.email,
       colegioId: user.institution_id || '',
     });
-    if (user.internal_code) params.set('codigoUnico', user.internal_code);
-    const configUserId = (user.config as { userId?: string })?.userId;
+    if (refreshed?.internal_code) params.set('codigoUnico', refreshed.internal_code);
+    const configUserId = ((refreshed?.config ?? user.config) as { userId?: string })?.userId;
     if (configUserId) params.set('userId', configUserId);
     res.redirect(`${FRONTEND_URL}/auth/callback?${params.toString()}`);
   } catch (e: unknown) {
@@ -160,7 +241,7 @@ router.get('/google/callback', async (req, res) => {
 });
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   let createdUserId: string | null = null;
   try {
     const { nombre, email, password, rol, curso, codigoAcceso, hijoId, materias, seccion } = req.body;
@@ -279,9 +360,11 @@ router.post('/register', async (req, res) => {
       await syncStudentToGroup(newUser.id, cursoNormalizado, colegioId);
     }
 
-    const token = generateToken(newUser.id);
     const savedUser = await findUserById(newUser.id);
     const codigoFinal = savedUser?.internal_code ?? codigoUnico;
+    const sv = readAuthSessionVersion(savedUser?.config);
+    const token = generateAccessToken(newUser.id, sv);
+    const refreshToken = generateRefreshToken(newUser.id, sv);
 
     return res.status(201).json({
       id: newUser.id,
@@ -296,6 +379,7 @@ router.post('/register', async (req, res) => {
       seccion: seccion ?? null,
       estado: newUser.status,
       token,
+      refreshToken,
     });
   } catch (err: unknown) {
     const e = err as Error & { code?: string };
@@ -314,7 +398,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -340,7 +424,9 @@ router.post('/login', async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: 'Contraseña incorrecta.' });
     }
-    const token = generateToken(pgUser.id);
+    const sv = readAuthSessionVersion(pgUser.config);
+    const token = generateAccessToken(pgUser.id, sv);
+    const refreshToken = generateRefreshToken(pgUser.id, sv);
     const userResponse = toAuthResponse(pgUser);
     const config = (pgUser.config ?? {}) as { curso?: string; materias?: string[] };
     let curso = config.curso;
@@ -363,6 +449,7 @@ router.post('/login', async (req, res) => {
     }
     return res.json({
       token,
+      refreshToken,
       ...userResponse,
       codigoUnico: pgUser.internal_code ?? undefined,
       curso: curso ?? config.curso,

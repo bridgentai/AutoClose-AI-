@@ -863,26 +863,24 @@ input[type="search"]::-webkit-search-cancel-button {
   transition: transform 0.3s ease-out;
 }
 
-/* Storytelling Visual Effects */
+/* Storytelling Visual Effects — clip al main; el scroll lo hace solo el hijo en AppLayout */
 .story-section {
   position: relative;
-  /* Solo cortar horizontalmente el decorativo ::before; el scroll vertical lo hace el hijo en AppLayout */
-  overflow-x: hidden;
-  overflow-y: visible;
+  overflow: hidden;
 }
 
 .story-section::before {
   content: "";
   position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
+  inset: -40%;
+  width: auto;
+  height: auto;
   background: radial-gradient(circle,
       rgba(59, 130, 246, 0.12) 0%,
       transparent 70%);
   animation: float 6s ease-in-out infinite;
   pointer-events: none;
+  contain: paint;
 }
 
 /* Pulse Effect for Calendar/Important Items - Blue glow */

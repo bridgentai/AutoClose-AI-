@@ -1,16 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { generateUserId } from '../utils/idGenerator';
-import { findUserById } from '../repositories/userRepository.js';
+import {
+  findUserById,
+  readAuthSessionVersion,
+  type UserRow,
+} from '../repositories/userRepository.js';
 import { getFirstGroupNameForStudent } from '../repositories/enrollmentRepository.js';
 import { ENV } from '../config/env.js';
 
 /**
- * NOTA DE MANTENIMIENTO:
- * Existe también server/middleware/authMiddleware.ts (legacy).
- * Ambos implementan `protect` pero con diferencias menores en manejo de errores.
- * TODO: unificar en un solo archivo en la próxima iteración.
- * Usar auth.ts como la versión canónica — authMiddleware.ts está deprecado.
+ * Auth canónico para PostgreSQL. Ver también authMiddleware.ts (re-export de este módulo).
  */
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -37,12 +37,41 @@ export interface AuthRequest extends Request {
   };
 }
 
+type AccessJwtPayload = { id: string; sv?: number; tokenUse?: string };
+
+const userProtectCache = new Map<string, { entry: UserRow; expiresAt: number }>();
+const PROTECT_TTL_MS = 45_000;
+const MAX_CACHE_ENTRIES = 10_000;
+
+export function invalidateUserAuthCache(userId: string): void {
+  userProtectCache.delete(userId);
+}
+
+async function loadUserForProtect(userId: string): Promise<UserRow | null> {
+  const now = Date.now();
+  const hit = userProtectCache.get(userId);
+  if (hit && hit.expiresAt > now) {
+    return hit.entry;
+  }
+  const user = await findUserById(userId);
+  if (!user) {
+    userProtectCache.delete(userId);
+    return null;
+  }
+  if (userProtectCache.size >= MAX_CACHE_ENTRIES) {
+    const firstKey = userProtectCache.keys().next().value as string | undefined;
+    if (firstKey) userProtectCache.delete(firstKey);
+  }
+  userProtectCache.set(userId, { entry: user, expiresAt: now + PROTECT_TTL_MS });
+  return user;
+}
+
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!ENV.DATABASE_URL) {
       return res.status(503).json({ message: 'Backend configurado solo para PostgreSQL. Configure DATABASE_URL.' });
     }
-    let token;
+    let token: string | undefined;
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     }
@@ -50,13 +79,24 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       return res.status(401).json({ message: 'No autorizado. Token no proporcionado.' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
-    req.userId = decoded.id;
+    const decoded = jwt.verify(token, JWT_SECRET) as AccessJwtPayload;
+    if (decoded.tokenUse === 'refresh') {
+      return res.status(401).json({ message: 'Token de acceso inválido. Usa /api/auth/refresh con el refresh token.' });
+    }
 
-    const pgUser = await findUserById(decoded.id);
+    req.userId = decoded.id;
+    const tokenSv = decoded.sv ?? 0;
+
+    const pgUser = await loadUserForProtect(decoded.id);
     if (!pgUser) {
       return res.status(401).json({ message: 'Usuario no encontrado.' });
     }
+
+    const currentSv = readAuthSessionVersion(pgUser.config);
+    if (tokenSv !== currentSv) {
+      return res.status(401).json({ message: 'Sesión cerrada o no válida. Inicia sesión de nuevo.' });
+    }
+
     const config = pgUser.config as { userId?: string; curso?: string; materias?: string[] } | undefined;
     let curso = config?.curso;
     if (pgUser.role === 'estudiante' && !curso) {
@@ -76,7 +116,14 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       materias: config?.materias,
     };
     next();
-  } catch {
+  } catch (e: unknown) {
+    const err = e as { name?: string };
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expirado. Renueva con /api/auth/refresh o inicia sesión de nuevo.' });
+    }
+    if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'No autorizado. Token inválido.' });
+    }
     return res.status(401).json({ message: 'No autorizado. Token inválido.' });
   }
 };

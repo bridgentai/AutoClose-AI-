@@ -11,22 +11,36 @@ import { exec } from "child_process";
 import http from "http";
 import { queryPg } from "./config/db-pg.js";
 import { deleteExpiredNotifications, notify } from "./repositories/notificationRepository.js";
+import { findUserById } from "./repositories/userRepository.js";
 
-// Verificación del .env al iniciar
-console.log('\n=== VERIFICACIÓN DE .ENV ===');
-console.log('OPENAI_API_KEY existe?', !!process.env.OPENAI_API_KEY);
-if (process.env.OPENAI_API_KEY) {
-  const key = process.env.OPENAI_API_KEY;
-  console.log('✅ Longitud:', key.length, 'caracteres');
-  console.log('✅ Primeros 20 chars:', key.substring(0, 20));
-  console.log('✅ Últimos 10 chars:', key.substring(key.length - 10));
-  console.log('✅ Tiene asteriscos?', key.includes('*') ? 'SÍ ❌' : 'NO ✅');
-  console.log('✅ Formato válido?', (key.startsWith('sk-') || key.startsWith('skproj')) ? 'SÍ ✅' : 'NO ❌');
-} else {
-  console.error('❌ OPENAI_API_KEY NO está en process.env');
-  console.error('   Verifica que el archivo .env esté en la raíz del proyecto');
+if (process.env.NODE_ENV !== "production") {
+  const ok = !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.length > 20);
+  console.log(`[env] OPENAI_API_KEY configured: ${ok ? "yes" : "no"}`);
 }
-console.log('===========================\n');
+
+function sanitizeForApiLog(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map(sanitizeForApiLog);
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) {
+      const kl = k.toLowerCase();
+      if (
+        kl.includes("token") ||
+        kl.includes("password") ||
+        kl.includes("secret") ||
+        kl.includes("authorization")
+      ) {
+        out[k] = "[redacted]";
+      } else {
+        out[k] = sanitizeForApiLog(v) as unknown;
+      }
+    }
+    return out;
+  }
+  return value;
+}
 
 const app = express();
 
@@ -64,8 +78,14 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      const logBody =
+        path.startsWith("/api/auth") || path.includes("/refresh")
+          ? undefined
+          : capturedJsonResponse
+            ? sanitizeForApiLog(capturedJsonResponse)
+            : undefined;
+      if (logBody) {
+        logLine += ` :: ${JSON.stringify(logBody)}`;
       }
 
       if (logLine.length > 80) {
@@ -127,7 +147,21 @@ app.use((req, res, next) => {
         .then(({ ensureEvoSendStaffAndDirectThreads }) => ensureEvoSendStaffAndDirectThreads())
         .then(() => console.log('[evoSendBootstrap] Staff and direct threads OK'))
         .catch((err) => console.error('[evoSendBootstrap]', err));
+
+      import('./db/pgSchemaPatches.js')
+        .then(({ ensureNotificationExtraColumns }) => ensureNotificationExtraColumns())
+        .catch((err) => console.error('[schema] notification columns:', err));
     }
+
+    const getEmailForUser = async (userId: string): Promise<string | undefined> => {
+      try {
+        const r = await queryPg<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId]);
+        const email = r.rows[0]?.email;
+        return typeof email === 'string' && email.trim() ? email.trim() : undefined;
+      } catch {
+        return undefined;
+      }
+    };
 
     if (process.env.DATABASE_URL) {
       const runReleaseComunicados = async () => {
@@ -135,7 +169,48 @@ app.use((req, res, next) => {
           const { releasePendingAnnouncements } = await import(
             './repositories/comunicacionRepository.js'
           );
-          await releasePendingAnnouncements();
+          const released = await releasePendingAnnouncements();
+          const padres = released.filter((x) => x.type === 'comunicado_padres');
+          if (padres.length > 0) {
+            const { mirrorComunicadosPadresToParentSubjectThreads } = await import(
+              './services/parentSubjectEvoSync.js'
+            );
+            await mirrorComunicadosPadresToParentSubjectThreads(padres);
+          }
+
+          const institucionales = released.filter((x) => x.type === 'comunicado_institucional');
+          for (const ann of institucionales) {
+            try {
+              const recipients = await queryPg<{ user_id: string }>(
+                `SELECT user_id FROM announcement_recipients WHERE announcement_id = $1`,
+                [ann.id]
+              );
+              const author = await findUserById(ann.created_by_id);
+              const authorName = author?.full_name ?? 'Administración';
+              const recipientsWithoutAuthor: string[] = recipients.rows
+                .map((r: { user_id: string }) => r.user_id)
+                .filter((uid: string) => uid !== ann.created_by_id);
+
+              await Promise.all(
+                recipientsWithoutAuthor.map(async (uid: string) => {
+                  const email = await getEmailForUser(uid);
+                  await notify({
+                    institution_id: ann.institution_id,
+                    user_id: uid,
+                    user_email: email,
+                    type: 'comunicado_institucional',
+                    entity_type: 'comunicado_institucional',
+                    entity_id: ann.id,
+                    action_url: `/institucional/comunicados`,
+                    title: `Comunicado institucional · ${authorName}`,
+                    body: (ann.title ?? '').slice(0, 240),
+                  });
+                })
+              );
+            } catch (e: unknown) {
+              console.error('[comunicacion] notify institucional:', (e as Error).message);
+            }
+          }
         } catch (e: unknown) {
           console.error('[comunicacion] releasePending:', (e as Error).message);
         }

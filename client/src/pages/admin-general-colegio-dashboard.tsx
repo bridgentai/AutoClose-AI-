@@ -1078,7 +1078,7 @@ export function AdminGeneralColegioDashboard() {
             <Button
               variant="outline"
               className="border-white/20 text-white shrink-0"
-              onClick={() => setLocation('/comunicacion')}
+              onClick={() => setLocation('/evo-send')}
             >
               Ver comunicación
               <ChevronRight className="w-4 h-4 ml-1" />

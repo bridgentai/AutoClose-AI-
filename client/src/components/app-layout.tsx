@@ -18,6 +18,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [isDockExpanded, setIsDockExpanded] = useState(false);
   const isEvoDrive = location === "/evo-drive";
   const isEvoSend = location === "/evo-send";
+  const isFullBleedShell = isEvoDrive || isEvoSend;
 
   useEffect(() => {
     const openCommand = () => setCommandOpen(true);
@@ -26,7 +27,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, []);
 
   return (
-    <div className="min-h-screen w-full relative overflow-hidden">
+    <div className="h-svh max-h-svh min-h-0 w-full relative overflow-hidden flex flex-col">
       {/* Escudo (arriba derecha) */}
       <div className="fixed top-4 right-4 z-20 pointer-events-none">
         <img
@@ -59,30 +60,33 @@ export function AppLayout({ children }: AppLayoutProps) {
       </div>
 
       {/* Main Content Container */}
-      <div className="relative z-10 text-white">
+      <div className="relative z-10 text-white flex-1 min-h-0 flex flex-col">
         {/* Content Area - with dynamic padding for AI Dock and Chat */}
         <div
           className={cn(
-            "flex flex-col transition-all duration-500 ease-in-out",
-            isEvoDrive || isEvoSend
-              ? "h-svh min-h-0 max-h-svh overflow-hidden"
-              : "min-h-screen",
+            "flex flex-col flex-1 min-h-0 overflow-hidden transition-all duration-500 ease-in-out",
             isChatOpen ? "pr-96" : isDockExpanded ? "pr-80" : "pr-16"
           )}
         >
           <main
             className={cn(
               "story-section flex flex-col flex-1 min-h-0",
-              (isEvoDrive || isEvoSend) && "!overflow-y-hidden min-h-0"
+              isFullBleedShell ? "!overflow-y-hidden" : "overflow-hidden"
             )}
           >
-            {isEvoDrive || isEvoSend ? (
+            {isFullBleedShell ? (
               <div className="flex flex-col flex-1 min-h-0 w-full max-h-full overflow-hidden">
                 {children}
               </div>
             ) : (
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8">
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full overscroll-y-contain">
+                <div
+                  className={cn(
+                    "max-w-7xl mx-auto px-4 sm:px-6 lg:px-10",
+                    "pt-4 sm:pt-6",
+                    "pb-[max(1.25rem,env(safe-area-inset-bottom,0px))] sm:pb-[max(1.75rem,env(safe-area-inset-bottom,0px))]"
+                  )}
+                >
                   {children}
                 </div>
               </div>
@@ -105,4 +109,3 @@ export function AppLayout({ children }: AppLayoutProps) {
     </div>
   );
 }
-

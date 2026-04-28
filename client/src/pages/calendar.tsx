@@ -28,9 +28,8 @@ interface Assignment {
 
 export default function CalendarPage() {
   const { user } = useAuth();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const isPadre = user?.rol === 'padre';
-  const fromParentCal = isPadre && location.startsWith('/parent/calendario');
 
   const { data: hijos = [] } = useQuery<{ _id: string; nombre: string; curso: string }[]>({
     queryKey: ['/api/users/me/hijos'],
@@ -96,10 +95,7 @@ export default function CalendarPage() {
   return (
     <div className="w-full">
       <div className="max-w-5xl mx-auto">
-        <NavBackButton
-          to={fromParentCal ? '/parent/aprendizaje' : undefined}
-          label={fromParentCal ? 'Aprendizaje del hijo/a' : undefined}
-        />
+        <NavBackButton />
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-white mb-2 font-['Poppins']">{pageTitle}</h2>
           <p className="text-white/60">{pageSubtitle}</p>

@@ -308,7 +308,7 @@ const ComunicadosInstitucionales: React.FC = () => {
   return (
     <div className="p-2 md:p-4 min-h-[70vh]">
       <NavBackButton
-        to={user?.rol === 'estudiante' ? '/mi-aprendizaje' : '/comunicacion'}
+        to={user?.rol === 'estudiante' ? '/mi-aprendizaje' : '/evo-send'}
         label={user?.rol === 'estudiante' ? 'Mi Aprendizaje' : 'Comunicación'}
       />
 

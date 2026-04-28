@@ -21,9 +21,9 @@ import {
 import {
   getGoogleToken,
   upsertGoogleToken,
-  updateGoogleAccessToken,
   deleteGoogleToken,
 } from '../repositories/googleTokenRepository.js';
+import { getGoogleOAuth2Client, getAuthedOAuth2ForUser } from '../services/googleDriveUserOAuth.js';
 import {
   getEvoFiles,
   getRecentCourseFilesForUser,
@@ -32,40 +32,188 @@ import {
   toggleDestacado,
   getEvoFileById,
 } from '../repositories/evoFileRepository.js';
+import { computeInboxCategory } from '../services/evoSendAccess.js';
 
 const router = express.Router();
 
-function getOAuthClient() {
-  return new google.auth.OAuth2(
-    ENV.GOOGLE_CLIENT_ID,
-    ENV.GOOGLE_CLIENT_SECRET,
-    ENV.GOOGLE_REDIRECT_URI
-  );
+function parseEvoDriveMessageAttachmentJson(content: string): { name?: string; url?: string | null; fileId?: string } | null {
+  try {
+    const o = JSON.parse(content) as unknown;
+    if (!o || typeof o !== 'object') return null;
+    const rec = o as Record<string, unknown>;
+    return {
+      name: typeof rec.name === 'string' ? rec.name : undefined,
+      url: typeof rec.url === 'string' ? rec.url : null,
+      fileId: typeof rec.fileId === 'string' ? rec.fileId : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
-async function getAuthedClient(userId: string) {
-  const token = await getGoogleToken(userId);
-  if (!token) return null;
-  const oauth2 = getOAuthClient();
-  oauth2.setCredentials({
-    access_token: token.access_token,
-    refresh_token: token.refresh_token ?? undefined,
-    expiry_date: token.expiry_date ?? undefined,
-  });
-  if (token.expiry_date && Date.now() > token.expiry_date - 60000) {
-    try {
-      const { credentials } = await oauth2.refreshAccessToken();
-      if (credentials.access_token && credentials.expiry_date) {
-        await updateGoogleAccessToken(userId, credentials.access_token, credentials.expiry_date);
-        oauth2.setCredentials(credentials);
-      }
-    } catch (e) {
-      console.error('[EvoDrive] refresh token error:', e);
-      return null;
-    }
-  }
-  return oauth2;
+function webViewLinkFromDriveMeta(meta: { url?: string | null; fileId?: string | undefined }): string {
+  const u = typeof meta.url === 'string' ? meta.url.trim() : '';
+  if (u) return u;
+  const id = typeof meta.fileId === 'string' ? meta.fileId.trim() : '';
+  if (id) return `https://drive.google.com/file/d/${id}/view`;
+  return '';
 }
+
+function parseAttachmentsJsonColumn(raw: unknown): Array<{ name: string; url?: string; fileId?: string }> {
+  if (raw == null) return [];
+  let arr: unknown;
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  } else {
+    arr = raw;
+  }
+  if (!Array.isArray(arr)) return [];
+  const out: Array<{ name: string; url?: string; fileId?: string }> = [];
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const nameRaw =
+      typeof o.name === 'string' ? o.name : typeof o.nombre === 'string' ? o.nombre : '';
+    const name = nameRaw.trim() || 'Archivo';
+    const url = typeof o.url === 'string' ? o.url.trim() : '';
+    const fileId = typeof o.fileId === 'string' ? o.fileId.trim() : '';
+    if (!url && !fileId) continue;
+    out.push({ name, url: url || undefined, fileId: fileId || undefined });
+  }
+  return out;
+}
+
+type CircSort = { api: ReturnType<typeof toEvoFileApi>; ts: number };
+
+/** Circulares: mensajes Evo Send institucionales (evo_drive) + comunicados institucionales categoría circular (attachments_json). */
+async function listPadreInstitutionalCirculareFiles(
+  userId: string,
+  institutionId: string
+): Promise<ReturnType<typeof toEvoFileApi>[]> {
+  const merged: CircSort[] = [];
+
+  const r = await queryPg<{
+    message_id: string;
+    content: string;
+    created_at: string;
+    announcement_id: string;
+    announcement_type: string;
+  }>(
+    `SELECT m.id AS message_id, m.content, m.created_at,
+            a.id AS announcement_id, a.type AS announcement_type
+     FROM announcement_messages m
+     INNER JOIN announcements a ON a.id = m.announcement_id
+     INNER JOIN announcement_recipients ar ON ar.announcement_id = a.id AND ar.user_id = $1::uuid
+     WHERE a.institution_id = $2::uuid
+       AND m.content_type = 'evo_drive'
+     ORDER BY m.created_at DESC
+     LIMIT 300`,
+    [userId, institutionId]
+  );
+  const catCache = new Map<string, 'academico' | 'institucional'>();
+  for (const row of r.rows) {
+    let cat = catCache.get(row.announcement_id);
+    if (!cat) {
+      cat = await computeInboxCategory({ id: row.announcement_id, type: row.announcement_type }, userId);
+      catCache.set(row.announcement_id, cat);
+    }
+    if (cat !== 'institucional') continue;
+    const meta = parseEvoDriveMessageAttachmentJson(row.content);
+    if (!meta) continue;
+    const link = webViewLinkFromDriveMeta({ url: meta.url ?? null, fileId: meta.fileId });
+    if (!link) continue;
+    const nombre = (meta.name && meta.name.trim()) || 'Archivo';
+    const ts = new Date(row.created_at).getTime();
+    const synthetic: Record<string, unknown> = {
+      id: `circ-${row.message_id}`,
+      nombre,
+      tipo: 'doc',
+      origen: 'google',
+      google_file_id: meta.fileId ?? null,
+      google_web_view_link: link,
+      google_mime_type: null,
+      mime_type: null,
+      group_id: null,
+      curso_nombre: 'Circulares',
+      propietario_id: null,
+      propietario_nombre: null,
+      propietario_rol: null,
+      es_publico: true,
+      evo_storage_key: null,
+      evo_storage_url: null,
+      size_bytes: null,
+      etiquetas: [],
+      destacado: false,
+      category_id: null,
+      staff_only: false,
+      created_at: row.created_at,
+      updated_at: row.created_at,
+    };
+    merged.push({ api: toEvoFileApi(synthetic), ts });
+  }
+
+  const inst = await queryPg<{
+    id: string;
+    attachments_json: unknown;
+    sent_at: string | null;
+    created_at: string;
+  }>(
+    `SELECT a.id, a.attachments_json, a.sent_at, a.created_at
+     FROM announcements a
+     INNER JOIN announcement_recipients ar ON ar.announcement_id = a.id AND ar.user_id = $1::uuid
+     WHERE a.institution_id = $2::uuid
+       AND a.type = 'comunicado_institucional'
+       AND LOWER(TRIM(COALESCE(a.category, ''))) = 'circular'
+       AND COALESCE(a.status, 'sent') = 'sent'
+       AND a.cancelled_at IS NULL
+     ORDER BY COALESCE(a.sent_at, a.created_at) DESC
+     LIMIT 100`,
+    [userId, institutionId]
+  );
+
+  for (const row of inst.rows) {
+    const items = parseAttachmentsJsonColumn(row.attachments_json);
+    const ts = new Date(row.sent_at || row.created_at).getTime();
+    items.forEach((att, idx) => {
+      const link = webViewLinkFromDriveMeta({ url: att.url ?? null, fileId: att.fileId });
+      if (!link) return;
+      const synthetic: Record<string, unknown> = {
+        id: `circ-inst-${row.id}-${idx}`,
+        nombre: att.name,
+        tipo: 'doc',
+        origen: 'google',
+        google_file_id: att.fileId ?? null,
+        google_web_view_link: link,
+        google_mime_type: null,
+        mime_type: null,
+        group_id: null,
+        curso_nombre: 'Circulares',
+        propietario_id: null,
+        propietario_nombre: null,
+        propietario_rol: null,
+        es_publico: true,
+        evo_storage_key: null,
+        evo_storage_url: null,
+        size_bytes: null,
+        etiquetas: [],
+        destacado: false,
+        category_id: null,
+        staff_only: false,
+        created_at: row.sent_at || row.created_at,
+        updated_at: row.sent_at || row.created_at,
+      };
+      merged.push({ api: toEvoFileApi(synthetic), ts });
+    });
+  }
+
+  merged.sort((a, b) => b.ts - a.ts);
+  return merged.map((m) => m.api);
+}
+
 const ROLES_WRITE = [
   'profesor',
   'directivo',
@@ -108,6 +256,7 @@ function canUsePersonalMyFolder(rol: string | undefined): boolean {
   return (
     rol === 'estudiante' ||
     rol === 'profesor' ||
+    rol === 'padre' ||
     rol === 'directivo' ||
     rol === 'admin-general-colegio' ||
     rol === 'asistente-academica' ||
@@ -123,7 +272,7 @@ router.get('/google/auth-url', protect, (req: AuthRequest, res) => {
   if (!ENV.GOOGLE_CLIENT_ID || !ENV.GOOGLE_CLIENT_SECRET || !ENV.GOOGLE_REDIRECT_URI) {
     return res.status(503).json({ message: 'Google Drive no configurado. Revisa .env', url: '' });
   }
-  const oauth2 = getOAuthClient();
+  const oauth2 = getGoogleOAuth2Client();
   const url = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -148,7 +297,7 @@ router.get('/google/callback', async (req, res) => {
     return res.redirect(`${FRONTEND_URL}/evo-drive?error=missing_params`);
   }
   try {
-    const oauth2 = getOAuthClient();
+    const oauth2 = getGoogleOAuth2Client();
     const { tokens } = await oauth2.getToken(code);
     oauth2.setCredentials(tokens);
     const oauth2api = google.oauth2({ version: 'v2', auth: oauth2 });
@@ -196,7 +345,7 @@ router.delete('/google/disconnect', protect, async (req: AuthRequest, res) => {
 router.get('/google/files', protect, async (req: AuthRequest, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ error: 'No autorizado.' });
-  const auth = await getAuthedClient(userId);
+  const auth = await getAuthedOAuth2ForUser(userId);
   if (!auth) return res.status(403).json({ error: 'Google Drive no conectado', code: 'GOOGLE_DRIVE_DISCONNECTED' });
   const drive = google.drive({ version: 'v3', auth });
   const { q = '', pageToken } = req.query as { q?: string; pageToken?: string };
@@ -225,7 +374,7 @@ router.post('/google/create', protect, restrictTo(...ROLES_WRITE), async (req: A
   const userId = req.user?.id;
   const colegioId = req.user?.colegioId;
   if (!userId || !colegioId) return res.status(401).json({ message: 'No autorizado.' });
-  const auth = await getAuthedClient(userId);
+  const auth = await getAuthedOAuth2ForUser(userId);
   if (!auth) return res.status(403).json({ message: 'Google Drive no conectado.', code: 'GOOGLE_DRIVE_DISCONNECTED' });
   const { nombre, tipo, cursoId, cursoNombre, groupSubjectId, staffOnly } = req.body as {
     nombre?: string;
@@ -310,7 +459,7 @@ router.post('/google/create', protect, restrictTo(...ROLES_WRITE), async (req: A
 router.post('/google/create-personal', protect, async (req: AuthRequest, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ message: 'No autorizado.' });
-  const auth = await getAuthedClient(userId);
+  const auth = await getAuthedOAuth2ForUser(userId);
   if (!auth) return res.status(403).json({ message: 'Google Drive no conectado.', code: 'GOOGLE_DRIVE_DISCONNECTED' });
   const { nombre, tipo } = req.body as { nombre?: string; tipo?: string };
   if (!nombre?.trim()) return res.status(400).json({ message: 'nombre es obligatorio.' });
@@ -451,6 +600,22 @@ router.get('/files', protect, async (req: AuthRequest, res) => {
   return res.json(rows.map(toEvoFileApi));
 });
 
+// GET /api/evo-drive/padre/circulares-files — circulares (adjuntos Evo Drive) desde Evo Send institucional.
+router.get('/padre/circulares-files', protect, async (req: AuthRequest, res) => {
+  const colegioId = req.user?.colegioId;
+  const userId = req.user?.id;
+  const rol = req.user?.rol;
+  if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
+  if (rol !== 'padre') return res.status(403).json({ message: 'Solo para acudientes.' });
+  try {
+    const files = await listPadreInstitutionalCirculareFiles(userId, colegioId);
+    return res.json(files);
+  } catch (err) {
+    console.error('[evoDrive] padre/circulares-files:', err);
+    return res.status(500).json({ message: 'Error al listar circulares.' });
+  }
+});
+
 // GET /api/evo-drive/my-folder — archivos personales (estudiante o profesor).
 router.get('/my-folder', protect, async (req: AuthRequest, res) => {
   const colegioId = req.user?.colegioId;
@@ -569,7 +734,56 @@ router.get('/recientes', protect, async (req: AuthRequest, res) => {
   const rol = req.user?.rol ?? '';
   if (!colegioId || !userId) return res.status(401).json({ message: 'No autorizado.' });
   if (rol === 'padre') {
-    return res.json([]);
+    type Sortable = { api: ReturnType<typeof toEvoFileApi>; ts: number };
+    const merged: Sortable[] = [];
+    try {
+      const personal = await getPersonalFiles(userId, colegioId);
+      for (const p of personal.slice(0, 15)) {
+        const row: Record<string, unknown> = {
+          id: p.id,
+          nombre: p.nombre,
+          tipo: p.tipo,
+          origen: p.google_file_id ? 'google' : 'material',
+          mime_type: p.google_mime_type,
+          group_id: null,
+          curso_nombre: 'Mi carpeta',
+          propietario_id: userId,
+          propietario_nombre: null,
+          propietario_rol: rol,
+          es_publico: false,
+          google_file_id: p.google_file_id,
+          google_web_view_link: p.google_web_view_link,
+          google_mime_type: p.google_mime_type,
+          evo_storage_key: null,
+          evo_storage_url: p.url,
+          size_bytes: null,
+          etiquetas: [],
+          destacado: false,
+          category_id: null,
+          staff_only: false,
+          created_at: p.created_at,
+          updated_at: p.created_at,
+        };
+        merged.push({
+          api: toEvoFileApi(row),
+          ts: new Date(p.created_at).getTime(),
+        });
+      }
+    } catch {
+      /* Mi carpeta no disponible */
+    }
+    try {
+      const circ = await listPadreInstitutionalCirculareFiles(userId, colegioId);
+      for (const api of circ.slice(0, 20)) {
+        const ca = api.createdAt ? new Date(String(api.createdAt)).getTime() : 0;
+        const ua = api.updatedAt ? new Date(String(api.updatedAt)).getTime() : ca;
+        merged.push({ api, ts: Math.max(ca, ua) });
+      }
+    } catch {
+      /* circulares best-effort */
+    }
+    merged.sort((a, b) => b.ts - a.ts);
+    return res.json(merged.slice(0, 10).map((m) => m.api));
   }
 
   const courseRows = await getRecentCourseFilesForUser(colegioId, userId, rol, 15);

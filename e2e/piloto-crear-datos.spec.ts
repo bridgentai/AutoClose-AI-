@@ -6,8 +6,8 @@
  * No requiere credenciales previas.
  *
  * Requisitos:
- * - Servidor en http://localhost:3000 (npm run dev)
- * - MongoDB conectado
+ * - Backend accesible (PLAYWRIGHT_BASE_URL o BASE_URL; default http://localhost:5000)
+ * - Base de datos según proyecto (PG para modo actual)
  *
  * Ejecutar: npm run test:e2e:crear-datos
  */
@@ -15,6 +15,9 @@
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+
+const E2E_BASE =
+  process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5000';
 
 // Tipos para el informe final
 interface CreatedData {
@@ -140,9 +143,7 @@ test.describe('Prueba Piloto - Creación de Datos Reales', () => {
     } catch (error: any) {
       if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout')) {
         throw new Error(
-          '❌ ERROR: El servidor no está corriendo en http://localhost:3000\n' +
-          'Por favor ejecuta: npm run dev\n' +
-          'Y espera a ver el mensaje "🚀 Servidor iniciado exitosamente!" antes de ejecutar los tests.'
+          `ERROR: No hay backend en ${E2E_BASE}. Ejecuta npm run dev o define PLAYWRIGHT_BASE_URL.`
         );
       }
       throw error;

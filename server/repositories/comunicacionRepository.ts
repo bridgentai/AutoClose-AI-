@@ -272,8 +272,8 @@ export async function createComunicacionAnnouncement(row: {
   return ins;
 }
 
-export async function releasePendingAnnouncements(): Promise<number> {
-  const r = await queryPg(
+export async function releasePendingAnnouncements(): Promise<AnnouncementRow[]> {
+  const r = await queryPg<AnnouncementRow>(
     `UPDATE announcements
      SET status = 'sent', sent_at = now(), updated_at = now()
      WHERE status = 'pending'
@@ -281,9 +281,9 @@ export async function releasePendingAnnouncements(): Promise<number> {
        AND scheduled_send_at IS NOT NULL
        AND scheduled_send_at <= now()
        AND cancelled_at IS NULL
-     RETURNING id`
+     RETURNING *`
   );
-  return r.rowCount ?? 0;
+  return r.rows;
 }
 
 export async function cancelComunicadoPending(

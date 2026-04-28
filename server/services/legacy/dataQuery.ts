@@ -1,10 +1,10 @@
 import { Types } from 'mongoose';
-import { User, Assignment, Course, Nota, Evento, Notificacion, Mensaje } from '../models';
-import { normalizeIdForQuery } from '../utils/idGenerator';
-import type { IAssignment, ISubmission } from '../models/Assignment';
-import { queryPg } from '../config/db-pg.js';
-import { getFirstGroupForStudent } from '../repositories/enrollmentRepository.js';
-import { findGroupSubjectsByGroupWithDetails, findGroupSubjectsByTeacherWithDetails } from '../repositories/groupSubjectRepository.js';
+import { User, Assignment, Course, Nota, Evento, Notificacion, Mensaje } from '../../models';
+import { normalizeIdForQuery } from '../../utils/idGenerator';
+import type { IAssignment, ISubmission } from '../../models/Assignment';
+import { queryPg } from '../../config/db-pg.js';
+import { getFirstGroupForStudent } from '../../repositories/enrollmentRepository.js';
+import { findGroupSubjectsByGroupWithDetails, findGroupSubjectsByTeacherWithDetails } from '../../repositories/groupSubjectRepository.js';
 
 /**
  * Servicio centralizado para consultar datos del sistema

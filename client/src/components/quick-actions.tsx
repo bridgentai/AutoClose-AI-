@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Clock, X, Home, MessageSquare, BookOpen, Calendar, FileText, Users, Globe, GraduationCap, User, Mail, Building2 } from "lucide-react";
+import { Clock, X, Home, MessageSquare, BookOpen, Calendar, FileText, Users, Globe, GraduationCap, User, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface RecentPage {
@@ -17,8 +17,7 @@ const routeIcons: Record<string, any> = {
   "/dashboard": Home,
   "/chat": MessageSquare,
   "/mi-aprendizaje": GraduationCap,
-  "/comunicacion": Mail,
-  "/comunidad/noticias": Building2,
+  "/evo-send": Send,
   "/courses": BookOpen,
   "/calendar": Calendar,
   "/teacher-calendar": Calendar,
@@ -37,8 +36,7 @@ const routeLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/chat": "Chat AI",
   "/mi-aprendizaje": "Mi Aprendizaje",
-  "/comunicacion": "Comunicación",
-  "/comunidad/noticias": "GLC",
+  "/evo-send": "Evo Send",
   "/courses": "Cursos",
   "/calendar": "Calendario",
   "/teacher-calendar": "Calendario",

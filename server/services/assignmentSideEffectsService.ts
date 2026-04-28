@@ -1,10 +1,13 @@
 import { queryPg } from '../config/db-pg.js';
 import { findGroupById } from '../repositories/groupRepository.js';
 import {
-  findOrCreateEvoChatForGroupTeacher,
+  findOrCreateEvoChatForGroupSubject,
+  findOrCreateParentSubjectEvoThread,
   createAnnouncementMessage,
   addAnnouncementRecipients,
 } from '../repositories/announcementRepository.js';
+import { findGroupSubjectWithDetailsById } from '../repositories/groupSubjectRepository.js';
+import { resolveRecipientsForThread } from './evoSendAccess.js';
 import {
   createComunicacionAnnouncement,
   findParentUserIdsForGroupSubject,
@@ -110,6 +113,14 @@ export async function runAfterAssignmentCreatedPg(args: {
   });
   const bodyPadres = `${description}\n\n—\nEntrega: ${dueLabel}`;
   const attachments = adjuntosToComunicadoAttachments(adjuntosFromBody);
+  const assignmentReminderMeta = {
+    title,
+    dueAt: dueDateIso,
+    url: `/assignment/${assignmentId}`,
+    description: truncateText(description, 420),
+    attachments,
+    accent: TASK_ACCENT,
+  };
 
   try {
     const parentIds = await findParentUserIdsForGroupSubject(groupSubjectId, institutionId);
@@ -139,27 +150,23 @@ export async function runAfterAssignmentCreatedPg(args: {
   }
 
   try {
+    const gsMeta = await findGroupSubjectWithDetailsById(groupSubjectId, institutionId);
     const group = await findGroupById(groupId);
-    const threadTitle = group?.name ?? groupId;
-    const thread = await findOrCreateEvoChatForGroupTeacher(
-      groupId,
+    const threadTitle = gsMeta
+      ? `${gsMeta.subject_name} · ${gsMeta.group_name}`
+      : (group?.name ?? groupId);
+    const thread = await findOrCreateEvoChatForGroupSubject(
+      groupSubjectId,
       institutionId,
       threadTitle,
-      teacherId
+      teacherId,
+      groupId
     );
-    const meta = {
-      title,
-      dueAt: dueDateIso,
-      url: `/assignment/${assignmentId}`,
-      description: truncateText(description, 420),
-      attachments,
-      accent: TASK_ACCENT,
-    };
     const msg = await createAnnouncementMessage({
       announcement_id: thread.id,
       sender_id: teacherId,
       sender_role: 'profesor',
-      content: JSON.stringify(meta),
+      content: JSON.stringify(assignmentReminderMeta),
       content_type: 'assignment_reminder',
       priority: 'normal',
     });
@@ -205,5 +212,63 @@ export async function runAfterAssignmentCreatedPg(args: {
     );
   } catch (e: unknown) {
     console.error('[assignmentSideEffects] evo send tarea:', (e as Error).message);
+  }
+
+  try {
+    const parentThread = await findOrCreateParentSubjectEvoThread(groupSubjectId, institutionId);
+    const msgPadres = await createAnnouncementMessage({
+      announcement_id: parentThread.id,
+      sender_id: teacherId,
+      sender_role: 'profesor',
+      content: JSON.stringify(assignmentReminderMeta),
+      content_type: 'assignment_reminder',
+      priority: 'normal',
+    });
+
+    const recipientIdsPadres = await resolveRecipientsForThread({
+      announcement: {
+        id: parentThread.id,
+        type: parentThread.type,
+        group_id: parentThread.group_id,
+        group_subject_id: parentThread.group_subject_id,
+        created_by_id: parentThread.created_by_id,
+      },
+      institutionId,
+    });
+    const recipientsPadresNoProf = recipientIdsPadres.filter((rid) => rid !== teacherId);
+    await Promise.all(
+      recipientsPadresNoProf.map(async (rid) => {
+        const email = await getUserEmail(rid);
+        await notify({
+          institution_id: institutionId,
+          user_id: rid,
+          user_email: email,
+          type: 'mensaje',
+          entity_type: 'evo_send_thread',
+          entity_id: parentThread.id,
+          action_url: `/evo-send?thread=${encodeURIComponent(parentThread.id)}`,
+          title: `EvoSend · ${parentThread.title}`,
+          body: truncateText(`Nueva tarea: ${title}`),
+        });
+      })
+    );
+
+    const senderP = await findUserById(teacherId);
+    const participantIdsPadres = Array.from(new Set([...recipientIdsPadres, teacherId]));
+    emitEvoMessageBroadcast(
+      parentThread.id,
+      {
+        _id: msgPadres.id,
+        contenido: msgPadres.content,
+        tipo: msgPadres.content_type,
+        prioridad: msgPadres.priority,
+        fecha: msgPadres.created_at,
+        remitenteId: { _id: teacherId, nombre: senderP?.full_name ?? '', rol: senderP?.role },
+        rolRemitente: msgPadres.sender_role,
+      },
+      participantIdsPadres
+    );
+  } catch (e: unknown) {
+    console.error('[assignmentSideEffects] evo send tarea (padres):', (e as Error).message);
   }
 }

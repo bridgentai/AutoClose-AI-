@@ -25,7 +25,6 @@ import {
   Users,
   Globe,
   Sparkles,
-  Mail,
   UsersRound,
   Clock,
   FolderOpen,
@@ -36,7 +35,6 @@ import {
   Send,
   BarChart3,
   Bell,
-  Building2,
 } from "lucide-react";
 
 interface CommandPaletteProps {
@@ -86,17 +84,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           roles: ["estudiante"]
         },
         {
-          icon: Building2,
-          label: "GLC",
-          path: "/comunidad/noticias",
-          keywords: ["glc", "comunicados", "institucionales", "circulares", "noticias", "comunidad"],
-          roles: ["estudiante"],
-        },
-        {
-          icon: Mail,
-          label: "Comunicación",
-          path: "/comunicacion",
-          keywords: ["mensajes", "comunicacion", "bandeja", "correo", "comunidad", "eventos", "calendario", "noticias", "avisos"],
+          icon: Send,
+          label: "Evo Send",
+          path: "/evo-send",
+          keywords: ["mensajes", "comunicacion", "bandeja", "evo send", "correo", "comunidad", "eventos", "calendario", "noticias", "avisos"],
           roles: ["profesor", "directivo", "padre"],
         },
         {
@@ -111,13 +102,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           label: "Cursos",
           path: "/profesor/academia/cursos",
           keywords: ["cursos", "clases", "grupos", "estudiantes"],
-          roles: ["profesor"]
-        },
-        {
-          icon: Mail,
-          label: "Comunicación Profesor",
-          path: "/profesor/comunicacion",
-          keywords: ["comunicacion", "mensajes", "profesor", "bandeja"],
           roles: ["profesor"]
         },
         {
@@ -200,39 +184,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           label: "Evo Drive",
           path: "/evo-drive",
           keywords: ["evo", "drive", "google", "archivos", "materiales"],
-          roles: ["profesor", "directivo"],
+          roles: ["profesor", "directivo", "estudiante", "padre"],
         },
         {
           icon: Globe,
           label: "Plataformas",
           path: "/profesor/academia/plataformas",
           keywords: ["plataformas", "herramientas", "recursos", "externos"],
-          roles: ["profesor"]
-        },
-      ],
-    },
-    {
-      group: "Comunicación - Profesor",
-      items: [
-        {
-          icon: Mail,
-          label: "Bandeja de Entrada",
-          path: "/profesor/comunicacion/bandeja",
-          keywords: ["bandeja", "entrada", "mensajes", "recibidos"],
-          roles: ["profesor"]
-        },
-        {
-          icon: MessageSquare,
-          label: "Redactar Mensaje",
-          path: "/profesor/comunicacion/redactar",
-          keywords: ["redactar", "enviar", "nuevo", "mensaje"],
-          roles: ["profesor"]
-        },
-        {
-          icon: Send,
-          label: "Mensajes Enviados",
-          path: "/profesor/comunicacion/enviados",
-          keywords: ["enviados", "mensajes", "historial"],
           roles: ["profesor"]
         },
       ],
@@ -262,10 +220,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           roles: ["directivo"]
         },
         {
-          icon: Mail,
-          label: "Comunicación",
-          path: "/directivo/comunicacion",
-          keywords: ["comunicacion", "directivo", "mensajes"],
+          icon: Send,
+          label: "Evo Send",
+          path: "/evo-send",
+          keywords: ["comunicacion", "mensajes", "evo send", "directivo", "mensajes"],
           roles: ["directivo"]
         },
       ],
@@ -404,13 +362,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           label: "Comunicación - Calendario de Eventos",
           path: "/comunidad/calendario",
           keywords: ["eventos", "calendario", "comunidad", "comunicacion"],
-          roles: ["estudiante", "profesor", "directivo", "padre"]
-        },
-        {
-          icon: Mail,
-          label: "Comunicación - Avisos y Noticias",
-          path: "/comunidad/noticias",
-          keywords: ["noticias", "avisos", "comunidad", "comunicacion"],
           roles: ["estudiante", "profesor", "directivo", "padre"]
         },
       ],

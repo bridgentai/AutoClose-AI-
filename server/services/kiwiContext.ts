@@ -59,7 +59,8 @@ RESTRICCIONES DE ROL (estudiante):
 HERRAMIENTAS DISPONIBLES:
 - get_my_grades: Ver tus notas por materia y período académico
 - get_my_attendance: Ver tu registro de asistencia
-- get_pending_tasks: Ver tareas pendientes, entregadas o calificadas
+- get_pending_tasks: Ver tareas pendientes, entregadas o calificadas (puedes filtrar por estado: pendiente, entregada, calificada)
+- list_my_courses: Ver tus materias y grupos matriculados
 - get_my_schedule: Ver tu horario de clases`,
 
   profesor: `
@@ -84,11 +85,19 @@ RESTRICCIONES DE ROL (padre/acudiente):
 - NO puedes ver información de otros estudiantes
 - NO puedes ver información de cursos completos
 
+PROTOCOLO OBLIGATORIO (herramientas primero):
+- Ante cualquier consulta sobre notas, promedios, asistencia, rendimiento, análisis académico, informe, PDF, Evo Doc o documento sobre el hijo/a: ejecuta de inmediato la herramienta adecuada (get_child_grades, get_child_attendance o generate_evo_doc). Los datos veraces vienen solo de las herramientas.
+- NO pidas al usuario que copie o resuma notas desde la app, ni un ID de estudiante salvo que tengas varios hijos y no puedas inferir cuál. NO exijas un periodo obligatorio: si no se indica, usa un periodo por defecto razonable (p. ej. año calendario o periodo actual).
+- Si piden documento descargable, informe o "Evo Doc", usa generate_evo_doc con docType student_analysis.
+- NUNCA inventes calificaciones ni estadísticas
+
 HERRAMIENTAS DISPONIBLES:
-- get_child_grades: Ver notas académicas de tu hijo/a
+- get_child_grades: Ver notas académicas de tu hijo/a (childId opcional si solo hay un hijo)
 - get_child_attendance: Ver asistencia de tu hijo/a
 - get_comunicados: Ver comunicados recibidos del colegio
-- contact_teacher: Enviar mensaje a un docente de tu hijo/a`,
+- contact_teacher: Enviar mensaje o ver docentes de tu hijo/a
+- search_documents: Buscar en documentos institucionales del colegio (PEI, manual, normas)
+- generate_evo_doc: Generar documento Evo Docs / PDF de análisis académico (student_analysis, etc.)`,
 
   directivo: `
 RESTRICCIONES DE ROL (directivo):
@@ -163,12 +172,64 @@ const TOOL_GET_MY_SCHEDULE: ToolDefinition = {
   description: 'Ver el horario de clases del usuario actual',
 };
 
+const TOOL_GENERATE_EVO_DOC: ToolDefinition = {
+  name: 'generate_evo_doc',
+  description: 'Generar un documento Evo Docs (analisis academico en PDF profesional). Usa esta herramienta cuando el usuario pida un analisis, reporte o documento sobre rendimiento academico, notas, asistencia o riesgo. El documento se guarda automaticamente en Evo Docs.',
+  parameters: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', description: 'Titulo del documento' },
+      docType: { type: 'string', enum: ['student_analysis', 'group_risk', 'attendance_report', 'custom'], description: 'Tipo de analisis' },
+      subjectId: { type: 'string', description: 'ID del estudiante o grupo analizado (opcional)' },
+      subjectName: { type: 'string', description: 'Nombre del estudiante o grupo' },
+      period: { type: 'string', description: 'Periodo academico (ej: Enero - Junio 2026)' },
+    },
+    required: ['title', 'docType'],
+  },
+};
+
+const TOOL_SEARCH_DOCUMENTS: ToolDefinition = {
+  name: 'search_documents',
+  description: 'Buscar en la base de conocimiento del colegio (PEI, manual de convivencia, reglamentos, documentos institucionales). Usa esta herramienta cuando el usuario pregunte sobre políticas, normativas o información general del colegio.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Pregunta o tema a buscar en los documentos institucionales' },
+    },
+    required: ['query'],
+  },
+};
+
 const TOOLS_BY_ROLE: Record<string, ToolDefinition[]> = {
   estudiante: [
-    { name: 'get_my_grades', description: 'Ver notas propias por materia y período académico' },
-    { name: 'get_my_attendance', description: 'Ver registro de asistencia propio' },
-    { name: 'get_pending_tasks', description: 'Ver tareas pendientes, entregadas o calificadas' },
+    {
+      name: 'get_my_grades',
+      description: 'Ver notas propias por materia y período académico. Retorna las últimas 50 notas.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'get_my_attendance',
+      description: 'Ver registro de asistencia propio de todas las materias.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'get_pending_tasks',
+      description: 'Ver tareas pendientes, entregadas o calificadas. Filtra por estado si se especifica.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['pendiente', 'entregada', 'calificada'], description: 'Filtrar por estado (opcional)' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'list_my_courses',
+      description: 'Ver las materias y grupos en los que estás matriculado.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
     TOOL_GET_MY_SCHEDULE,
+    TOOL_SEARCH_DOCUMENTS,
   ],
   profesor: [
     {
@@ -199,12 +260,44 @@ const TOOLS_BY_ROLE: Record<string, ToolDefinition[]> = {
       },
     },
     TOOL_GET_MY_SCHEDULE,
+    TOOL_SEARCH_DOCUMENTS,
+    TOOL_GENERATE_EVO_DOC,
   ],
   padre: [
-    { name: 'get_child_grades', description: 'Ver notas académicas de un hijo/a registrado' },
-    { name: 'get_child_attendance', description: 'Ver asistencia de un hijo/a registrado' },
-    { name: 'get_comunicados', description: 'Ver comunicados recibidos del colegio' },
-    { name: 'contact_teacher', description: 'Enviar mensaje a un docente de un hijo/a' },
+    {
+      name: 'get_child_grades',
+      description: 'Ver notas académicas de un hijo/a registrado. Si tienes un solo hijo, se selecciona automáticamente.',
+      parameters: {
+        type: 'object',
+        properties: {
+          childId: { type: 'string', description: 'ID del hijo (opcional si solo tienes uno)' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'get_child_attendance',
+      description: 'Ver asistencia escolar de un hijo/a registrado.',
+      parameters: {
+        type: 'object',
+        properties: {
+          childId: { type: 'string', description: 'ID del hijo (opcional si solo tienes uno)' },
+        },
+        required: [],
+      },
+    },
+    {
+      name: 'get_comunicados',
+      description: 'Ver comunicados recibidos del colegio (institucionales y académicos).',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+    {
+      name: 'contact_teacher',
+      description: 'Muestra los profesores disponibles de tus hijos para enviarles un mensaje.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+    TOOL_SEARCH_DOCUMENTS,
+    TOOL_GENERATE_EVO_DOC,
   ],
   directivo: [
     {
@@ -256,6 +349,21 @@ const TOOLS_BY_ROLE: Record<string, ToolDefinition[]> = {
         required: [],
       },
     },
+    TOOL_SEARCH_DOCUMENTS,
+    {
+      name: 'trigger_workflow',
+      description: 'Activar una automatización del colegio (alertas, recordatorios, generación de boletines, sync con Google Calendar). Si no sabes cuál activar, llámala sin workflowId para ver las disponibles.',
+      parameters: {
+        type: 'object',
+        properties: {
+          workflowId: { type: 'string', description: 'ID del workflow a activar (opcional, deja vacío para listar disponibles)' },
+          threshold: { type: 'number', description: 'Umbral para workflows que lo requieran (ej: nota mínima para riesgo académico)' },
+          scope: { type: 'string', enum: ['group', 'all'], description: 'Alcance: group=un grupo, all=todo el colegio' },
+          groupId: { type: 'string', description: 'ID del grupo (si scope=group)' },
+        },
+        required: [],
+      },
+    },
     // TODO: activar post-demo
     // { name: 'send_evosend_message', description: 'Envía un mensaje por EvoSend en un canal donde el directivo ya es miembro',
     //   parameters: { type: 'object', properties: {
@@ -270,6 +378,7 @@ const TOOLS_BY_ROLE: Record<string, ToolDefinition[]> = {
     //     groupId: { type: 'string', description: 'ID del grupo, requerido si scope=group' },
     //     confirmed: { type: 'boolean', description: 'true solo si el usuario ya confirmó la generación' },
     //   }, required: ['scope'] } },
+    TOOL_GENERATE_EVO_DOC,
   ],
   rector: [
     { name: 'get_institution_analytics', description: 'Ver métricas generales de la institución' },

@@ -137,7 +137,7 @@ export default function SuperAdminPage() {
   };
 
   return (
-    <div data-testid="super-admin-page" className="min-h-screen p-6">
+    <div data-testid="super-admin-page" className="min-h-0 p-6">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-white mb-2 font-['Poppins']">

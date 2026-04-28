@@ -1,7 +1,7 @@
 /**
  * Prueba piloto MVP - Cumple con todos los requisitos de docs/MVP_VALIDACION_PILOTO.md
  *
- * Requisitos: app corriendo (npm run dev), MongoDB conectado.
+ * Opcional: PLAYWRIGHT_BASE_URL o BASE_URL para staging (default http://localhost:5000).
  * Opcional: ADMIN_EMAIL y ADMIN_PASSWORD en .env o env para login.
  *
  * Ejecutar: npx playwright test e2e/piloto-mvp.spec.ts
@@ -17,6 +17,9 @@ import { test, expect } from '@playwright/test';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || process.env.E2E_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || process.env.E2E_ADMIN_PASSWORD;
 
+const E2E_BASE =
+  process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://localhost:5000';
+
 // Verificar que el servidor está disponible antes de ejecutar tests
 test.beforeAll(async ({ request }) => {
   try {
@@ -27,9 +30,7 @@ test.beforeAll(async ({ request }) => {
   } catch (error: any) {
     if (error.message?.includes('ECONNREFUSED') || error.message?.includes('timeout')) {
       throw new Error(
-        '❌ ERROR: El servidor no está corriendo en http://localhost:3000\n' +
-        'Por favor ejecuta: npm run dev\n' +
-        'Y espera a ver el mensaje "🚀 Servidor iniciado exitosamente!" antes de ejecutar los tests.'
+        `ERROR: No hay backend en ${E2E_BASE}. Ejecuta npm run dev (o despliega staging) y revisa PLAYWRIGHT_BASE_URL / BASE_URL.`
       );
     }
     throw error;
