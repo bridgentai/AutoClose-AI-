@@ -92,7 +92,6 @@ import ProfesorAcademiaLayout from "@/pages/profesor-academia";
 import ProfesorTareasPage from "@/pages/profesor-tareas";
 import ProfesorCalificacionLogrosPage from "@/pages/profesor-calificacion-logros";
 import ProfesorAsignarTareaPage from "@/pages/profesor-asignar-tarea";
-import ProfesorRevisionTareasPage from "@/pages/profesor-revision-tareas";
 import ProfesorPanelCalificacionPage from "@/pages/profesor-panel-calificacion";
 import ProfesorTareasPorRevisarPage from "@/pages/profesor-tareas-por-revisar";
 import ProfesorEditorDocumentoPage from "@/pages/profesor-editor-documento";
@@ -482,7 +481,7 @@ function AppRouter() {
               <AuthGuard><Redirect to="/profesor/academia/cursos" /></AuthGuard>
             </Route>
             <Route path="/profesor/academia/tareas/revision">
-              <AuthGuard><Redirect to="/profesor/academia/cursos" /></AuthGuard>
+              <AuthGuard><ProfesorTareasPorRevisarPage /></AuthGuard>
             </Route>
             <Route path="/profesor/tareas-por-revisar">
               <AuthGuard><ProfesorTareasPorRevisarPage /></AuthGuard>

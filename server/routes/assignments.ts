@@ -585,12 +585,14 @@ router.get('/profesor/:profesorId/mis-asignaciones', protect, async (req: AuthRe
       is_gradable: boolean;
       requires_submission: boolean;
       created_at: string;
+      group_id: string;
       group_name: string;
+      subject_id: string;
       subject_name: string;
       pendientes_calificar: number;
     }>(
       `SELECT a.id, a.group_subject_id, a.title, a.description, a.content_document, a.due_date, a.max_score, a.created_by, a.type, a.is_gradable, a.requires_submission, a.created_at,
-              g.name AS group_name, COALESCE(gs.display_name, s.name) AS subject_name,
+              g.id AS group_id, g.name AS group_name, s.id AS subject_id, COALESCE(gs.display_name, s.name) AS subject_name,
               COALESCE((
                 SELECT COUNT(*)::int FROM submissions sub
                 WHERE sub.assignment_id = a.id AND sub.submitted_at IS NOT NULL AND sub.score IS NULL
@@ -619,7 +621,9 @@ router.get('/profesor/:profesorId/mis-asignaciones', protect, async (req: AuthRe
       is_gradable: boolean;
       requires_submission: boolean;
       created_at: string;
+      group_id: string;
       group_name: string;
+      subject_id: string;
       subject_name: string;
       pendientes_calificar: number;
     };
@@ -642,6 +646,8 @@ router.get('/profesor/:profesorId/mis-asignaciones', protect, async (req: AuthRe
         curso: row.group_name,
         materiaNombre: row.subject_name,
         pendientesCalificar: row.pendientes_calificar,
+        groupId: row.group_id,
+        subjectId: row.subject_id,
       });
     });
     return res.json(list);

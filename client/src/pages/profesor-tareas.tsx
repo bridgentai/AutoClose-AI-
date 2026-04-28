@@ -76,7 +76,7 @@ export default function ProfesorTareasPage() {
                 Revisión
               </CardTitle>
               <CardDescription className="text-white/60">
-                Accede al módulo de asignaciones de cada curso para revisar entregas, calificar y gestionar.
+                Vista tipo estudiante con filtros, pestañas y calendario para priorizar entregas por calificar.
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0">
@@ -88,7 +88,7 @@ export default function ProfesorTareasPage() {
                   setLocation('/profesor/academia/tareas/revision');
                 }}
               >
-                Ver Mis Cursos
+                Abrir revisión de asignaciones
               </Button>
             </CardContent>
           </Card>
