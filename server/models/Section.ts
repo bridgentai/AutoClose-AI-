@@ -1,9 +1,8 @@
-import { Schema, model, Document, Types } from 'mongoose';
+import { Schema, model, Document } from 'mongoose';
 
 export interface ISection extends Document {
   nombre: string;
   colegioId: string;
-  _id?: Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }

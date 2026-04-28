@@ -1,5 +1,6 @@
 import express from 'express';
 import { google } from 'googleapis';
+import type { drive_v3 } from 'googleapis';
 import { protect, restrictTo, AuthRequest } from '../middleware/authMiddleware.js';
 import { ENV } from '../config/env.js';
 import { findUserById } from '../repositories/userRepository.js';
@@ -349,7 +350,7 @@ router.get('/google/files', protect, async (req: AuthRequest, res) => {
   if (!auth) return res.status(403).json({ error: 'Google Drive no conectado', code: 'GOOGLE_DRIVE_DISCONNECTED' });
   const drive = google.drive({ version: 'v3', auth });
   const { q = '', pageToken } = req.query as { q?: string; pageToken?: string };
-  const params: Parameters<typeof drive.files.list>[0] = {
+  const params: drive_v3.Params$Resource$Files$List = {
     pageSize: 30,
     fields: 'nextPageToken, files(id, name, mimeType, webViewLink, iconLink, modifiedTime, size)',
     orderBy: 'modifiedTime desc',
@@ -443,7 +444,7 @@ router.post('/google/create', protect, restrictTo(...ROLES_WRITE), async (req: A
       es_publico: !isStaffCoursePrivate,
       group_subject_id: validGroupSubjectId,
       staff_only: isStaffCoursePrivate,
-      google_file_id: googleFileId,
+      google_file_id: googleFileId ?? undefined,
       google_web_view_link: webViewLink || undefined,
       google_mime_type: mimeType,
     });
@@ -923,7 +924,7 @@ router.post('/files', protect, restrictTo(...ROLES_WRITE), async (req: AuthReque
       es_publico: isStaffCoursePrivate ? false : esPublico !== false,
       group_subject_id: validGroupSubjectId,
       staff_only: isStaffCoursePrivate,
-      google_file_id: googleFileId,
+      google_file_id: googleFileId ?? undefined,
       google_web_view_link: googleWebViewLink,
       google_mime_type: googleMimeType,
       size_bytes: sizeBytes,

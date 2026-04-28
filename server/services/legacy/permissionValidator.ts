@@ -39,9 +39,7 @@ export async function canQueryOwnNotes(
     };
   }
 
-  // ⚠️ SEGURIDAD: super_admin tiene acceso global, no está limitado por colegioId
-  // En producción, considerar logging de auditoría para accesos de super_admin
-  if (user.rol !== 'super_admin' && user.colegioId !== colegioId) {
+  if (user.colegioId !== colegioId) {
     return {
       allowed: false,
       reason: 'No tienes acceso a información de otro colegio.'

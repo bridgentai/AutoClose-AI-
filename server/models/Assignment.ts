@@ -24,6 +24,7 @@ export interface ISubmission {
 }
 
 export interface IAssignment {
+  _id?: Types.ObjectId;
   titulo: string;
   descripcion: string;
   contenidoDocumento?: string; // Contenido HTML del documento extendido
@@ -110,5 +111,3 @@ assignmentSchema.index({ colegioId: 1, cursoId: 1 });
 assignmentSchema.index({ profesorId: 1, fechaEntrega: 1 });
 
 export const Assignment = model<IAssignment>('tareas', assignmentSchema);
-
-export type { IAssignment, ISubmission, IAttachment };

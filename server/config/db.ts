@@ -3,6 +3,10 @@ import mongoose from 'mongoose';
 // IMPORTANTE: Importar ENV asegura que .env se carga primero (env.ts carga dotenv)
 import { ENV } from './env';
 
+function mongoReadyState(): number {
+  return mongoose.connection.readyState as number;
+}
+
 export let mongoConnected = false;
 export let mongoError: string | null = null;
 
@@ -111,7 +115,7 @@ export async function connectDB(retries = 3) {
         }
         
         // Cerrar cualquier conexión previa antes de intentar
-        if (mongoose.connection.readyState !== 0) {
+        if (mongoReadyState() !== 0) {
           await mongoose.connection.close().catch(() => {});
           // Esperar un momento para que se cierre completamente
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -135,7 +139,7 @@ export async function connectDB(retries = 3) {
           }
           
           // Cerrar cualquier conexión parcial antes de reintentar
-          if (mongoose.connection.readyState !== 0) {
+          if (mongoReadyState() !== 0) {
             await mongoose.connection.close().catch(() => {});
           }
         }
@@ -145,9 +149,9 @@ export async function connectDB(retries = 3) {
     // Si falló con querySrv ECONNREFUSED y hay URI directa, intentar con ella (evita DNS SRV)
     const directUri = ENV.MONGODB_URI_DIRECT?.trim();
     const isQuerySrvRefused = lastError?.message?.includes('querySrv') && (lastError?.code === 'ECONNREFUSED' || lastError?.message?.includes('ECONNREFUSED'));
-    if ((!mongoose.connection.readyState || mongoose.connection.readyState === 0) && directUri && directUri.startsWith('mongodb://') && isQuerySrvRefused) {
+    if ((!mongoReadyState() || mongoReadyState() === 0) && directUri && directUri.startsWith('mongodb://') && isQuerySrvRefused) {
       console.log('🔄 Fallo en resolución SRV; intentando con URI directa (MONGODB_URI_DIRECT)...');
-      if (mongoose.connection.readyState !== 0) {
+      if (mongoReadyState() !== 0) {
         await mongoose.connection.close().catch(() => {});
         await new Promise(resolve => setTimeout(resolve, 500));
       }
@@ -159,7 +163,7 @@ export async function connectDB(retries = 3) {
     }
 
     // Si después de todos los intentos aún falla, lanzar el último error
-    if (!mongoose.connection.readyState || mongoose.connection.readyState === 0) {
+    if (!mongoReadyState() || mongoReadyState() === 0) {
       throw lastError || new Error('No se pudo conectar después de múltiples intentos');
     }
     
@@ -167,7 +171,7 @@ export async function connectDB(retries = 3) {
     console.log(`📊 Base de datos: ${mongoose.connection.db?.databaseName || 'autoclose_ai'}`);
     console.log(`🔗 Host: ${mongoose.connection.host || 'N/A'}`);
     console.log(`🔌 Puerto: ${mongoose.connection.port || 'N/A'}`);
-    console.log(`📡 Estado: ${mongoose.connection.readyState === 1 ? 'Conectado' : 'Desconectado'}`);
+    console.log(`📡 Estado: ${mongoReadyState() === 1 ? 'Conectado' : 'Desconectado'}`);
     
     mongoConnected = true;
     mongoError = null;

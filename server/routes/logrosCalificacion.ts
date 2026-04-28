@@ -34,7 +34,7 @@ async function getOrCreateSchemaForCourse(
   const existing = await findGradingSchemaByGroupSubject(gsId, gs.institution_id);
   if (existing) return existing;
 
-  const r = await queryPg(
+  const r = await queryPg<{ id: string; group_id: string; institution_id: string }>(
     'INSERT INTO grading_schemas (group_id, group_subject_id, institution_id, name, version, is_active) VALUES ($1, $2, $3, $4, 1, true) RETURNING id, group_id, institution_id',
     [gs.group_id, gsId, gs.institution_id, null]
   );

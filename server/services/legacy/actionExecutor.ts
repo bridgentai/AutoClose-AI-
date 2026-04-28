@@ -591,18 +591,18 @@ async function executeCreateAssignment(
     role: 'profesor',
     action: 'asignar_tarea',
     entityType: 'assignment',
-    entityId: result.assignment!._id.toString(),
+    entityId: result.assignment!._id!.toString(),
     cursoId: finalCursoId,
     colegioId,
     result: 'success',
     requestData: params
   });
 
-  await syncService.syncAssignmentChange(result.assignment!._id.toString(), 'created', colegioId);
+  await syncService.syncAssignmentChange(result.assignment!._id!.toString(), 'created', colegioId);
 
   return {
     success: true,
-    data: { assignmentId: result.assignment!._id.toString() },
+    data: { assignmentId: result.assignment!._id!.toString() },
     message: `Tarea "${titulo}" creada exitosamente${grupoFinal ? ` para el grupo ${grupoFinal}` : ''}`
   };
 }

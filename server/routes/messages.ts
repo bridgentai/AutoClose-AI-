@@ -121,7 +121,7 @@ router.post('/conversations', protect, async (req: AuthRequest, res) => {
     }
 
     const allowed = ['profesor', 'directivo', 'admin-general-colegio', 'asistente', 'asistente-academica'];
-    if (!allowed.includes(rol)) return res.status(403).json({ message: 'Solo profesor, directivo o asistente pueden iniciar conversación con padres.' });
+    if (!rol || !allowed.includes(rol)) return res.status(403).json({ message: 'Solo profesor, directivo o asistente pueden iniciar conversación con padres.' });
 
     const dest = await findUserById(destinatarioId);
     if (!dest || dest.role !== 'padre') return res.status(400).json({ message: 'El destinatario debe ser un padre.' });

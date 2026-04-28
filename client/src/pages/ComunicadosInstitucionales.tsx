@@ -170,7 +170,7 @@ const ComunicadosInstitucionales: React.FC = () => {
     queryFn: async () => {
       const res = await fetch('/api/institution/config', { headers: authHeaders() });
       if (!res.ok) return { nombre: 'Institución' };
-      return res.json() as { nombre: string };
+      return (await res.json()) as { nombre: string };
     },
   });
 
@@ -180,7 +180,7 @@ const ComunicadosInstitucionales: React.FC = () => {
       queryFn: async (): Promise<CategoryCounts> => {
         const res = await fetch('/api/institucional/comunicados/categorias', { headers: authHeaders() });
         if (!res.ok) throw new Error('categorias');
-        return res.json();
+        return await res.json();
       },
     });
 
@@ -190,7 +190,7 @@ const ComunicadosInstitucionales: React.FC = () => {
       const q = apiCategory ? `?category=${encodeURIComponent(apiCategory)}` : '';
       const res = await fetch(`/api/institucional/comunicados${q}`, { headers: authHeaders() });
       if (!res.ok) throw new Error('list');
-      return res.json();
+      return await res.json();
     },
   });
 

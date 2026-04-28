@@ -132,6 +132,7 @@ interface Assignment {
     submissions?: Submission[];
     entregas?: Submission[];
     logroCalificacionId?: string;
+    categoryWeightPct?: number | null;
 }
 
 interface LogroCalificacion {

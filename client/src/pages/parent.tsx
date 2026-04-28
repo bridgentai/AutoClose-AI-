@@ -28,7 +28,7 @@ export default function ParentPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return { items: [] as UnreadComItem[], count: 0 };
-      return res.json() as { items: UnreadComItem[]; count: number };
+      return (await res.json()) as { items: UnreadComItem[]; count: number };
     },
     enabled: user?.rol === 'padre',
   });

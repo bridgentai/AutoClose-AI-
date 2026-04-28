@@ -309,7 +309,7 @@ function useInstitucionalEvosendData() {
         { headers: authHeaders() }
       );
       if (!res.ok) throw new Error('events');
-      return res.json();
+      return await res.json();
     },
     enabled: !!institutionId,
     staleTime: 30_000,
@@ -342,7 +342,7 @@ function useInstitucionalEvosendData() {
       queryFn: async (): Promise<CategoryCounts> => {
         const res = await fetch('/api/institucional/comunicados/categorias', { headers: authHeaders() });
         if (!res.ok) throw new Error('categorias');
-        return res.json();
+        return await res.json();
       },
     });
 
@@ -352,7 +352,7 @@ function useInstitucionalEvosendData() {
       const q = apiCategory ? `?category=${encodeURIComponent(apiCategory)}` : '';
       const res = await fetch(`/api/institucional/comunicados${q}`, { headers: authHeaders() });
       if (!res.ok) throw new Error('list');
-      return res.json();
+      return await res.json();
     },
     enabled: activeCat !== 'calendario',
   });
@@ -511,7 +511,7 @@ function useInstitucionalEvosendData() {
     queryFn: async () => {
       const res = await fetch('/api/evo-send/institutional-mailbox-meta', { headers: authHeaders() });
       if (!res.ok) throw new Error('meta');
-      return res.json() as { trashCount: number; starredCount: number };
+      return (await res.json()) as { trashCount: number; starredCount: number };
     },
     staleTime: 15_000,
   });
@@ -949,7 +949,7 @@ function DirectorMailboxPanel() {
         headers: authHeaders(),
       });
       if (!res.ok) throw new Error('mailbox');
-      return res.json();
+      return await res.json();
     },
     enabled: institutionalMailbox === 'threads',
   });
@@ -963,7 +963,7 @@ function DirectorMailboxPanel() {
         { headers: authHeaders() }
       );
       if (!res.ok) throw new Error('folder');
-      return res.json() as {
+      return (await res.json()) as {
         items: Array<{
           messageId: string;
           threadId: string;
@@ -1063,7 +1063,7 @@ function DirectorMailboxPanel() {
         }),
       });
       if (!res.ok) throw new Error('send');
-      return res.json();
+      return await res.json();
     },
     onSuccess: () => {
       setReplyDraft('');
@@ -2018,7 +2018,7 @@ function InstitutionalPublishComposePanel() {
         { headers: authHeaders() }
       );
       if (!res.ok) throw new Error('events');
-      return res.json();
+      return await res.json();
     },
     enabled: !!composeInstId && pubCategory === 'evento',
   });
@@ -2539,7 +2539,7 @@ function InstitutionalCommunityCalendarPanel() {
         { headers: authHeaders() }
       );
       if (!res.ok) throw new Error('events');
-      return res.json();
+      return await res.json();
     },
     enabled: !!instId,
   });

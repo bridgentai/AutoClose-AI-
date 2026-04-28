@@ -226,11 +226,7 @@ async function assertMessageMailboxFlagAllowed(
 
   const directorReadAll =
     !!rol &&
-    DIRECTIVO_FULL_INBOX_ROLES.includes(rol as (typeof DIRECTIVO_FULL_INBOX_ROLES)[number]) &&
-    (a.type === 'evo_chat' ||
-      a.type === 'evo_chat_staff' ||
-      a.type === 'evo_chat_direct' ||
-      a.type === 'evo_chat_section_director');
+    DIRECTIVO_FULL_INBOX_ROLES.includes(rol as (typeof DIRECTIVO_FULL_INBOX_ROLES)[number]);
 
   if (!directorReadAll) {
     const allowed = await isUserRecipientOfAnnouncement(a.id, userId);
@@ -294,7 +290,13 @@ async function buildThreadFromAnnouncement(a: {
 async function buildThreadFromAnnouncementForViewer(
   a: AnnouncementRow,
   viewerUserId: string | undefined
-): Promise<Awaited<ReturnType<typeof buildThreadFromAnnouncement>> & { inbox_category: 'academico' | 'institucional' }> {
+): Promise<
+  Awaited<ReturnType<typeof buildThreadFromAnnouncement>> & {
+    inbox_category: 'academico' | 'institucional';
+    peerName?: string;
+    peerRole?: string;
+  }
+> {
   const base = await buildThreadFromAnnouncement(a);
   const inbox_category = await computeInboxCategory(a, viewerUserId);
 

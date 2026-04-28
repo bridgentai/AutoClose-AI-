@@ -90,6 +90,15 @@ const mockStudents: Student[] = [
 
 const PASSED_THRESHOLD = 65;
 
+interface GradeTableAssignment {
+  _id: string;
+  titulo: string;
+  submissions?: { estudianteId: string; calificacion?: number }[];
+  entregas?: { estudianteId: string; calificacion?: number }[];
+  logroCalificacionId?: string;
+  categoryWeightPct?: number | null;
+}
+
 const mockStudentDetail: StudentDetail = {
   _id: '1',
   nombre: 'Juan Pérez',
@@ -166,7 +175,7 @@ export default function TeacherNotesPage() {
   const firstSubjectId = subjectsForGroup[0]?._id;
   const courseIdForData = subjectsLoaded && firstSubjectId ? firstSubjectId : '';
 
-  const { data: assignmentsForTable = [] } = useQuery({
+  const { data: assignmentsForTable = [] } = useQuery<GradeTableAssignment[]>({
     queryKey: ['gradeTableAssignments', cursoId, courseIdForData],
     queryFn: () => fetchGradeTableAssignments(displayGroupId, courseIdForData),
     enabled: !!cursoId && !!courseIdForData,
@@ -277,9 +286,9 @@ export default function TeacherNotesPage() {
     const getCategoryGrade = (catId: string): number | null => {
       const block = assignmentsByLogro[catId];
       if (!block?.assignments?.length) return null;
-      const scores = block.assignments.map((a) => getNotaForStudent(a, estudianteId));
-      const slots = block.assignments.map((a) => ({
-        categoryWeightPct: (a as { categoryWeightPct?: number | null }).categoryWeightPct ?? null,
+      const scores = block.assignments.map((a: GradeTableAssignment) => getNotaForStudent(a, estudianteId));
+      const slots = block.assignments.map((a: GradeTableAssignment) => ({
+        categoryWeightPct: a.categoryWeightPct ?? null,
       }));
       return weightedGradeWithinLogro(slots, scores);
     };
@@ -287,7 +296,7 @@ export default function TeacherNotesPage() {
     if (course == null) {
       const all: number[] = [];
       Object.values(assignmentsByLogro).forEach(({ assignments }) => {
-        assignments.forEach((a) => {
+        assignments.forEach((a: GradeTableAssignment) => {
           const n = getNotaForStudent(a, estudianteId);
           if (hasRecordedScore(n)) all.push(Number(n));
         });
@@ -360,10 +369,10 @@ export default function TeacherNotesPage() {
           <div className="space-y-6">
             {Object.values(assignmentsByLogro).map(({ logro, assignments }) => {
               if (assignments.length === 0) return null;
-              const slots = assignments.map((a) => ({
-                categoryWeightPct: (a as { categoryWeightPct?: number | null }).categoryWeightPct ?? null,
+              const slots = assignments.map((a: GradeTableAssignment) => ({
+                categoryWeightPct: a.categoryWeightPct ?? null,
               }));
-              const scores = assignments.map((a) => getNotaForStudent(a, estudianteId));
+              const scores = assignments.map((a: GradeTableAssignment) => getNotaForStudent(a, estudianteId));
               const promLogroRaw = weightedGradeWithinLogro(slots, scores);
               const promLogro =
                 promLogroRaw != null && !Number.isNaN(promLogroRaw) ? Math.round(promLogroRaw * 10) / 10 : null;

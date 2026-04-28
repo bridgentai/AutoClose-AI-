@@ -168,7 +168,9 @@ export default function HorarioEscolarPage() {
                               >
                                 <span className="truncate">{subject.nombre}</span>
                                 {esHoy && registrado && (
-                                  <CheckCircle className="w-4 h-4 flex-shrink-0 text-[#10B981]" title="Asistencia registrada" />
+                                  <span title="Asistencia registrada" className="inline-flex">
+                                    <CheckCircle className="w-4 h-4 flex-shrink-0 text-[#10B981]" aria-hidden />
+                                  </span>
                                 )}
                               </motion.button>
                             ) : (

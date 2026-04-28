@@ -20,7 +20,7 @@ export function getPgPool(): pg.Pool {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
     });
-    pgPool.on('error', (err) => {
+    pgPool.on('error', (err: Error) => {
       console.error('PostgreSQL pool error:', err);
       pgError = err.message;
     });
@@ -28,7 +28,7 @@ export function getPgPool(): pg.Pool {
   return pgPool;
 }
 
-export async function queryPg<T = pg.QueryResultRow>(
+export async function queryPg<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   values?: unknown[]
 ): Promise<pg.QueryResult<T>> {

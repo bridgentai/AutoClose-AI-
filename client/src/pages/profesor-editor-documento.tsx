@@ -17,7 +17,7 @@ interface Assignment {
   titulo: string;
   descripcion: string;
   contenidoDocumento?: string;
-  curso: string;
+  curso?: string;
   fechaEntrega: string;
 }
 
@@ -33,15 +33,15 @@ export default function ProfesorEditorDocumentoPage() {
 
   const { data: assignment, isLoading } = useQuery<Assignment>({
     queryKey: ['/api/assignments', assignmentId],
-    queryFn: () => apiRequest('GET', `/api/assignments/${assignmentId}`),
+    queryFn: () => apiRequest<Assignment>('GET', `/api/assignments/${assignmentId}`),
     enabled: !!assignmentId,
-    onSuccess: (data) => {
-      if (data) {
-        setTitulo(data.titulo);
-        setDocumentContent(data.contenidoDocumento || '');
-      }
-    },
   });
+
+  useEffect(() => {
+    if (!assignment) return;
+    setTitulo(assignment.titulo);
+    setDocumentContent(assignment.contenidoDocumento || '');
+  }, [assignment]);
 
   const updateDocumentMutation = useMutation({
     mutationFn: async (content: string) => {
@@ -107,7 +107,7 @@ export default function ProfesorEditorDocumentoPage() {
                   Tarea: <span className="text-white font-semibold">{titulo}</span>
                 </p>
                 <p className="text-sm text-white/50 mt-1">
-                  Curso: {assignment.curso}
+                  Curso: {assignment.curso ?? '—'}
                 </p>
               </div>
               <div className="flex gap-2">

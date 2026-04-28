@@ -62,17 +62,23 @@ async function run() {
   // 1) Crear grupos (cursos) si no existen
   const groups: { _id: Types.ObjectId; nombre: string }[] = [];
   for (const nombre of GROUP_NAMES) {
-    let g = await Group.findOne({ nombre, colegioId }).lean();
-    if (!g) {
+    const existing = await Group.findOne({ nombre, colegioId }).lean();
+    let id: Types.ObjectId;
+    let name: string;
+    if (!existing) {
       const created = await Group.create({
         nombre,
         descripcion: `Grupo ${nombre}`,
         colegioId,
       });
-      g = created.toObject();
+      id = created._id;
+      name = created.nombre;
       console.log(`[SEED] Grupo creado: ${nombre}`);
+    } else {
+      id = existing._id;
+      name = existing.nombre;
     }
-    groups.push({ _id: (g as any)._id, nombre: (g as any).nombre });
+    groups.push({ _id: id, nombre: name });
   }
   console.log(`[SEED] Grupos listos: ${groups.length}`);
 

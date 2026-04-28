@@ -3,7 +3,7 @@ import { BookOpen, GraduationCap, MessageSquare, TrendingUp } from 'lucide-react
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useLocation } from 'wouter';
-import { Calendar } from '@/components/Calendar';
+import { Calendar, type CalendarAssignment } from '@/components/Calendar';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -28,7 +28,12 @@ export default function TeacherPage() {
     enabled: !!user?.id && user?.rol === 'profesor',
   });
 
-  const handleDayClick = (assignment: Assignment) => {
+  const calendarAssignments: CalendarAssignment[] = assignments.map((a) => ({
+    ...a,
+    curso: a.curso ?? '',
+  }));
+
+  const handleDayClick = (assignment: CalendarAssignment) => {
     setLocation(`/assignment/${assignment._id}`);
   };
 
@@ -143,7 +148,7 @@ export default function TeacherPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Calendar assignments={assignments} onDayClick={handleDayClick} />
+            <Calendar assignments={calendarAssignments} onDayClick={handleDayClick} />
           </CardContent>
         </Card>
       </div>

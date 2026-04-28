@@ -8,7 +8,7 @@ interface IExamen {
   resultados: Record<string, any>[];
 }
 
-const examenSchema = new Schema<IExamen>({
+const examenSchema = new Schema({
   titulo: { type: String, required: true },
   cursoId: { type: Schema.Types.ObjectId, ref: 'cursos', required: true },
   materiaId: { type: Schema.Types.ObjectId, ref: 'materias', required: true },

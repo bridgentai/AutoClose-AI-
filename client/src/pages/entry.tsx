@@ -246,14 +246,16 @@ export default function Entry() {
       }
 
       default: {
+        const r = rol as string;
+        const info = (rolesInfo as Record<string, RoleInfo | undefined>)[r];
         mockUser = {
-          id: `dev_${rol}_${Date.now()}`,
-          _id: `dev_${rol}_${Date.now()}`,
-          nombre: `Usuario ${rolesInfo[rol].label}`,
-          email: `${rol}@dev.local`,
-          rol,
+          id: `dev_${r}_${Date.now()}`,
+          _id: `dev_${r}_${Date.now()}`,
+          nombre: `Usuario ${info?.label ?? r}`,
+          email: `${r}@dev.local`,
+          rol: r as AuthResponse['rol'],
           colegioId: 'default_colegio',
-          token: `dev_token_${rol}_${Date.now()}`,
+          token: `dev_token_${r}_${Date.now()}`,
           codigoUnico: Math.floor(1000 + Math.random() * 9000).toString()
         };
       }

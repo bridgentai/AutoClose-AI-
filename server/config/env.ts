@@ -17,10 +17,9 @@ function parseIntEnv(value: string | undefined, fallback: number): number {
 }
 
 export const ENV = {
-  // MongoDB (legacy; no se usa en arranque — solo PostgreSQL/Neon)
-  // MONGO_URI: process.env.MONGO_URI || '',
-  // MONGODB_URI_DIRECT: process.env.MONGODB_URI_DIRECT || '',
-  // MONGODB_USE_PUBLIC_DNS: process.env.MONGODB_USE_PUBLIC_DNS === 'true',
+  MONGO_URI: process.env.MONGO_URI || '',
+  MONGODB_URI_DIRECT: process.env.MONGODB_URI_DIRECT || '',
+  MONGODB_USE_PUBLIC_DNS: process.env.MONGODB_USE_PUBLIC_DNS === 'true',
   JWT_SECRET: process.env.JWT_SECRET || '',
   JWT_REFRESH_EXPIRES: process.env.JWT_REFRESH_EXPIRES || '7d',
   DATABASE_URL: process.env.DATABASE_URL || '',

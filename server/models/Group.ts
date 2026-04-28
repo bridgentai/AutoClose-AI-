@@ -8,7 +8,6 @@ interface IGroup extends Document {
   seccion?: string;
   /** Referencia a la sección (módulo Crear Sección) */
   sectionId?: Types.ObjectId;
-  _id?: Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }

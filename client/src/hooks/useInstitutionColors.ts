@@ -24,7 +24,8 @@ export function useInstitutionColors() {
   const { data: institutionConfig } = useQuery<InstitutionConfig>({
     queryKey: ['institutionConfig', user?.colegioId],
     queryFn: async () => {
-      if (!user?.colegioId) return null;
+      const colegioId = user?.colegioId;
+      if (!colegioId) throw new Error('institutionConfig: sin colegioId');
       return apiRequest<InstitutionConfig>('GET', '/api/institution/config');
     },
     enabled: !!user?.colegioId,

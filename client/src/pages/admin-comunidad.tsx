@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/authContext";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { isAdminColegioLayoutRole } from "@/lib/adminColegioRoles";
 
 const navigationItems = [
   {
@@ -28,12 +29,12 @@ export default function AdminComunidadLayout() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (user && user.rol !== "administrador") {
+    if (user && !isAdminColegioLayoutRole(user.rol)) {
       setLocation("/dashboard");
     }
   }, [user, setLocation]);
 
-  if (!user || user.rol !== "administrador") {
+  if (!user || !isAdminColegioLayoutRole(user.rol)) {
     return null;
   }
 
